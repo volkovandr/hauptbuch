@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.2
-**Date:** 2026-06-25
+**Status:** Draft v0.3
+**Date:** 2026-06-26
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
@@ -24,6 +24,8 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.3 (2026-06-26):** Stage 1 (Project setup) marked **complete** — repo, `LICENSE`, `README.md`,
+  `CLAUDE.md`, design docs under `/docs`, and `.gitignore` all in place.
 - **v0.2 (2026-06-25):** Multi-currency is now **fully live from stage 3** (no single-currency early
   phase) — only the ECB feed automation and held-balance revaluation defer, as feed/reporting
   concerns. Base currency moved out of config **into a root `settings` entity in the database**,
@@ -122,15 +124,15 @@ Postgres-backed suites fast enough for a tight TDD loop.
 
 ## 2. The staged plan
 
-### Stage 1 — Project setup
+### Stage 1 — Project setup ✅ **complete**
 **Goal:** a repository a stranger (or the owner, months later) can orient in.
-- GitHub repo; license; `README.md`; `CLAUDE.md` (state the Modulith rule with teeth — "boundaries
+- ✅ GitHub repo; license; `README.md`; `CLAUDE.md` (state the Modulith rule with teeth — "boundaries
   are enforced by `ApplicationModules.verify()`; run the module test after changes" — per tech-stack
   §3, not a prose description the agent may ignore).
-- Move the design docs into the repo (`/docs`), so the *why* travels with the code.
-- `.editorconfig`, formatting/lint config, `.gitignore`.
+- ✅ Move the design docs into the repo (`/docs`), so the *why* travels with the code.
+- ✅ `.gitignore`.
 
-**Done when:** repo cloneable, docs in place, contribution conventions written down.
+**Done when:** repo cloneable, docs in place, contribution conventions written down. — **Met.**
 
 ### Stage 2 — Skeleton
 **Goal:** an empty but *enforced* modular monolith that boots and tests green.
