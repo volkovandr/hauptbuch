@@ -24,17 +24,9 @@
 > assumptions that can be overturned.
 
 **Changelog**
-- **v0.4 (2026-06-28):** Stage 2 (Skeleton) marked **complete** — module-first packages for all 13
-  modules (+ an open `shared` kernel) with `@ApplicationModule` and the `ApplicationModules.verify()`
-  test live; three Gradle test suites (`test`/`integrationTest`/`sqlLogicTest`) scaffolded with a
-  sample green test each, Testcontainers Postgres + reuse wired; **Joda-Money** chosen (T1 / P-5) with
-  a thin `MoneyFactory` wrapper; local `docker-compose` dev Postgres (host port 15432); app boots
-  against it with Flyway enabled (empty migration set). Two deviations from the Initializr default,
-  both deliberate: dropped `spring-modulith-starter-jdbc` to `-core` (the event-publication/outbox
-  registry is deferred in v1 — CLAUDE.md §3/§8), and added `flyway-database-postgresql` (Flyway split
-  per-database support out of core).
-- **v0.3 (2026-06-26):** Stage 1 (Project setup) marked **complete** — repo, `LICENSE`, `README.md`,
-  `CLAUDE.md`, design docs under `/docs`, and `.gitignore` all in place.
+- **v0.5 (2026-06-28):** Stage 3 (Transaction core) marked **complete** 
+- **v0.4 (2026-06-28):** Stage 2 (Skeleton) marked **complete** 
+- **v0.3 (2026-06-26):** Stage 1 (Project setup) marked **complete**
 - **v0.2 (2026-06-25):** Multi-currency is now **fully live from stage 3** (no single-currency early
   phase) — only the ECB feed automation and held-balance revaluation defer, as feed/reporting
   concerns. Base currency moved out of config **into a root `settings` entity in the database**,
@@ -163,29 +155,29 @@ Postgres-backed suites fast enough for a tight TDD loop.
 boots against the compose Postgres. — **Met** (all green; boots against compose Postgres 17.9 on
 15432, Flyway applies its empty migration set cleanly).
 
-### Stage 3 — The transaction core (the engine, fully multi-currency)
+### Stage 3 — The transaction core (the engine, fully multi-currency) ✅ **complete**
 **Goal:** the uniform posting model, correct and tested, with **no UI**.
-- **Settings entity** (§1.3) + migration: single-row `settings`, write-once `base_currency`. The
+- ✅ **Settings entity** (§1.3) + migration: single-row `settings`, write-once `base_currency`. The
   engine treats "base currency set" as a precondition for recording transactions. (Tests set it via
   fixtures; the UI to set it is stage 5.)
-- **Migrations (Flyway):** `currency` (seed the currencies actually used — data-model §3.1),
+- ✅ **Migrations (Flyway):** `currency` (seed the currencies actually used — data-model §3.1),
   `account`, `transaction`, `posting`, `exchange_rate`, `payee`. Seed the **system accounts**
   (Opening Balances equity; `FX gain/loss` leaf), per-currency leaves following the category rule.
-- **Records + repositories** (JdbcClient): `Account`, `Transaction`, `Posting`, `ExchangeRate`,
+- ✅ **Records + repositories** (JdbcClient): `Account`, `Transaction`, `Posting`, `ExchangeRate`,
   mapped from rows.
-- **Domain-ops service** (§1.4): `recordTransaction` (validates balanced postings — native sum for
+- ✅ **Domain-ops service** (§1.4): `recordTransaction` (validates balanced postings — native sum for
   single-currency, base sum with frozen `base_amount` for cross-currency — before insert),
   `voidTransaction` (soft-delete cascading to postings), `editTransaction`.
-- **Cross-currency is live here:** a non-par conversion freezes `base_amount` on its legs and routes
+- ✅ **Cross-currency is live here:** a non-par conversion freezes `base_amount` on its legs and routes
   the residual to the `FX gain/loss` leaf (data-model §6.3/§6.4). Exercised by real ops + tests.
-- **Invariants as SQL-logic tests** (data-model §8): conditional sum-to-zero (both branches),
+- ✅ **Invariants as SQL-logic tests** (data-model §8): conditional sum-to-zero (both branches),
   leaves-only, currency consistency, soft-delete coherence.
-- **Running-balance query** (windowed `sum` per account) — SQL-logic tier; the backdated-insert
+- ✅ **Running-balance query** (windowed `sum` per account) — SQL-logic tier; the backdated-insert
   correctness test (invariant 5) starts here even though the register that surfaces it is stage 7.
 
 **Done when:** the engine records, voids, and edits balanced transactions including cross-currency
 conversions; all invariants are tested against real Postgres; running balance computes correctly
-including backdated inserts.
+including backdated inserts. — **Met.**
 
 ### Stage 4 — UI container (the shell)
 **Goal:** the server-rendered scaffold every later screen hangs on.
@@ -214,6 +206,14 @@ in settings shows in the greeting.
 **Goal:** the reference data the register needs, plus the equity plumbing.
 > Prerequisite ordering holds: base currency is set (stage 5) before any account, since every account
 > carries a currency.
+> **Module-boundary note (carried from stage 3):** the `Account` record and a *read-only*
+> `AccountRepository` were born in **`ledger`** at stage 3, because the engine needs to read accounts
+> (currency lookup, leaves-only check, resolving a system leaf) before the `accounts` module exists.
+> **Stage 6 moves ownership of `Account` (and the account table's writes) into `accounts`**, exposes a
+> read API from it, and has `ledger` depend on `accounts`' public type — closing the deliberate
+> stage-3 placement so a concept does not stay split across two modules. (Decision: keep in `ledger`
+> for stage 3, relocate here. `verify()` stays green throughout — repositories were package-private,
+> so nothing cross-module was ever exposed.)
 - **Account management UI:** create/edit/close accounts (name, type, parent, **currency — any seeded
   currency**, multi-currency live per §1.2). Stored two-tone hue per account assigned here
   (register §2.8).

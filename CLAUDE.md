@@ -32,8 +32,13 @@ outranks cleverness, brevity, and raw capability every time. Concretely:
 
 1. **Module-first packaging, enforced.** A top-level package under the app root *is* a Spring
    Modulith module (organise by feature/vertical slice). **Never** create layer-first packages
-   (`controllers/`, `services/`, `repositories/` at the root). A module may only call another
-   module's **public top-level types**; its sub-packages are internal.
+   (`controllers/`, `services/`, `repositories/` at the *app root*). A module may only call another
+   module's **public top-level types**; its sub-packages are internal. *Within* a module you **may**
+   sub-package by concern (e.g. `ledger.repository` for the JdbcClient repositories) — Modulith treats
+   any sub-package as module-internal, so its types may be `public` for the module's own root-package
+   services to call them, yet `verify()` still forbids other modules from reaching in. Keep the
+   module's public API (the named interface) in the **root** package; push internals down. This is the
+   api/internal idiom, *not* the banned app-root layer-first split.
 2. **Run the module-verification test after any structural change.** `ApplicationModules.verify()`
    lives in the `test` suite. A red module test means you broke an architecture boundary or created a
    cycle — **fix the boundary, never suppress the test.**
@@ -213,8 +218,24 @@ Full detail in `docs/data-model.md`. The traps:
 5. **Finish on a fully green `./gradlew check`** (§1.9) — all three suites *and* Checkstyle, PMD,
    SpotBugs, Spotless, and JaCoCo coverage. Run `./gradlew spotlessApply` to clear formatting
    findings. The step is not complete while any gate is red; fix the code, don't weaken the tool.
-6. **Keep bespoke JS in its leaf.** If a change tempts you toward an SPA, a build step, or
+6. **Never mark a stage ✅ complete without the owner's explicit confirmation.** A green `check` and a
+   met "Done when" make a stage *ready to confirm* — report that and ask. The owner ticks the box.
+7. **Keep the docs lean — never let them grow for the sake of it (§8a).**
+8. **Keep bespoke JS in its leaf.** If a change tempts you toward an SPA, a build step, or
    app-wide JS, stop — that violates §1.6.
+
+### 8a. Documentation discipline (do not let docs bloat)
+The docs are a navigation aid, not a worklog. Resist the urge to add prose.
+- **Marking a stage complete is enough.** The stage's own description already records *what* it
+  delivered — don't restate it in the changelog. The reader goes to the (now ✅) stage to learn what
+  shipped.
+- **Changelog = scope changes only.** Add a changelog entry when a stage's *scope* shifted
+  significantly (work moved between stages, a decision overturned, an entity added) — **not** a recap
+  of routine implementation. "Stage N marked complete" is a sufficient entry on its own.
+- **Don't echo the code in prose.** If the answer lives in the code, tests, or git history, don't
+  duplicate it in a doc (mirrors §0 and the memory rules).
+- Same restraint applies to `CLAUDE.md` itself: add a rule when a convention is established, not a
+  diary of changes.
 
 ---
 
