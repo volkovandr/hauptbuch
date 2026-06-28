@@ -1,0 +1,24 @@
+# Local dev PostgreSQL for `./gradlew bootRun` (plan stage 2 / CLAUDE.md §2).
+# The app itself stays on the JVM for now; only the database runs in a container.
+# The Postgres-backed test suites use Testcontainers, NOT this compose service.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: hauptbuch-postgres
+    environment:
+      POSTGRES_DB: hauptbuch
+      POSTGRES_USER: hauptbuch
+      POSTGRES_PASSWORD: hauptbuch
+    # Host 15432 avoids colliding with a local/native Postgres already on 5432.
+    ports:
+      - "15432:5432"
+    volumes:
+      - hauptbuch-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hauptbuch -d hauptbuch"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  hauptbuch-pgdata:

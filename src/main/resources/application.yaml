@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: hauptbuch
+  # Dev datasource points at the local docker-compose Postgres (see docker-compose.yml).
+  # The Pi deployment overrides these via environment in a later stage.
+  datasource:
+    url: jdbc:postgresql://localhost:15432/hauptbuch
+    username: hauptbuch
+    password: hauptbuch
+  # Flyway applies migrations on start. No migrations exist yet (stage 3 adds them);
+  # an empty migration set is a valid, no-op state.
+  flyway:
+    enabled: true
