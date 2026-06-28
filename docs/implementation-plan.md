@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.3
-**Date:** 2026-06-26
+**Status:** Draft v0.4
+**Date:** 2026-06-28
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
@@ -24,6 +24,15 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.4 (2026-06-28):** Stage 2 (Skeleton) marked **complete** — module-first packages for all 13
+  modules (+ an open `shared` kernel) with `@ApplicationModule` and the `ApplicationModules.verify()`
+  test live; three Gradle test suites (`test`/`integrationTest`/`sqlLogicTest`) scaffolded with a
+  sample green test each, Testcontainers Postgres + reuse wired; **Joda-Money** chosen (T1 / P-5) with
+  a thin `MoneyFactory` wrapper; local `docker-compose` dev Postgres (host port 15432); app boots
+  against it with Flyway enabled (empty migration set). Two deviations from the Initializr default,
+  both deliberate: dropped `spring-modulith-starter-jdbc` to `-core` (the event-publication/outbox
+  registry is deferred in v1 — CLAUDE.md §3/§8), and added `flyway-database-postgresql` (Flyway split
+  per-database support out of core).
 - **v0.3 (2026-06-26):** Stage 1 (Project setup) marked **complete** — repo, `LICENSE`, `README.md`,
   `CLAUDE.md`, design docs under `/docs`, and `.gitignore` all in place.
 - **v0.2 (2026-06-25):** Multi-currency is now **fully live from stage 3** (no single-currency early
@@ -134,19 +143,25 @@ Postgres-backed suites fast enough for a tight TDD loop.
 
 **Done when:** repo cloneable, docs in place, contribution conventions written down. — **Met.**
 
-### Stage 2 — Skeleton
+### Stage 2 — Skeleton ✅ **complete**
 **Goal:** an empty but *enforced* modular monolith that boots and tests green.
-- Spring Initializr (Java, Spring Boot 3.2+, Web, Thymeleaf, JdbcClient, Flyway, Testcontainers,
-  Validation).
-- Module-first packages from §1.1 (empty stubs).
-- Spring Modulith dependency + the `verify()` test (§1.1).
-- Gradle test suites scaffolded (§1.5): `test`, `integrationTest`, logic suite, each with a sample
-  green test; Testcontainers Postgres + reuse wired.
-- Money type chosen (T1: Joda-Money vs JSR-354 — pick now, low-risk either way) and a thin wrapper.
-- Local `docker-compose` for a dev Postgres (app stays on the JVM for now).
+- ✅ Spring Initializr (Java 25, Spring Boot 4.1, Web, Thymeleaf, JdbcClient, Flyway, Testcontainers).
+  *Validation deferred — added when a screen first needs it.*
+- ✅ Module-first packages from §1.1 (empty stubs), each an explicit `@ApplicationModule`; plus an
+  **open** `shared` kernel module for cross-cutting types (the money type lives there).
+- ✅ Spring Modulith dependency + the `verify()` test (§1.1) in the unit suite. **Scoped to
+  `spring-modulith-starter-core`** — the `-jdbc` starter (event-publication/outbox registry) is
+  deliberately **not** used (events deferred in v1 — CLAUDE.md §3/§8).
+- ✅ Gradle test suites scaffolded (§1.5) via the JVM Test Suite plugin: `test`, `integrationTest`,
+  `sqlLogicTest`, each with a sample green test; Testcontainers Postgres singleton + reuse wired;
+  `check` runs all three plus module-verify.
+- ✅ Money type chosen — **Joda-Money** (T1 / P-5) — with a thin `MoneyFactory` wrapper (one
+  sanctioned, currency-rounded construction path; does not hide Joda-Money).
+- ✅ Local `docker-compose` for a dev Postgres on host port **15432** (app stays on the JVM for now).
 
-**Done when:** `./gradlew build` runs all three suites and the module-verify test, all green; app
-boots against the compose Postgres.
+**Done when:** `./gradlew check` runs all three suites and the module-verify test, all green; app
+boots against the compose Postgres. — **Met** (all green; boots against compose Postgres 17.9 on
+15432, Flyway applies its empty migration set cleanly).
 
 ### Stage 3 — The transaction core (the engine, fully multi-currency)
 **Goal:** the uniform posting model, correct and tested, with **no UI**.
