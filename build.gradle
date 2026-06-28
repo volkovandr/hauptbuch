@@ -105,6 +105,11 @@ jacoco {
 	toolVersion = '0.8.14'
 }
 
+// The Spring Boot entry point is bootstrap glue, not logic: its only statement hands off to
+// SpringApplication.run(). It is not unit-tested (the integration tier exercises context startup),
+// so exclude it from coverage rather than distort the ratio or write a contrived test of main().
+def jacocoCoverageExclusions = ['volkovandr/hauptbuch/HauptbuchApplication.class']
+
 tasks.named('jacocoTestReport') {
 	dependsOn tasks.named('test')
 	reports {
@@ -112,11 +117,18 @@ tasks.named('jacocoTestReport') {
 		html.required = true
 		csv.required = false
 	}
+	classDirectories.setFrom(
+		fileTree(dir: "${layout.buildDirectory.get()}/classes/java/main",
+		         exclude: jacocoCoverageExclusions))
 }
 
 // Enforce a minimum line coverage on the unit-test suite.
 // Raise the threshold gradually as the codebase grows.
 tasks.named('jacocoTestCoverageVerification') {
+	dependsOn(tasks.named('jacocoTestReport'))
+	classDirectories.setFrom(
+		fileTree(dir: "${layout.buildDirectory.get()}/classes/java/main",
+		         exclude: jacocoCoverageExclusions))
 	violationRules {
 		rule {
 			limit {
@@ -197,4 +209,6 @@ tasks.named('check') {
 	dependsOn(testing.suites.named('integrationTest'))
 	dependsOn(testing.suites.named('sqlLogicTest'))
 	dependsOn(tasks.named('jacocoTestReport'))
+	// Fail the build on a coverage regression, not just report it.
+	dependsOn(tasks.named('jacocoTestCoverageVerification'))
 }

@@ -51,13 +51,24 @@ outranks cleverness, brevity, and raw capability every time. Concretely:
    CRUD is only for true reference data (payees, tags, account definitions).
 8. **AI calls send only the document + parsing instructions — never the ledger, balances, or DB**
    (ARCH-08). Secrets (AI keys, DB creds) come from config/env, never hardcoded, never committed.
+9. **`./gradlew check` is the completion gate — it must be fully green before any step is done.**
+   `check` runs the three test suites *and* every quality tool: **Checkstyle, PMD, SpotBugs,
+   Spotless, and JaCoCo coverage verification.** Never call a step complete on a red gate, and
+   **never weaken a tool to pass** (don't suppress warnings, add blanket excludes, ratchet coverage
+   *down*, or disable a rule). Fix the code. If a finding is a genuine false positive, narrow the
+   suppression to the single site and say why. Run `./gradlew spotlessApply` to auto-fix formatting
+   — formatting failures are never an excuse to ship. **Coverage exclusions** (the JaCoCo
+   `jacocoCoverageExclusions` list in `build.gradle`) are reserved for untestable framework
+   bootstrap (e.g. the Spring Boot entry point); never add a class there to dodge writing a test for
+   real logic — write the test instead.
 
 ---
 
 ## 2. Commands
 
 ```bash
-# build everything + all test suites + module verification
+# THE completion gate: all three test suites + module verification + every quality
+# tool (Checkstyle, PMD, SpotBugs, Spotless, JaCoCo coverage). Must be green to finish a step.
 ./gradlew check
 
 # run the app (JVM; needs the dev Postgres up)
@@ -70,6 +81,15 @@ docker-compose up -d        # local dev Postgres
 ./gradlew test              # unit (Mockito, no container) — includes ApplicationModules.verify()
 ./gradlew integrationTest   # Flyway + repositories vs Testcontainers Postgres
 ./gradlew sqlLogicTest      # SQL-resident logic vs Testcontainers Postgres
+
+# quality tools (all run as part of `check`; invoke individually to debug a failure)
+./gradlew spotlessCheck                  # formatting (google-java-format); see report for diffs
+./gradlew spotlessApply                  # auto-fix formatting — run this, don't hand-format
+./gradlew checkstyleMain                  # style rules (google_checks.xml, warnings = errors)
+./gradlew pmdMain                         # static-analysis ruleset (config/pmd/ruleset.xml)
+./gradlew spotbugsMain                    # bytecode bug patterns; HTML report under build/reports
+./gradlew jacocoTestReport \
+          jacocoTestCoverageVerification  # coverage report + minimum-coverage gate
 ```
 
 Flyway migrations apply automatically on app start and in the Postgres-backed suites. Keep
@@ -188,9 +208,12 @@ Full detail in `docs/data-model.md`. The traps:
 1. **Read** the relevant `docs/` file for any domain rule you are about to touch.
 2. **Write the test first** (the right tier per §6).
 3. **Implement** following the existing patterns in that module.
-4. **Run** `./gradlew test` (includes module verification) plus the relevant Postgres-backed suite.
-   If the module test is red, you broke a boundary — fix it.
-5. **Keep bespoke JS in its leaf.** If a change tempts you toward an SPA, a build step, or
+4. **Run** `./gradlew test` (includes module verification) plus the relevant Postgres-backed suite
+   while iterating. If the module test is red, you broke a boundary — fix it.
+5. **Finish on a fully green `./gradlew check`** (§1.9) — all three suites *and* Checkstyle, PMD,
+   SpotBugs, Spotless, and JaCoCo coverage. Run `./gradlew spotlessApply` to clear formatting
+   findings. The step is not complete while any gate is red; fix the code, don't weaken the tool.
+6. **Keep bespoke JS in its leaf.** If a change tempts you toward an SPA, a build step, or
    app-wide JS, stop — that violates §1.6.
 
 ---
