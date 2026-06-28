@@ -1,0 +1,82 @@
+<?xml version="1.0"?>
+<ruleset name="Hauptbuch PMD rules"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0
+                             https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+  <description>PMD ruleset aligned with Google Java Style and project conventions.</description>
+
+  <!-- ── Best practices ───────────────────────────────────────────────── -->
+  <rule ref="category/java/bestpractices.xml">
+    <!-- Lombok-friendlier; project does not use Lombok but avoids false-positives -->
+    <exclude name="GuardLogStatement"/>
+    <!-- Abstract class with no abstract methods is a valid pattern (e.g. Spring base classes) -->
+    <exclude name="AbstractClassWithoutAbstractMethod"/>
+    <!-- Multiple asserts per test is intentional: we assert related facts together for clarity -->
+    <exclude name="UnitTestContainsTooManyAsserts"/>
+    <!-- False positive: assertThat(rs.next()).isTrue() does check the return value -->
+    <exclude name="CheckResultSet"/>
+  </rule>
+
+  <!-- ── Code style ───────────────────────────────────────────────────── -->
+  <rule ref="category/java/codestyle.xml">
+    <!-- Formatting is owned by Spotless/google-java-format; PMD must not fight it -->
+    <exclude name="AtLeastOneConstructor"/>
+    <exclude name="CommentDefaultAccessModifier"/>
+    <exclude name="ConfusingTernary"/>
+    <exclude name="LongVariable"/>
+    <exclude name="ShortVariable"/>
+    <exclude name="ShortClassName"/>
+    <!-- Short factory-style method names like .of(), .zero() are a Java convention -->
+    <exclude name="ShortMethodName"/>
+    <exclude name="TooManyStaticImports"/>
+    <exclude name="UnnecessaryFullyQualifiedName"/>
+    <exclude name="UselessParentheses"/>
+    <!-- Records use compact constructors; this check fires incorrectly -->
+    <exclude name="LocalVariableCouldBeFinal"/>
+    <exclude name="MethodArgumentCouldBeFinal"/>
+    <exclude name="OnlyOneReturn"/>
+  </rule>
+
+  <!-- ── Design ───────────────────────────────────────────────────────── -->
+  <rule ref="category/java/design.xml">
+    <!-- Project deliberately uses slim, feature-oriented classes, not large ones -->
+    <exclude name="TooManyMethods"/>
+    <exclude name="LawOfDemeter"/>
+    <!-- Utility classes in a Spring app may have Spring-managed state -->
+    <exclude name="UseUtilityClass"/>
+    <!-- Thymeleaf controllers legitimately throw checked exceptions -->
+    <exclude name="SignatureDeclareThrowsException"/>
+    <!-- Spring constructor injection uses final fields; this fires on records -->
+    <exclude name="ImmutableField"/>
+  </rule>
+
+  <!-- ── Documentation ────────────────────────────────────────────────── -->
+  <!-- Checkstyle owns Javadoc; omit the PMD doc category to avoid duplication -->
+
+  <!-- ── Error-prone ──────────────────────────────────────────────────── -->
+  <rule ref="category/java/errorprone.xml">
+    <!-- Project uses SLF4J via Spring Boot; this rule targets java.util.logging -->
+    <exclude name="MoreThanOneLogger"/>
+    <!-- Intentional: test helpers inherit from Spring base classes -->
+    <exclude name="TestClassWithoutTestCases"/>
+    <!-- NullAssignment is idiomatic in some JdbcClient patterns -->
+    <exclude name="NullAssignment"/>
+  </rule>
+
+  <!-- ── Multithreading ───────────────────────────────────────────────── -->
+  <rule ref="category/java/multithreading.xml">
+    <!-- Spring singleton beans are the threading model; avoid false positives -->
+    <exclude name="UseConcurrentHashMap"/>
+    <!-- Requires explicit package/class list to be useful; omit until needed -->
+    <exclude name="LoosePackageCoupling"/>
+  </rule>
+
+  <!-- ── Performance ──────────────────────────────────────────────────── -->
+  <rule ref="category/java/performance.xml"/>
+
+  <!-- ── Security ─────────────────────────────────────────────────────── -->
+  <rule ref="category/java/security.xml"/>
+
+</ruleset>

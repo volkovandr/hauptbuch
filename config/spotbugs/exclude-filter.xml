@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0
+                        https://raw.githubusercontent.com/spotbugs/spotbugs/master/spotbugs/etc/findbugsfilter.xsd">
+
+  <!--
+    Spring @Autowired fields appear uninitialised to SpotBugs because injection
+    happens at runtime. This false-positive pattern affects every @Component.
+  -->
+  <Match>
+    <Bug pattern="UWF_UNWRITTEN_FIELD,UWF_FIELD_NOT_INITIALIZED_IN_CONSTRUCTOR"/>
+    <Or>
+      <Annotation name="org.springframework.beans.factory.annotation.Autowired"/>
+      <Annotation name="org.springframework.beans.factory.annotation.Value"/>
+    </Or>
+  </Match>
+
+  <!--
+    Spring @Configuration classes with @Bean methods: SpotBugs sees the method
+    as returning a new object each call, but Spring intercepts it.
+  -->
+  <Match>
+    <Bug pattern="RV_RETURN_VALUE_IGNORED_NO_SIDE_EFFECT"/>
+    <Annotation name="org.springframework.context.annotation.Bean"/>
+  </Match>
+
+  <!--
+    JdbcClient lambdas — row-mapper lambdas capture a ResultSet that SpotBugs
+    thinks can escape; they do not.
+  -->
+  <Match>
+    <Bug pattern="OBL_UNSATISFIED_OBLIGATION,OBL_UNSATISFIED_OBLIGATION_EXCEPTION_EDGE"/>
+    <Class name="~.*Repository"/>
+  </Match>
+
+  <!--
+    Thymeleaf controller methods can legitimately return null (Spring MVC
+    interprets null model attributes as absent, not NPE).
+  -->
+  <Match>
+    <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE"/>
+    <Or>
+      <Annotation name="org.springframework.web.bind.annotation.GetMapping"/>
+      <Annotation name="org.springframework.web.bind.annotation.PostMapping"/>
+      <Annotation name="org.springframework.web.bind.annotation.RequestMapping"/>
+    </Or>
+  </Match>
+
+  <!--
+    Test code: SpotBugs reports many patterns in test helpers and @BeforeEach
+    set-up methods that are intentional (e.g. unread fields used by JUnit
+    lifecycle callbacks).
+  -->
+  <Match>
+    <Or>
+      <Source name="~.*Test\.java"/>
+      <Source name="~.*Tests\.java"/>
+      <Source name="~.*IT\.java"/>
+      <Source name="~.*Spec\.java"/>
+    </Or>
+    <Bug pattern="URF_UNREAD_FIELD,UUF_UNUSED_FIELD,DLS_DEAD_LOCAL_STORE,ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD"/>
+  </Match>
+
+</FindBugsFilter>

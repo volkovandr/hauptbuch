@@ -1,8 +1,16 @@
+import com.github.spotbugs.snom.SpotBugsTask
+import org.springframework.boot.gradle.plugin.SpringBootPlugin
+
 plugins {
 	id 'java'
 	id 'jvm-test-suite'
+	id 'jacoco'
 	id 'org.springframework.boot' version '4.1.0'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'checkstyle'
+	id 'pmd'
+	id 'com.github.spotbugs' version '6.5.8'
+	id 'com.diffplug.spotless' version '8.7.0'
 }
 
 group = 'volkovandr'
@@ -32,17 +40,95 @@ dependencies {
 	runtimeOnly 'org.springframework.modulith:spring-modulith-runtime'
 	runtimeOnly 'org.postgresql:postgresql'
 	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
+
+	spotbugs 'com.github.spotbugs:spotbugs:4.10.2'
 }
 
 dependencyManagement {
 	imports {
 		// Explicit so managed versions (incl. org.testcontainers:*) resolve in the
 		// custom integrationTest / sqlLogicTest suites, not just the standard configs.
-		mavenBom org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES
+		mavenBom SpringBootPlugin.BOM_COORDINATES
 		mavenBom "org.springframework.modulith:spring-modulith-bom:${springModulithVersion}"
 	}
 }
 
+// ── Checkstyle ────────────────────────────────────────────────────────────────
+checkstyle {
+	toolVersion = '13.7.0'
+	// google_checks.xml is extracted from the checkstyle jar at this exact version,
+	// so it is guaranteed to match and tracks upstream automatically on version bumps.
+	configFile = file('config/checkstyle/google_checks.xml')
+	// Treat warnings as errors so the build fails on any style violation.
+	maxWarnings = 0
+	// Propagate the severity=error override that google_checks.xml reads via this property.
+	configProperties = ['org.checkstyle.google.severity': 'error']
+}
+
+// ── PMD ───────────────────────────────────────────────────────────────────────
+pmd {
+	toolVersion = '7.25.0'
+	ruleSetFiles = files('config/pmd/ruleset.xml')
+	ruleSets = []   // disable built-in rulesets; use only our file
+	consoleOutput = true
+}
+
+// ── SpotBugs ──────────────────────────────────────────────────────────────────
+spotbugs {
+	toolVersion = '4.10.2'
+	excludeFilter = file('config/spotbugs/exclude-filter.xml')
+	effort = 'max'
+	reportLevel = 'low'
+}
+tasks.withType(SpotBugsTask).configureEach {
+	reports {
+		html.required = true
+		xml.required = false
+	}
+}
+
+// ── Spotless / google-java-format ─────────────────────────────────────────────
+spotless {
+	java {
+		googleJavaFormat('1.27.0')
+		// Normalise line endings and trim trailing whitespace
+		endWithNewline()
+		trimTrailingWhitespace()
+		// Keep import order consistent with google-java-format output
+		importOrder()
+		removeUnusedImports()
+	}
+}
+
+// ── JaCoCo ────────────────────────────────────────────────────────────────────
+jacoco {
+	toolVersion = '0.8.14'
+}
+
+tasks.named('jacocoTestReport') {
+	dependsOn tasks.named('test')
+	reports {
+		xml.required = true
+		html.required = true
+		csv.required = false
+	}
+}
+
+// Enforce a minimum line coverage on the unit-test suite.
+// Raise the threshold gradually as the codebase grows.
+tasks.named('jacocoTestCoverageVerification') {
+	violationRules {
+		rule {
+			limit {
+				counter = 'LINE'
+				value = 'COVEREDRATIO'
+				minimum = 0.50
+			}
+		}
+	}
+}
+
+// ── Test suites ───────────────────────────────────────────────────────────────
 testing {
 	suites {
 		// Shared configuration applied to every Postgres-backed suite below.
@@ -110,4 +196,5 @@ testing {
 tasks.named('check') {
 	dependsOn(testing.suites.named('integrationTest'))
 	dependsOn(testing.suites.named('sqlLogicTest'))
+	dependsOn(tasks.named('jacocoTestReport'))
 }
