@@ -110,8 +110,22 @@ jacoco {
 // so exclude it from coverage rather than distort the ratio or write a contrived test of main().
 def jacocoCoverageExclusions = ['volkovandr/hauptbuch/HauptbuchApplication.class']
 
+// Coverage aggregates ALL THREE tiers, not just the unit suite. This is deliberate and matches the
+// three-tier strategy (plan §15, CLAUDE.md §6): the unit tier is *thin by design* for query-heavy
+// modules — repositories and SQL-resident logic are exercised by the integration and SQL-logic
+// suites against real Postgres, and padding the unit tier to chase a number is explicitly forbidden.
+// Counting every suite's execution data reflects what is genuinely tested, so the gate measures real
+// coverage rather than rewarding mock-heavy unit tests.
+def coverageExecData = files(
+	"${layout.buildDirectory.get()}/jacoco/test.exec",
+	"${layout.buildDirectory.get()}/jacoco/integrationTest.exec",
+	"${layout.buildDirectory.get()}/jacoco/sqlLogicTest.exec",
+)
+def coverageSuites = ['test', 'integrationTest', 'sqlLogicTest']
+
 tasks.named('jacocoTestReport') {
-	dependsOn tasks.named('test')
+	coverageSuites.each { dependsOn(testing.suites.named(it)) }
+	executionData.setFrom(coverageExecData)
 	reports {
 		xml.required = true
 		html.required = true
@@ -122,10 +136,12 @@ tasks.named('jacocoTestReport') {
 		         exclude: jacocoCoverageExclusions))
 }
 
-// Enforce a minimum line coverage on the unit-test suite.
+// Enforce a minimum line coverage across the three tiers.
 // Raise the threshold gradually as the codebase grows.
 tasks.named('jacocoTestCoverageVerification') {
 	dependsOn(tasks.named('jacocoTestReport'))
+	coverageSuites.each { dependsOn(testing.suites.named(it)) }
+	executionData.setFrom(coverageExecData)
 	classDirectories.setFrom(
 		fileTree(dir: "${layout.buildDirectory.get()}/classes/java/main",
 		         exclude: jacocoCoverageExclusions))
@@ -164,6 +180,9 @@ testing {
 		integrationTest(JvmTestSuite) {
 			dependencies {
 				implementation project()
+				// Main's data-jdbc starter is an `implementation` dep, so JdbcClient is not
+				// exposed transitively to this suite — declare the jdbc starter explicitly.
+				implementation 'org.springframework.boot:spring-boot-starter-jdbc'
 				implementation 'org.springframework.boot:spring-boot-starter-test'
 				implementation 'org.springframework.boot:spring-boot-testcontainers'
 				implementation 'org.testcontainers:testcontainers-junit-jupiter'
@@ -186,6 +205,8 @@ testing {
 		sqlLogicTest(JvmTestSuite) {
 			dependencies {
 				implementation project()
+				// Raw-JDBC suite (no Boot autoconfig): run Flyway ourselves to build the schema.
+				implementation 'org.flywaydb:flyway-core'
 				implementation 'org.springframework.boot:spring-boot-starter-test'
 				implementation 'org.springframework.boot:spring-boot-testcontainers'
 				implementation 'org.testcontainers:testcontainers-junit-jupiter'

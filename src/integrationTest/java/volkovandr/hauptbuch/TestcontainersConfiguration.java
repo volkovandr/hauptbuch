@@ -11,7 +11,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * automatically. Integration tests {@code @Import} this.
  */
 @TestConfiguration(proxyBeanMethods = false)
-class TestcontainersConfiguration {
+public class TestcontainersConfiguration {
 
   @Bean
   @ServiceConnection

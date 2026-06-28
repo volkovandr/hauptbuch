@@ -132,9 +132,10 @@ create table currency (
 );
 ```
 
-Seed only the currencies actually used, via Flyway — not all ~180 ISO codes. **Base currency is a
-write-once value in the single-row `settings` entity** (§3.8), not a per-currency row flag (one base
-per book).
+Seed only the currencies actually used, via Flyway — not all ~180 ISO codes. The stage-3 seed is
+**EUR, CHF, USD, GBP, JPY, CZK, PLN** (the home/travel set, including the Prague-trip examples; JPY
+is the zero-minor-units case the rounding path must handle). **Base currency is a write-once value in
+the single-row `settings` entity** (§3.8), not a per-currency row flag (one base per book).
 
 ### 3.2 `account`
 
