@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.4
-**Date:** 2026-06-28
+**Status:** Draft v0.6
+**Date:** 2026-06-30
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
@@ -24,6 +24,8 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.6 (2026-06-30):** Stage 4 (UI shell) marked **complete**; a `web` module (UI shell only)
+  was added to the §3 module map — feature controllers stay in their own modules.
 - **v0.5 (2026-06-28):** Stage 3 (Transaction core) marked **complete** 
 - **v0.4 (2026-06-28):** Stage 2 (Skeleton) marked **complete** 
 - **v0.3 (2026-06-26):** Stage 1 (Project setup) marked **complete**
@@ -179,7 +181,7 @@ boots against the compose Postgres. — **Met** (all green; boots against compos
 conversions; all invariants are tested against real Postgres; running balance computes correctly
 including backdated inserts. — **Met.**
 
-### Stage 4 — UI container (the shell)
+### Stage 4 — UI container (the shell) ✅ **complete**
 **Goal:** the server-rendered scaffold every later screen hangs on.
 - Base Thymeleaf layout; htmx wired; the dense, restrained, spreadsheet-like house style
   (FR-UX-04; consult the frontend-design conventions); navigation shell.
@@ -190,7 +192,7 @@ including backdated inserts. — **Met.**
 - A trivial demo page proving fragment swaps and keyboard nav work.
 
 **Done when:** the shell renders, htmx swaps work, keyboard nav moves focus, numbers format
-German-style.
+German-style. — **Met.**
 
 ### Stage 5 — Settings UI
 **Goal:** the smallest real screen, the greeting, and the first-run base-currency gate.

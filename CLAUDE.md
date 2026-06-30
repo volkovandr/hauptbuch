@@ -122,6 +122,7 @@ One deployable Spring Boot app; internal boundaries are **real and verified** (Â
 | `importer` | format-agnostic import via a canonical representation |
 | `operations` | first-class data-management ops: merge / reassign / subdivide |
 | `mcp` | MCP server exposing the operations + read tools |
+| `web` | UI shell only: base layout, nav, htmx wiring, vendored JS leaves. Feature screens' controllers live in **their own** feature module, not here |
 
 **`operations` is the single home for structural domain operations**, called by **both** the UI and
 the MCP server â€” the same validated, audited, reversible operation regardless of caller.
