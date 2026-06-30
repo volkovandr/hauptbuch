@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<!--
+  Stage-4 demo page. Proves the scaffold: it renders inside the base layout, the htmx button swaps
+  in a server-rendered fragment, and the keyboard leaf moves focus over the demo rows (arrow keys,
+  Enter, Ctrl-K). Throwaway demonstration surface — not a product screen. Dressed as a ledger leaf
+  so the house identity is visible: tabular figures, a hard rule before the balance column, oxblood
+  for negatives. The sample amounts are illustrative German-formatted strings, not live data.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content ledger" th:fragment="content">
+    <div class="leaf-head">
+      <p class="eyebrow">Stage 4 · UI shell</p>
+      <h1>The shell works</h1>
+      <p class="lede">
+        Base layout, htmx fragment swaps, keyboard navigation, and German number formatting are
+        wired. Real screens arrive with their stages.
+      </p>
+      <span class="folio" aria-hidden="true">Fol. 1</span>
+    </div>
+
+    <section class="panel">
+      <p class="eyebrow">htmx</p>
+      <h2>Fragment swap</h2>
+      <p class="muted">The button asks the server for a fragment and swaps it in place.</p>
+      <p class="actions">
+        <button
+          type="button"
+          class="btn"
+          hx-get="/demo/fragment"
+          hx-target="#swap-target"
+          hx-swap="innerHTML"
+        >
+          Swap a fragment
+        </button>
+      </p>
+      <div id="swap-target" class="swap-target">
+        <span class="muted">Press the button, or focus it and hit Enter.</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Keyboard</p>
+      <h2>Move through the ledger</h2>
+      <p class="muted">
+        Arrow up and down move the selection, Enter opens a row, and Ctrl-K opens the command
+        palette.
+      </p>
+      <ul class="rows" data-kbd-list role="listbox" aria-label="Sample ledger entries">
+        <li class="row" tabindex="-1" data-kbd-row role="option">
+          <span class="row__payee">Coffee</span>
+          <span class="row__memo">Rewe · Dortmund</span>
+          <span class="num row__amount num--debit">3,80</span>
+        </li>
+        <li class="row" tabindex="-1" data-kbd-row role="option">
+          <span class="row__payee">Groceries</span>
+          <span class="row__memo">Migros · Zürich</span>
+          <span class="num row__amount num--debit">CHF 62,40</span>
+        </li>
+        <li class="row" tabindex="-1" data-kbd-row role="option">
+          <span class="row__payee">Salary</span>
+          <span class="row__memo">Acme GmbH</span>
+          <span class="num row__amount num--credit">−4.250,00</span>
+        </li>
+        <li class="row" tabindex="-1" data-kbd-row role="option">
+          <span class="row__payee">Rent</span>
+          <span class="row__memo">Hausverwaltung</span>
+          <span class="num row__amount num--debit">1.180,00</span>
+        </li>
+      </ul>
+    </section>
+  </main>
+</html>

@@ -15,8 +15,20 @@
     <exclude name="AbstractClassWithoutAbstractMethod"/>
     <!-- Multiple asserts per test is intentional: we assert related facts together for clarity -->
     <exclude name="UnitTestContainsTooManyAsserts"/>
+    <!-- Re-declared below with extra assertion method names; exclude the default here -->
+    <exclude name="UnitTestShouldIncludeAssert"/>
     <!-- False positive: assertThat(rs.next()).isTrue() does check the return value -->
     <exclude name="CheckResultSet"/>
+  </rule>
+
+  <!-- Re-declared with extra assertion methods so MockMvc's fluent .andExpect(...) chain counts
+       as an assertion — the rule otherwise sees no assert()/fail() and false-flags every
+       full-context web test. The fix is to teach PMD the assertion vocabulary, not to drop the
+       rule, so genuinely assertion-free tests are still caught. -->
+  <rule ref="category/java/bestpractices.xml/UnitTestShouldIncludeAssert">
+    <properties>
+      <property name="extraAssertMethodNames" value="andExpect,andExpectAll"/>
+    </properties>
   </rule>
 
   <!-- ── Code style ───────────────────────────────────────────────────── -->

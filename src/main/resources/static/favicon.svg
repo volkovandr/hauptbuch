@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hauptbuch favicon — the ledger mark in the app's own palette: a leaf of warm ledger stock with
+  the green column rule, an oxblood credit tick, and a stamped "H". SVG so it stays crisp at every
+  size and needs no binary asset. Colours mirror /css/app.css (paper, green-ink, oxblood).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Hauptbuch">
+  <rect width="32" height="32" rx="3" fill="#fbfaf6"/>
+  <rect x="2.5" y="2.5" width="27" height="27" rx="2" fill="none" stroke="#9bb3a4" stroke-width="1.5"/>
+  <!-- the hard column rule -->
+  <line x1="22" y1="4" x2="22" y2="28" stroke="#2f5d3f" stroke-width="1.5"/>
+  <!-- stamped H -->
+  <g fill="#21201b">
+    <rect x="7" y="8" width="2.6" height="16"/>
+    <rect x="14.4" y="8" width="2.6" height="16"/>
+    <rect x="7" y="14.7" width="10" height="2.6"/>
+  </g>
+  <!-- an oxblood credit tick in the numeric column -->
+  <rect x="24" y="20" width="4.5" height="2.2" fill="#9e2b25"/>
+</svg>

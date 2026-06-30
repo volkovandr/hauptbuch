@@ -184,6 +184,10 @@ testing {
 				// exposed transitively to this suite — declare the jdbc starter explicitly.
 				implementation 'org.springframework.boot:spring-boot-starter-jdbc'
 				implementation 'org.springframework.boot:spring-boot-starter-test'
+				// Boot 4.1 split MockMvc auto-configuration (@AutoConfigureMockMvc) into a
+				// dedicated module; the web shell's integration test boots the full context
+				// and drives it through MockMvc.
+				implementation 'org.springframework.boot:spring-boot-webmvc-test'
 				implementation 'org.springframework.boot:spring-boot-testcontainers'
 				implementation 'org.testcontainers:testcontainers-junit-jupiter'
 				implementation 'org.testcontainers:testcontainers-postgresql'
