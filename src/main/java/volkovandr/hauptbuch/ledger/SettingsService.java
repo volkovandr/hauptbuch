@@ -1,8 +1,10 @@
 package volkovandr.hauptbuch.ledger;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import volkovandr.hauptbuch.ledger.repository.CurrencyRepository;
 import volkovandr.hauptbuch.ledger.repository.SettingsRepository;
 
 /**
@@ -18,14 +20,25 @@ import volkovandr.hauptbuch.ledger.repository.SettingsRepository;
 public class SettingsService {
 
   private final SettingsRepository settingsRepository;
+  private final CurrencyRepository currencyRepository;
 
-  SettingsService(SettingsRepository settingsRepository) {
+  SettingsService(SettingsRepository settingsRepository, CurrencyRepository currencyRepository) {
     this.settingsRepository = settingsRepository;
+    this.currencyRepository = currencyRepository;
   }
 
   /** The full settings row (base currency + display name). */
   public Settings get() {
     return settingsRepository.load();
+  }
+
+  /**
+   * The seeded currencies offered as base-currency choices on first run (plan stage 5). Only
+   * meaningful while the base currency is unset; once locked, the settings screen shows the chosen
+   * currency read-only and does not need the list.
+   */
+  public List<Currency> availableCurrencies() {
+    return currencyRepository.findAll();
   }
 
   /** The base currency, or empty on a fresh book where it has not yet been set. */

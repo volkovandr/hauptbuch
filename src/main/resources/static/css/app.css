@@ -80,11 +80,17 @@ body {
   border-bottom: 2px solid var(--rule);
 }
 
+/* The brand doubles as the home link — it works like a link but reads as a wordmark, not one. */
 .app-bar__brand {
   font-weight: 600;
   font-size: 1.05rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.app-bar__brand:visited {
   color: var(--ink);
 }
 
@@ -128,7 +134,6 @@ body {
 }
 
 .leaf-head {
-  position: relative;
   padding-bottom: 0.75rem;
   margin-bottom: var(--rhythm);
   border-bottom: 2px solid var(--rule);
@@ -166,17 +171,6 @@ h2 {
   color: var(--ink-soft);
 }
 
-/* The folio number — true to a ledger, sitting in the leaf corner. */
-.folio {
-  position: absolute;
-  top: 0;
-  right: 0;
-  font-family: var(--font-num);
-  font-size: 0.78rem;
-  letter-spacing: 0.05em;
-  color: var(--ink-soft);
-}
-
 .panel {
   padding: 1rem 0 0;
   margin: var(--rhythm) 0 0;
@@ -203,14 +197,47 @@ h2 {
   color: var(--paper);
 }
 
-.swap-target,
-.swapped {
-  display: block;
+/* ── Forms: labelled fields, stamped inputs in the ledger register ────── */
+.form {
   margin-top: 0.5rem;
+  max-width: 30rem;
 }
 
-.swapped strong {
-  font-family: var(--font-num);
+.field {
+  margin: 0.6rem 0;
+}
+
+.field__label {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* Rectilinear input on paper, matching the stamped .btn — no rounded corners. */
+.input {
+  font: inherit;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1.5px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.input:hover {
+  border-color: var(--green-ink);
+}
+
+/* A locked, read-only setting value — the base currency once it is set in stone. */
+.setting-value {
+  margin: 0.3rem 0 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink);
 }
 
 /* ── Ledger rows: payee | memo | hard-ruled numeric column ────────────── */

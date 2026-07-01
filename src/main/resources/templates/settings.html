@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<!--
+  Settings screen (plan stage 5): the book's two global settings over the single-row settings
+  entity (data-model §3.8).
+
+    • Base currency — the first-run gate. Chosen from the seeded currencies on a fresh book, then
+      shown READ-ONLY once locked (write-once: changing it would invalidate every frozen base
+      amount). The choice form renders only while unset, so a locked value can never be posted back.
+    • Display name — freely editable; backs the "Hello, %name%" greeting on the landing page.
+
+  Standard server-rendered form POSTs re-render this page; no bespoke JS needed here.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content ledger" th:fragment="content">
+    <div class="leaf-head">
+      <p class="eyebrow">Settings</p>
+      <h1>Book settings</h1>
+      <p class="lede">The base currency and the name the ledger greets you by.</p>
+    </div>
+
+    <section class="panel">
+      <p class="eyebrow">Currency</p>
+      <h2>Base currency</h2>
+
+      <!-- Locked: the base currency is set and immutable. -->
+      <div th:if="${baseCurrencyLocked}">
+        <p class="muted">
+          Set once and immutable — every valued amount is denominated in it.
+        </p>
+        <p class="setting-value num" th:text="${settings.baseCurrency()}">EUR</p>
+      </div>
+
+      <!-- Fresh book: offer the seeded currencies, then lock on submit. -->
+      <form
+        th:unless="${baseCurrencyLocked}"
+        method="post"
+        th:action="@{/settings/base-currency}"
+        class="form"
+      >
+        <p class="muted">
+          Chosen once, before the first transaction, and cannot be changed afterwards.
+        </p>
+        <div class="field">
+          <label class="field__label" for="baseCurrency">Currency</label>
+          <select id="baseCurrency" name="baseCurrency" class="input" required>
+            <option
+              th:each="c : ${currencies}"
+              th:value="${c.code()}"
+              th:text="${c.code() + ' — ' + c.name()}"
+            >
+              EUR — Euro
+            </option>
+          </select>
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Set base currency</button>
+        </p>
+      </form>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Greeting</p>
+      <h2>Display name</h2>
+      <form method="post" th:action="@{/settings/display-name}" class="form">
+        <p class="muted">The name shown on the landing page — "Hello, %name%".</p>
+        <div class="field">
+          <label class="field__label" for="displayName">Name</label>
+          <input
+            id="displayName"
+            name="displayName"
+            type="text"
+            class="input"
+            th:value="${settings.displayName()}"
+            autocomplete="off"
+          />
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Save name</button>
+        </p>
+      </form>
+    </section>
+  </main>
+</html>
