@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.6
-**Date:** 2026-06-30
+**Status:** Draft v0.7
+**Date:** 2026-07-01
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
@@ -24,6 +24,7 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.7 (2026-07-01):** Stage 5 (Settings UI) marked **complete**.
 - **v0.6 (2026-06-30):** Stage 4 (UI shell) marked **complete**; a `web` module (UI shell only)
   was added to the §3 module map — feature controllers stay in their own modules.
 - **v0.5 (2026-06-28):** Stage 3 (Transaction core) marked **complete** 
@@ -194,7 +195,7 @@ including backdated inserts. — **Met.**
 **Done when:** the shell renders, htmx swaps work, keyboard nav moves focus, numbers format
 German-style. — **Met.**
 
-### Stage 5 — Settings UI
+### Stage 5 — Settings UI ✅ **complete**
 **Goal:** the smallest real screen, the greeting, and the first-run base-currency gate.
 - Settings screen over the §1.3 entity: **base currency** — set on first run (chosen from seeded
   currencies), then shown **read-only** once locked; editable **display name**.
