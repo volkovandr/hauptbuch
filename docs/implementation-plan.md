@@ -24,6 +24,12 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.8 (2026-07-01):** Stage 6 formally split into **6a** (accounts + opening balances), **6b**
+  (categories + subdivision), and a new **6c** (currency-list editor). 6c adds user-managed
+  currencies via an "Add currency…" affordance in every picker (base picker included); it is a
+  `createCurrency` **operation** that provisions per-currency backing leaves (back-filling under
+  existing parents), reusing 6b's provisioning path. Interaction is htmx + native `<dialog>` with
+  **no bespoke JS** (§1.6 preserved).
 - **v0.7 (2026-07-01):** Stage 5 (Settings UI) marked **complete**.
 - **v0.6 (2026-06-30):** Stage 4 (UI shell) marked **complete**; a `web` module (UI shell only)
   was added to the §3 module map — feature controllers stay in their own modules.
@@ -231,11 +237,32 @@ in settings shows in the greeting.
   reassign its postings to a `…:General` leaf) — required by category-create (register §3.5 /
   data-model §5). The broader merge/reassign suite is backlog (§14).
 
-**May split** into 6a (accounts + opening balances) and 6b (categories + subdivision) if the slice
-feels large.
+**Split (confirmed):** the slice is large, so stage 6 is built as three ordered sub-stages, each
+ending green and demoable:
 
-**Done when:** accounts (any currency) and categories can be created and managed; an account can be
-opened with a starting balance that is a real, balanced transaction; subdividing a leaf works.
+- **6a — Accounts + opening balances.** Move `Account` ownership into `accounts`; account
+  management UI (any seeded currency); opening balance as a real balanced transaction.
+- **6b — Categories + subdivision.** Category management over the same table; the `operations`
+  module is born here with the **subdivision** op (leaf → parent, postings reassigned to `…:General`).
+- **6c — Currency-list editor.** An "Add currency…" affordance in **every** currency picker
+  (including the first-run base-currency picker). Depends on 6b: adding a currency is not one insert —
+  it provisions the currency's per-currency backing leaves (`Opening Balances <CODE>`,
+  `FX gain/loss <CODE>`, and one leaf under every existing category parent), **back-filling under
+  parents that already exist** — reusing 6b's leaf-provisioning path (data-model §6.5, CLAUDE.md §1.7).
+  So it is a `createCurrency` **operation** in `operations`, not CRUD.
+  - **Interaction (no bespoke JS — htmx + native `<dialog>`, upholds CLAUDE.md §1.6):** a reusable
+    Thymeleaf currency-picker fragment (`<select>` + "Add currency…" button) lives in the currency's
+    owning module (`ledger`, not `web`); screens include it. The button `hx-get`s a `<dialog>`
+    add-form; **OK** `hx-post`s to create + provision, and the response uses `hx-swap-oob` to both
+    replace the picker with a version that has the new currency **pre-selected** and dismiss the
+    dialog; **Cancel** swaps an empty fragment to dismiss. This is the app's first htmx partial-swap
+    and first `<dialog>`; add minimal `<dialog>` CSS.
+  - **TDD:** the `createCurrency` `sqlLogicTest` includes the *currency-added-after-categories-exist*
+    case (leaves back-filled under existing parents), not just the fresh-book case the V2 seed covers.
+
+**Done when (6a–6c):** accounts (any currency) and categories can be created and managed; an account
+can be opened with a starting balance that is a real, balanced transaction; subdividing a leaf works;
+a new currency can be added from any picker and is provisioned with its backing leaves and pre-selected.
 
 ---
 
