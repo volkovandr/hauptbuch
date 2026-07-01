@@ -32,7 +32,7 @@ public record NavItem(String label, String path, boolean current) {
   }
 
   /** The sections list with the item matching {@code activePath} marked current. */
-  static List<NavItem> sectionsFor(String activePath) {
+  public static List<NavItem> sectionsFor(String activePath) {
     return SECTIONS.stream().map(item -> item.markedCurrentFor(activePath)).toList();
   }
 }

@@ -14,6 +14,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.ledger.repository.AccountRepository;
+import volkovandr.hauptbuch.ledger.repository.CurrencyRepository;
 import volkovandr.hauptbuch.ledger.repository.ExchangeRateRepository;
 import volkovandr.hauptbuch.ledger.repository.PayeeRepository;
 import volkovandr.hauptbuch.ledger.repository.SettingsRepository;
@@ -42,6 +43,7 @@ class RepositoryRoundTripIntegrationTest {
   @Autowired TransactionRepository transactionRepository;
   @Autowired PayeeRepository payeeRepository;
   @Autowired SettingsRepository settingsRepository;
+  @Autowired CurrencyRepository currencyRepository;
 
   /** A real cash account in the given currency, returning its id. */
   private long insertCashAccount(String currencyCode) {
@@ -158,5 +160,16 @@ class RepositoryRoundTripIntegrationTest {
   void settingsRowExistsAndDisplayNameUpdates() {
     settingsRepository.updateDisplayName("Andrey");
     assertThat(settingsRepository.load().displayName()).isEqualTo("Andrey");
+  }
+
+  @Test
+  void currenciesRoundTripFromTheSeed() {
+    List<Currency> currencies = currencyRepository.findAll();
+    // Seeded in V2; the natural key is the ISO code, and the list is ordered by it.
+    assertThat(currencies).extracting(Currency::code).contains(EUR, CHF).isSorted();
+    Currency eur = currencies.stream().filter(c -> EUR.equals(c.code())).findFirst().orElseThrow();
+    assertThat(eur.name()).isEqualTo("Euro");
+    assertThat(eur.minorUnits()).isEqualTo(2);
+    assertThat(eur.symbol()).isEqualTo("€");
   }
 }

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!--
+  Landing page (plan stage 5): the "Hello, %name%" greeting, reading the display name from the
+  book's settings. Dressed as the opening leaf of the ledger. On a fresh book — no display name,
+  no base currency yet — it welcomes neutrally and points at the settings screen, which carries
+  the first-run base-currency gate.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content ledger" th:fragment="content">
+    <div class="leaf-head">
+      <p class="eyebrow">Das Hauptbuch</p>
+      <h1 th:if="${displayName != null and !displayName.isBlank()}" th:text="'Hello, ' + ${displayName}">
+        Hello, name
+      </h1>
+      <h1 th:unless="${displayName != null and !displayName.isBlank()}">Welcome</h1>
+      <p class="lede">Your general ledger — double-entry, multi-currency, kept by hand.</p>
+    </div>
+
+    <section class="panel" th:unless="${baseCurrencySet}">
+      <p class="eyebrow">First run</p>
+      <h2>Set the base currency</h2>
+      <p class="muted">
+        Every amount is valued in a single base currency. It is set once, before the first
+        transaction, and cannot be changed afterwards.
+      </p>
+      <p class="actions">
+        <a class="btn" th:href="@{/settings}">Open settings</a>
+      </p>
+    </section>
+  </main>
+</html>

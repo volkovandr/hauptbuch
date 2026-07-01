@@ -6,10 +6,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import volkovandr.hauptbuch.ledger.repository.CurrencyRepository;
 import volkovandr.hauptbuch.ledger.repository.SettingsRepository;
 
 /**
@@ -21,23 +23,25 @@ import volkovandr.hauptbuch.ledger.repository.SettingsRepository;
 class SettingsServiceTest {
 
   private static final String CHF = "CHF";
+  private static final String EUR = "EUR";
 
   @Mock private SettingsRepository settingsRepository;
+  @Mock private CurrencyRepository currencyRepository;
 
   @Test
   void setsBaseCurrencyOnFreshBook() {
     when(settingsRepository.load()).thenReturn(new Settings(null, null));
-    SettingsService service = new SettingsService(settingsRepository);
+    SettingsService service = new SettingsService(settingsRepository, currencyRepository);
 
-    service.setBaseCurrency("EUR");
+    service.setBaseCurrency(EUR);
 
-    verify(settingsRepository).updateBaseCurrency("EUR");
+    verify(settingsRepository).updateBaseCurrency(EUR);
   }
 
   @Test
   void refusesToOverwriteAlreadySetBaseCurrency() {
-    when(settingsRepository.load()).thenReturn(new Settings("EUR", null));
-    SettingsService service = new SettingsService(settingsRepository);
+    when(settingsRepository.load()).thenReturn(new Settings(EUR, null));
+    SettingsService service = new SettingsService(settingsRepository, currencyRepository);
 
     assertThatExceptionOfType(IllegalStateException.class)
         .isThrownBy(() -> service.setBaseCurrency(CHF))
@@ -49,7 +53,7 @@ class SettingsServiceTest {
   @Test
   void baseCurrencyIsEmptyOnFreshBook() {
     when(settingsRepository.load()).thenReturn(new Settings(null, null));
-    SettingsService service = new SettingsService(settingsRepository);
+    SettingsService service = new SettingsService(settingsRepository, currencyRepository);
 
     assertThat(service.baseCurrency()).isEmpty();
   }
@@ -57,8 +61,27 @@ class SettingsServiceTest {
   @Test
   void baseCurrencyIsPresentOnceSet() {
     when(settingsRepository.load()).thenReturn(new Settings(CHF, "Andrey"));
-    SettingsService service = new SettingsService(settingsRepository);
+    SettingsService service = new SettingsService(settingsRepository, currencyRepository);
 
     assertThat(service.baseCurrency()).contains(CHF);
+  }
+
+  @Test
+  void setsDisplayName() {
+    SettingsService service = new SettingsService(settingsRepository, currencyRepository);
+
+    service.setDisplayName("Andrey");
+
+    verify(settingsRepository).updateDisplayName("Andrey");
+  }
+
+  @Test
+  void offersSeededCurrenciesAsChoices() {
+    List<Currency> seeded =
+        List.of(new Currency(CHF, 2, "CHF", "Swiss Franc"), new Currency(EUR, 2, "€", "Euro"));
+    when(currencyRepository.findAll()).thenReturn(seeded);
+    SettingsService service = new SettingsService(settingsRepository, currencyRepository);
+
+    assertThat(service.availableCurrencies()).isEqualTo(seeded);
   }
 }
