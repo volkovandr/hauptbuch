@@ -7,7 +7,8 @@ import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import volkovandr.hauptbuch.ledger.repository.AccountRepository;
+import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.repository.TransactionRepository;
 
 /**
@@ -43,15 +44,15 @@ public class LedgerService {
   private static final int SINGLE_CURRENCY = 1;
 
   private final SettingsService settingsService;
-  private final AccountRepository accountRepository;
+  private final AccountService accountService;
   private final TransactionRepository transactionRepository;
 
   LedgerService(
       SettingsService settingsService,
-      AccountRepository accountRepository,
+      AccountService accountService,
       TransactionRepository transactionRepository) {
     this.settingsService = settingsService;
-    this.accountRepository = accountRepository;
+    this.accountService = accountService;
     this.transactionRepository = transactionRepository;
   }
 
@@ -149,7 +150,7 @@ public class LedgerService {
           "A transaction needs at least two postings to balance");
     }
 
-    Set<Long> parentAccountIds = new HashSet<>(accountRepository.findParentAccountIds());
+    Set<Long> parentAccountIds = new HashSet<>(accountService.findParentAccountIds());
     Set<String> currencies = new HashSet<>();
     for (PostingDraft leg : postings) {
       Account account = requireLeafAccount(leg.accountId(), parentAccountIds);
@@ -201,7 +202,7 @@ public class LedgerService {
 
     // A non-par conversion: the residual that makes it balance is a real FX gain/loss (§6.3).
     Account fxLeaf =
-        accountRepository
+        accountService
             .findLeafUnderParentNamed(FX_GAIN_LOSS_PARENT, baseCurrency)
             .orElseThrow(
                 () ->
@@ -233,7 +234,7 @@ public class LedgerService {
 
   private Account requireLeafAccount(long accountId, Set<Long> parentAccountIds) {
     Account account =
-        accountRepository
+        accountService
             .findById(accountId)
             .orElseThrow(
                 () -> new UnbalancedTransactionException("No account with id " + accountId));

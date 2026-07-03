@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!--
+  Account edit page (plan stage 6a): the freely-editable fields — display name and the stored
+  register hue (register §2.8) — plus the close action.
+
+  Type, currency, and parent are shown read-only: postings inherit the account's currency, and
+  re-parenting a posted-to account would break leaves-only (data-model §5); the stage-6b
+  subdivision operation is the sanctioned path for restructuring.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <div class="leaf-head">
+      <p class="eyebrow">Accounts</p>
+      <h1 th:text="${account.name()}">Giro</h1>
+      <p class="lede">
+        <span th:text="${account.type()}">asset</span> ·
+        <span class="num" th:text="${account.currencyCode()}">EUR</span>
+        <span th:if="${account.openedAt() != null}"
+          >· opened <span th:text="${account.openedAt()}">2026-07-03</span></span
+        >
+      </p>
+    </div>
+
+    <section class="panel">
+      <p class="eyebrow">Settings</p>
+      <h2>Name &amp; colour</h2>
+      <form method="post" th:action="@{/accounts/{id}(id=${account.accountId()})}" class="form">
+        <div class="field">
+          <label class="field__label" for="name">Name</label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            class="input"
+            th:value="${account.name()}"
+            required
+            autocomplete="off"
+          />
+        </div>
+        <div class="field">
+          <span class="field__label">Register colour</span>
+          <p class="muted">
+            Two shades of this hue zebra the account's rows in the register — stable whatever else
+            is on screen.
+          </p>
+          <div class="hue-picker">
+            <label class="hue" th:each="h : ${hueOptions}">
+              <input
+                type="radio"
+                name="hue"
+                th:value="${h.value()}"
+                th:checked="${account.hue() == h.value()}"
+              />
+              <span
+                class="swatch"
+                th:style="|background: hsl(${h.value()} 55% 78%); border-color: hsl(${h.value()} 55% 45%)|"
+              ></span>
+              <span th:text="${h.label()}">Blue</span>
+            </label>
+          </div>
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Save</button>
+          <a th:href="@{/accounts}">Back to accounts</a>
+        </p>
+      </form>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Lifecycle</p>
+      <h2>Close this account</h2>
+      <div th:if="${account.closedAt() != null}">
+        <p class="muted">
+          Closed on <span th:text="${account.closedAt()}">2026-07-01</span>. Its history stays in
+          the book.
+        </p>
+        <form method="post" th:action="@{/accounts/{id}/reopen(id=${account.accountId()})}" class="form">
+          <p class="actions">
+            <button type="submit" class="btn">Reopen account</button>
+          </p>
+        </form>
+      </div>
+      <form
+        th:if="${account.closedAt() == null}"
+        method="post"
+        th:action="@{/accounts/{id}/close(id=${account.accountId()})}"
+        class="form"
+      >
+        <p class="muted">
+          Closing takes the account out of daily use as of today; nothing is deleted and every
+          posting stays.
+        </p>
+        <p class="actions">
+          <button type="submit" class="btn">Close account</button>
+        </p>
+      </form>
+    </section>
+  </main>
+</html>

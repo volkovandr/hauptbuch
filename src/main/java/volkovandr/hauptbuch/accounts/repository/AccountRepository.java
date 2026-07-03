@@ -1,0 +1,171 @@
+package volkovandr.hauptbuch.accounts.repository;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
+import volkovandr.hauptbuch.accounts.Account;
+
+/**
+ * Native-SQL access to the {@code account} table (CLAUDE.md §1.3 — JdbcClient + records, no ORM).
+ * Moved here from {@code ledger} at stage 6a, gaining the writes: this module owns the account
+ * table now; the engine reads accounts through {@link
+ * volkovandr.hauptbuch.accounts.AccountService}.
+ *
+ * <p>{@link #hasPostings} reads the {@code posting} table — a deliberate, read-only, SQL-level
+ * peek: the leaves-only invariant (data-model §5) must be enforced when a parent is chosen, and
+ * asking the engine would invert the module dependency (see {@code OpeningBalanceRecorder}).
+ */
+@Repository
+public class AccountRepository {
+
+  private static final String ACCOUNT_ID = "accountId";
+
+  private final JdbcClient jdbcClient;
+
+  AccountRepository(JdbcClient jdbcClient) {
+    this.jdbcClient = jdbcClient;
+  }
+
+  /** Find an account by id. */
+  public Optional<Account> findById(long accountId) {
+    return jdbcClient
+        .sql(
+            """
+            select account_id, name, type, parent_id, currency_code, hue,
+                   opened_at, closed_at, deleted_at
+            from account
+            where account_id = :accountId
+            """)
+        .param(ACCOUNT_ID, accountId)
+        .query(Account.class)
+        .optional();
+  }
+
+  /**
+   * Resolve a system leaf by its parent's name and the leaf's currency (e.g. the {@code Opening
+   * Balances} leaf for EUR, the {@code FX gain/loss} leaf for the base currency). The seed (V2)
+   * creates exactly one such leaf per currency under each named system parent.
+   */
+  public Optional<Account> findLeafUnderParentNamed(String parentName, String currencyCode) {
+    return jdbcClient
+        .sql(
+            """
+            select child.account_id, child.name, child.type, child.parent_id,
+                   child.currency_code, child.hue, child.opened_at, child.closed_at,
+                   child.deleted_at
+            from account child
+            join account parent on child.parent_id = parent.account_id
+            where parent.name = :parentName
+              and parent.parent_id is null
+              and child.currency_code = :currencyCode
+            """)
+        .param("parentName", parentName)
+        .param("currencyCode", currencyCode)
+        .query(Account.class)
+        .optional();
+  }
+
+  /** The account ids that are some other account's parent — i.e. the non-leaf accounts. */
+  public List<Long> findParentAccountIds() {
+    return jdbcClient
+        .sql("select distinct parent_id from account where parent_id is not null")
+        .query(Long.class)
+        .list();
+  }
+
+  /**
+   * The live (not soft-deleted) accounts of the given types, parents before their children and
+   * alphabetical within a level — the accounts screen's list order.
+   */
+  public List<Account> findLiveByTypes(List<String> types) {
+    return jdbcClient
+        .sql(
+            """
+            select account_id, name, type, parent_id, currency_code, hue,
+                   opened_at, closed_at, deleted_at
+            from account
+            where type in (:types)
+              and deleted_at is null
+            order by type, coalesce(parent_id, account_id), parent_id is not null, name
+            """)
+        .param("types", types)
+        .query(Account.class)
+        .list();
+  }
+
+  /** The account ids at least one posting — live or voided — has ever hit. */
+  public List<Long> findPostedAccountIds() {
+    return jdbcClient.sql("select distinct account_id from posting").query(Long.class).list();
+  }
+
+  /** Whether any posting — live or voided — has ever hit this account (leaves-only guard). */
+  public boolean hasPostings(long accountId) {
+    return jdbcClient
+        .sql("select exists(select 1 from posting where account_id = :accountId)")
+        .param(ACCOUNT_ID, accountId)
+        .query(Boolean.class)
+        .single();
+  }
+
+  /** Insert a new account and return its generated id. */
+  public long insert(Account account) {
+    return jdbcClient
+        .sql(
+            """
+            insert into account (name, type, parent_id, currency_code, hue, opened_at)
+            values (:name, :type, :parentId, :currencyCode, :hue, :openedAt)
+            returning account_id
+            """)
+        .param("name", account.name())
+        .param("type", account.type())
+        .param("parentId", account.parentId())
+        .param("currencyCode", account.currencyCode())
+        .param("hue", account.hue())
+        .param("openedAt", account.openedAt())
+        .query(Long.class)
+        .single();
+  }
+
+  /** Update the freely-editable fields: display name and stored hue. */
+  public int updateNameAndHue(long accountId, String name, Integer hue) {
+    return jdbcClient
+        .sql("update account set name = :name, hue = :hue where account_id = :accountId")
+        .param("name", name)
+        .param("hue", hue)
+        .param(ACCOUNT_ID, accountId)
+        .update();
+  }
+
+  /** Stamp {@code closed_at} on a live, still-open account; affects no rows otherwise. */
+  public int close(long accountId, LocalDate closedAt) {
+    return jdbcClient
+        .sql(
+            """
+            update account
+            set closed_at = :closedAt
+            where account_id = :accountId
+              and closed_at is null
+              and deleted_at is null
+            """)
+        .param("closedAt", closedAt)
+        .param(ACCOUNT_ID, accountId)
+        .update();
+  }
+
+  /** Clear {@code closed_at} on a live, closed account; affects no rows otherwise. */
+  public int reopen(long accountId) {
+    return jdbcClient
+        .sql(
+            """
+            update account
+            set closed_at = null
+            where account_id = :accountId
+              and closed_at is not null
+              and deleted_at is null
+            """)
+        .param(ACCOUNT_ID, accountId)
+        .update();
+  }
+}

@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -13,7 +12,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
-import volkovandr.hauptbuch.ledger.repository.AccountRepository;
+import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.repository.CurrencyRepository;
 import volkovandr.hauptbuch.ledger.repository.ExchangeRateRepository;
 import volkovandr.hauptbuch.ledger.repository.PayeeRepository;
@@ -38,7 +38,7 @@ class RepositoryRoundTripIntegrationTest {
   private static final String OPENING_BALANCES = "Opening Balances";
 
   @Autowired JdbcClient jdbcClient;
-  @Autowired AccountRepository accountRepository;
+  @Autowired AccountService accountService;
   @Autowired ExchangeRateRepository exchangeRateRepository;
   @Autowired TransactionRepository transactionRepository;
   @Autowired PayeeRepository payeeRepository;
@@ -56,32 +56,6 @@ class RepositoryRoundTripIntegrationTest {
         .param("c", currencyCode)
         .query(Long.class)
         .single();
-  }
-
-  @Test
-  void accountRoundTripsIncludingTheSeededSystemLeaf() {
-    Optional<Account> openingBalancesEur =
-        accountRepository.findLeafUnderParentNamed(OPENING_BALANCES, EUR);
-    assertThat(openingBalancesEur).isPresent();
-    assertThat(openingBalancesEur.get().type()).isEqualTo("equity");
-    assertThat(openingBalancesEur.get().currencyCode()).isEqualTo(EUR);
-
-    Optional<Account> byId = accountRepository.findById(openingBalancesEur.get().accountId());
-    assertThat(byId).contains(openingBalancesEur.get());
-  }
-
-  @Test
-  void parentAccountIdsAreTheNonLeafAccounts() {
-    // The two seeded system parents (Opening Balances, FX gain/loss) are parents of their leaves.
-    List<Long> parentIds = accountRepository.findParentAccountIds();
-    List<Long> systemParentIds =
-        jdbcClient
-            .sql(
-                "select account_id from account "
-                    + "where name in ('Opening Balances', 'FX gain/loss') and parent_id is null")
-            .query(Long.class)
-            .list();
-    assertThat(parentIds).containsAll(systemParentIds);
   }
 
   @Test
@@ -105,7 +79,7 @@ class RepositoryRoundTripIntegrationTest {
   @Test
   void transactionAndPostingsRoundTrip() {
     long cash = insertCashAccount(EUR);
-    Account food = accountRepository.findLeafUnderParentNamed(OPENING_BALANCES, EUR).orElseThrow();
+    Account food = accountService.findLeafUnderParentNamed(OPENING_BALANCES, EUR).orElseThrow();
 
     long payeeId = payeeRepository.insert("Rewe");
     long txnId =

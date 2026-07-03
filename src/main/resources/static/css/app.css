@@ -293,6 +293,74 @@ h2 {
   box-shadow: inset 3px 0 0 var(--green-ink);
 }
 
+/* ── Accounts screen (stage 6a) ───────────────────────────────────────── */
+.acct-list {
+  list-style: none;
+  margin: 0.5rem 0 1rem;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.acct {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.3rem 0.25rem;
+  border-bottom: 1px solid var(--feint);
+}
+
+.acct--child {
+  padding-left: 1.75rem;
+}
+
+.acct__name {
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.acct__name:hover {
+  text-decoration: underline;
+}
+
+/* The currency code, pushed against the right edge like a ledger column. */
+.acct__meta {
+  margin-left: auto;
+}
+
+/* The account's stored register hue (register §2.8): the tint filled, the darker shade as the
+   border — the same two shades the register's zebra derives from the stored hue. */
+.swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  align-self: center;
+  flex: none;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+}
+
+.tag {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  padding: 0 0.35rem;
+}
+
+.hue-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin: 0.5rem 0;
+}
+
+.hue {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 /* ── Command palette stub (Ctrl-K) ────────────────────────────────────── */
 .palette {
   position: fixed;

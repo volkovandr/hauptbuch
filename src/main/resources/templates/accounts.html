@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<!--
+  Accounts screen (plan stage 6a): the asset and liability accounts the register threads through,
+  and the open-account form.
+
+    • The list groups assets and liabilities; children indent under their parent (leaves-only
+      hierarchy, data-model §5). Each account shows its stored register hue (register §2.8) as a
+      swatch and links to its edit page. Closed accounts stay listed, tagged, history intact.
+    • Opening an account takes any seeded currency (multi-currency is live, plan §1.2) and an
+      optional opening balance — German-formatted, booked through the engine as a real balanced
+      transaction against the per-currency Opening Balances leaf (data-model T-DM-4).
+
+  Standard server-rendered form POSTs with redirect-after-post; no bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <div class="leaf-head">
+      <p class="eyebrow">Accounts</p>
+      <h1>Accounts</h1>
+      <p class="lede">The real-world accounts the book keeps — cash, giro, cards, loans.</p>
+    </div>
+
+    <section class="panel">
+      <p class="eyebrow">Balance</p>
+      <h2>Assets</h2>
+      <p class="muted" th:if="${#lists.isEmpty(assets)}">No asset accounts yet.</p>
+      <ul class="acct-list" th:unless="${#lists.isEmpty(assets)}">
+        <li
+          th:each="a : ${assets}"
+          class="acct"
+          th:classappend="${a.parentId() != null} ? 'acct--child'"
+        >
+          <span
+            class="swatch"
+            th:style="${a.hue() != null} ? |background: hsl(${a.hue()} 55% 78%); border-color: hsl(${a.hue()} 55% 45%)|"
+          ></span>
+          <a class="acct__name" th:href="@{/accounts/{id}(id=${a.accountId()})}" th:text="${a.name()}"
+            >Giro</a
+          >
+          <span class="tag" th:if="${a.closedAt() != null}">closed</span>
+          <span class="acct__meta muted num" th:text="${a.currencyCode()}">EUR</span>
+        </li>
+      </ul>
+
+      <h2>Liabilities</h2>
+      <p class="muted" th:if="${#lists.isEmpty(liabilities)}">No liability accounts yet.</p>
+      <ul class="acct-list" th:unless="${#lists.isEmpty(liabilities)}">
+        <li
+          th:each="a : ${liabilities}"
+          class="acct"
+          th:classappend="${a.parentId() != null} ? 'acct--child'"
+        >
+          <span
+            class="swatch"
+            th:style="${a.hue() != null} ? |background: hsl(${a.hue()} 55% 78%); border-color: hsl(${a.hue()} 55% 45%)|"
+          ></span>
+          <a class="acct__name" th:href="@{/accounts/{id}(id=${a.accountId()})}" th:text="${a.name()}"
+            >Visa</a
+          >
+          <span class="tag" th:if="${a.closedAt() != null}">closed</span>
+          <span class="acct__meta muted num" th:text="${a.currencyCode()}">EUR</span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">New</p>
+      <h2>Open an account</h2>
+      <form method="post" th:action="@{/accounts}" class="form">
+        <div class="field">
+          <label class="field__label" for="name">Name</label>
+          <input id="name" name="name" type="text" class="input" required autocomplete="off" />
+        </div>
+        <div class="field">
+          <label class="field__label" for="type">Type</label>
+          <select id="type" name="type" class="input" required>
+            <option value="asset">Asset — cash, giro, savings</option>
+            <option value="liability">Liability — card, loan</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="parentId">Parent</label>
+          <select id="parentId" name="parentId" class="input">
+            <option value="">— none (top level) —</option>
+            <option
+              th:each="p : ${parentOptions}"
+              th:value="${p.accountId()}"
+              th:text="${p.name() + ' (' + p.type() + ')'}"
+            >
+              Giro (asset)
+            </option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="currencyCode">Currency</label>
+          <select id="currencyCode" name="currencyCode" class="input" required>
+            <option
+              th:each="c : ${currencies}"
+              th:value="${c.code()}"
+              th:text="${c.code() + ' — ' + c.name()}"
+            >
+              EUR — Euro
+            </option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="openedAt">Opened on</label>
+          <input
+            id="openedAt"
+            name="openedAt"
+            type="date"
+            class="input"
+            th:value="${today}"
+            required
+          />
+        </div>
+        <div class="field">
+          <label class="field__label" for="openingBalance">Opening balance</label>
+          <input
+            id="openingBalance"
+            name="openingBalance"
+            type="text"
+            class="input num"
+            inputmode="decimal"
+            placeholder="1.234,56"
+            autocomplete="off"
+          />
+          <p class="muted">
+            Optional; in the account's currency. Booked as a real transaction against Opening
+            Balances, dated the opening day. Negative for debt carried into the book.
+          </p>
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Open account</button>
+        </p>
+      </form>
+    </section>
+  </main>
+</html>

@@ -14,7 +14,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
-import volkovandr.hauptbuch.ledger.repository.AccountRepository;
+import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.repository.TransactionRepository;
 
 /**
@@ -38,7 +39,7 @@ class LedgerServiceIntegrationTest {
   @Autowired JdbcClient jdbcClient;
   @Autowired LedgerService ledgerService;
   @Autowired SettingsService settingsService;
-  @Autowired AccountRepository accountRepository;
+  @Autowired AccountService accountService;
   @Autowired TransactionRepository transactionRepository;
 
   private long cashEur;
@@ -116,7 +117,7 @@ class LedgerServiceIntegrationTest {
     List<Posting> postings = transactionRepository.findPostings(txnId);
     assertThat(postings).hasSize(3);
 
-    Account fxLeaf = accountRepository.findLeafUnderParentNamed("FX gain/loss", EUR).orElseThrow();
+    Account fxLeaf = accountService.findLeafUnderParentNamed("FX gain/loss", EUR).orElseThrow();
     Posting fxLeg =
         postings.stream()
             .filter(p -> p.accountId().equals(fxLeaf.accountId()))

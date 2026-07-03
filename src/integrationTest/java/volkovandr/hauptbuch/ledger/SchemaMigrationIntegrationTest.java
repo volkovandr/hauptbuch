@@ -101,6 +101,26 @@ class SchemaMigrationIntegrationTest {
   }
 
   @Test
+  void accountCarriesNullableStoredHueWithinTheColourWheel() {
+    // V3: the stored two-tone hue (register §2.8). Nullable — the seeded system accounts have none.
+    Long seededWithHue =
+        jdbcClient
+            .sql("select count(*) from account where hue is not null")
+            .query(Long.class)
+            .single();
+    assertThat(seededWithHue).isZero();
+
+    // The check constraint keeps a hue on the HSL colour wheel.
+    assertThatThrownBy(
+        () ->
+            jdbcClient
+                .sql(
+                    "insert into account (name, type, currency_code, hue) "
+                        + "values ('Bad hue', 'asset', 'EUR', 360)")
+                .update());
+  }
+
+  @Test
   void seedsAnFxGainLossIncomeLeafPerCurrency() {
     List<String> allCurrencies = jdbcClient.sql(ALL_CURRENCIES).query(String.class).list();
     assertThat(leafCurrenciesUnder("FX gain/loss"))

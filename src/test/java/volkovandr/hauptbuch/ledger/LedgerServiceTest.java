@@ -19,7 +19,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import volkovandr.hauptbuch.ledger.repository.AccountRepository;
+import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.repository.TransactionRepository;
 
 /**
@@ -44,14 +45,14 @@ class LedgerServiceTest {
   private static final long FX_LEAF_EUR = 7L;
 
   @Mock private SettingsService settingsService;
-  @Mock private AccountRepository accountRepository;
+  @Mock private AccountService accountService;
   @Mock private TransactionRepository transactionRepository;
 
   private LedgerService ledgerService;
 
   @BeforeEach
   void setUp() {
-    ledgerService = new LedgerService(settingsService, accountRepository, transactionRepository);
+    ledgerService = new LedgerService(settingsService, accountService, transactionRepository);
   }
 
   private void stubBaseCurrency(String code) {
@@ -59,9 +60,10 @@ class LedgerServiceTest {
   }
 
   private void stubAccount(long id, String currency) {
-    when(accountRepository.findById(id))
+    when(accountService.findById(id))
         .thenReturn(
-            Optional.of(new Account(id, "acct" + id, "asset", null, currency, null, null, null)));
+            Optional.of(
+                new Account(id, "acct" + id, "asset", null, currency, null, null, null, null)));
   }
 
   @Test
@@ -69,7 +71,7 @@ class LedgerServiceTest {
     stubBaseCurrency(EUR);
     stubAccount(CASH_EUR, EUR);
     stubAccount(FOOD_EUR, EUR);
-    when(accountRepository.findParentAccountIds()).thenReturn(List.of());
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
     when(transactionRepository.insertTransaction(any())).thenReturn(500L);
 
     long id =
@@ -91,7 +93,7 @@ class LedgerServiceTest {
     stubBaseCurrency(EUR);
     stubAccount(CASH_EUR, EUR);
     stubAccount(FOOD_EUR, EUR);
-    when(accountRepository.findParentAccountIds()).thenReturn(List.of());
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
 
     assertThatExceptionOfType(UnbalancedTransactionException.class)
         .isThrownBy(
@@ -134,10 +136,11 @@ class LedgerServiceTest {
   void rejectsPostingToNonLeafAccount() {
     stubBaseCurrency(EUR);
     stubAccount(CASH_EUR, EUR);
-    when(accountRepository.findById(FOOD_PARENT))
+    when(accountService.findById(FOOD_PARENT))
         .thenReturn(
-            Optional.of(new Account(FOOD_PARENT, "Food", "expense", null, EUR, null, null, null)));
-    when(accountRepository.findParentAccountIds()).thenReturn(List.of(FOOD_PARENT));
+            Optional.of(
+                new Account(FOOD_PARENT, "Food", "expense", null, EUR, null, null, null, null)));
+    when(accountService.findParentAccountIds()).thenReturn(List.of(FOOD_PARENT));
 
     assertThatExceptionOfType(UnbalancedTransactionException.class)
         .isThrownBy(
@@ -160,7 +163,7 @@ class LedgerServiceTest {
     stubBaseCurrency(EUR);
     stubAccount(CARD_CHF, CHF);
     stubAccount(CASH_EUR, EUR);
-    when(accountRepository.findParentAccountIds()).thenReturn(List.of());
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
 
     assertThatExceptionOfType(UnbalancedTransactionException.class)
         .isThrownBy(
@@ -185,7 +188,7 @@ class LedgerServiceTest {
     stubBaseCurrency(EUR);
     stubAccount(CARD_CHF, CHF);
     stubAccount(CASH_EUR, EUR);
-    when(accountRepository.findParentAccountIds()).thenReturn(List.of());
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
     when(transactionRepository.insertTransaction(any())).thenReturn(600L);
 
     // 100 CHF arrived as €95; both base amounts given, summing to zero — no residual.
@@ -202,7 +205,7 @@ class LedgerServiceTest {
 
     // Exactly the two submitted legs — no FX gain/loss leg inserted.
     verify(transactionRepository, times(2)).insertPosting(any());
-    verify(accountRepository, never()).findLeafUnderParentNamed(any(), any());
+    verify(accountService, never()).findLeafUnderParentNamed(any(), any());
   }
 
   @Test
@@ -210,13 +213,13 @@ class LedgerServiceTest {
     stubBaseCurrency(EUR);
     stubAccount(CARD_CHF, CHF);
     stubAccount(CASH_EUR, EUR);
-    when(accountRepository.findParentAccountIds()).thenReturn(List.of());
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
     when(transactionRepository.insertTransaction(any())).thenReturn(700L);
-    when(accountRepository.findLeafUnderParentNamed(LedgerService.FX_GAIN_LOSS_PARENT, EUR))
+    when(accountService.findLeafUnderParentNamed(LedgerService.FX_GAIN_LOSS_PARENT, EUR))
         .thenReturn(
             Optional.of(
                 new Account(
-                    FX_LEAF_EUR, "FX gain/loss EUR", "income", null, EUR, null, null, null)));
+                    FX_LEAF_EUR, "FX gain/loss EUR", "income", null, EUR, null, null, null, null)));
 
     // Base amounts sum to +2.00 (−95 + 97): a non-par conversion. Residual −2.00 → FX leaf.
     ledgerService.recordTransaction(
@@ -271,7 +274,7 @@ class LedgerServiceTest {
     stubBaseCurrency(EUR);
     stubAccount(CASH_EUR, EUR);
     stubAccount(FOOD_EUR, EUR);
-    when(accountRepository.findParentAccountIds()).thenReturn(List.of());
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
     when(transactionRepository.findById(80L))
         .thenReturn(
             Optional.of(
