@@ -188,6 +188,11 @@ Full detail in `docs/data-model.md`. The traps:
 - **Row mapping:** Java `record`s, mapped via `JdbcClient`. No entity graphs.
 - **Formatting:** German display/parse (`1.234,56`); base currency rendered bare, non-base carries
   symbol/ISO. Lives in the shared UI formatting utility.
+- **UI copy is English-only.** German number formatting (above) is a display convention, not a
+  language choice — every label, heading, button, and message is English. The one sanctioned
+  exception is the app's own name, "Hauptbuch", in the brand mark. Do not introduce German words
+  into templates (an earlier draft leaked a few, e.g. "Lebenslauf" for a section heading — fixed to
+  "Lifecycle").
 - **Tests are the living spec.** When you return to a module, the tests state what it does — write
   them that way.
 

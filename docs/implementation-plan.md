@@ -24,6 +24,7 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.9 (2026-07-03):** Stage 6a (Accounts + opening balances) marked **complete**.
 - **v0.8 (2026-07-01):** Stage 6 formally split into **6a** (accounts + opening balances), **6b**
   (categories + subdivision), and a new **6c** (currency-list editor). 6c adds user-managed
   currencies via an "Add currency…" affordance in every picker (base picker included); it is a
@@ -240,8 +241,8 @@ in settings shows in the greeting.
 **Split (confirmed):** the slice is large, so stage 6 is built as three ordered sub-stages, each
 ending green and demoable:
 
-- **6a — Accounts + opening balances.** Move `Account` ownership into `accounts`; account
-  management UI (any seeded currency); opening balance as a real balanced transaction.
+- **6a — Accounts + opening balances.** ✅ **complete.** Move `Account` ownership into `accounts`;
+  account management UI (any seeded currency); opening balance as a real balanced transaction.
 - **6b — Categories + subdivision.** Category management over the same table; the `operations`
   module is born here with the **subdivision** op (leaf → parent, postings reassigned to `…:General`).
 - **6c — Currency-list editor.** An "Add currency…" affordance in **every** currency picker
