@@ -24,6 +24,14 @@ import volkovandr.hauptbuch.SqlLogicSchema;
  * it. Because the balance is <em>derived</em> on read (never materialized), the corrected totals
  * fall out for free — this test pins that behaviour so a future "optimisation" to stored balances
  * cannot silently break it.
+ *
+ * <p><strong>TDD-ahead:</strong> unlike the rest of this suite (which now boots Spring and
+ * exercises the SQL that lives in a repository), this running-balance query is still a
+ * <em>test-owned</em> string constant — no production repository runs it yet. That is deliberate:
+ * the SQL is written ahead of the balances stage that will consume it (CLAUDE.md §6 TDD-for-SQL).
+ * When that stage lands, the query moves into a repository method and this test rebinds to it (like
+ * {@link volkovandr.hauptbuch.accounts.AccountTreeSqlLogicTest} does for the recursive walkers).
+ * Until then it uses raw JDBC via {@link SqlLogicSchema}.
  */
 class RunningBalanceSqlLogicTest {
 

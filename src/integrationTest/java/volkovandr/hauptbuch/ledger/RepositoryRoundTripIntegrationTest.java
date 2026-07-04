@@ -17,7 +17,6 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.repository.CurrencyRepository;
-import volkovandr.hauptbuch.ledger.repository.ExchangeRateRepository;
 import volkovandr.hauptbuch.ledger.repository.PayeeRepository;
 import volkovandr.hauptbuch.ledger.repository.SettingsRepository;
 import volkovandr.hauptbuch.ledger.repository.TransactionRepository;
@@ -43,7 +42,6 @@ class RepositoryRoundTripIntegrationTest {
 
   @Autowired JdbcClient jdbcClient;
   @Autowired AccountService accountService;
-  @Autowired ExchangeRateRepository exchangeRateRepository;
   @Autowired TransactionRepository transactionRepository;
   @Autowired PayeeRepository payeeRepository;
   @Autowired SettingsRepository settingsRepository;
@@ -61,24 +59,6 @@ class RepositoryRoundTripIntegrationTest {
         .param("c", currencyCode)
         .query(Long.class)
         .single();
-  }
-
-  @Test
-  void exchangeRateCarriesForwardToTheMostRecentOnOrBeforeTheDate() {
-    exchangeRateRepository.insert(
-        new ExchangeRate(
-            null, CHF, LocalDate.of(2026, 1, 1), new BigDecimal("0.90000000"), "manual"));
-    exchangeRateRepository.insert(
-        new ExchangeRate(
-            null, CHF, LocalDate.of(2026, 3, 1), new BigDecimal("0.95000000"), "manual"));
-
-    // On a gap date, the most recent prior rate carries forward.
-    assertThat(exchangeRateRepository.rateAsOf(CHF, LocalDate.of(2026, 2, 15)).orElseThrow())
-        .isEqualByComparingTo("0.90");
-    assertThat(exchangeRateRepository.rateAsOf(CHF, LocalDate.of(2026, 3, 1)).orElseThrow())
-        .isEqualByComparingTo("0.95");
-    // Before any stored rate: empty.
-    assertThat(exchangeRateRepository.rateAsOf(CHF, LocalDate.of(2025, 12, 31))).isEmpty();
   }
 
   @Test

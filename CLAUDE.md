@@ -221,6 +221,22 @@ Full detail in `docs/data-model.md`. The traps:
   roll back, fire another) — which v1 deliberately does not have; (2) an ordered multi-repository
   sequence whose ordering is too awkward to assert with Mockito `InOrder`. Absent one of those, the
   service belongs in the unit tier.
+- **Which tier a repository method goes in — by its SQL, not its module.** The integration tier owns
+  row-mapping round-trips; the SQL-logic tier owns queries whose *logic lives in the SQL*. Rule of
+  thumb: a plain `insert`, `update`/`delete` by id, or a simple `select` by id / a field or two /
+  `exists` / single-column `distinct` is a **round-trip → integration tier**. A query with grouping
+  or aggregation, more than two tables, a recursive CTE, `distinct on`, a window function, or a
+  carry-forward / gap-filling lookup is **SQL-resident logic → `sqlLogicTest`** (e.g.
+  `findLiveByTypesWithDepth`, `findSubtreeAccountIds`, `rateAsOf`). A complex query earns its own
+  focused test class with several crafted scenarios, not one happy-path case. Do not test Postgres
+  itself — a test that only proves a built-in (window function, `generate_series`) works, with no
+  query of *ours* under test, does not belong in any tier.
+- **`sqlLogicTest` boots Spring and exercises the repository's SQL — not a copy pasted into the
+  test.** The test may use raw JDBC to *seed* crafted data and *validate* results, but the query
+  under test must be the production one (autowire the real repository). The one sanctioned exception
+  is **TDD-ahead SQL**: a query written before the stage that will host it in a repository exists
+  (the invariant and running-balance queries) may live as a test-owned constant run via raw JDBC —
+  marked as such, and rebinding to the repository method when that stage lands.
 - **TDD.** For SQL-resident logic, write the `sqlLogicTest` first with crafted data — including the
   cross-currency and backdated-insert cases — then implement the query.
 - **Do not unit-test Thymeleaf templates.** Server rendering means most "UI logic" is backend logic

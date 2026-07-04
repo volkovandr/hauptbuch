@@ -19,6 +19,14 @@ import volkovandr.hauptbuch.SqlLogicSchema;
  *
  * <p>Each test runs in a rolled-back transaction (autocommit off) so the crafted data never leaks
  * into the reused container.
+ *
+ * <p><strong>TDD-ahead:</strong> unlike the rest of this suite (which now boots Spring and
+ * exercises the SQL that lives in a repository), these invariant queries are still
+ * <em>test-owned</em> string constants — no production repository runs them yet. That is
+ * deliberate: the SQL is written ahead of the integrity-check surface that will consume it
+ * (CLAUDE.md §6 TDD-for-SQL). When that stage lands, the query moves into a repository method and
+ * this test rebinds to it (like {@link volkovandr.hauptbuch.accounts.AccountTreeSqlLogicTest} does
+ * for the recursive walkers). Until then it uses raw JDBC via {@link SqlLogicSchema}.
  */
 class InvariantSqlLogicTest {
 

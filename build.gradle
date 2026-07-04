@@ -209,7 +209,7 @@ testing {
 		sqlLogicTest(JvmTestSuite) {
 			dependencies {
 				implementation project()
-				// Raw-JDBC suite (no Boot autoconfig): run Flyway ourselves to build the schema.
+				implementation 'org.springframework.boot:spring-boot-starter-jdbc'
 				implementation 'org.flywaydb:flyway-core'
 				implementation 'org.springframework.boot:spring-boot-starter-test'
 				implementation 'org.springframework.boot:spring-boot-testcontainers'
