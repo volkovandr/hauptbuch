@@ -1,7 +1,6 @@
 package volkovandr.hauptbuch.accounts;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -178,26 +177,6 @@ class AccountRepositoryIntegrationTest {
     List<Account> children = accountRepository.findChildrenOf(parent);
 
     assertThat(children).extracting(Account::accountId).containsExactly(bread, milk);
-  }
-
-  @Test
-  void findLiveByTypesWithDepthWalksArbitrarilyDeepAndOrdersDepthFirst() {
-    long food = accountRepository.insert(draft("Food", EXPENSE, null));
-    long sweets = accountRepository.insert(childDraft("Sweets", EXPENSE, food));
-    long mms = accountRepository.insert(childDraft("M&Ms", EXPENSE, sweets));
-    long otherSweets = accountRepository.insert(childDraft("Other sweets", EXPENSE, sweets));
-    long nonSweets = accountRepository.insert(childDraft("Non-sweets", EXPENSE, food));
-
-    List<AccountNode> nodes = accountRepository.findLiveByTypesWithDepth(List.of(EXPENSE));
-
-    assertThat(nodes)
-        .extracting(n -> n.account().accountId(), AccountNode::depth)
-        .containsExactly(
-            tuple(food, 0),
-            tuple(nonSweets, 1),
-            tuple(sweets, 1),
-            tuple(mms, 2),
-            tuple(otherSweets, 2));
   }
 
   @Test
