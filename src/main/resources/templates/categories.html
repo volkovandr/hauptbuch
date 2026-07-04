@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<!--
+  Categories screen (plan stage 6b): the income and expense categories the register files
+  transactions against, and the create-category form.
+
+    • The list groups income and expense; each row indents by its true hierarchy depth (leaves-only
+      hierarchy, data-model §5) — grandchildren and deeper nest further than children, not the same
+      as children. No colour swatch — categories are never register threads (that's accounts' hue,
+      register §2.8).
+    • A top-level category is a single new leaf in the book's base currency (data-model §6.5) — no
+      currency picker; the user thinks of "Food", not "Food EUR". Naming a currently-posted-to leaf
+      as the parent subdivides it: the leaf gains the requested child AND an "Uncategorized"
+      sibling that absorbs its existing postings.
+
+  Standard server-rendered form POSTs with redirect-after-post; no bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <div class="leaf-head">
+      <p class="eyebrow">Categories</p>
+      <h1>Categories</h1>
+      <p class="lede">The taxonomy income and expense postings are filed against.</p>
+    </div>
+
+    <section class="panel">
+      <p class="eyebrow">Flow</p>
+      <h2>Income</h2>
+      <p class="muted" th:if="${#lists.isEmpty(incomeCategories)}">No income categories yet.</p>
+      <ul class="acct-list" th:unless="${#lists.isEmpty(incomeCategories)}">
+        <li
+          th:each="n : ${incomeCategories}"
+          class="acct"
+          th:classappend="${n.depth() > 0} ? 'acct--child'"
+          th:style="${n.depth() > 0} ? |--depth: ${n.depth()}|"
+        >
+          <a
+            class="acct__name"
+            th:href="@{/categories/{id}(id=${n.account().accountId()})}"
+            th:text="${n.account().name()}"
+            >Salary</a
+          >
+        </li>
+      </ul>
+
+      <h2>Expense</h2>
+      <p class="muted" th:if="${#lists.isEmpty(expenseCategories)}">No expense categories yet.</p>
+      <ul class="acct-list" th:unless="${#lists.isEmpty(expenseCategories)}">
+        <li
+          th:each="n : ${expenseCategories}"
+          class="acct"
+          th:classappend="${n.depth() > 0} ? 'acct--child'"
+          th:style="${n.depth() > 0} ? |--depth: ${n.depth()}|"
+        >
+          <a
+            class="acct__name"
+            th:href="@{/categories/{id}(id=${n.account().accountId()})}"
+            th:text="${n.account().name()}"
+            >Food</a
+          >
+        </li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">New</p>
+      <h2>Create a category</h2>
+      <form method="post" th:action="@{/categories}" class="form">
+        <div class="field">
+          <label class="field__label" for="name">Name</label>
+          <input id="name" name="name" type="text" class="input" required autocomplete="off" />
+        </div>
+        <div class="field">
+          <label class="field__label" for="type">Type</label>
+          <select id="type" name="type" class="input" required>
+            <option value="expense">Expense</option>
+            <option value="income">Income</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="parentId">Parent</label>
+          <select id="parentId" name="parentId" class="input">
+            <option value="">— none (top level) —</option>
+            <optgroup label="Expense">
+              <option
+                th:each="n : ${expenseParentOptions}"
+                th:value="${n.account().accountId()}"
+                th:text="${#strings.repeat('  ', n.depth()) + n.account().name()}"
+              >
+                Food
+              </option>
+            </optgroup>
+            <optgroup label="Income">
+              <option
+                th:each="n : ${incomeParentOptions}"
+                th:value="${n.account().accountId()}"
+                th:text="${#strings.repeat('  ', n.depth()) + n.account().name()}"
+              >
+                Salary
+              </option>
+            </optgroup>
+          </select>
+          <p class="muted">
+            Must match the chosen type. Naming a category that already has postings as the parent
+            splits it: it gains this child and an "Uncategorized" sibling that keeps its history.
+          </p>
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Create category</button>
+        </p>
+      </form>
+    </section>
+  </main>
+</html>

@@ -76,9 +76,67 @@ public class AccountService {
     return accountRepository.findParentAccountIds();
   }
 
+  /** The live children of an account, alphabetical by name. */
+  public List<Account> findChildrenOf(long parentId) {
+    return accountRepository.findChildrenOf(parentId);
+  }
+
+  /** Whether any live posting hits this account (leaves-only guard). */
+  public boolean hasPostings(long accountId) {
+    return accountRepository.hasPostings(accountId);
+  }
+
+  /**
+   * Insert a fresh leaf account with no opening balance, hue, or open date — used by structural
+   * operations that create accounts directly (e.g. category subdivision, {@code operations}
+   * module).
+   *
+   * @return the persisted account
+   */
+  public Account insertLeaf(String name, String type, Long parentId, String currencyCode) {
+    long accountId =
+        accountRepository.insert(
+            new Account(null, name, type, parentId, currencyCode, null, null, null, null));
+    return accountRepository.findById(accountId).orElseThrow();
+  }
+
+  /**
+   * Rename any account, regardless of type. Unlike {@link #updateAccount}, this does not gate on
+   * the accounts screen's managed types — callers (e.g. {@code categories}) own their own
+   * manageability check first.
+   *
+   * @throws IllegalArgumentException if the account does not exist or the name is blank
+   */
+  @Transactional
+  public void renameAccount(long accountId, String name) {
+    if (name == null || name.isBlank()) {
+      throw new IllegalArgumentException("An account needs a name");
+    }
+    Account account =
+        accountRepository
+            .findById(accountId)
+            .filter(a -> a.deletedAt() == null)
+            .orElseThrow(() -> new IllegalArgumentException("No account with id " + accountId));
+    accountRepository.updateNameAndHue(accountId, name, account.hue());
+  }
+
   /** The live asset and liability accounts the accounts screen lists and manages. */
   public List<Account> manageableAccounts() {
     return accountRepository.findLiveByTypes(MANAGEABLE_TYPES);
+  }
+
+  /** The live accounts of the given types — the read other modules' screens list against. */
+  public List<Account> findLiveByTypes(List<String> types) {
+    return accountRepository.findLiveByTypes(types);
+  }
+
+  /**
+   * The live accounts of the given types, each annotated with its true hierarchy depth and listed
+   * depth-first (every node immediately followed by all of its descendants) — what a screen needs
+   * to indent a multi-level tree correctly, unlike the flat {@link #findLiveByTypes}.
+   */
+  public List<AccountNode> findLiveByTypesWithDepth(List<String> types) {
+    return accountRepository.findLiveByTypesWithDepth(types);
   }
 
   /**

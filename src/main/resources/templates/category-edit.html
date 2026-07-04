@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<!--
+  Category edit page (plan stage 6b): rename only.
+
+  Type, currency, and parent are read-only: postings inherit the category's currency, and
+  restructuring the hierarchy goes through category creation on the categories screen (naming an
+  existing leaf as a new category's parent), not through this page.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <div class="leaf-head">
+      <p class="eyebrow">Categories</p>
+      <h1 th:text="${category.name()}">Food</h1>
+      <p class="lede">
+        <span th:text="${category.type()}">expense</span> ·
+        <span class="num" th:text="${category.currencyCode()}">EUR</span>
+      </p>
+    </div>
+
+    <section class="panel">
+      <p class="eyebrow">Settings</p>
+      <h2>Name</h2>
+      <form method="post" th:action="@{/categories/{id}(id=${category.accountId()})}" class="form">
+        <div class="field">
+          <label class="field__label" for="name">Name</label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            class="input"
+            th:value="${category.name()}"
+            required
+            autocomplete="off"
+          />
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Save</button>
+          <a th:href="@{/categories}">Back to categories</a>
+        </p>
+      </form>
+    </section>
+  </main>
+</html>

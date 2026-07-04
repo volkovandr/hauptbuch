@@ -1,11 +1,13 @@
 package volkovandr.hauptbuch.accounts.repository;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountNode;
 
 /**
  * Native-SQL access to the {@code account} table (CLAUDE.md §1.3 — JdbcClient + records, no ORM).
@@ -75,6 +77,23 @@ public class AccountRepository {
         .list();
   }
 
+  /** The live children of an account, alphabetical by name. */
+  public List<Account> findChildrenOf(long parentId) {
+    return jdbcClient
+        .sql(
+            """
+            select account_id, name, type, parent_id, currency_code, hue,
+                   opened_at, closed_at, deleted_at
+            from account
+            where parent_id = :parentId
+              and deleted_at is null
+            order by name
+            """)
+        .param("parentId", parentId)
+        .query(Account.class)
+        .list();
+  }
+
   /**
    * The live (not soft-deleted) accounts of the given types, parents before their children and
    * alphabetical within a level — the accounts screen's list order.
@@ -92,6 +111,58 @@ public class AccountRepository {
             """)
         .param("types", types)
         .query(Account.class)
+        .list();
+  }
+
+  /**
+   * The live accounts of the given types, each annotated with its true depth in the parent-chain (0
+   * = top level, 1 = child, 2 = grandchild, …) and listed depth-first — every node immediately
+   * followed by all of its descendants, alphabetical among siblings at each level. A recursive CTE
+   * walks {@code parent_id} to arbitrary depth (data-model §5's hierarchy is not limited to two
+   * levels; a flat "has a parent or not" check under-counts grandchildren and deeper).
+   */
+  public List<AccountNode> findLiveByTypesWithDepth(List<String> types) {
+    return jdbcClient
+        .sql(
+            """
+            with recursive tree as (
+              select account_id, name, type, parent_id, currency_code, hue,
+                     opened_at, closed_at, deleted_at,
+                     0 as depth,
+                     array[name] as sort_path
+              from account
+              where type in (:types)
+                and deleted_at is null
+                and parent_id is null
+              union all
+              select a.account_id, a.name, a.type, a.parent_id, a.currency_code, a.hue,
+                     a.opened_at, a.closed_at, a.deleted_at,
+                     tree.depth + 1,
+                     tree.sort_path || a.name
+              from account a
+              join tree on a.parent_id = tree.account_id
+              where a.deleted_at is null
+            )
+            select account_id, name, type, parent_id, currency_code, hue,
+                   opened_at, closed_at, deleted_at, depth
+            from tree
+            order by type, sort_path
+            """)
+        .param("types", types)
+        .query(
+            (rs, rowNum) ->
+                new AccountNode(
+                    new Account(
+                        rs.getLong("account_id"),
+                        rs.getString("name"),
+                        rs.getString("type"),
+                        rs.getObject("parent_id", Long.class),
+                        rs.getString("currency_code"),
+                        rs.getObject("hue", Integer.class),
+                        rs.getObject("opened_at", LocalDate.class),
+                        rs.getObject("closed_at", LocalDate.class),
+                        rs.getObject("deleted_at", OffsetDateTime.class)),
+                    rs.getInt("depth")))
         .list();
   }
 

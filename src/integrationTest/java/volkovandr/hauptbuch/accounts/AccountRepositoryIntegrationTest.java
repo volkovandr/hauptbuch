@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.accounts;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -31,6 +32,7 @@ class AccountRepositoryIntegrationTest {
 
   private static final String EUR = "EUR";
   private static final String ASSET = "asset";
+  private static final String EXPENSE = "expense";
   private static final String GIRO = "Giro";
   private static final String OPENING_BALANCES = "Opening Balances";
   private static final LocalDate OPENED = LocalDate.of(2026, 7, 1);
@@ -41,6 +43,10 @@ class AccountRepositoryIntegrationTest {
 
   private Account draft(String name, String type, Integer hue) {
     return new Account(null, name, type, null, EUR, hue, OPENED, null, null);
+  }
+
+  private Account childDraft(String name, String type, long parentId) {
+    return new Account(null, name, type, parentId, EUR, null, null, null, null);
   }
 
   @Test
@@ -156,6 +162,42 @@ class AccountRepositoryIntegrationTest {
     assertThat(accountRepository.hasPostings(giro)).isTrue();
     assertThat(accountRepository.hasPostings(fresh)).isFalse();
     assertThat(accountRepository.findPostedAccountIds()).contains(giro).doesNotContain(fresh);
+  }
+
+  @Test
+  void findChildrenOfReturnsLiveChildrenAlphabetically() {
+    long parent = accountRepository.insert(draft("Food", EXPENSE, null));
+    long milk = accountRepository.insert(childDraft("Milk", EXPENSE, parent));
+    long bread = accountRepository.insert(childDraft("Bread", EXPENSE, parent));
+    long deleted = accountRepository.insert(childDraft("Gone", EXPENSE, parent));
+    jdbcClient
+        .sql("update account set deleted_at = now() where account_id = :id")
+        .param("id", deleted)
+        .update();
+
+    List<Account> children = accountRepository.findChildrenOf(parent);
+
+    assertThat(children).extracting(Account::accountId).containsExactly(bread, milk);
+  }
+
+  @Test
+  void findLiveByTypesWithDepthWalksArbitrarilyDeepAndOrdersDepthFirst() {
+    long food = accountRepository.insert(draft("Food", EXPENSE, null));
+    long sweets = accountRepository.insert(childDraft("Sweets", EXPENSE, food));
+    long mms = accountRepository.insert(childDraft("M&Ms", EXPENSE, sweets));
+    long otherSweets = accountRepository.insert(childDraft("Other sweets", EXPENSE, sweets));
+    long nonSweets = accountRepository.insert(childDraft("Non-sweets", EXPENSE, food));
+
+    List<AccountNode> nodes = accountRepository.findLiveByTypesWithDepth(List.of(EXPENSE));
+
+    assertThat(nodes)
+        .extracting(n -> n.account().accountId(), AccountNode::depth)
+        .containsExactly(
+            tuple(food, 0),
+            tuple(nonSweets, 1),
+            tuple(sweets, 1),
+            tuple(mms, 2),
+            tuple(otherSweets, 2));
   }
 
   @Test

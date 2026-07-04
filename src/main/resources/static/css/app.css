@@ -309,8 +309,11 @@ h2 {
   border-bottom: 1px solid var(--feint);
 }
 
+/* Indentation scales with the true hierarchy depth (--depth, set inline per row) rather than a
+   fixed "is this a child or not" class, so grandchildren and deeper nest correctly (data-model
+   §5's hierarchy is not limited to two levels). */
 .acct--child {
-  padding-left: 1.75rem;
+  padding-left: calc(var(--depth, 1) * 1.75rem);
 }
 
 .acct__name {
