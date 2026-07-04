@@ -24,6 +24,13 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.14 (2026-07-04):** Stage 6d (Currency-list editor) marked **complete** — with it, all of
+  Stage 6 (6a–6d) is done.
+- **v0.13 (2026-07-04):** Stage 6d scope narrowed: `createCurrency` provisions the two **system**
+  backing leaves only (`Opening Balances <CODE>`, `FX gain/loss <CODE>`), **not** a back-filled leaf
+  under every category parent. The earlier "back-fill category leaves" line contradicted data-model
+  §6.5, where a category's currency-leaf appears lazily on first spend via subdivision; eager
+  back-fill would manufacture the empty per-currency leaves §6.5 avoids.
 - **v0.12 (2026-07-04):** Stage 6c (Category deletion) marked **complete**. The target-leaf rule was
   refined during implementation: "leaf" is judged **after** the deletion, so an ancestor whose only
   surviving children are inside the deleted subtree is a valid target (deleting `M&Ms` lets `Sweets`
@@ -227,7 +234,7 @@ German-style. — **Met.**
 **Done when:** base currency can be set once on a fresh book and is read-only thereafter; a name set
 in settings shows in the greeting.
 
-### Stage 6 — Accounts & categories (with opening balances)
+### Stage 6 — Accounts & categories (with opening balances) ✅ **complete**
 **Goal:** the reference data the register needs, plus the equity plumbing.
 > Prerequisite ordering holds: base currency is set (stage 5) before any account, since every account
 > carries a currency.
@@ -279,21 +286,31 @@ ending green and demoable:
     plain-text warning in the destructive/oxblood ink noting the operation is **irreversible**.
   - **TDD:** `sqlLogicTest`/integration coverage for a childless leaf (simple reassign-then-delete),
     a parent with children (cascade), and the rejected-target-inside-subtree case.
-- **6d — Currency-list editor.** An "Add currency…" affordance in **every** currency picker
-  (including the first-run base-currency picker). Depends on 6b: adding a currency is not one insert —
-  it provisions the currency's per-currency backing leaves (`Opening Balances <CODE>`,
-  `FX gain/loss <CODE>`, and one leaf under every existing category parent), **back-filling under
-  parents that already exist** — reusing 6b's leaf-provisioning path (data-model §6.5, CLAUDE.md §1.7).
-  So it is a `createCurrency` **operation** in `operations`, not CRUD.
+- **6d — Currency-list editor.** ✅ **complete.** An "Add currency…" affordance in **every** currency
+  picker (including the first-run base-currency picker). Adding a currency is not one insert — it provisions
+  the currency's per-currency **system** backing leaves (`Opening Balances <CODE>`, `FX gain/loss
+  <CODE>`), mirroring what the V2 seed does per currency on an empty book (data-model §3.1/§6.3), so
+  opening-balance entry and cross-currency conversion work in the new currency the moment it exists
+  (CLAUDE.md §1.7, §4). It does **not** pre-create a leaf under every category parent: per data-model
+  §6.5 a category's currency-leaf appears **lazily** — the first time you actually spend that
+  currency, via the stage-6b subdivision path — so eagerly back-filling category leaves would
+  manufacture the empty per-currency leaves §6.5 deliberately avoids. So it is a `createCurrency`
+  **operation** in `operations`, not CRUD, reusing `accounts`' leaf-insertion path.
   - **Interaction (no bespoke JS — htmx + native `<dialog>`, upholds CLAUDE.md §1.6):** a reusable
-    Thymeleaf currency-picker fragment (`<select>` + "Add currency…" button) lives in the currency's
-    owning module (`ledger`, not `web`); screens include it. The button `hx-get`s a `<dialog>`
-    add-form; **OK** `hx-post`s to create + provision, and the response uses `hx-swap-oob` to both
-    replace the picker with a version that has the new currency **pre-selected** and dismiss the
-    dialog; **Cancel** swaps an empty fragment to dismiss. This is the app's first htmx partial-swap
-    and first `<dialog>`; add minimal `<dialog>` CSS.
-  - **TDD:** the `createCurrency` `sqlLogicTest` includes the *currency-added-after-categories-exist*
-    case (leaves back-filled under existing parents), not just the fresh-book case the V2 seed covers.
+    Thymeleaf currency-picker fragment (`<select>` + "Add currency…" button) lives with the currency
+    in `ledger`'s template dir; screens include it. The button `hx-get`s a `<dialog>` add-form;
+    **OK** `hx-post`s to create + provision, and the response `hx-swap-oob`s the picker back with the
+    new currency **pre-selected** (its empty dialog-mount target dismissing the dialog); **Cancel**
+    clears the mount. The htmx-driving *controller* lives in `operations`, not `ledger` — `ledger →
+    operations` would close a module cycle with `operations → ledger` (the currency insert). Two
+    implementation gotchas, both worth remembering: htmx attributes are emitted via `th:attr` (there
+    is no htmx Thymeleaf dialect, so `th:hx-*` silently drops), and the modal backdrop is a sibling
+    `<div>`, not a `::before` (a pseudo tints the slip). This is the app's first htmx partial-swap
+    and first `<dialog>`; minimal `<dialog>` CSS centres it with a pure-CSS backdrop (no
+    `showModal()`).
+  - **TDD:** the `createCurrency` test asserts the two system leaves land under the right parents
+    (`Opening Balances`, `FX gain/loss`) and are the new currency's, on both a fresh book and a book
+    that already has categories (confirming categories are *not* back-filled — they stay lazy, §6.5).
 
 **Done when (6a–6d):** accounts (any currency) and categories can be created and managed; an account
 can be opened with a starting balance that is a real, balanced transaction; subdividing a leaf works;
