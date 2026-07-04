@@ -209,9 +209,18 @@ Full detail in `docs/data-model.md`. The traps:
 | Suite | Against | Holds |
 |-------|---------|-------|
 | `test` (unit) | nothing — Mockito mocks the DB | service orchestration & validation logic (e.g. reject unbalanced input *before* the DB). **Thin by design** for query-heavy modules — do not pad it. |
-| `integrationTest` | Testcontainers Postgres | Flyway migrations apply; repositories map rows ↔ records |
+| `integrationTest` | Testcontainers Postgres | Flyway migrations apply; **every repository method** maps rows ↔ records; controller/htmx acceptance (rendered `hx-*`, redirects, OOB swaps) |
 | `sqlLogicTest` | Testcontainers Postgres | logic that *lives in SQL* and cannot be mocked: matrix query, running balances, tag rollups, conditional sum-to-zero, FX valuation |
 
+- **No service-level integration tests.** A service is orchestration over repositories — unit-test it
+  with the repositories mocked; round-trip each **repository method** against Postgres in the
+  integration tier. A `*ServiceIntegrationTest` re-proves decision logic the unit test already owns
+  and persistence the repository test already owns — delete it, moving any repository method it was
+  the sole cover for down to that repository's round-trip test. **Two exceptions** earn a
+  service-level integration test: (1) genuine multi-transaction choreography (fire a repo, commit or
+  roll back, fire another) — which v1 deliberately does not have; (2) an ordered multi-repository
+  sequence whose ordering is too awkward to assert with Mockito `InOrder`. Absent one of those, the
+  service belongs in the unit tier.
 - **TDD.** For SQL-resident logic, write the `sqlLogicTest` first with crafted data — including the
   cross-currency and backdated-insert cases — then implement the query.
 - **Do not unit-test Thymeleaf templates.** Server rendering means most "UI logic" is backend logic
