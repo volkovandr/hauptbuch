@@ -41,4 +41,5 @@ from the button, and the type (expense or income) from the parent category as we
 ## General UX improvements
 
 * In the various pages instead of "Back to..." links we should have a "Cancel" button. This makes the UX more consistent.
+* Modal dialogs should close on Enter accepting the changes, and on Esc discarding the changes, as if Save or Cancel buttons were clicked.
 
