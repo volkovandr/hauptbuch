@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<!--
+  Reusable currency-picker fragment (plan stage 6d). Lives in the currency's owning module (ledger):
+  every currency picker in the app — the first-run base-currency picker, the open-account form —
+  includes it, so "Add currency…" is offered everywhere from one place (CLAUDE.md §3).
+
+  No bespoke JS (CLAUDE.md §1.6): the "Add currency…" button hx-gets a native <dialog> add-form;
+  OK hx-posts to /currencies (create + provision the system leaves), and the response uses two
+  hx-swap-oob swaps — one replaces the picker with the new currency PRE-SELECTED, the other clears
+  the dialog mount to dismiss the dialog. Cancel just clears the dialog mount. This is the app's
+  first htmx partial-swap and first <dialog>.
+
+  Contract — a screen includes:
+      <div th:replace="~{fragments/currency-picker :: picker('currencyCode', 'currencyCode', null)}"></div>
+      <div th:replace="~{fragments/currency-picker :: dialogMount('currencyCode')}"></div>
+  fieldId / fieldName name the <select>; selected pre-selects a value (null = first option).
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <!-- The picker itself: a labelled <select> plus the add button. Wrapped in a stable, per-field
+         id so the create response can hx-swap-oob it wholesale (new currency pre-selected). -->
+    <div
+      th:fragment="picker(fieldId, fieldName, selected)"
+      th:id="'currency-picker-' + ${fieldId}"
+      class="currency-picker"
+      hx-swap-oob="true"
+    >
+      <select th:id="${fieldId}" th:name="${fieldName}" class="input" required>
+        <option
+          th:each="c : ${currencies}"
+          th:value="${c.code()}"
+          th:selected="${c.code() == selected}"
+          th:text="${c.code() + ' — ' + c.name()}"
+        >
+          EUR — Euro
+        </option>
+      </select>
+      <!-- htmx attributes are emitted via th:attr — this project has no htmx Thymeleaf dialect, so
+           th:hx-get would be an unknown th:* attribute and silently dropped. -->
+      <button
+        type="button"
+        class="btn btn--ghost currency-picker__add"
+        hx-swap="innerHTML"
+        th:attr="
+          hx-get=@{/currencies/new(fieldId=${fieldId},fieldName=${fieldName})},
+          hx-target='#currency-dialog-' + ${fieldId}
+        "
+      >
+        Add currency…
+      </button>
+    </div>
+
+    <!-- The dialog mount: an empty, per-field slot the add-form swaps into and clears out of. -->
+    <div
+      th:fragment="dialogMount(fieldId)"
+      th:id="'currency-dialog-' + ${fieldId}"
+    ></div>
+
+    <!-- Create response (POST /currencies OK). The form targets the dialog mount with innerHTML, so
+         this body becomes the mount's content: it is empty apart from the out-of-band picker swap,
+         which htmx lifts out by id — the net effect is the picker re-renders (new currency
+         pre-selected) and the dialog vanishes, in one request. -->
+    <th:block th:fragment="created(fieldId, fieldName, selected)">
+      <div
+        th:replace="~{fragments/currency-picker :: picker(${fieldId}, ${fieldName}, ${selected})}"
+      ></div>
+    </th:block>
+
+    <!-- The add-currency dialog (GET /currencies/new). A native <dialog open> so it shows the
+         moment htmx swaps it in, with no JS; CSS centres it as a modal, with a separate sibling
+         backdrop div dimming the page behind it — no showModal(), upholding the no-bespoke-JS rule
+         (CLAUDE.md §1.6). The backdrop is a sibling, not a ::before of the slip, so the dim never
+         tints the slip's own paper. OK posts, Cancel clears the mount. The picker's field id/name
+         ride along as hidden inputs so the create response knows which picker to re-render. -->
+    <th:block th:fragment="dialog(fieldId, fieldName)">
+      <div class="dialog__backdrop"></div>
+      <dialog class="dialog" open>
+        <form
+        class="form"
+        hx-post="/currencies"
+        hx-swap="innerHTML"
+        th:attr="hx-target='#currency-dialog-' + ${fieldId}"
+      >
+        <p class="eyebrow">New currency</p>
+        <h2 class="dialog__title">Add a currency</h2>
+        <p class="muted">
+          Adds the currency and its Opening Balances and FX gain/loss leaves, so it is ready for
+          opening balances and conversions.
+        </p>
+
+        <input type="hidden" name="fieldId" th:value="${fieldId}" />
+        <input type="hidden" name="fieldName" th:value="${fieldName}" />
+
+        <div class="field">
+          <label class="field__label" for="new-currency-code">Code</label>
+          <input
+            id="new-currency-code"
+            name="code"
+            type="text"
+            class="input num"
+            maxlength="3"
+            minlength="3"
+            placeholder="NOK"
+            autocomplete="off"
+            required
+          />
+          <p class="muted">Three-letter ISO-4217 code, e.g. NOK.</p>
+        </div>
+        <div class="field">
+          <label class="field__label" for="new-currency-name">Name</label>
+          <input
+            id="new-currency-name"
+            name="name"
+            type="text"
+            class="input"
+            placeholder="Norwegian Krone"
+            autocomplete="off"
+            required
+          />
+        </div>
+        <div class="field">
+          <label class="field__label" for="new-currency-symbol">Symbol</label>
+          <input
+            id="new-currency-symbol"
+            name="symbol"
+            type="text"
+            class="input"
+            maxlength="8"
+            placeholder="kr"
+            autocomplete="off"
+          />
+          <p class="muted">Optional display symbol.</p>
+        </div>
+        <div class="field">
+          <label class="field__label" for="new-currency-minor-units">Minor units</label>
+          <input
+            id="new-currency-minor-units"
+            name="minorUnits"
+            type="number"
+            class="input num"
+            min="0"
+            max="4"
+            value="2"
+            required
+          />
+          <p class="muted">Fractional digits — 2 for most, 0 for yen-like currencies.</p>
+        </div>
+
+        <p class="warning" th:if="${error}" th:text="${error}">Something went wrong.</p>
+
+        <p class="actions dialog__actions">
+          <button type="submit" class="btn">Add currency</button>
+          <button
+            type="button"
+            class="btn btn--ghost"
+            hx-swap="innerHTML"
+            th:attr="
+              hx-get=@{/currencies/new/cancel(fieldId=${fieldId})},
+              hx-target='#currency-dialog-' + ${fieldId}
+            "
+          >
+            Cancel
+          </button>
+        </p>
+      </form>
+    </dialog>
+    </th:block>
+  </body>
+</html>

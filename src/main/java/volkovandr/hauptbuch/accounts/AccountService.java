@@ -76,6 +76,15 @@ public class AccountService {
     return accountRepository.findParentAccountIds();
   }
 
+  /**
+   * Resolve a top-level (parentless) system parent by name — e.g. the {@code Opening Balances} or
+   * {@code FX gain/loss} tree the seed creates once. Used by the {@code createCurrency} operation
+   * to hang a new currency's system leaves under the right parent (plan stage 6d).
+   */
+  public Optional<Account> findTopLevelByName(String name) {
+    return accountRepository.findTopLevelByName(name);
+  }
+
   /** The live children of an account, alphabetical by name. */
   public List<Account> findChildrenOf(long parentId) {
     return accountRepository.findChildrenOf(parentId);
