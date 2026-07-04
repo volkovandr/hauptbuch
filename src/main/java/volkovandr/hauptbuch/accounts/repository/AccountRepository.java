@@ -23,6 +23,7 @@ import volkovandr.hauptbuch.accounts.AccountNode;
 public class AccountRepository {
 
   private static final String ACCOUNT_ID = "accountId";
+  private static final String NAME = "name";
 
   private final JdbcClient jdbcClient;
 
@@ -65,6 +66,27 @@ public class AccountRepository {
             """)
         .param("parentName", parentName)
         .param("currencyCode", currencyCode)
+        .query(Account.class)
+        .optional();
+  }
+
+  /**
+   * Resolve a top-level (parentless) account by name — e.g. the {@code Opening Balances} or {@code
+   * FX gain/loss} system parent the seed (V2) creates once, under which each currency has one leaf.
+   * Used by the {@code createCurrency} operation to hang the new currency's system leaves.
+   */
+  public Optional<Account> findTopLevelByName(String name) {
+    return jdbcClient
+        .sql(
+            """
+            select account_id, name, type, parent_id, currency_code, hue,
+                   opened_at, closed_at, deleted_at
+            from account
+            where name = :name
+              and parent_id is null
+              and deleted_at is null
+            """)
+        .param(NAME, name)
         .query(Account.class)
         .optional();
   }
@@ -240,7 +262,7 @@ public class AccountRepository {
             values (:name, :type, :parentId, :currencyCode, :hue, :openedAt)
             returning account_id
             """)
-        .param("name", account.name())
+        .param(NAME, account.name())
         .param("type", account.type())
         .param("parentId", account.parentId())
         .param("currencyCode", account.currencyCode())
@@ -254,7 +276,7 @@ public class AccountRepository {
   public int updateNameAndHue(long accountId, String name, Integer hue) {
     return jdbcClient
         .sql("update account set name = :name, hue = :hue where account_id = :accountId")
-        .param("name", name)
+        .param(NAME, name)
         .param("hue", hue)
         .param(ACCOUNT_ID, accountId)
         .update();

@@ -46,20 +46,22 @@
         </p>
         <div class="field">
           <label class="field__label" for="baseCurrency">Currency</label>
-          <select id="baseCurrency" name="baseCurrency" class="input" required>
-            <option
-              th:each="c : ${currencies}"
-              th:value="${c.code()}"
-              th:text="${c.code() + ' — ' + c.name()}"
-            >
-              EUR — Euro
-            </option>
-          </select>
+          <!-- Shared currency picker (plan stage 6d): the seeded currencies plus "Add currency…",
+               so a user whose currency isn't seeded can add it right here on first run. -->
+          <div
+            th:replace="~{fragments/currency-picker :: picker('baseCurrency', 'baseCurrency', null)}"
+          ></div>
         </div>
         <p class="actions">
           <button type="submit" class="btn">Set base currency</button>
         </p>
       </form>
+      <!-- Add-currency dialog mounts here, OUTSIDE the base-currency form: the dialog carries its
+           own <form>, and nesting forms is invalid HTML. -->
+      <div
+        th:unless="${baseCurrencyLocked}"
+        th:replace="~{fragments/currency-picker :: dialogMount('baseCurrency')}"
+      ></div>
     </section>
 
     <section class="panel">

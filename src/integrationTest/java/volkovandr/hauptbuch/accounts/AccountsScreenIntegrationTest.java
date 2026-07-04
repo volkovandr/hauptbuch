@@ -81,6 +81,19 @@ class AccountsScreenIntegrationTest {
   }
 
   @Test
+  void currencyPickerAddButtonCarriesRenderedHxGet() throws Exception {
+    // Guards the "nothing happens on click" bug: this project has no htmx Thymeleaf dialect, so the
+    // fragment must emit hx-* via th:attr. Assert the rendered attribute is actually present.
+    mockMvc
+        .perform(get(ACCOUNTS_PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Add currency…")))
+        .andExpect(
+            content().string(containsString("hx-get=\"/currencies/new?fieldId=currencyCode")))
+        .andExpect(content().string(containsString("hx-target=\"#currency-dialog-currencyCode\"")));
+  }
+
+  @Test
   void openedAccountAppearsInTheListWithStoredHue() throws Exception {
     mockMvc
         .perform(
