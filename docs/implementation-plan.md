@@ -24,6 +24,17 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.11 (2026-07-04):** Inserted a new **6c — Category deletion** (leaf or whole-subtree delete,
+  postings reassigned to a user-picked surviving leaf outside the deleted subtree); the former 6c
+  (currency-list editor) renumbered to **6d**, unchanged in scope. Prompted by testing 6b: category
+  create/rename exist but there was no way to remove a mis-created category.
+- **v0.10 (2026-07-04):** Stage 6b implemented: subdivision is **implicit**, not a standalone UI
+  action — creating a category whose chosen parent is currently a posted-to leaf triggers it
+  automatically, adding the requested child plus an `Uncategorized` catch-all sibling that absorbs
+  the leaf's existing postings. Category creation takes no currency (unlike accounts): every
+  category leaf is created in the book's base currency; per-currency leaves arrive with real usage
+  once the register exists. `subdivideAccount` itself is generic over any account type, living in
+  the new `operations` module; `categories` is its first caller.
 - **v0.9 (2026-07-03):** Stage 6a (Accounts + opening balances) marked **complete**.
 - **v0.8 (2026-07-01):** Stage 6 formally split into **6a** (accounts + opening balances), **6b**
   (categories + subdivision), and a new **6c** (currency-list editor). 6c adds user-managed
@@ -243,9 +254,24 @@ ending green and demoable:
 
 - **6a — Accounts + opening balances.** ✅ **complete.** Move `Account` ownership into `accounts`;
   account management UI (any seeded currency); opening balance as a real balanced transaction.
-- **6b — Categories + subdivision.** Category management over the same table; the `operations`
-  module is born here with the **subdivision** op (leaf → parent, postings reassigned to `…:General`).
-- **6c — Currency-list editor.** An "Add currency…" affordance in **every** currency picker
+- **6b — Categories + subdivision.** ✅ **complete.** Category management over the same table; the
+  `operations` module is born here with the **subdivision** op (leaf → parent, postings reassigned
+  to an `Uncategorized` sibling), triggered implicitly by creating a child under a posted-to leaf.
+- **6c — Category deletion.** Unlike accounts (closed/reopened, never deleted), a category is truly
+  deleted: the user picks a **surviving leaf** (never inside the subtree being deleted) that
+  receives every reassigned posting, then confirms. Deleting a parent deletes its **whole subtree**
+  (every descendant, not just the parent row) after moving all of their postings — descendants,
+  not only the parent's own — onto the chosen target. This is a `deleteCategory` **operation** in
+  `operations`, reusing `subdivideAccount`'s posting-reassignment repository in reverse (many
+  sources → one target instead of one source → new target).
+  - **Validation:** the target must be a live leaf that is not the category being deleted and not
+    any of its descendants (rejects a self-referential target, data-model §5).
+  - **UI:** the category edit page gains a "Delete" panel — pick the target from a leaf-only picker,
+    one confirm button (no second are-you-sure step, consistent with account close/reopen), with a
+    plain-text warning in the destructive/oxblood ink noting the operation is **irreversible**.
+  - **TDD:** `sqlLogicTest`/integration coverage for a childless leaf (simple reassign-then-delete),
+    a parent with children (cascade), and the rejected-target-inside-subtree case.
+- **6d — Currency-list editor.** An "Add currency…" affordance in **every** currency picker
   (including the first-run base-currency picker). Depends on 6b: adding a currency is not one insert —
   it provisions the currency's per-currency backing leaves (`Opening Balances <CODE>`,
   `FX gain/loss <CODE>`, and one leaf under every existing category parent), **back-filling under
@@ -261,9 +287,11 @@ ending green and demoable:
   - **TDD:** the `createCurrency` `sqlLogicTest` includes the *currency-added-after-categories-exist*
     case (leaves back-filled under existing parents), not just the fresh-book case the V2 seed covers.
 
-**Done when (6a–6c):** accounts (any currency) and categories can be created and managed; an account
+**Done when (6a–6d):** accounts (any currency) and categories can be created and managed; an account
 can be opened with a starting balance that is a real, balanced transaction; subdividing a leaf works;
-a new currency can be added from any picker and is provisioned with its backing leaves and pre-selected.
+a category (leaf or whole subtree) can be deleted with its postings reassigned to a chosen surviving
+leaf; a new currency can be added from any picker and is provisioned with its backing leaves and
+pre-selected.
 
 ---
 
