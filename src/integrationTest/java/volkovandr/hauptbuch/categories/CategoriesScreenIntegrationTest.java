@@ -46,6 +46,11 @@ class CategoriesScreenIntegrationTest {
   private static final String EUR = "EUR";
   private static final String FOOD = "Food";
   private static final String MILK = "Milk";
+  private static final String GROCERIES = "Groceries";
+  private static final String RETURNING_ID = "returning account_id";
+  private static final String INSERT_POSTING =
+      "insert into posting (transaction_id, account_id, amount) values (:t, :a, :amt)";
+  private static final String AMT = "amt";
 
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
@@ -60,6 +65,46 @@ class CategoriesScreenIntegrationTest {
     return jdbcClient
         .sql("select account_id from account where name = :name")
         .param(NAME, name)
+        .query(Long.class)
+        .single();
+  }
+
+  private long insertAccount(String name, String type) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code) values (:n, :t, 'EUR') "
+                + RETURNING_ID)
+        .param("n", name)
+        .param("t", type)
+        .query(Long.class)
+        .single();
+  }
+
+  private long insertChildAccount(String name, String type, long parentId) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code, parent_id) "
+                + "values (:n, :t, 'EUR', :p) "
+                + RETURNING_ID)
+        .param("n", name)
+        .param("t", type)
+        .param("p", parentId)
+        .query(Long.class)
+        .single();
+  }
+
+  private void insertPosting(long txnId, long accountId, String amount) {
+    jdbcClient
+        .sql(INSERT_POSTING)
+        .param("t", txnId)
+        .param("a", accountId)
+        .param(AMT, new BigDecimal(amount))
+        .update();
+  }
+
+  private long newTransaction() {
+    return jdbcClient
+        .sql("insert into transaction (date) values ('2026-07-01') returning transaction_id")
         .query(Long.class)
         .single();
   }
@@ -98,30 +143,10 @@ class CategoriesScreenIntegrationTest {
     long foodId = accountIdNamed(FOOD);
 
     // Give Food a posting so the next child triggers subdivision.
-    long cash =
-        jdbcClient
-            .sql(
-                "insert into account (name, type, currency_code) values ('Cash', 'asset', 'EUR') "
-                    + "returning account_id")
-            .query(Long.class)
-            .single();
-    long txn =
-        jdbcClient
-            .sql("insert into transaction (date) values ('2026-07-01') returning transaction_id")
-            .query(Long.class)
-            .single();
-    jdbcClient
-        .sql("insert into posting (transaction_id, account_id, amount) values (:t, :a, :amt)")
-        .param("t", txn)
-        .param("a", foodId)
-        .param("amt", new BigDecimal("5.00"))
-        .update();
-    jdbcClient
-        .sql("insert into posting (transaction_id, account_id, amount) values (:t, :a, :amt)")
-        .param("t", txn)
-        .param("a", cash)
-        .param("amt", new BigDecimal("-5.00"))
-        .update();
+    long cash = insertAccount("Cash", "asset");
+    long txn = newTransaction();
+    insertPosting(txn, foodId, "5.00");
+    insertPosting(txn, cash, "-5.00");
 
     mockMvc
         .perform(
@@ -155,33 +180,55 @@ class CategoriesScreenIntegrationTest {
 
   @Test
   void grandchildCategoryIndentsFurtherThanItsParent() throws Exception {
-    long food =
-        jdbcClient
-            .sql(
-                "insert into account (name, type, currency_code) values ('Food', 'expense', 'EUR') "
-                    + "returning account_id")
-            .query(Long.class)
-            .single();
-    long sweets =
-        jdbcClient
-            .sql(
-                "insert into account (name, type, currency_code, parent_id) "
-                    + "values ('Sweets', 'expense', 'EUR', :p) returning account_id")
-            .param("p", food)
-            .query(Long.class)
-            .single();
-    jdbcClient
-        .sql(
-            "insert into account (name, type, currency_code, parent_id) "
-                + "values ('M&Ms', 'expense', 'EUR', :p)")
-        .param("p", sweets)
-        .update();
+    long food = insertAccount(FOOD, EXPENSE);
+    long sweets = insertChildAccount("Sweets", EXPENSE, food);
+    insertChildAccount("M&Ms", EXPENSE, sweets);
 
     // Sweets (depth 1) and M&Ms (depth 2) must carry different indentation, not the same one.
     mockMvc
         .perform(get(CATEGORIES_PATH))
         .andExpect(content().string(containsString("--depth: 1")))
         .andExpect(content().string(containsString("--depth: 2")));
+  }
+
+  @Test
+  void deletePanelMovesPostingsAndRemovesTheSubtree() throws Exception {
+    long food = insertAccount(FOOD, EXPENSE);
+    long milk = insertChildAccount(MILK, EXPENSE, food);
+    long cash = insertAccount("Cash", "asset");
+    long txn = newTransaction();
+    insertPosting(txn, milk, "4.00");
+    insertPosting(txn, cash, "-4.00");
+    long groceries = insertAccount(GROCERIES, EXPENSE);
+
+    // The edit page offers Groceries as a move-to target (Milk is inside the subtree, excluded).
+    mockMvc
+        .perform(get(CATEGORY_PATH_PREFIX + food))
+        .andExpect(content().string(containsString("Delete this category")))
+        .andExpect(content().string(containsString(GROCERIES)));
+
+    mockMvc
+        .perform(
+            post(CATEGORY_PATH_PREFIX + food + "/delete")
+                .param("targetLeafId", String.valueOf(groceries)))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl(CATEGORIES_PATH));
+
+    // The whole subtree is gone from the live list; the postings landed on Groceries.
+    List<String> live =
+        jdbcClient
+            .sql("select name from account where deleted_at is null and type = 'expense'")
+            .query(String.class)
+            .list();
+    assertThat(live).containsExactly(GROCERIES);
+
+    BigDecimal groceriesBalance =
+        jdbcClient
+            .sql("select coalesce(sum(amount), 0) from posting where account_id = :id")
+            .param("id", groceries)
+            .query(BigDecimal.class)
+            .single();
+    assertThat(groceriesBalance).isEqualByComparingTo("4.00");
   }
 
   @Test
@@ -197,10 +244,10 @@ class CategoriesScreenIntegrationTest {
         .andExpect(content().string(containsString(FOOD)));
 
     mockMvc
-        .perform(post(CATEGORY_PATH_PREFIX + foodId).param(NAME, "Groceries"))
+        .perform(post(CATEGORY_PATH_PREFIX + foodId).param(NAME, GROCERIES))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl(CATEGORIES_PATH));
 
-    mockMvc.perform(get(CATEGORIES_PATH)).andExpect(content().string(containsString("Groceries")));
+    mockMvc.perform(get(CATEGORIES_PATH)).andExpect(content().string(containsString(GROCERIES)));
   }
 }

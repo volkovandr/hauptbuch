@@ -81,6 +81,27 @@ public class AccountService {
     return accountRepository.findChildrenOf(parentId);
   }
 
+  /**
+   * The account ids of a subtree — the given root and every live descendant to arbitrary depth
+   * (data-model §5). Used by the category-deletion operation, which removes a whole subtree at once
+   * (plan stage 6c).
+   */
+  public List<Long> findSubtreeAccountIds(long rootId) {
+    return accountRepository.findSubtreeAccountIds(rootId);
+  }
+
+  /**
+   * Soft-delete a set of accounts (plan stage 6c). Unlike {@link #closeAccount}, deletion is not a
+   * reversible display state — the caller must have reassigned any postings away first. Structural
+   * callers ({@code operations}) own their own validation; this is the mechanical stamp.
+   *
+   * @return the number of rows stamped
+   */
+  @Transactional
+  public int softDelete(List<Long> accountIds) {
+    return accountRepository.softDelete(accountIds);
+  }
+
   /** Whether any live posting hits this account (leaves-only guard). */
   public boolean hasPostings(long accountId) {
     return accountRepository.hasPostings(accountId);

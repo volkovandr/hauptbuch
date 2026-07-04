@@ -2,12 +2,15 @@ package volkovandr.hauptbuch.categories;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.SettingsService;
+import volkovandr.hauptbuch.operations.DeletionService;
 import volkovandr.hauptbuch.operations.SubdivisionResult;
 import volkovandr.hauptbuch.operations.SubdivisionService;
 
@@ -34,14 +37,17 @@ public class CategoryService {
   private final AccountService accountService;
   private final SettingsService settingsService;
   private final SubdivisionService subdivisionService;
+  private final DeletionService deletionService;
 
   CategoryService(
       AccountService accountService,
       SettingsService settingsService,
-      SubdivisionService subdivisionService) {
+      SubdivisionService subdivisionService,
+      DeletionService deletionService) {
     this.accountService = accountService;
     this.settingsService = settingsService;
     this.subdivisionService = subdivisionService;
+    this.deletionService = deletionService;
   }
 
   /** Find a category by id. */
@@ -105,6 +111,51 @@ public class CategoryService {
     }
     requireManageable(accountId);
     accountService.renameAccount(accountId, name);
+  }
+
+  /**
+   * The live leaf categories that may receive a deleted subtree's postings: same type as the
+   * category being deleted, a leaf (postings land only on leaves, data-model §5), and outside the
+   * subtree itself (a target within the subtree would be deleted too). The leaf-only picker for the
+   * delete panel (plan stage 6c).
+   *
+   * <p>"Leaf" is judged against the state <em>after</em> the deletion: a node whose only children
+   * are inside the subtree becomes a leaf once they are gone, so it is a valid target. E.g.
+   * deleting {@code M&Ms} leaves {@code Sweets} childless — {@code Sweets} may receive the
+   * postings.
+   */
+  public List<AccountNode> deleteTargetOptions(long subtreeRootId) {
+    Account root = requireManageable(subtreeRootId);
+    Set<Long> subtree = Set.copyOf(accountService.findSubtreeAccountIds(subtreeRootId));
+    List<AccountNode> survivors =
+        manageableCategories().stream()
+            .filter(n -> root.type().equals(n.account().type()))
+            .filter(n -> !subtree.contains(n.account().accountId()))
+            .toList();
+    // A survivor is still a parent only if one of its children also survives the deletion.
+    Set<Long> survivingParents =
+        survivors.stream()
+            .map(n -> n.account().parentId())
+            .filter(id -> id != null)
+            .collect(Collectors.toSet());
+    return survivors.stream()
+        .filter(n -> !survivingParents.contains(n.account().accountId()))
+        .toList();
+  }
+
+  /**
+   * Delete a category and its whole subtree (plan stage 6c), reassigning every posting under it
+   * onto the chosen surviving {@code targetLeafId}. Unlike an account (closed/reopened), a category
+   * is truly removed — the mechanical cascade and target validation live in {@link
+   * DeletionService}.
+   *
+   * @throws IllegalArgumentException if the category is not one this screen manages, or the target
+   *     is invalid (not a leaf, or within the subtree being deleted)
+   */
+  @Transactional
+  public void deleteCategory(long accountId, long targetLeafId) {
+    requireManageable(accountId);
+    deletionService.deleteCategory(accountId, targetLeafId);
   }
 
   private void validateDraft(CategoryDraft draft) {

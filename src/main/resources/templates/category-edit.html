@@ -43,5 +43,40 @@
         </p>
       </form>
     </section>
+
+    <section class="panel">
+      <p class="eyebrow">Danger</p>
+      <h2>Delete this category</h2>
+      <p class="muted">
+        Deletes this category and everything under it. Every posting filed here moves onto the
+        category you pick below, which keeps its history.
+      </p>
+      <p class="warning">This cannot be undone.</p>
+      <p class="muted" th:if="${#lists.isEmpty(deleteTargets)}">
+        No other leaf category of this type to move the postings to — create one first.
+      </p>
+      <form
+        th:unless="${#lists.isEmpty(deleteTargets)}"
+        method="post"
+        th:action="@{/categories/{id}/delete(id=${category.accountId()})}"
+        class="form"
+      >
+        <div class="field">
+          <label class="field__label" for="targetLeafId">Move postings to</label>
+          <select id="targetLeafId" name="targetLeafId" class="input" required>
+            <option
+              th:each="n : ${deleteTargets}"
+              th:value="${n.account().accountId()}"
+              th:text="${#strings.repeat('  ', n.depth()) + n.account().name()}"
+            >
+              Groceries
+            </option>
+          </select>
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn btn--danger">Delete category</button>
+        </p>
+      </form>
+    </section>
   </main>
 </html>

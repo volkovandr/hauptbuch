@@ -75,6 +75,7 @@ class CategoriesController {
             .findById(accountId)
             .orElseThrow(() -> new IllegalArgumentException("No category with id " + accountId));
     model.addAttribute("category", category);
+    model.addAttribute("deleteTargets", categoryService.deleteTargetOptions(accountId));
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", category.name() + " · Hauptbuch");
     return EDIT_VIEW;
@@ -84,6 +85,16 @@ class CategoriesController {
   @PostMapping("/categories/{accountId}")
   String renameCategory(@PathVariable long accountId, @RequestParam String name) {
     categoryService.renameCategory(accountId, name);
+    return REDIRECT_TO_LIST;
+  }
+
+  /**
+   * Delete the category and its whole subtree (plan stage 6c), moving every posting under it onto
+   * the chosen surviving leaf. Truly removed — no reopen, unlike an account's close.
+   */
+  @PostMapping("/categories/{accountId}/delete")
+  String deleteCategory(@PathVariable long accountId, @RequestParam long targetLeafId) {
+    categoryService.deleteCategory(accountId, targetLeafId);
     return REDIRECT_TO_LIST;
   }
 }

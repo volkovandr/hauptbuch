@@ -166,6 +166,57 @@ public class AccountRepository {
         .list();
   }
 
+  /**
+   * The account ids of a subtree: the given root and every live descendant, walked to arbitrary
+   * depth via {@code parent_id} (data-model §5's hierarchy is not limited to two levels). Used by
+   * the category-deletion operation, which removes a whole subtree at once (plan stage 6c).
+   */
+  public List<Long> findSubtreeAccountIds(long rootId) {
+    return jdbcClient
+        .sql(
+            """
+            with recursive subtree as (
+              select account_id
+              from account
+              where account_id = :rootId
+                and deleted_at is null
+              union all
+              select a.account_id
+              from account a
+              join subtree on a.parent_id = subtree.account_id
+              where a.deleted_at is null
+            )
+            select account_id from subtree
+            """)
+        .param("rootId", rootId)
+        .query(Long.class)
+        .list();
+  }
+
+  /**
+   * Soft-delete a set of accounts by stamping {@code deleted_at} — the account-side of category
+   * deletion (plan stage 6c). Unlike {@link #close}, this is not a display state the UI can undo;
+   * the category screen offers no reopen for a deleted category. Postings are reassigned away first
+   * by the caller, so a deleted account carries none.
+   *
+   * @return the number of rows stamped
+   */
+  public int softDelete(List<Long> accountIds) {
+    if (accountIds.isEmpty()) {
+      return 0;
+    }
+    return jdbcClient
+        .sql(
+            """
+            update account
+            set deleted_at = now()
+            where account_id in (:accountIds)
+              and deleted_at is null
+            """)
+        .param("accountIds", accountIds)
+        .update();
+  }
+
   /** The account ids at least one posting — live or voided — has ever hit. */
   public List<Long> findPostedAccountIds() {
     return jdbcClient.sql("select distinct account_id from posting").query(Long.class).list();

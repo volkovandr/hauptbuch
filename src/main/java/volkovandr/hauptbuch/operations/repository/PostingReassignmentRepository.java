@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.operations.repository;
 
+import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -29,6 +30,22 @@ public class PostingReassignmentRepository {
         .sql("update posting set account_id = :toAccountId where account_id = :fromAccountId")
         .param("toAccountId", toAccountId)
         .param("fromAccountId", fromAccountId)
+        .update();
+  }
+
+  /**
+   * Repoint every posting on any of {@code fromAccountIds} to {@code toAccountId} — the many-source
+   * form used by category deletion (plan stage 6c), where a whole subtree's postings converge onto
+   * one surviving leaf, the mirror of subdivision's one-source-to-new-child split.
+   */
+  public void reassignPostings(List<Long> fromAccountIds, long toAccountId) {
+    if (fromAccountIds.isEmpty()) {
+      return;
+    }
+    jdbcClient
+        .sql("update posting set account_id = :toAccountId where account_id in (:fromAccountIds)")
+        .param("toAccountId", toAccountId)
+        .param("fromAccountIds", fromAccountIds)
         .update();
   }
 }

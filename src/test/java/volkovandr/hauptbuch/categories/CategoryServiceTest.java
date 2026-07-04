@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.categories;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -17,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.SettingsService;
+import volkovandr.hauptbuch.operations.DeletionService;
 import volkovandr.hauptbuch.operations.SubdivisionResult;
 import volkovandr.hauptbuch.operations.SubdivisionService;
 
@@ -41,12 +43,14 @@ class CategoryServiceTest {
   @Mock private AccountService accountService;
   @Mock private SettingsService settingsService;
   @Mock private SubdivisionService subdivisionService;
+  @Mock private DeletionService deletionService;
 
   private CategoryService categoryService;
 
   @BeforeEach
   void setUp() {
-    categoryService = new CategoryService(accountService, settingsService, subdivisionService);
+    categoryService =
+        new CategoryService(accountService, settingsService, subdivisionService, deletionService);
   }
 
   private static Account account(long id, String name, String type, Long parentId) {
@@ -172,5 +176,27 @@ class CategoryServiceTest {
     categoryService.renameCategory(FOOD_ID, "Groceries");
 
     verify(accountService).renameAccount(FOOD_ID, "Groceries");
+  }
+
+  @Test
+  void deleteDelegatesToDeletionServiceForManageableCategory() {
+    when(accountService.findById(FOOD_ID))
+        .thenReturn(Optional.of(account(FOOD_ID, FOOD, EXPENSE, null)));
+
+    categoryService.deleteCategory(FOOD_ID, MILK_ID);
+
+    verify(deletionService).deleteCategory(FOOD_ID, MILK_ID);
+  }
+
+  @Test
+  void deleteRefusesAccountsThisScreenDoesNotManage() {
+    when(accountService.findById(FOOD_ID))
+        .thenReturn(Optional.of(account(FOOD_ID, "Giro", "asset", null)));
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> categoryService.deleteCategory(FOOD_ID, MILK_ID))
+        .withMessageContaining("No manageable category");
+
+    verify(deletionService, never()).deleteCategory(anyLong(), anyLong());
   }
 }

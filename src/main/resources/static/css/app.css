@@ -197,6 +197,24 @@ h2 {
   color: var(--paper);
 }
 
+/* The one destructive control: oxblood, reserved for irreversible actions (category delete). */
+.btn--danger {
+  border-color: var(--oxblood);
+  background: var(--paper);
+  color: var(--oxblood);
+}
+
+.btn--danger:hover {
+  background: var(--oxblood);
+  color: var(--paper);
+}
+
+/* Plain-text warning in the destructive ink — no icon, no box; just the ink carries the weight. */
+.warning {
+  color: var(--oxblood);
+  font-weight: 600;
+}
+
 /* ── Forms: labelled fields, stamped inputs in the ledger register ────── */
 .form {
   margin-top: 0.5rem;
