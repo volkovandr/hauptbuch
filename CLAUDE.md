@@ -270,3 +270,4 @@ The docs are a navigation aid, not a worklog. Resist the urge to add prose.
 - **`ui-transaction-register.md`** — the register and the entry/edit dock; display & entry rules.
 - **`ui-receipt-processing.md`** — receipt lifecycle, the four-step workflow, the `receipt` schema sketch.
 - **`implementation-plan.md`** — the staged build sequence and the backlog. *Start here for what's next.*
+- **`potential-feature-ideas.md`** — ideas that came up during implementation/testing, not yet planned.
