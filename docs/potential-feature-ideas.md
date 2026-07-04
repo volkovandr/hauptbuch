@@ -38,9 +38,6 @@ from the button, and the type (expense or income) from the parent category as we
 * Type of the new category should be automatically set to the type of the parent category when a non-top-level category is created.
 * Collapse-expand parent categories in the category list - a nice UX improvement. 
 
-**Category deletion moved to the plan** as Stage 6c (`implementation-plan.md`) — important enough
-to schedule rather than leave as a someday-idea.
-
 ## General UX improvements
 
 * In the various pages instead of "Back to..." links we should have a "Cancel" button. This makes the UX more consistent.

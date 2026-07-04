@@ -87,11 +87,13 @@ docker-compose up -d        # local dev Postgres
 ./gradlew integrationTest   # Flyway + repositories vs Testcontainers Postgres
 ./gradlew sqlLogicTest      # SQL-resident logic vs Testcontainers Postgres
 
-# quality tools (all run as part of `check`; invoke individually to debug a failure)
+# quality tools — run these INDIVIDUALLY while iterating; save the slow `check` for last (§7.5).
+# Each has per-source-set variants (Main / Test / IntegrationTest / SqlLogicTest) — quality tools
+# run on test code too, so run the *Test variants, not just *Main.
+./gradlew spotlessApply                  # auto-fix formatting — run this FIRST, don't hand-format
 ./gradlew spotlessCheck                  # formatting (google-java-format); see report for diffs
-./gradlew spotlessApply                  # auto-fix formatting — run this, don't hand-format
-./gradlew checkstyleMain                  # style rules (google_checks.xml, warnings = errors)
-./gradlew pmdMain                         # static-analysis ruleset (config/pmd/ruleset.xml)
+./gradlew checkstyleMain checkstyleTest checkstyleIntegrationTest   # style (google_checks.xml)
+./gradlew pmdMain pmdTest pmdIntegrationTest                        # static analysis (config/pmd)
 ./gradlew spotbugsMain                    # bytecode bug patterns; HTML report under build/reports
 ./gradlew jacocoTestReport \
           jacocoTestCoverageVerification  # coverage report + minimum-coverage gate
@@ -181,6 +183,10 @@ Full detail in `docs/data-model.md`. The traps:
   target's PK name** (`posting.account_id` → `account.account_id`). Exceptions: externally-defined
   entities keep their natural key (`currency.currency_code`); self-references use a role name
   (`parent_id`). Junction tables get their own `<junction>_id` PK with the natural pair as `unique`.
+- **No consecutive capitals in Java identifiers (Checkstyle `AbbreviationAsWordInName`).** The usual
+  culprit is a one-letter article glued to the next capital: name test methods `deletePosting`, not
+  `deleteAPosting`; `rejectsBlankName`, not `rejectsABlankName`. Drop the `A`/`An`, or reword. Get
+  this right from the start — it is a recurring, avoidable build failure.
 - **SQL style:** explicit `ON` joins (never `USING`). Literal, readable Postgres. Window functions
   and `generate_series` are expected and fine — they are why we test on real Postgres.
 - **Migrations:** Flyway, plain versioned `.sql`, forward-only. A migration is "tested" when it
@@ -221,9 +227,12 @@ Full detail in `docs/data-model.md`. The traps:
 3. **Implement** following the existing patterns in that module.
 4. **Run** `./gradlew test` (includes module verification) plus the relevant Postgres-backed suite
    while iterating. If the module test is red, you broke a boundary — fix it.
-5. **Finish on a fully green `./gradlew check`** (§1.9) — all three suites *and* Checkstyle, PMD,
-   SpotBugs, Spotless, and JaCoCo coverage. Run `./gradlew spotlessApply` to clear formatting
-   findings. The step is not complete while any gate is red; fix the code, don't weaken the tool.
+5. **Run the quality tools individually first, `check` only at the end.** `check` is slow; don't use
+   it to *discover* a Checkstyle nit or PMD finding you could have caught in seconds. Order: run
+   `./gradlew spotlessApply`, then the individual `checkstyle*`/`pmd*`/`spotbugs*` tasks (**including
+   the `*Test`/`*IntegrationTest` variants — quality tools run on test code too**), fix what they
+   flag, and only run the full `./gradlew check` once you expect it to pass. The step is not complete
+   while any gate is red; fix the code, don't weaken the tool.
 6. **Never mark a stage ✅ complete without the owner's explicit confirmation.** A green `check` and a
    met "Done when" make a stage *ready to confirm* — report that and ask. The owner ticks the box.
 7. **Keep the docs lean — never let them grow for the sake of it (§8a).**

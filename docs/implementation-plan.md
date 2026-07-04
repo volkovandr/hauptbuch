@@ -24,6 +24,10 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.12 (2026-07-04):** Stage 6c (Category deletion) marked **complete**. The target-leaf rule was
+  refined during implementation: "leaf" is judged **after** the deletion, so an ancestor whose only
+  surviving children are inside the deleted subtree is a valid target (deleting `M&Ms` lets `Sweets`
+  receive the postings) — the initial cut wrongly excluded every current parent.
 - **v0.11 (2026-07-04):** Inserted a new **6c — Category deletion** (leaf or whole-subtree delete,
   postings reassigned to a user-picked surviving leaf outside the deleted subtree); the former 6c
   (currency-list editor) renumbered to **6d**, unchanged in scope. Prompted by testing 6b: category
@@ -257,15 +261,19 @@ ending green and demoable:
 - **6b — Categories + subdivision.** ✅ **complete.** Category management over the same table; the
   `operations` module is born here with the **subdivision** op (leaf → parent, postings reassigned
   to an `Uncategorized` sibling), triggered implicitly by creating a child under a posted-to leaf.
-- **6c — Category deletion.** Unlike accounts (closed/reopened, never deleted), a category is truly
-  deleted: the user picks a **surviving leaf** (never inside the subtree being deleted) that
+- **6c — Category deletion.** ✅ **complete.** Unlike accounts (closed/reopened, never deleted), a
+  category is truly deleted: the user picks a **surviving leaf** (never inside the subtree being
+  deleted) that
   receives every reassigned posting, then confirms. Deleting a parent deletes its **whole subtree**
   (every descendant, not just the parent row) after moving all of their postings — descendants,
   not only the parent's own — onto the chosen target. This is a `deleteCategory` **operation** in
   `operations`, reusing `subdivideAccount`'s posting-reassignment repository in reverse (many
   sources → one target instead of one source → new target).
-  - **Validation:** the target must be a live leaf that is not the category being deleted and not
-    any of its descendants (rejects a self-referential target, data-model §5).
+  - **Validation:** the target must be a live leaf **after** the deletion — not the category being
+    deleted nor any of its descendants (rejects a self-referential target, data-model §5), and with
+    no children left *outside* the subtree. A node whose only children are inside the deleted subtree
+    becomes a leaf once they are gone, so it is a valid target (e.g. deleting `M&Ms` lets its parent
+    `Sweets` receive the postings).
   - **UI:** the category edit page gains a "Delete" panel — pick the target from a leaf-only picker,
     one confirm button (no second are-you-sure step, consistent with account close/reopen), with a
     plain-text warning in the destructive/oxblood ink noting the operation is **irreversible**.
