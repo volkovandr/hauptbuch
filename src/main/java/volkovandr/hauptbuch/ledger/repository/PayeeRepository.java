@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.ledger.repository;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -33,6 +34,14 @@ public class PayeeRepository {
       throw new IllegalStateException("Insert did not return a generated key");
     }
     return key.longValue();
+  }
+
+  /** The live payees, alphabetical — the register's payee filter options (register §2.3). */
+  public List<Payee> findAllLive() {
+    return jdbcClient
+        .sql("select payee_id, name, deleted_at from payee where deleted_at is null order by name")
+        .query(Payee.class)
+        .list();
   }
 
   /** Find a payee by id. */

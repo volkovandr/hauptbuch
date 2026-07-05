@@ -1,0 +1,151 @@
+package volkovandr.hauptbuch.ledger.repository;
+
+import java.time.LocalDate;
+import java.util.List;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
+import volkovandr.hauptbuch.ledger.RegisterCounterpartLeg;
+import volkovandr.hauptbuch.ledger.RegisterRow;
+
+/**
+ * Native-SQL access for the transaction register (register §2, plan stage 7a): the row query with
+ * per-account running balances, and the counterpart-leg lookup that feeds the Category cell.
+ *
+ * <p>The register screen lives in {@code ledger} (the feature module owns its screen — plan stage
+ * 7, boundary note), so this repository joins the {@code account} table read-only to project the
+ * row's account name / hue / currency. The {@code account} <em>table</em> is shared storage; the
+ * module boundary {@code verify()} enforces is on Java types, and this reaches for none of {@code
+ * accounts}' internals.
+ *
+ * <p>The running-balance window is the query the stage-3 SQL-logic suite wrote TDD-ahead; {@link
+ * #findRows} is where it lands in production (CLAUDE.md §6 — that marker closes here).
+ */
+@Repository
+public class RegisterRepository {
+
+  private static final String ACCOUNT_IDS = "accountIds";
+  private static final String FROM_DATE = "fromDate";
+  private static final String TO_DATE = "toDate";
+  private static final String PAYEE_ID = "payeeId";
+
+  private final JdbcClient jdbcClient;
+
+  RegisterRepository(JdbcClient jdbcClient) {
+    this.jdbcClient = jdbcClient;
+  }
+
+  /**
+   * The register rows for the viewed accounts: one row per live posting to one of {@code
+   * accountIds}, in {@code (date, transaction_id, posting_id)} order, each carrying its account's
+   * native running balance up to and including that leg.
+   *
+   * <p>The running balance is a windowed sum over the account's <em>entire</em> live history
+   * (computed in the {@code threaded} CTE before any display filter), so a row's "balance after"
+   * stays correct as-of even when older rows fall outside {@code fromDate} or the payee filter
+   * hides intervening rows. The date-range and payee filters are applied only in the outer select,
+   * to what is <em>shown</em> — never to what the balance accumulates over (register §2.7).
+   *
+   * @param accountIds the viewed accounts; an empty list yields no rows
+   * @param fromDate inclusive lower bound on the shown rows' dates; null for no lower bound
+   * @param toDate inclusive upper bound on the shown rows' dates; null for no upper bound
+   * @param payeeId show only rows whose transaction has this payee; null for all payees
+   * @param baseCurrency the book's base currency, to flag base vs non-base rows for display
+   */
+  public List<RegisterRow> findRows(
+      List<Long> accountIds,
+      LocalDate fromDate,
+      LocalDate toDate,
+      Long payeeId,
+      String baseCurrency) {
+    if (accountIds.isEmpty()) {
+      return List.of();
+    }
+    return jdbcClient
+        .sql(
+            """
+            with threaded as (
+              select p.posting_id,
+                     p.transaction_id,
+                     t.date,
+                     a.account_id,
+                     a.name          as account_name,
+                     a.hue           as account_hue,
+                     a.currency_code as currency_code,
+                     t.payee_id,
+                     t.lifecycle,
+                     p.amount,
+                     p.reconciliation,
+                     sum(p.amount) over (
+                       partition by p.account_id
+                       order by t.date, p.transaction_id, p.posting_id
+                       rows between unbounded preceding and current row
+                     ) as running_balance
+              from posting p
+              join transaction t on p.transaction_id = t.transaction_id
+              join account a on p.account_id = a.account_id
+              where p.account_id in (:accountIds)
+                and t.deleted_at is null
+            )
+            select threaded.posting_id,
+                   threaded.transaction_id,
+                   threaded.date,
+                   threaded.account_id,
+                   threaded.account_name,
+                   threaded.account_hue,
+                   threaded.currency_code,
+                   (threaded.currency_code = :baseCurrency) as base_currency,
+                   pay.name as payee_name,
+                   threaded.amount,
+                   threaded.running_balance,
+                   threaded.lifecycle,
+                   threaded.reconciliation
+            from threaded
+            left join payee pay on threaded.payee_id = pay.payee_id
+            where (cast(:fromDate as date) is null or threaded.date >= :fromDate)
+              and (cast(:toDate as date) is null or threaded.date <= :toDate)
+              and (cast(:payeeId as bigint) is null or threaded.payee_id = :payeeId)
+            order by threaded.date, threaded.transaction_id, threaded.posting_id
+            """)
+        .param(ACCOUNT_IDS, accountIds)
+        .param(FROM_DATE, fromDate)
+        .param(TO_DATE, toDate)
+        .param(PAYEE_ID, payeeId)
+        .param("baseCurrency", baseCurrency)
+        .query(RegisterRow.class)
+        .list();
+  }
+
+  /**
+   * The counterpart legs of a set of transactions: every live leg whose account is <em>not</em> one
+   * of the viewed accounts. These feed the Category cell (register §2.6) — an income/expense leg
+   * shows as its category name, another own account as {@code ⇄ Account}. The viewed legs are the
+   * rows themselves and so are excluded here.
+   *
+   * @param transactionIds the transactions on screen (typically the ids of {@link #findRows})
+   * @param viewedAccountIds the accounts whose legs are the register rows, hence not counterparts
+   */
+  public List<RegisterCounterpartLeg> findCounterpartLegs(
+      List<Long> transactionIds, List<Long> viewedAccountIds) {
+    if (transactionIds.isEmpty()) {
+      return List.of();
+    }
+    return jdbcClient
+        .sql(
+            """
+            select p.transaction_id,
+                   a.account_id,
+                   a.name as account_name,
+                   a.type as account_type,
+                   p.amount
+            from posting p
+            join account a on p.account_id = a.account_id
+            where p.transaction_id in (:transactionIds)
+              and p.account_id not in (:viewedAccountIds)
+            order by p.transaction_id, abs(p.amount) desc, a.name
+            """)
+        .param("transactionIds", transactionIds)
+        .param("viewedAccountIds", viewedAccountIds)
+        .query(RegisterCounterpartLeg.class)
+        .list();
+  }
+}

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<!--
+  Transaction register (plan stage 7a): the newest-at-bottom list of postings to the viewed
+  accounts, read-only. The entry/edit dock arrives at 7b.
+
+    • A row is one posting to a viewed account (register §2.4). Columns are fixed
+      (colour spine · Date · Account · Payee · Category · Amount · Balance · status — §2.5).
+    • Same-hue zebra from the account's stored hue (§2.8): two shades of one hue, alternated per
+      account thread — the tint tells you which balance thread a number belongs to.
+    • German money (§2.9): base bare, non-base with symbol. Income green; negative balances red;
+      pending_review rows muted with a — balance (§2.10).
+    • Newest at the bottom (§2.1): the page scrolls to the bottom on load (keyboard.js leaf), so
+      "now" and the (future) entry point are co-located.
+
+  Filters (§2.3): date range (default last 12 months), account multi-select, payee — a plain GET
+  form; the same view re-renders. Sorting is deferred (plan §14); order is fixed date-ascending.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <div class="leaf-head">
+      <p class="eyebrow">Register</p>
+      <h1>Transaction register</h1>
+      <p class="lede">
+        Your accounts, threaded by date — oldest at the top, newest at the bottom, each account
+        keeping its own running balance.
+      </p>
+    </div>
+
+    <form class="register-filter" method="get" th:action="@{/register}">
+      <fieldset class="register-filter__accounts">
+        <legend class="eyebrow">Accounts</legend>
+        <label class="check" th:each="a : ${register.accounts()}">
+          <input
+            type="checkbox"
+            name="accountId"
+            th:value="${a.accountId()}"
+            th:checked="${a.selected()}"
+          />
+          <span
+            class="swatch"
+            th:style="${a.hue() != null} ? |background: hsl(${a.hue()} 55% 78%); border-color: hsl(${a.hue()} 55% 45%)|"
+          ></span>
+          <span th:text="${a.name()}">Cash</span>
+          <span class="muted num" th:text="${a.currencyCode()}">EUR</span>
+        </label>
+      </fieldset>
+      <div class="register-filter__row">
+        <div class="field">
+          <label class="field__label" for="fromDate">From</label>
+          <input
+            id="fromDate"
+            name="fromDate"
+            type="date"
+            class="input"
+            th:value="${register.filter().fromDate()}"
+          />
+        </div>
+        <div class="field">
+          <label class="field__label" for="toDate">To</label>
+          <input
+            id="toDate"
+            name="toDate"
+            type="date"
+            class="input"
+            th:value="${register.filter().toDate()}"
+          />
+        </div>
+        <div class="field">
+          <label class="field__label" for="payeeId">Payee</label>
+          <select id="payeeId" name="payeeId" class="input">
+            <option value="">— all payees —</option>
+            <option
+              th:each="p : ${register.payees()}"
+              th:value="${p.payeeId()}"
+              th:selected="${p.selected()}"
+              th:text="${p.name()}"
+            >
+              Rewe
+            </option>
+          </select>
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Apply</button>
+        </p>
+      </div>
+    </form>
+
+    <p class="muted" th:if="${#lists.isEmpty(register.rows())}">
+      No transactions in this view. Open an account with an opening balance, or widen the date range.
+    </p>
+
+    <div class="register-scroll" data-scroll-bottom th:unless="${#lists.isEmpty(register.rows())}">
+      <table class="register">
+        <thead>
+          <tr>
+            <th class="register__spine" aria-hidden="true"></th>
+            <th scope="col">Date</th>
+            <th scope="col">Account</th>
+            <th scope="col">Payee</th>
+            <th scope="col">Category</th>
+            <th scope="col" class="num">Amount</th>
+            <th scope="col" class="num">Balance</th>
+            <th scope="col" class="register__status"><span class="visually-hidden">Status</span></th>
+          </tr>
+        </thead>
+        <tbody id="register-rows">
+          <tr
+            th:each="r : ${register.rows()}"
+            class="register__row"
+            th:classappend="${r.pending()} ? 'register__row--pending'"
+            th:style="${r.accountHue() != null}
+              ? (${r.zebraDark()}
+                  ? |background: hsl(${r.accountHue()} 40% 90%)|
+                  : |background: hsl(${r.accountHue()} 38% 95%)|)"
+          >
+            <td
+              class="register__spine"
+              th:style="${r.accountHue() != null} ? |background: hsl(${r.accountHue()} 55% 45%)|"
+            ></td>
+            <td class="register__date num" th:text="${r.date()}">2026-01-01</td>
+            <td class="register__account" th:text="${r.accountName()}">Cash</td>
+            <td class="register__payee" th:text="${r.payeeName()}">Rewe</td>
+            <td class="register__category">
+              <span
+                th:each="chip, i : ${r.category().chips()}"
+                class="cat-chip"
+                th:classappend="${chip.transfer()} ? 'cat-chip--transfer'"
+              >
+                <span th:if="${chip.transfer()}" aria-hidden="true">⇄ </span
+                ><span th:text="${chip.label()}">Food</span>
+              </span>
+              <span
+                class="cat-chip__overflow muted"
+                th:if="${r.category().overflow() > 0}"
+                th:text="'· +' + ${r.category().overflow()}"
+                >· +2</span
+              >
+            </td>
+            <td
+              class="register__amount num"
+              th:classappend="${r.income()} ? 'num--income'"
+              th:text="${r.amountDisplay()}"
+            >
+              -20,00
+            </td>
+            <td
+              class="register__balance num"
+              th:classappend="${r.negativeBalance()} ? 'num--credit'"
+              th:text="${r.balanceDisplay()}"
+            >
+              -150,00
+            </td>
+            <td class="register__status">
+              <span
+                class="recon"
+                th:classappend="'recon--' + ${r.reconciliation()}"
+                th:title="${r.reconciliation()}"
+                aria-hidden="true"
+                >●</span
+              >
+              <span class="recon recon--pending" th:if="${r.pending()}" title="Pending review"
+                >◷</span
+              >
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</html>

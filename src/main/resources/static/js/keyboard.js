@@ -7,12 +7,15 @@
  * through. It attaches to plain DOM via data-attributes; remove the script and the app still
  * renders and submits — keyboard nav is the only thing lost. Keep it that way.
  *
- * It does three things, all driven by markup:
+ * It does these things, all driven by markup:
  *   1. List navigation: within [data-kbd-list], ArrowUp/ArrowDown move a "selected" [data-kbd-row];
  *      Enter activates the selected row (clicks it / its first link or button).
  *   2. Command palette: Ctrl/Cmd-K toggles [data-kbd-palette] (a stub here; real commands land with
  *      the screens that need them).
- *   3. Nothing else. New shortcuts are added here, by markup convention — never scattered into
+ *   3. Scroll-to-bottom: any [data-scroll-bottom] container is scrolled to its bottom on load and
+ *      after an htmx swap — the register is newest-at-bottom (register §2.1), so "now" and the
+ *      entry point sit where the eye lands.
+ *   4. Nothing else. New shortcuts are added here, by markup convention — never scattered into
  *      page scripts.
  *
  * It re-scans after htmx swaps so freshly-inserted rows are navigable.
@@ -100,12 +103,22 @@
     }
   }
 
+  /** Scroll every [data-scroll-bottom] container to its bottom (register newest-at-bottom, §2.1). */
+  function scrollToBottom() {
+    document
+      .querySelectorAll("[data-scroll-bottom]")
+      .forEach((el) => (el.scrollTop = el.scrollHeight));
+  }
+
   document.addEventListener("keydown", onKeydown);
+  document.addEventListener("DOMContentLoaded", scrollToBottom);
 
   // After an htmx swap, a selected row may have been replaced; drop a stale selection so the next
-  // arrow keypress re-selects from a clean state. (No-op when htmx is absent.)
+  // arrow keypress re-selects from a clean state, and re-anchor the newest-at-bottom scroll (both
+  // no-ops when htmx is absent).
   document.body &&
     document.body.addEventListener("htmx:afterSwap", function () {
       rows().forEach((r) => r.classList.remove(SELECTED));
+      scrollToBottom();
     });
 })();
