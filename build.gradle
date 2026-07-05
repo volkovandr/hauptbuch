@@ -73,6 +73,30 @@ pmd {
 	consoleOutput = true
 }
 
+// The test source sets reuse the main ruleset but drop AvoidDuplicateLiterals: tests spell out
+// account names, dates, and amounts inline so each crafted scenario reads at a glance, and hoisting
+// recurring literals into constants to hit a threshold hurts readability. The rule stays fully in
+// force for main code. Owner-confirmed trade-off.
+//
+// The exclusion is applied by an inline ruleset that references the main ruleset by ABSOLUTE path
+// (PMD resolves file refs off its classpath, not relative to the referencing file — so a plain
+// 'config/pmd/ruleset.xml' ref does not resolve; the absolute path does). Kept inline here rather
+// than as a second XML file so there is one source of truth for the exclude list.
+def mainPmdRuleset = file('config/pmd/ruleset.xml').absolutePath
+def testPmdRuleset = resources.text.fromString("""<?xml version="1.0"?>
+<ruleset name="Hauptbuch PMD rules (test tiers)"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0">
+  <description>Main ruleset minus AvoidDuplicateLiterals, for the test source sets.</description>
+  <rule ref="${mainPmdRuleset}">
+    <exclude name="AvoidDuplicateLiterals"/>
+  </rule>
+</ruleset>
+""")
+tasks.matching { it.name in ['pmdTest', 'pmdIntegrationTest', 'pmdSqlLogicTest'] }.configureEach {
+	ruleSetFiles = files()
+	ruleSetConfig = testPmdRuleset
+}
+
 // ── SpotBugs ──────────────────────────────────────────────────────────────────
 spotbugs {
 	toolVersion = '4.10.2'

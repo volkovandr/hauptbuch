@@ -488,3 +488,179 @@ h2 {
     transition: none !important;
   }
 }
+
+/* ── Transaction register (stage 7a) ──────────────────────────────────────
+   The two central surfaces' read half: a dense, spreadsheet-like table, newest at the bottom,
+   each account its own same-hue zebra thread (register §2.8) and its own balance column (§2.7). */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The filter bar: account checkboxes above a date-range + payee row. Plain GET form. */
+.register-filter {
+  margin: var(--rhythm) 0 0.5rem;
+  padding: 0.3rem 0.7rem 0.3rem 0.7rem;
+  border: 1px solid var(--rule);
+  background: var(--paper-edge);
+}
+
+.register-filter__accounts {
+  border: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+}
+
+.register-filter__accounts legend {
+  padding: 0;
+  margin-bottom: 0.35rem;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.register-filter__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1.25rem;
+}
+
+/* The scroll box: the register scrolls inside its own frame so the page body never scrolls
+   horizontally, and newest-at-bottom can anchor to the bottom (keyboard.js [data-scroll-bottom]). */
+.register-scroll {
+  margin-top: 0.5rem;
+  max-height: 65vh;
+  overflow: auto;
+  border-top: 2px solid var(--rule);
+}
+
+.register {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.75rem;
+}
+
+.register thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--paper-edge);
+  text-align: left;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border-bottom: 2px solid var(--rule);
+}
+
+.register td {
+  padding: 0.12rem 0.3rem;
+  border-bottom: 1px solid var(--feint);
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+/* The colour spine: a thin bar of the account's darker shade at the row's leading edge, so the
+   thread reads even where the zebra tint is subtle. */
+.register__spine,
+th.register__spine {
+  width: 4px;
+  min-width: 4px;
+  padding: 0;
+  border-bottom: none;
+}
+
+.register__account {
+  font-weight: 500;
+}
+
+.register__payee {
+  color: var(--ink);
+}
+
+/* The numeric columns get the hard rule and tabular figures via .num; income is the ledger green,
+   negative balances the oxblood (.num--credit). */
+.register__amount,
+.register__balance {
+  border-left: 1px solid var(--rule);
+}
+
+.num--income {
+  color: var(--green-ink);
+}
+
+/* Category cell: the summarised counterpart chips (§2.6). A transfer chip carries the ⇄ glyph and
+   a quieter, italic treatment to set a "movement" apart from a spending category. */
+.cat-chip {
+  margin-right: 0.4rem;
+}
+
+.cat-chip--transfer {
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.cat-chip__overflow {
+  font-size: 0.85rem;
+}
+
+/* pending_review rows: muted and dashed, no balance (§2.10) — they do not move the confirmed
+   balance, so they must not read as if they had. */
+.register__row--pending {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.register__row--pending td {
+  border-bottom-style: dashed;
+}
+
+/* Reconciliation glyph: a small dot whose fill carries the state; unreconciled is a hollow hint. */
+.register__status {
+  text-align: right;
+}
+
+.recon {
+  font-size: 0.7rem;
+}
+
+.recon--unreconciled {
+  color: var(--feint);
+}
+
+.recon--cleared {
+  color: var(--rule);
+}
+
+.recon--reconciled {
+  color: var(--green-ink);
+}
+
+.recon--pending {
+  color: var(--ink-soft);
+}
+
+/* Category is the first column to drop on a narrow viewport (register §2.5); Date always stays. */
+@media (max-width: 60rem) {
+  .register__category {
+    display: none;
+  }
+}
