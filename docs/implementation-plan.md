@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.7
-**Date:** 2026-07-01
+**Status:** Draft v0.15
+**Date:** 2026-07-05
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
@@ -24,6 +24,12 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.15 (2026-07-05):** Stage 7 made concrete and split into **7a–7e** in the new dedicated
+  sub-plan `implementation-plan-stage-7.md`. Scope decisions: tags last (7e, schema migrates then);
+  cross-currency entry after edit/splits (7d); keyboard-first as each piece lands (Q-UI-2 piecewise);
+  column re-sorting + the balance-hide rule deferred to §14. Payee gains city/country + a seeded
+  `country` table at 7b; the dock's commit endpoint lives in `operations` (module cycles — the 6d
+  precedent).
 - **v0.14 (2026-07-04):** Stage 6d (Currency-list editor) marked **complete** — with it, all of
   Stage 6 (6a–6d) is done.
 - **v0.13 (2026-07-04):** Stage 6d scope narrowed: `createCurrency` provisions the two **system**
@@ -323,14 +329,28 @@ pre-selected.
 > **From here, plan is rough by intent.** Stage 6 puts a usable UI in front of the owner; expect the
 > ordering and detail below to be revised once that feedback arrives.
 
-### Stage 7 — Transaction register (rough)
-The two central surfaces from the register doc: the newest-at-bottom list (rows = postings to viewed
-accounts; per-account running balance; two-tone-per-account zebra; `hx-swap="beforeend"` insert — the
-register doc supersedes tech-stack §4.2 on direction; non-base accounts shown per §2.9) and the
-persistent bottom **entry/edit dock** (payee/category/tag pickers, sign-free amount entry, the
-single-ghost-category autofill rule, the inline split panel, cross-currency entry). Backdated-insert
-slice refresh (OOB swap vs bounded re-fetch — Q-UI-5). First **Playwright** smoke test (transaction
-entry → commit). *Exact keyboard state machine deferred to implementation (Q-UI-2).*
+### Stage 7 — Transaction register & entry dock
+The two central surfaces from `ui-transaction-register.md`: the newest-at-bottom register and the
+persistent bottom entry/edit dock. **Detailed in the dedicated sub-plan
+`implementation-plan-stage-7.md`** (the >30-line rule); UI inspiration mock-ups in
+`docs/pic/register-*.png`. Five ordered sub-stages, each green and demoable; keyboard-first as each
+piece lands (Q-UI-2 decided piecewise, never retrofitted):
+
+- **7a — Register, read-only.** The list over a register query + the stage-3 running-balance SQL
+  rebound to a real repository; date/account/payee filters (column re-sorting deferred to §14);
+  zebra, currency display, muted `pending_review`.
+- **7b — Entry dock, simple transactions.** Payee picker with create-new parsing (payee gains
+  city/country + a seeded `country` list), category picker with create-new and the lazy
+  per-currency-leaf routing (data-model §6.5), sign-free amounts with the `+`/`−` override, the
+  single-ghost-category autofill, backdated-insert slice refresh (Q-UI-5 decided here). First
+  **Playwright** smoke (entry → commit). Dock commit endpoint lives in `operations` (module-cycle
+  precedent from 6d).
+- **7c — Edit mode, splits, void.** Edit-in-place with account/date re-threading, `voidTransaction`
+  from the dock, the inline split panel with "the rest" defaulting, notes at both levels.
+- **7d — Cross-currency entry.** The dock's conversion mode over the already-complete stage-3
+  engine (both native amounts entered; rate proposed; FX residual verified end-to-end).
+- **7e — Tags.** `tag`/`posting_tag` migration (data-model §10, owned by `categories`), the
+  keyboard-first chip field, split inheritance, register display.
 
 ### Stage 8 — People & per-person debts (rough)
 The `debts` module: `person` + `account_owner`; auto-provisioned signed per-person/per-currency
@@ -380,6 +400,8 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
   line (FR-ANA-09); drill-down from cells (FR-ANA-10); spend by category/tag/payee, period
   comparisons, category trends (FR-ANA-01–04); net worth in base incl. **held-balance revaluation**
   (FR-ANA-05, §1.2); monthly narrative report (FR-RPT, Q12).
+- **Register follow-ons:** column re-sorting with the balance-hide rule (register §2.7) — deferred
+  from stage 7a until missed.
 - **Currency follow-ons:** ECB rate-feed automation (§1.2 — the engine is already multi-currency;
   this only automates rate lookup/proposal).
 - **Recurring & subscriptions:** recurring templates generating `pending_review` transactions
