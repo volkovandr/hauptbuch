@@ -37,7 +37,7 @@ point there. Visual inspiration mock-ups: `docs/pic/register-*.png`.
 
 ---
 
-## 7a — Register, read-only
+## 7a — Register, read-only ✅ **complete**
 
 **Goal:** the list renders a real book correctly; no entry yet (opening-balance transactions from
 stage 6 provide live rows on day one).

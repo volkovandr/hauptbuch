@@ -1,7 +1,7 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.15
+**Status:** Draft v0.16
 **Date:** 2026-07-05
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
@@ -24,6 +24,7 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.16 (2026-07-05):** Stage 7a (Register, read-only) marked **complete**.
 - **v0.15 (2026-07-05):** Stage 7 made concrete and split into **7a–7e** in the new dedicated
   sub-plan `implementation-plan-stage-7.md`. Scope decisions: tags last (7e, schema migrates then);
   cross-currency entry after edit/splits (7d); keyboard-first as each piece lands (Q-UI-2 piecewise);
@@ -336,9 +337,9 @@ persistent bottom entry/edit dock. **Detailed in the dedicated sub-plan
 `docs/pic/register-*.png`. Five ordered sub-stages, each green and demoable; keyboard-first as each
 piece lands (Q-UI-2 decided piecewise, never retrofitted):
 
-- **7a — Register, read-only.** The list over a register query + the stage-3 running-balance SQL
-  rebound to a real repository; date/account/payee filters (column re-sorting deferred to §14);
-  zebra, currency display, muted `pending_review`.
+- **7a — Register, read-only.** ✅ **complete.** The list over a register query + the stage-3
+  running-balance SQL rebound to a real repository; date/account/payee filters (column re-sorting
+  deferred to §14); zebra, currency display, muted `pending_review`.
 - **7b — Entry dock, simple transactions.** Payee picker with create-new parsing (payee gains
   city/country + a seeded `country` list), category picker with create-new and the lazy
   per-currency-leaf routing (data-model §6.5), sign-free amounts with the `+`/`−` override, the
