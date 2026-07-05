@@ -3,8 +3,9 @@
 > A self-hosted, single-user, web-based **Microsoft Money replacement**: a double-entry ledger with
 > multi-currency support, AI receipt ingestion, and an MCP surface — built to run on a Raspberry Pi.
 
-**Status:** Pre-implementation. The design is documented and ratified; the codebase is being built
-in staged increments (see `docs/implementation-plan.md`). There is nothing to build or run yet.
+**Status:** Under active implementation. The design is documented and ratified; the codebase is
+being built in staged increments (see `docs/implementation-plan.md`). The app builds and runs — the
+accounts, categories, settings, and (read-only) transaction-register screens are live.
 
 ---
 
@@ -66,6 +67,34 @@ The full rationale for every choice — and the alternatives rejected — is in 
 
 ---
 
+## Running it locally
+
+```bash
+docker-compose up -d          # start the local dev PostgreSQL (host port 15432)
+./gradlew bootRun             # run the app; Flyway migrates on start
+```
+
+Then open <http://localhost:8080>. On a fresh book, set the base currency on the settings screen
+first (it is write-once and required before any transaction can be recorded), then open an account.
+
+### Dev seed data (for eyeballing the register)
+
+A fresh book is empty, so the transaction register has nothing to show. `scripts/dev-seed-register.sql`
+hand-loads a realistic book — a few colour-coded accounts, a set of categories, some payees, and
+~45 balanced EUR transactions spread over the last year — straight into the dev database:
+
+```bash
+psql "postgresql://hauptbuch:hauptbuch@localhost:15432/hauptbuch" -f scripts/dev-seed-register.sql
+```
+
+It is a **dev-only convenience, not a Flyway migration and not test-suite data.** Every transaction
+it books is balanced and single-currency, so it respects the model's invariants. It sets the
+(write-once) base currency to EUR only if unset, and skips its own accounts/categories/payees if
+already present — but **re-running appends another batch of transactions**, so run it once, or
+`docker-compose down -v && docker-compose up -d` to reset the database first.
+
+---
+
 ## Repository map
 
 ```
@@ -77,6 +106,7 @@ docs/                          The authoritative design — read before changing
 ├── ui-receipt-processing.md   Receipt lifecycle, the four-step workflow, the receipt schema sketch
 └── implementation-plan.md     The staged build sequence and the backlog — start here for what's next
 
+scripts/                       Dev-only helper scripts (e.g. dev-seed-register.sql — not migrations)
 CLAUDE.md                      Operational guide for AI-assisted work (how to build correctly here)
 README.md                      This file
 ```
