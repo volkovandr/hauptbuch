@@ -10,6 +10,7 @@ import java.util.List;
  * the fields together (rather than a long parameter list on the controller method) is the readable
  * shape.
  *
+ * @param transactionId the transaction being edited; {@code null} for a new entry (register §3.1)
  * @param date booking date
  * @param accountId the funding account
  * @param payeeText the payee text (a picked datalist value or a create-new string); nullable
@@ -22,11 +23,12 @@ import java.util.List;
  * @param viewPayeeId the active filter's payee; nullable
  */
 public record DockEntryForm(
+    Long transactionId,
     LocalDate date,
-    long accountId,
+    Long accountId,
     String payeeText,
     String amount,
-    long categoryId,
+    Long categoryId,
     String note,
     List<Long> viewAccountId,
     LocalDate viewFromDate,

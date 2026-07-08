@@ -3,6 +3,8 @@ package volkovandr.hauptbuch.operations;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -106,7 +108,8 @@ class DockCommitServiceTest {
     when(ledgerService.recordTransaction(any())).thenReturn(99L);
 
     DockEntry entry =
-        new DockEntry(LocalDate.of(2026, 2, 1), CASH_ID, 42L, null, CATEGORY_ID, "20", "lunch");
+        new DockEntry(
+            null, LocalDate.of(2026, 2, 1), CASH_ID, 42L, null, CATEGORY_ID, "20", "lunch");
     long txnId = dockCommitService.commit(entry);
 
     assertThat(txnId).isEqualTo(99L);
@@ -137,6 +140,7 @@ class DockCommitServiceTest {
 
     DockEntry entry =
         new DockEntry(
+            null,
             LocalDate.of(2026, 2, 1),
             CASH_ID,
             null,
@@ -155,10 +159,40 @@ class DockCommitServiceTest {
     when(accountService.findById(CASH_ID)).thenReturn(Optional.empty());
 
     DockEntry entry =
-        new DockEntry(LocalDate.of(2026, 2, 1), CASH_ID, null, null, CATEGORY_ID, "10", null);
+        new DockEntry(null, LocalDate.of(2026, 2, 1), CASH_ID, null, null, CATEGORY_ID, "10", null);
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockCommitService.commit(entry))
         .withMessageContaining("No account");
+  }
+
+  // ── edit & void (register §3.1) ───────────────────────────────────────────────
+
+  @Test
+  void editReThreadsTheExistingTransactionInsteadOfRecording() {
+    Account cash = account(CASH_ID, "asset", EUR);
+    Account leaf = account(LEAF_ID, EXPENSE, EUR);
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(cash));
+    when(currencyLeafService.resolveCurrencyLeaf(CATEGORY_ID, EUR)).thenReturn(leaf);
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+
+    // A non-null transactionId means edit mode: editTransaction is called, recordTransaction is
+    // not.
+    DockEntry entry =
+        new DockEntry(55L, LocalDate.of(2026, 2, 1), CASH_ID, null, null, CATEGORY_ID, "30", null);
+    long txnId = dockCommitService.commit(entry);
+
+    assertThat(txnId).isEqualTo(55L);
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).editTransaction(eq(55L), draft.capture());
+    verify(ledgerService, never()).recordTransaction(any());
+    assertThat(leg(draft.getValue().postings(), CASH_ID)).isEqualByComparingTo("-30");
+    assertThat(leg(draft.getValue().postings(), LEAF_ID)).isEqualByComparingTo("30");
+  }
+
+  @Test
+  void voidTransactionDelegatesToTheEngine() {
+    dockCommitService.voidTransaction(7L);
+    verify(ledgerService).voidTransaction(7L);
   }
 
   private static BigDecimal leg(List<PostingDraft> legs, long accountId) {

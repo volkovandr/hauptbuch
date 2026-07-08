@@ -25,6 +25,11 @@ public record PostingDraft(
     return new PostingDraft(accountId, amount, null, "unreconciled", null);
   }
 
+  /** A single-currency leg carrying a posting-level note (a split line — register §3.7). */
+  public static PostingDraft of(long accountId, BigDecimal amount, String note) {
+    return new PostingDraft(accountId, amount, null, "unreconciled", note);
+  }
+
   /** A cross-currency leg carrying its frozen base-currency amount. */
   public static PostingDraft ofCrossCurrency(
       long accountId, BigDecimal amount, BigDecimal baseAmount) {

@@ -1,7 +1,11 @@
 <!DOCTYPE html>
 <!--
-  The register's entry dock (register §3, plan stage 7b) — the persistent bottom form for entering a
-  new single-category transaction. New mode only at 7b; edit/split/void arrive at 7c.
+  The register's entry dock (register §3, plan stage 7b/7c) — the persistent bottom form for
+  entering a new single-category transaction, or editing an existing one in place (§3.1). The
+  `edit` fragment argument drives the two modes: null → new mode (＋ New transaction, Add button);
+  a DockEditModel → edit mode (✎ Edit transaction, pre-filled fields, a hidden transactionId, and
+  Save · Void · Cancel). Saving posts to the same /register/entry endpoint — the hidden
+  transactionId makes it re-thread rather than record (§3.3).
 
   Field order (register §3.2): Date · Account · Payee · Amount · Category · Note · Add — driven by
   the autofill rule (the amount precedes the category so the single ghost suggestion is correct).
@@ -28,15 +32,20 @@
          it out to replace the live #entry-dock (reset), while the rows region is the primary swap.
          The initial page render passes oob=false — an inert form, no self-OOB. -->
     <form
-      th:fragment="dock(register, oob)"
+      th:fragment="dock(register, oob, edit)"
       id="entry-dock"
       class="entry-dock"
+      th:classappend="${edit != null} ? 'entry-dock--edit'"
       hx-post="/register/entry"
       hx-target="#register-body"
       hx-swap="outerHTML"
       th:attr="hx-swap-oob=${oob} ? 'true'"
     >
-      <p class="entry-dock__title eyebrow">＋ New transaction</p>
+      <p class="entry-dock__title eyebrow" th:if="${edit == null}">＋ New transaction</p>
+      <p class="entry-dock__title eyebrow" th:if="${edit != null}">✎ Edit transaction</p>
+
+      <!-- Edit mode: the hidden id that turns the commit into an in-place re-thread (§3.1/§3.3). -->
+      <input th:if="${edit != null}" type="hidden" name="transactionId" th:value="${edit.transactionId()}" />
 
       <!-- The active filter, so the commit re-renders exactly the current view (§2.2). -->
       <th:block th:each="a : ${register.accounts()}">
@@ -60,7 +69,7 @@
             name="date"
             type="date"
             class="input"
-            th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}"
+            th:value="${edit != null} ? ${edit.date()} : ${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}"
             data-kbd-new
             required
           />
@@ -73,6 +82,7 @@
             <option
               th:each="a : ${register.accounts()}"
               th:value="${a.accountId()}"
+              th:selected="${edit != null and edit.accountId() == a.accountId()}"
               th:text="${a.name() + ' (' + a.currencyCode() + ')'}"
             >
               Cash (EUR)
@@ -90,6 +100,7 @@
             list="entry-payee-options"
             autocomplete="off"
             placeholder="Rewe - Dortmund - Germany"
+            th:value="${edit != null} ? ${edit.payeeText()}"
             hx-get="/register/ghost"
             hx-trigger="change"
             hx-target="#entry-ghost"
@@ -115,6 +126,7 @@
             inputmode="decimal"
             autocomplete="off"
             placeholder="31,50"
+            th:value="${edit != null} ? ${edit.amount()}"
             required
           />
         </div>
@@ -129,6 +141,7 @@
             list="entry-category-options"
             autocomplete="off"
             placeholder="Food  ·  or  Food - Milk"
+            th:value="${edit != null} ? ${edit.categoryName()}"
             hx-post="/categories/resolve"
             hx-trigger="change"
             hx-target="#entry-category-resolved"
@@ -145,20 +158,44 @@
         <!-- 6 · Note -->
         <div class="field">
           <label class="field__label" for="entry-note">Note</label>
-          <input id="entry-note" name="note" class="input" autocomplete="off" />
+          <input id="entry-note" name="note" class="input" autocomplete="off" th:value="${edit != null} ? ${edit.note()}" />
         </div>
 
-        <p class="actions">
+        <!-- 7 · Actions. New mode: Add. Edit mode: Save · Void · Cancel (§3.1). Void hx-posts to
+             /register/void (the whole form rides along); Cancel reloads a fresh new-mode dock. -->
+        <p class="actions" th:if="${edit == null}">
           <button type="submit" class="btn">Add</button>
+        </p>
+        <p class="actions" th:if="${edit != null}">
+          <button type="submit" class="btn">Save</button>
+          <button
+            type="button"
+            class="btn btn--danger"
+            hx-post="/register/void"
+            hx-confirm="Void this transaction? It can be restored later."
+          >
+            Void
+          </button>
+          <button
+            type="button"
+            class="btn btn--ghost"
+            hx-get="/register/dock"
+            hx-include="[name='viewAccountId'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
+            hx-target="#entry-dock"
+            hx-swap="outerHTML"
+          >
+            Cancel
+          </button>
         </p>
       </div>
 
       <!-- Status line, below the fields so it never changes the fields' row height/alignment: the
            resolved category id (hidden) the dock commits, and the ghost suggestion note (§3.9). -->
       <div class="entry-dock__status">
-        <!-- The resolved category id (hidden) + status, swapped in by /categories/resolve. -->
+        <!-- The resolved category id (hidden) + status, swapped in by /categories/resolve. In edit
+             mode it starts pre-filled with the loaded transaction's category id. -->
         <span id="entry-category-resolved">
-          <input type="hidden" name="categoryId" value="" />
+          <input type="hidden" name="categoryId" th:value="${edit != null} ? ${edit.categoryId()} : ''" />
         </span>
         <!-- The ghost suggestion note (§3.9), filled by /register/ghost. -->
         <span id="entry-ghost" class="entry-dock__ghost muted"></span>
@@ -173,7 +210,7 @@
          entry — both top-level elements are parse-safe (a div and a form). -->
     <th:block th:fragment="committed(register)">
       <div th:replace="~{register :: rows(${register})}"></div>
-      <div th:replace="~{fragments/entry-dock :: dock(${register}, true)}"></div>
+      <div th:replace="~{fragments/entry-dock :: dock(${register}, true, null)}"></div>
     </th:block>
 
     <!-- POST /categories/resolve response: the hidden categoryId the dock submits, plus a small

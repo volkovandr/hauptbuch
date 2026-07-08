@@ -12,8 +12,7 @@ After the fix the issue should be removed from the list.
 
 ### REGISTER page
 
-* Keyboard-first entry is still shallow. `n` now jumps focus to the dock's first field, and Tab
-   walks the fields with Enter to Add — but the full per-field key map from the mock-ups
-   (`1 Date → 2 Account → 3 Payee → 4 Amount → 5 Category → 6 Tags → ↵ Add`, `S` to split, the
-   picker open/close transitions) is not built yet. It grows as the later stage-7 sub-stages land
-   (Q-UI-2 decided piecewise); revisit if the current level is too thin in daily use.
+* When creating a new transaction and selecting a Payee, the most used catagory should be pre-selected automatically.
+  but this is not working as expected: When my Food category has two children: Sweets and Non-Sweets, and I only use
+  Sweets for a given payee, when I select the payee, the Food (the parent category) is selected, instead of Sweets (the child category).
+  This is wrong, and since Food cannot be selected for a transaction, the user has to select Sweets manually. This is inconvenient and should be fixed.
