@@ -29,7 +29,7 @@
     "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, "Liberation Mono",
     monospace;
 
-  --rhythm: 1.6rem; /* the feint-line spacing, reused as vertical rhythm */
+  --rhythm: 0.1rem; /* the feint-line spacing, reused as vertical rhythm */
 }
 
 * {
@@ -129,8 +129,8 @@ body {
 
 /* ── Content surface: the ledger leaf ─────────────────────────────────── */
 .content {
-  padding: 1.75rem 2rem 3rem;
-  max-width: 72rem;
+  padding: 0.75rem 1rem 3rem;
+  max-width: 92rem;
 }
 
 .leaf-head {
@@ -326,6 +326,10 @@ h2 {
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--ink);
+}
+
+.setting-value.num {
+  text-align: left;
 }
 
 /* ── Ledger rows: payee | memo | hard-ruled numeric column ────────────── */
@@ -663,4 +667,75 @@ th.register__spine {
   .register__category {
     display: none;
   }
+}
+
+/* ── The entry dock (register §3, plan stage 7b) ──────────────────────────────
+   The persistent bottom form for a new transaction. Dressed as the ledger's own entry slip: it sits
+   below the register, on the bound edge, with the fields in entry order (§3.2). A distinct UI
+   element felt as one, so its field order differs from the reading columns — that is by design. */
+.entry-dock {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.7rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-top: 2px solid var(--rule);
+  background: var(--paper-edge);
+}
+
+.entry-dock__title {
+  margin: 0 0 0.45rem;
+  color: var(--green-ink);
+}
+
+/* One line of fields, wrapping on a narrow viewport. Every field is label-over-input of identical
+   height, so `align-items: end` lines the inputs up dead straight (the earlier misalignment came
+   from the category field carrying extra status spans — those now live in .entry-dock__status,
+   below the row, so they never change a field's height). Each field flexes from a basis, so the
+   wrap points are stable and tabbing between fields never reflows the row. */
+.entry-dock__fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.4rem 0.9rem;
+}
+
+.entry-dock .field {
+  margin: 0;
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+/* The Add button sits on the input baseline, not stretched to the row height. */
+.entry-dock .actions {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+/* Amount is fixed and right-aligned; it does not flex, so the numeric slot stays put. */
+.entry-dock .field--amount {
+  flex: 0 0 8rem;
+}
+
+.field--amount .input {
+  text-align: right;
+}
+
+/* The status line under the fields: the ghost suggestion (§3.9) and resolved-category note. Quiet,
+   non-committal, and out of the fields' flow so it never disturbs their alignment. */
+.entry-dock__status {
+  min-height: 1.1rem;
+  margin-top: 0.3rem;
+}
+
+.entry-dock__ghost,
+.entry-dock__resolved {
+  display: inline-block;
+  font-size: 0.72rem;
+}
+
+.entry-dock__ghost {
+  color: var(--green-ink);
+}
+
+.entry-dock__error {
+  margin: 0.4rem 0 0;
 }

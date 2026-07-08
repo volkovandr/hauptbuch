@@ -15,7 +15,11 @@
  *   3. Scroll-to-bottom: any [data-scroll-bottom] container is scrolled to its bottom on load and
  *      after an htmx swap — the register is newest-at-bottom (register §2.1), so "now" and the
  *      entry point sit where the eye lands.
- *   4. Nothing else. New shortcuts are added here, by markup convention — never scattered into
+ *   4. Focus the entry point: pressing "n" (when not already typing) focuses [data-kbd-new] — the
+ *      register entry dock's first field — so entry is reachable without the mouse (register §3.2,
+ *      Q-UI-2 keyboard-first). Within the dock, Tab walks the fields and Enter on a field submits
+ *      (native form behaviour, which htmx drives); the "n" jump is the one thing the browser lacks.
+ *   5. Nothing else. New shortcuts are added here, by markup convention — never scattered into
  *      page scripts.
  *
  * It re-scans after htmx swaps so freshly-inserted rows are navigable.
@@ -83,9 +87,19 @@
       return;
     }
 
-    // List navigation only applies when not typing into a field.
+    // List navigation and single-key shortcuts only apply when not typing into a field.
     const tag = (event.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+    // "n": jump to the entry dock's first field (register §3.2), if the page has one.
+    if (event.key === "n") {
+      const entry = document.querySelector("[data-kbd-new]");
+      if (entry) {
+        event.preventDefault();
+        entry.focus();
+        return;
+      }
+    }
 
     const all = rows();
     if (all.length === 0) return;

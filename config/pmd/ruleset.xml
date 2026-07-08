@@ -31,6 +31,13 @@
     </properties>
   </rule>
 
+  <rule ref="category/java/errorprone.xml/AvoidLiteralsInIfCondition">
+    <properties>
+      <property name="ignoreMagicNumbers" value="-1,0,1" />
+      <property name="ignoreExpressions" value="true" />
+    </properties>
+  </rule>
+
   <!-- ── Code style ───────────────────────────────────────────────────── -->
   <rule ref="category/java/codestyle.xml">
     <!-- Formatting is owned by Spotless/google-java-format; PMD must not fight it -->

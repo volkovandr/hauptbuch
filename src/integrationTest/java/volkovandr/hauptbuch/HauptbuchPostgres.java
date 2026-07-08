@@ -6,11 +6,14 @@ import org.testcontainers.utility.DockerImageName;
 /**
  * Singleton Testcontainers Postgres for the integration suite.
  *
- * <p>The container is started once for the JVM and shared by every test class (plan §1.5 / §15:
- * reused containers keep the Postgres-backed loop tight). With {@code withReuse(true)} and {@code
- * testcontainers.reuse.enable=true} on the host, the same daemon container is even reused
- * <em>across</em> Gradle runs and across the two Postgres-backed suites, since the reuse key is the
- * container config.
+ * <p>The container is started once for the JVM and shared by every test class in this suite (plan
+ * §1.5 / §15: one container per suite keeps the Postgres-backed loop tight).
+ *
+ * <p><strong>Reuse is deliberately off.</strong> A shared cross-suite container let one suite's
+ * committed rows leak into another's (a dock-commit MockMvc transaction that escapes a test's
+ * {@code @Transactional} rollback polluted the SQL-logic payee search). Each suite now owns a
+ * container torn down at JVM exit, so no committed row can cross a suite boundary — correctness
+ * over the few seconds reuse saved.
  *
  * <p>Exposed to Spring via a {@code @ServiceConnection} bean in {@link
  * TestcontainersConfiguration}; integration tests import that configuration.
@@ -18,7 +21,7 @@ import org.testcontainers.utility.DockerImageName;
 final class HauptbuchPostgres {
 
   static final PostgreSQLContainer INSTANCE =
-      new PostgreSQLContainer(DockerImageName.parse("postgres:17-alpine")).withReuse(true);
+      new PostgreSQLContainer(DockerImageName.parse("postgres:17-alpine")).withReuse(false);
 
   static {
     INSTANCE.start();

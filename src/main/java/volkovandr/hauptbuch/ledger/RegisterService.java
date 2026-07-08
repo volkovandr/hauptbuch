@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.RegisterView.RegisterAccountOption;
+import volkovandr.hauptbuch.ledger.RegisterView.RegisterCategoryOption;
 import volkovandr.hauptbuch.ledger.RegisterView.RegisterPayeeOption;
 import volkovandr.hauptbuch.ledger.repository.PayeeRepository;
 import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
@@ -25,6 +26,9 @@ public class RegisterService {
 
   /** The default account set's types: your own real accounts (register §2.3). */
   private static final List<String> OWN_ACCOUNT_TYPES = List.of("asset", "liability");
+
+  /** The category types the dock offers in its category picker (data-model §6.5). */
+  private static final List<String> CATEGORY_TYPES = List.of("income", "expense");
 
   private final RegisterRepository registerRepository;
   private final PayeeRepository payeeRepository;
@@ -63,7 +67,8 @@ public class RegisterService {
 
     List<RegisterAccountOption> accountOptions = accountOptions(ownAccounts, viewed);
     List<RegisterPayeeOption> payeeOptions = payeeOptions(filter.payeeId());
-    return new RegisterView(rows, accountOptions, payeeOptions, filter);
+    List<RegisterCategoryOption> categoryOptions = categoryOptions();
+    return new RegisterView(rows, accountOptions, payeeOptions, categoryOptions, filter);
   }
 
   /**
@@ -103,11 +108,28 @@ public class RegisterService {
         .toList();
   }
 
+  /**
+   * The categories the dock offers (register §3.5): live income/expense accounts, listed by name.
+   * The user picks semantically; the currency leaf is resolved from the paying account at commit
+   * (data-model §6.5), so both parents and leaves are offered as-is.
+   */
+  private List<RegisterCategoryOption> categoryOptions() {
+    return accountService.findLiveByTypes(CATEGORY_TYPES).stream()
+        .map(a -> new RegisterCategoryOption(a.accountId(), a.name()))
+        .sorted((x, y) -> x.name().compareToIgnoreCase(y.name()))
+        .toList();
+  }
+
   private List<RegisterPayeeOption> payeeOptions(Long selectedPayeeId) {
-    return payeeRepository.findAllLive().stream()
+    // Composed "Name · City · Country" labels so same-named payees are distinguishable (§3.4).
+    return payeeRepository.findFilterOptions().stream()
         .map(
             p ->
-                new RegisterPayeeOption(p.payeeId(), p.name(), p.payeeId().equals(selectedPayeeId)))
+                new RegisterPayeeOption(
+                    p.payeeId(),
+                    p.label(),
+                    p.entryValue(),
+                    Long.valueOf(p.payeeId()).equals(selectedPayeeId)))
         .toList();
   }
 }

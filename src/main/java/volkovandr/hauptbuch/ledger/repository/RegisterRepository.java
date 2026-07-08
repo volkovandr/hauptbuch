@@ -94,13 +94,18 @@ public class RegisterRepository {
                    threaded.account_hue,
                    threaded.currency_code,
                    (threaded.currency_code = :baseCurrency) as base_currency,
-                   pay.name as payee_name,
+                   -- Display "Name · City · Country" so same-named payees are distinguishable
+                   -- (register §3.4); the city/country parts drop out when absent.
+                   pay.name
+                     || coalesce(' · ' || pay.city, '')
+                     || coalesce(' · ' || pay_country.name, '') as payee_name,
                    threaded.amount,
                    threaded.running_balance,
                    threaded.lifecycle,
                    threaded.reconciliation
             from threaded
             left join payee pay on threaded.payee_id = pay.payee_id
+            left join country pay_country on pay.country_code = pay_country.country_code
             where (cast(:fromDate as date) is null or threaded.date >= :fromDate)
               and (cast(:toDate as date) is null or threaded.date <= :toDate)
               and (cast(:payeeId as bigint) is null or threaded.payee_id = :payeeId)

@@ -67,6 +67,38 @@ class CategoriesController {
     return REDIRECT_TO_LIST;
   }
 
+  /**
+   * Resolve the dock's category field to a category id (register §3.5, plan stage 7b): an existing
+   * category by name, or a new {@code Parent - Child} leaf. Returns the {@code categoryResolved}
+   * dock fragment — the hidden {@code categoryId} the dock commits, plus a status. On a bad value
+   * it returns the fragment carrying the error and no id, so the dock cannot commit an unresolved
+   * category.
+   *
+   * <p>Lives here, not in the dock's {@code operations} controller: creating a category is this
+   * module's logic, and {@code operations → categories} would close a module cycle (plan stage 7
+   * boundary note). The browser bridges the two — it resolves here, then commits to {@code
+   * operations} with the returned id.
+   */
+  @PostMapping("/categories/resolve")
+  String resolveCategory(@RequestParam String categoryText, Model model) {
+    try {
+      long categoryId = categoryService.resolveCategory(categoryText);
+      Account category =
+          categoryService
+              .findById(categoryId)
+              .orElseThrow(() -> new IllegalStateException("resolved category vanished"));
+      model.addAttribute("categoryId", categoryId);
+      model.addAttribute("categoryName", category.name());
+      model.addAttribute("error", null);
+    } catch (IllegalArgumentException e) {
+      model.addAttribute("categoryId", "");
+      model.addAttribute("categoryName", null);
+      model.addAttribute("error", e.getMessage());
+    }
+    return "fragments/entry-dock :: categoryResolved(categoryId=${categoryId},"
+        + " categoryName=${categoryName}, error=${error})";
+  }
+
   /** The edit page for one category: rename only — type, currency, and parent are fixed. */
   @GetMapping("/categories/{accountId}")
   String editCategory(@PathVariable long accountId, Model model) {
