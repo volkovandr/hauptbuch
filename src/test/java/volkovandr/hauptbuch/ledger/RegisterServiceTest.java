@@ -53,7 +53,7 @@ class RegisterServiceTest {
         new RegisterService(
             registerRepository, payeeRepository, accountService, settingsService, rowRenderer);
     lenient().when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
-    lenient().when(payeeRepository.findAllLive()).thenReturn(List.of());
+    lenient().when(payeeRepository.findFilterOptions()).thenReturn(List.of());
     lenient()
         .when(registerRepository.findRows(anyList(), any(), any(), any(), anyString()))
         .thenReturn(List.of());

@@ -127,4 +127,65 @@ class SchemaMigrationIntegrationTest {
         .containsExactlyInAnyOrderElementsOf(allCurrencies);
     assertThat(leafTypeUnder("FX gain/loss")).isEqualTo("income");
   }
+
+  @Test
+  void seedsCountriesWithIsoAlpha3NaturalKeys() {
+    // V4: the country reference list for the payee create-new parser (register §3.4). Natural key
+    // is
+    // the ISO-3166 alpha-3 code, like currency's ISO-4217 code (data-model §3.0).
+    List<String> codes =
+        jdbcClient.sql("select country_code from country").query(String.class).list();
+    assertThat(codes).contains("DEU", "CHE", "FRA", "GBR", "USA");
+    assertThat(
+            jdbcClient
+                .sql("select name from country where country_code = 'DEU'")
+                .query(String.class)
+                .single())
+        .isEqualTo("Germany");
+  }
+
+  @Test
+  void countryAliasesResolveCanonicalGermanAndIsoSpellings() {
+    // The create-new parser validates a typed segment against the aliases (lower-cased) — canonical
+    // English, the German exonym, and both ISO codes all land on the same country.
+    assertThat(aliasResolvesTo("germany")).isEqualTo("DEU");
+    assertThat(aliasResolvesTo("frankreich")).isEqualTo("FRA");
+    assertThat(aliasResolvesTo("fr")).isEqualTo("FRA");
+    assertThat(aliasResolvesTo("che")).isEqualTo("CHE");
+    // A non-country segment (a city) resolves to nothing — that is how city is told from country.
+    assertThat(
+            jdbcClient
+                .sql("select country_code from country_alias where alias = 'dortmund'")
+                .query(String.class)
+                .optional())
+        .isEmpty();
+  }
+
+  @Test
+  void payeeCarriesAnOptionalCityAndCountry() {
+    // V4: a payee is Name + optional City + optional Country (register §3.4). Both nullable — the
+    // seed and existing payees carry neither. The country FK references the seeded list.
+    long payeeId =
+        jdbcClient
+            .sql(
+                "insert into payee (name, city, country_code) "
+                    + "values ('Rewe', 'Dortmund', 'DEU') returning payee_id")
+            .query(Long.class)
+            .single();
+    assertThat(
+            jdbcClient
+                .sql("select city from payee where payee_id = :id")
+                .param("id", payeeId)
+                .query(String.class)
+                .single())
+        .isEqualTo("Dortmund");
+  }
+
+  private String aliasResolvesTo(String alias) {
+    return jdbcClient
+        .sql("select country_code from country_alias where alias = :alias")
+        .param("alias", alias)
+        .query(String.class)
+        .single();
+  }
 }

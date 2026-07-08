@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-  Transaction register (plan stage 7a): the newest-at-bottom list of postings to the viewed
-  accounts, read-only. The entry/edit dock arrives at 7b.
+  Transaction register (plan stage 7a) + the entry dock (7b): the newest-at-bottom list of postings
+  to the viewed accounts, with a persistent bottom entry dock for new transactions.
 
     • A row is one posting to a viewed account (register §2.4). Columns are fixed
       (colour spine · Date · Account · Payee · Category · Amount · Balance · status — §2.5).
@@ -10,10 +10,15 @@
     • German money (§2.9): base bare, non-base with symbol. Income green; negative balances red;
       pending_review rows muted with a — balance (§2.10).
     • Newest at the bottom (§2.1): the page scrolls to the bottom on load (keyboard.js leaf), so
-      "now" and the (future) entry point are co-located.
+      "now" and the entry dock are co-located.
 
   Filters (§2.3): date range (default last 12 months), account multi-select, payee — a plain GET
   form; the same view re-renders. Sorting is deferred (plan §14); order is fixed date-ascending.
+
+  The entry dock (7b) hx-posts to /register/entry (the commit endpoint lives in operations — plan
+  stage 7 boundary note). On commit the whole rows body re-renders for the active filter (a bounded
+  re-fetch — the Q-UI-5 fallback, §2.2), so a backdated insert re-threads every affected balance
+  below it, not just the newest row. The dock's rows fragment is reused verbatim by that response.
 -->
 <html
   lang="en"
@@ -21,14 +26,14 @@
   th:replace="~{layout :: page(~{:: content})}"
 >
   <main class="content" th:fragment="content">
-    <div class="leaf-head">
-      <p class="eyebrow">Register</p>
-      <h1>Transaction register</h1>
-      <p class="lede">
-        Your accounts, threaded by date — oldest at the top, newest at the bottom, each account
-        keeping its own running balance.
-      </p>
-    </div>
+<!--    <div class="leaf-head">-->
+<!--      <p class="eyebrow">Register</p>-->
+<!--      <h1>Transaction register</h1>-->
+<!--      <p class="lede">-->
+<!--        Your accounts, threaded by date — oldest at the top, newest at the bottom, each account-->
+<!--        keeping its own running balance.-->
+<!--      </p>-->
+<!--    </div>-->
 
     <form class="register-filter" method="get" th:action="@{/register}">
       <fieldset class="register-filter__accounts">
@@ -89,26 +94,33 @@
       </div>
     </form>
 
-    <p class="muted" th:if="${#lists.isEmpty(register.rows())}">
-      No transactions in this view. Open an account with an opening balance, or widen the date range.
-    </p>
+    <!-- The whole rows region is a named fragment (a div, not a bare tbody) so the commit response
+         can re-render it wholesale for the active filter (bounded re-fetch, §2.2). It must be a
+         parse-safe top-level element: a bare <tbody> in an htmx response is discarded by the HTML
+         parser (a tbody outside a table is invalid), so the swap target is this div. -->
+    <div id="register-body" th:fragment="rows(register)">
+      <p class="muted" th:if="${#lists.isEmpty(register.rows())}" id="register-empty">
+        No transactions in this view. Enter one below, or widen the date range.
+      </p>
 
-    <div class="register-scroll" data-scroll-bottom th:unless="${#lists.isEmpty(register.rows())}">
-      <table class="register">
-        <thead>
-          <tr>
-            <th class="register__spine" aria-hidden="true"></th>
-            <th scope="col">Date</th>
-            <th scope="col">Account</th>
-            <th scope="col">Payee</th>
-            <th scope="col">Category</th>
-            <th scope="col" class="num">Amount</th>
-            <th scope="col" class="num">Balance</th>
-            <th scope="col" class="register__status"><span class="visually-hidden">Status</span></th>
-          </tr>
-        </thead>
-        <tbody id="register-rows">
-          <tr
+      <div class="register-scroll" data-scroll-bottom th:unless="${#lists.isEmpty(register.rows())}">
+        <table class="register">
+          <thead>
+            <tr>
+              <th class="register__spine" aria-hidden="true"></th>
+              <th scope="col">Date</th>
+              <th scope="col">Account</th>
+              <th scope="col">Payee</th>
+              <th scope="col">Category</th>
+              <th scope="col" class="num">Amount</th>
+              <th scope="col" class="num">Balance</th>
+              <th scope="col" class="register__status">
+                <span class="visually-hidden">Status</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="register-rows">
+            <tr
             th:each="r : ${register.rows()}"
             class="register__row"
             th:classappend="${r.pending()} ? 'register__row--pending'"
@@ -119,10 +131,10 @@
           >
             <td
               class="register__spine"
-              th:style="${r.accountHue() != null} ? |background: hsl(${r.accountHue()} 55% 45%)|"
+              th:style="${r.accountHue() != null} ? |background: hsl(${r.accountHue()} 55% 78%)|"
             ></td>
             <td class="register__date num" th:text="${r.date()}">2026-01-01</td>
-            <td class="register__account" th:text="${r.accountName()}">Cash</td>
+            <td class="register__account" th:text="${r.accountName()}" th:style="${r.accountHue() != null} ? |color: hsl(${r.accountHue()} 55% 25%)|">Cash</td>
             <td class="register__payee" th:text="${r.payeeName()}">Rewe</td>
             <td class="register__category">
               <span
@@ -169,6 +181,13 @@
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
+
+    <!-- The persistent entry dock (register §3). Included from its own fragment so the commit
+         response can re-render it (reset to a fresh new-transaction state). -->
+    <div
+      th:replace="~{fragments/entry-dock :: dock(${register}, false)}"
+    ></div>
   </main>
 </html>

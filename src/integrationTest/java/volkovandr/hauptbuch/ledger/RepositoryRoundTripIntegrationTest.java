@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.ledger.repository.CountryRepository;
 import volkovandr.hauptbuch.ledger.repository.CurrencyRepository;
 import volkovandr.hauptbuch.ledger.repository.PayeeRepository;
 import volkovandr.hauptbuch.ledger.repository.SettingsRepository;
@@ -47,6 +48,7 @@ class RepositoryRoundTripIntegrationTest {
   @Autowired SettingsRepository settingsRepository;
   @Autowired CurrencyRepository currencyRepository;
   @Autowired CurrencyService currencyService;
+  @Autowired CountryRepository countryRepository;
 
   /** A real cash account in the given currency, returning its id. */
   private long insertCashAccount(String currencyCode) {
@@ -66,7 +68,7 @@ class RepositoryRoundTripIntegrationTest {
     long cash = insertCashAccount(EUR);
     Account food = accountService.findLeafUnderParentNamed(OPENING_BALANCES, EUR).orElseThrow();
 
-    long payeeId = payeeRepository.insert("Rewe");
+    long payeeId = payeeRepository.insert("Rewe", null, null);
     long txnId =
         transactionRepository.insertTransaction(
             new Transaction(
@@ -94,7 +96,7 @@ class RepositoryRoundTripIntegrationTest {
 
   @Test
   void updateHeaderReplacesTheEditableFieldsLeavingCreatedAtUntouched() {
-    long payeeId = payeeRepository.insert("Rewe");
+    long payeeId = payeeRepository.insert("Rewe", null, null);
     long txnId =
         transactionRepository.insertTransaction(
             new Transaction(
@@ -106,7 +108,7 @@ class RepositoryRoundTripIntegrationTest {
                 null,
                 null,
                 null));
-    long newPayeeId = payeeRepository.insert("Migros");
+    long newPayeeId = payeeRepository.insert("Migros", null, null);
     final OffsetDateTime createdAt =
         transactionRepository.findById(txnId).orElseThrow().createdAt();
 
@@ -183,5 +185,30 @@ class RepositoryRoundTripIntegrationTest {
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> currencyService.insert(EUR, 2, "€", "Euro"))
         .withMessageContaining("already exists");
+  }
+
+  @Test
+  void payeeRoundTripsWithItsOptionalCityAndCountry() {
+    long payeeId = payeeRepository.insert("Rewe", "Dortmund", "DEU");
+    Payee loaded = payeeRepository.findById(payeeId).orElseThrow();
+    assertThat(loaded.name()).isEqualTo("Rewe");
+    assertThat(loaded.city()).isEqualTo("Dortmund");
+    assertThat(loaded.countryCode()).isEqualTo("DEU");
+
+    // A bare payee (no address) round-trips with nulls — many payees have neither.
+    Payee bare = payeeRepository.findById(payeeRepository.insert("Cash", null, null)).orElseThrow();
+    assertThat(bare.city()).isNull();
+    assertThat(bare.countryCode()).isNull();
+  }
+
+  @Test
+  void countryListAndAliasLookupReadFromTheSeed() {
+    // The country reference list and its alias lookup (register §3.4) — plain reads over the V4
+    // seed.
+    assertThat(countryRepository.findAll()).extracting(Country::code).contains("DEU", "FRA", "CHE");
+    assertThat(countryRepository.resolveAlias("Frankreich")).contains("FRA");
+    // Case-insensitive; a city segment (no alias) resolves to nothing.
+    assertThat(countryRepository.resolveAlias("FR")).contains("FRA");
+    assertThat(countryRepository.resolveAlias("Dortmund")).isEmpty();
   }
 }

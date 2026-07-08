@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<!--
+  The register's entry dock (register §3, plan stage 7b) — the persistent bottom form for entering a
+  new single-category transaction. New mode only at 7b; edit/split/void arrive at 7c.
+
+  Field order (register §3.2): Date · Account · Payee · Amount · Category · Note · Add — driven by
+  the autofill rule (the amount precedes the category so the single ghost suggestion is correct).
+
+  No bespoke JS beyond the keyboard leaf (CLAUDE.md §1.6):
+    • Payee and Category are native <input list="…"> datalists — browser type-ahead, zero custom JS.
+    • Create-new is server-side: an unmatched payee string is parsed and created at commit
+      (operations → ledger PayeeService); an unmatched category is resolved/created by the
+      categories module via /categories/resolve, which OOB-swaps the hidden categoryId.
+    • The ghost suggestion (§3.9) is fetched on payee change (GET /register/ghost) and fills the
+      category field — a single suggestion, never a replayed split.
+
+  On commit the form hx-posts to /register/entry (operations — plan stage 7 boundary note). The
+  response re-renders the whole rows body for the active filter (carried as hidden fields) — a
+  bounded re-fetch so a backdated insert re-threads every affected balance below it (§2.2, Q-UI-5) —
+  and resets the dock. keyboard.js re-anchors the newest-at-bottom scroll after the swap.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <!-- The dock. Wrapped in a stable id so the commit response can re-render it (reset). The active
+         filter rides along as hidden fields so the commit knows which view to repaint.
+
+         `oob` marks the copy returned by the commit response: it carries hx-swap-oob so htmx lifts
+         it out to replace the live #entry-dock (reset), while the rows region is the primary swap.
+         The initial page render passes oob=false — an inert form, no self-OOB. -->
+    <form
+      th:fragment="dock(register, oob)"
+      id="entry-dock"
+      class="entry-dock"
+      hx-post="/register/entry"
+      hx-target="#register-body"
+      hx-swap="outerHTML"
+      th:attr="hx-swap-oob=${oob} ? 'true'"
+    >
+      <p class="entry-dock__title eyebrow">＋ New transaction</p>
+
+      <!-- The active filter, so the commit re-renders exactly the current view (§2.2). -->
+      <th:block th:each="a : ${register.accounts()}">
+        <input
+          th:if="${a.selected()}"
+          type="hidden"
+          name="viewAccountId"
+          th:value="${a.accountId()}"
+        />
+      </th:block>
+      <input type="hidden" name="viewFromDate" th:value="${register.filter().fromDate()}" />
+      <input type="hidden" name="viewToDate" th:value="${register.filter().toDate()}" />
+      <input type="hidden" name="viewPayeeId" th:value="${register.filter().payeeId()}" />
+
+      <div class="entry-dock__fields">
+        <!-- 1 · Date -->
+        <div class="field">
+          <label class="field__label" for="entry-date">Date</label>
+          <input
+            id="entry-date"
+            name="date"
+            type="date"
+            class="input"
+            th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}"
+            data-kbd-new
+            required
+          />
+        </div>
+
+        <!-- 2 · Account (funding account) -->
+        <div class="field">
+          <label class="field__label" for="entry-account">Account</label>
+          <select id="entry-account" name="accountId" class="input" required>
+            <option
+              th:each="a : ${register.accounts()}"
+              th:value="${a.accountId()}"
+              th:text="${a.name() + ' (' + a.currencyCode() + ')'}"
+            >
+              Cash (EUR)
+            </option>
+          </select>
+        </div>
+
+        <!-- 3 · Payee (datalist + create-new-at-commit). Changing it fetches the ghost category. -->
+        <div class="field">
+          <label class="field__label" for="entry-payee">Payee</label>
+          <input
+            id="entry-payee"
+            name="payeeText"
+            class="input"
+            list="entry-payee-options"
+            autocomplete="off"
+            placeholder="Rewe - Dortmund - Germany"
+            hx-get="/register/ghost"
+            hx-trigger="change"
+            hx-target="#entry-ghost"
+            hx-swap="innerHTML"
+          />
+          <!-- The option value is the "Name - City - Country" entry form the create-new parser
+               round-trips back to the same payee, so re-picking reuses it (register §3.4). -->
+          <datalist id="entry-payee-options">
+            <option
+              th:each="p : ${register.payees()}"
+              th:value="${p.entryValue()}"
+            ></option>
+          </datalist>
+        </div>
+
+        <!-- 4 · Amount (sign-free magnitude; explicit +/- overrides — §3.8) -->
+        <div class="field field--amount">
+          <label class="field__label" for="entry-amount">Amount</label>
+          <input
+            id="entry-amount"
+            name="amount"
+            class="input num"
+            inputmode="decimal"
+            autocomplete="off"
+            placeholder="31,50"
+            required
+          />
+        </div>
+
+        <!-- 5 · Category (datalist; resolve/create via categories on change, into the hidden id) -->
+        <div class="field">
+          <label class="field__label" for="entry-category">Category</label>
+          <input
+            id="entry-category"
+            name="categoryText"
+            class="input"
+            list="entry-category-options"
+            autocomplete="off"
+            placeholder="Food  ·  or  Food - Milk"
+            hx-post="/categories/resolve"
+            hx-trigger="change"
+            hx-target="#entry-category-resolved"
+            hx-swap="innerHTML"
+          />
+          <datalist id="entry-category-options">
+            <option
+              th:each="c : ${register.categories()}"
+              th:value="${c.name()}"
+            ></option>
+          </datalist>
+        </div>
+
+        <!-- 6 · Note -->
+        <div class="field">
+          <label class="field__label" for="entry-note">Note</label>
+          <input id="entry-note" name="note" class="input" autocomplete="off" />
+        </div>
+
+        <p class="actions">
+          <button type="submit" class="btn">Add</button>
+        </p>
+      </div>
+
+      <!-- Status line, below the fields so it never changes the fields' row height/alignment: the
+           resolved category id (hidden) the dock commits, and the ghost suggestion note (§3.9). -->
+      <div class="entry-dock__status">
+        <!-- The resolved category id (hidden) + status, swapped in by /categories/resolve. -->
+        <span id="entry-category-resolved">
+          <input type="hidden" name="categoryId" value="" />
+        </span>
+        <!-- The ghost suggestion note (§3.9), filled by /register/ghost. -->
+        <span id="entry-ghost" class="entry-dock__ghost muted"></span>
+      </div>
+
+      <p class="entry-dock__error warning" th:if="${entryError}" th:text="${entryError}"></p>
+    </form>
+
+    <!-- POST /register/entry success response: the repainted rows region (the primary swap into
+         #register-body) plus the reset dock (oob=true, so its hx-swap-oob lifts it out to replace
+         #entry-dock). One response repaints the affected thread and clears the dock for the next
+         entry — both top-level elements are parse-safe (a div and a form). -->
+    <th:block th:fragment="committed(register)">
+      <div th:replace="~{register :: rows(${register})}"></div>
+      <div th:replace="~{fragments/entry-dock :: dock(${register}, true)}"></div>
+    </th:block>
+
+    <!-- POST /categories/resolve response: the hidden categoryId the dock submits, plus a small
+         status (the resolved category name, or an error). Swapped into #entry-category-resolved. -->
+    <th:block th:fragment="categoryResolved(categoryId, categoryName, error)">
+      <input type="hidden" name="categoryId" th:value="${categoryId}" />
+      <span th:if="${categoryName}" class="entry-dock__resolved muted" th:text="${categoryName}"
+        >Food</span
+      >
+      <span th:if="${error}" class="entry-dock__resolved warning" th:text="${error}"></span>
+    </th:block>
+
+    <!-- GET /register/ghost response: the suggested category note (§3.9). Swapped into #entry-ghost;
+         when a suggestion exists it also OOB-fills the category field's text. -->
+    <th:block th:fragment="ghost(categoryName)">
+      <th:block th:if="${categoryName}">
+        <span aria-hidden="true">auto · </span><span th:text="${categoryName}">Fuel</span>
+        <!-- OOB-fill the category input with the suggestion so the single ghost line shows there. -->
+        <input
+          id="entry-category"
+          name="categoryText"
+          class="input"
+          list="entry-category-options"
+          autocomplete="off"
+          th:value="${categoryName}"
+          hx-swap-oob="true"
+          hx-post="/categories/resolve"
+          hx-trigger="change"
+          hx-target="#entry-category-resolved"
+          hx-swap="innerHTML"
+        />
+      </th:block>
+    </th:block>
+  </body>
+</html>

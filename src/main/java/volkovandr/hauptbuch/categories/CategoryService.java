@@ -98,6 +98,72 @@ public class CategoryService {
   }
 
   /**
+   * Resolve the dock's category field (register §3.5, plan stage 7b) to a category id: an existing
+   * category is matched by its display name; a {@code Parent - Child} string creates a new leaf
+   * under an existing parent (type inherited), reusing {@link #createCategory} — including its
+   * implicit subdivision of a posted-to parent leaf. This is the categories module's own logic, so
+   * the dock (in {@code operations}) resolves the category through here before committing, keeping
+   * {@code operations} free of a {@code categories} dependency (plan stage 7 boundary note).
+   *
+   * @param text the typed category — an existing category's name, or {@code Parent - Child}
+   * @return the resolved (or newly-created) category's id
+   * @throws IllegalArgumentException if the text matches nothing and is not a {@code Parent -
+   *     Child} with an existing parent, or names an ambiguous category
+   */
+  @Transactional
+  public long resolveCategory(String text) {
+    if (text == null || text.isBlank()) {
+      throw new IllegalArgumentException("A category is required");
+    }
+    String trimmed = text.strip();
+
+    Optional<Account> existing = findManageableByName(trimmed);
+    if (existing.isPresent()) {
+      return existing.get().accountId();
+    }
+
+    int separator = trimmed.lastIndexOf(" - ");
+    if (separator < 0) {
+      throw new IllegalArgumentException(
+          "Unknown category '"
+              + trimmed
+              + "' — pick an existing category, or create one as 'Parent - Child'");
+    }
+    String parentName = trimmed.substring(0, separator).strip();
+    String childName = trimmed.substring(separator + 3).strip();
+    Account parent =
+        findManageableByName(parentName)
+            .orElseThrow(
+                () ->
+                    new IllegalArgumentException(
+                        "No existing category '"
+                            + parentName
+                            + "' to create '"
+                            + childName
+                            + "' under"));
+    return createCategory(new CategoryDraft(childName, parent.type(), parent.accountId()))
+        .accountId();
+  }
+
+  /**
+   * A live manageable category matched by exact display name. Empty if none match; throws if the
+   * name is ambiguous (e.g. a same-named income and expense category) — the dock cannot guess
+   * which.
+   */
+  private Optional<Account> findManageableByName(String name) {
+    List<Account> matches =
+        manageableCategories().stream()
+            .map(AccountNode::account)
+            .filter(a -> a.name().equalsIgnoreCase(name))
+            .toList();
+    if (matches.size() > 1) {
+      throw new IllegalArgumentException(
+          "Category '" + name + "' is ambiguous — more than one category has that name");
+    }
+    return matches.stream().findFirst();
+  }
+
+  /**
    * Rename a category's freely-editable field: display name. Type, currency, and parent are
    * immutable through the UI — the same stance {@code accounts} takes on real accounts.
    *
