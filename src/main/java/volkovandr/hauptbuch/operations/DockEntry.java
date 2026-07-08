@@ -13,6 +13,13 @@ import java.time.LocalDate;
  * German-formatted magnitude whose sign is <em>determined</em> by the category's type, unless an
  * explicit leading {@code +}/{@code −} overrides it (register §3.8).
  *
+ * <p>{@code transactionId} distinguishes the dock's two modes (register §3.1): {@code null} is a
+ * <em>new</em> entry that {@link DockCommitService} records; a non-null id is an <em>edit</em> that
+ * re-threads that existing transaction in place ({@code editTransaction}). Editing the account or
+ * date re-threads both affected balance threads via the same bounded re-fetch as a backdated insert
+ * (register §3.3).
+ *
+ * @param transactionId the transaction being edited, or {@code null} for a new entry
  * @param date booking date
  * @param accountId the funding (own) account the money moves through
  * @param payeeId a picked existing payee, or null
@@ -23,6 +30,7 @@ import java.time.LocalDate;
  * @param note free-text transaction note; nullable
  */
 public record DockEntry(
+    Long transactionId,
     LocalDate date,
     long accountId,
     Long payeeId,

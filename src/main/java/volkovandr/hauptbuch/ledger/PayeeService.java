@@ -47,6 +47,19 @@ public class PayeeService {
   }
 
   /**
+   * The {@code Name - City - Country} entry value for an existing payee (register §3.4) — the same
+   * string the dock's datalist offers and the create-new parser round-trips, used to pre-fill the
+   * payee input when a transaction is loaded into the dock's edit mode. Empty if the payee does not
+   * exist (or is deleted, absent from the options).
+   */
+  public Optional<String> entryValueFor(long payeeId) {
+    return payeeRepository.findFilterOptions().stream()
+        .filter(o -> o.payeeId() == payeeId)
+        .map(PayeeRepository.PayeeOption::entryValue)
+        .findFirst();
+  }
+
+  /**
    * Parse a create-new payee string into a {@link PayeeDraft} (register §3.4). The typed string is
    * split on {@code " - "} / {@code ","}:
    *

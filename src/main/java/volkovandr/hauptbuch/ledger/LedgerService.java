@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -83,6 +84,23 @@ public class LedgerService {
                 null));
     insertLegs(transactionId, legs);
     return transactionId;
+  }
+
+  /**
+   * A live (not soft-deleted) transaction by id, for loading it into the entry dock's edit mode
+   * (register §3.1). A read the dock needs before it can re-thread; pairs with {@link
+   * #findPostings}. Returns empty for a missing or voided transaction.
+   */
+  public Optional<Transaction> findTransaction(long transactionId) {
+    return transactionRepository.findById(transactionId).filter(t -> t.deletedAt() == null);
+  }
+
+  /**
+   * The legs of a transaction, in posting-id order — the other half of an edit-mode load (register
+   * §3.1). The dock classifies them into the funding (own-account) leg and the category legs.
+   */
+  public List<Posting> findPostings(long transactionId) {
+    return transactionRepository.findPostings(transactionId);
   }
 
   /** Reversibly soft-delete a transaction and (by the join) its postings (data-model §3.5). */

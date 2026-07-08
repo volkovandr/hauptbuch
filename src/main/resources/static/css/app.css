@@ -646,6 +646,30 @@ th.register__spine {
   font-size: 0.7rem;
 }
 
+/* Edit affordance (register §3.1): a quiet icon button, revealed on row hover/focus so it never
+   competes with the numbers, but always keyboard-reachable (Enter on the selected row activates it). */
+.register__edit {
+  margin-left: 0.35rem;
+  padding: 0 0.2rem;
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.register__row:hover .register__edit,
+.register__row:focus-within .register__edit,
+.register__edit:focus {
+  opacity: 1;
+}
+
+.register__edit:hover {
+  color: var(--green-ink);
+}
+
 .recon--unreconciled {
   color: var(--feint);
 }
@@ -684,6 +708,16 @@ th.register__spine {
 .entry-dock__title {
   margin: 0 0 0.45rem;
   color: var(--green-ink);
+}
+
+/* Edit mode (register §3.1): the same dock, accented so it is unmistakably editing an existing row
+   rather than entering a new one — a warm left border and an amber title. */
+.entry-dock--edit {
+  border-left: 3px solid var(--amber-ink, #b26a00);
+}
+
+.entry-dock--edit .entry-dock__title {
+  color: var(--amber-ink, #b26a00);
 }
 
 /* One line of fields, wrapping on a narrow viewport. Every field is label-over-input of identical

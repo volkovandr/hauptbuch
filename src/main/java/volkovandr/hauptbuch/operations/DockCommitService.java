@@ -52,11 +52,15 @@ public class DockCommitService {
   }
 
   /**
-   * Commit a simple dock entry: resolve the payee (existing or create-new), route the category to
-   * its per-currency leaf (§6.5), resolve the sign-free amount into a balanced pair of legs (§3.8),
-   * and record the transaction through the engine.
+   * Commit a simple dock entry (register §3.1): resolve the payee (existing or create-new), route
+   * the category to its per-currency leaf (§6.5), resolve the sign-free amount into a balanced pair
+   * of legs (§3.8), and either <em>record</em> a new transaction or <em>re-thread</em> an existing
+   * one through the engine. Which one is decided by {@link DockEntry#transactionId()}: {@code null}
+   * records; a non-null id edits in place ({@code editTransaction}) — changing the account or date
+   * re-threads both affected balance threads (register §3.3), which the caller repaints with the
+   * same bounded re-fetch as a backdated insert.
    *
-   * @return the new transaction's id
+   * @return the affected transaction's id (the new one, or the edited one unchanged)
    * @throws IllegalArgumentException if the funding account is unknown or the amount is unparseable
    */
   @Transactional
@@ -81,7 +85,24 @@ public class DockCommitService {
             List.of(
                 PostingDraft.of(fundingAccount.accountId(), fundingAmount),
                 PostingDraft.of(leaf.accountId(), fundingAmount.negate())));
-    return ledgerService.recordTransaction(draft);
+
+    if (entry.transactionId() == null) {
+      return ledgerService.recordTransaction(draft);
+    }
+    ledgerService.editTransaction(entry.transactionId(), draft);
+    return entry.transactionId();
+  }
+
+  /**
+   * Void a transaction from the dock's edit mode (register §3.1): a reversible soft-delete
+   * (data-model §3.5). Delegates straight to the engine — voiding upholds no dock-specific rule, so
+   * this is a thin pass-through the dock controller calls beside {@link #commit}.
+   *
+   * @throws IllegalArgumentException if there is no live transaction with that id
+   */
+  @Transactional
+  public void voidTransaction(long transactionId) {
+    ledgerService.voidTransaction(transactionId);
   }
 
   /**

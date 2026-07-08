@@ -119,10 +119,12 @@
               </th>
             </tr>
           </thead>
-          <tbody id="register-rows">
+          <tbody id="register-rows" data-kbd-list>
             <tr
             th:each="r : ${register.rows()}"
             class="register__row"
+            data-kbd-row
+            tabindex="-1"
             th:classappend="${r.pending()} ? 'register__row--pending'"
             th:style="${r.accountHue() != null}
               ? (${r.zebraDark()}
@@ -177,6 +179,21 @@
               <span class="recon recon--pending" th:if="${r.pending()}" title="Pending review"
                 >◷</span
               >
+              <!-- Edit affordance (register §3.1): loads this transaction into the dock's edit mode.
+                   hx-includes the dock's active-filter hidden fields so the edit dock keeps
+                   repainting the current view. Keyboard: the row is [data-kbd-row]; Enter on it
+                   activates this button (keyboard.js clicks the row's first button). -->
+              <button
+                type="button"
+                class="register__edit"
+                title="Edit transaction"
+                th:attr="hx-get=@{/register/edit/{id}(id=${r.transactionId()})}"
+                hx-include="[name='viewAccountId'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
+                hx-target="#entry-dock"
+                hx-swap="outerHTML"
+              >
+                ✎
+              </button>
             </td>
           </tr>
         </tbody>
@@ -187,7 +204,7 @@
     <!-- The persistent entry dock (register §3). Included from its own fragment so the commit
          response can re-render it (reset to a fresh new-transaction state). -->
     <div
-      th:replace="~{fragments/entry-dock :: dock(${register}, false)}"
+      th:replace="~{fragments/entry-dock :: dock(${register}, false, null)}"
     ></div>
   </main>
 </html>

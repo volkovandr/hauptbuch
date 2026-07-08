@@ -23,6 +23,10 @@ point there. Visual inspiration mock-ups: `docs/pic/register-*.png`.
   never retrofitted. All key handling stays in the sanctioned `keyboard.js` leaf.
 - **Filters yes, sorting deferred** — date-range / account / payee filters are in 7a; column
   re-sorting and the §2.7 balance-hide rule go to the backlog (plan §14) until missed.
+- **7c in two increments, split-edit bundled (owner-confirmed, 2026-07-08)** — edit/void shipped
+  first (7c.1 ✅); the split panel (7c.2) delivers new-split entry *and* editing an existing split
+  back into the panel together. **Blocked on one open decision** — the sign of a mixed
+  income+expense split line (see 7c.2).
 
 **Module-boundary note (decided up front — the 6d lesson, again).** `categories → ledger`,
 `categories → operations`, and `operations → ledger` all already exist, so a dock controller in
@@ -101,23 +105,82 @@ work inline; a backdated insert repaints every affected balance below it; all th
 
 ## 7c — Edit mode, splits, void
 
-**Goal:** the dock's second half — selecting, correcting, splitting, and removing rows.
+**Goal:** the dock's second half — selecting, correcting, splitting, and removing rows. Two
+increments: **7c.1** edit/void (done), **7c.2** the split panel + posting notes (planned below).
 
-- **Edit mode (§3.1):** selecting a row loads it into the dock; save updates in place via
-  `editTransaction`; dock returns to new mode after commit.
-- **Re-threading (§3.3):** changing the Account (or the date) recomputes both affected accounts'
-  balance threads from that date down — the same slice machinery as the backdated insert.
-- **Void:** a delete affordance in edit mode calls `voidTransaction` (soft-delete); the row
-  disappears and the slice repaints.
-- **Split panel (§3.10):** `S` takes the committed single line into the inline-expand panel;
-  "the rest" defaulting so the split balances by construction; `remaining 0,00 ✓` readout;
-  per-line category + note (per-line tags at 7e, beneficiary at stage 8); the register cell shows
-  the top one-to-three categories.
-- **Notes (§3.7):** transaction level and split-line (posting) level.
-- **Playwright:** a split-entry case joins the smoke.
+### 7c.1 — Edit mode + void ✅ **complete**
 
-**Done when:** rows are editable in place including account/date re-threading; splits balance by
-construction and render summarised; void removes the row and repaints the thread.
+Selecting a row loads it into the dock (edit mode, §3.1); Save re-threads it in place via
+`editTransaction`; changing the Account or date recomputes both affected balance threads from that
+date down (§3.3, the backdated-insert slice); a Void affordance soft-deletes via `voidTransaction`
+and the slice repaints; the dock returns to new mode after any commit. `DockEditService` (in
+`operations`) classifies a live transaction's legs into the dock's simple shape — one own-account
+funding leg + one income/expense category leg, single currency — reconstructs the sign-free amount
+text, and resolves the per-currency leaf back to its semantic parent; anything else (transfer,
+opening balance, cross-currency, and — until 7c.2 — a split) is refused with a clear message.
+`DockEntry` gained a nullable `transactionId` (null = record, non-null = edit).
+
+### 7c.2 — Split panel + posting notes (planned)
+
+**⚠ Blocked on one decision before coding — the mixed-type split sign.** 7c.2 as designed below
+treats a split as a decomposition of **one** funding flow: the funding total is fixed and every line
+is a bare **magnitude** sharing the funding leg's direction, so the lines sum to the total and it
+balances by construction (`remaining 0,00 ✓`). That assumes a single direction per split. A real
+receipt can mix directions — e.g. Food items (expense) **and** a bottle-deposit return (income),
+where the deposit should net **negative** against the spend. Which line goes negative, and how "the
+rest"/remaining behave across two directions, is unresolved (why the *deposit* and not the *food*? —
+no good answer yet). **Decide this first**; it changes the line/leg model below. Options to weigh:
+keep splits single-direction and enter a mixed receipt as two transactions; or let each line's sign
+follow its own category type and redefine "remaining" as the signed funding residual.
+
+Assuming the single-direction model (revisit per the block above):
+
+- **Open (§3.9→§3.10):** a `Split` affordance (button + `S` in `keyboard.js`) hx-posts the committed
+  single dock line to `POST /register/split`, which returns the **split panel** fragment (replacing
+  the dock) seeded with one line at the full amount and the committed category. The funding
+  direction (outflow/inflow), decided at open from that category's type and any explicit `+`/`−`,
+  rides along as a hidden field; all lines inherit it.
+- **Per-line fields (§3.10, §3.7):** each line carries category + amount + note. The panel form is
+  the single source of truth — `lineCategoryText[] / lineCategoryId[] / lineAmount[] / lineNote[]`,
+  index-aligned — all submitted and re-emitted, so a re-render preserves resolved ids.
+- **Per-line category create-new (owner-confirmed):** create-new must work from **every** category
+  picker, split lines included. Reuse the browser bridge — `POST /categories/resolve` — but
+  **parameterise its output field name** (`fieldName`, default `categoryId`) so each line resolves
+  into its own list-bound hidden `lineCategoryId`. `operations` still never resolves categories
+  itself (the `operations → categories` cycle); it only echoes the ids the browser posts back.
+- **"The rest" defaulting (§3.10):** **Add line** / **Remove line** full-re-render the panel
+  server-side; a new line's amount defaults to the current remaining (total − allocated).
+- **Live `remaining` readout + Save-button label — in the `keyboard.js` leaf (owner-confirmed
+  2026-07-08):** rather than an htmx round-trip per keystroke, a small client-side handler in
+  `keyboard.js` (the sanctioned JS home, §1.6 — no new script, nothing threaded through templates)
+  reacts to line-amount input: the panel exposes `data-split-*` hooks, keyboard.js sums the lines,
+  writes the `remaining 0,00 ✓` readout, and relabels the Save button (below). This is a **display
+  convenience only** — the server re-derives `remaining` authoritatively at Save (§1.7); there is no
+  `/register/split/recalc` endpoint.
+- **Balancing on Save — Save-button relabel (owner-confirmed 2026-07-08, replaces the earlier
+  prompt idea):** when `remaining = 0` the button reads **Save** and commits as entered. When
+  `remaining ≠ 0` it reads **Save and update amount** (relabelled live by the keyboard.js handler
+  above) — clicking it (or pressing Enter) commits, and the **server** adjusts the funding total to
+  the sum of the lines. No modal/prompt; the relabelled button is the visible, single-keystroke
+  confirmation.
+- **Commit:** `DockSplitService` (in `operations`) builds the funding leg + one leg per line
+  (`PostingDraft.of(id, amount, note)` carries the posting note — added in 7c.1) and records/edits
+  through the engine. The register Category cell already summarises the top one-to-three legs (7a
+  renderer) — assert, don't rebuild.
+- **Editing an existing split (owner-confirmed: land with new-split):** `GET /register/edit/{id}`
+  loads a transaction with one funding leg + ≥2 same-direction category legs (single currency) back
+  into the split panel, pre-filled; non-simple shapes stay refused (transfer/opening/cross-currency).
+- **Out of scope here:** per-line tags → 7e; split beneficiary (`→ Person`) → stage 8.
+- **TDD:** leg-building + remaining/adjust-total and the direction/"the rest" defaulting in the unit
+  tier; the open→add→resolve→save flow, the *Save and update amount* path, and split edit-load in
+  MockMvc acceptance (browser smoke stays dropped, plan §14). The keyboard.js live-remaining/relabel
+  handler stays in the leaf (not unit-tested); the server's authoritative balancing is what the unit
+  + MockMvc tiers assert.
+
+**Done when:** a split is enterable from the dock, balances by construction with a live `remaining`
+readout, and commits (adjusting the total when the button so indicates); an existing split re-opens
+in the panel for edit; posting-level notes persist; the register cell shows the summarised
+categories.
 
 ## 7d — Cross-currency entry
 

@@ -41,6 +41,14 @@ from the button, and the type (expense or income) from the parent category as we
 ## Register page UX improvements
 
 * the date range filter should provide quick selection of common ranges, like "Last 12 months", "This year", "This month".
+* the transaction editing works and available on clicking the edit button on the right. But when editing a transaction
+  it is totally unclear which of them is being edited. We should highlight the transaction being edited in the table.
+* Ideally the edit feature should be triggered not by a small button, but by simly clicking on the transaction row. This
+  is how Money works.
+* Creating a new category inline works. But we need a confirmation, maybe user did not want to create a new category, but just made a typo.
+  Another motivation, if I type "Food - Milk" it creates a subcategory under food, which is correct. But what if I wanted
+  to create a new category called "Food - Milk" and not a subcategory? I would need to go to the category management
+  which is fine, but it should be clear what the inline creation is going to do, that's why a confirmation is needed.
 
 ## General UX improvements
 
@@ -49,3 +57,6 @@ from the button, and the type (expense or income) from the parent category as we
 * We need a payee editor page, where the user could create (not much sense)/edit (necessary)/merge (very necessary) or delete payees.
 * The difference between "zebra" light and dark colors is too big, bigger than the difference between different hue colors. 
   This makes the register look a bit confusing
+* When entering a new transaction, and in fact in other places as well, the TAB key moves the selection between the date
+  components, i.e. day→month→year. But in fact this is annoying, simple Right key does the same. I would like TAB to move to 
+  the next field.

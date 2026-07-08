@@ -181,6 +181,118 @@ class RegisterEntryScreenIntegrationTest {
         .andExpect(content().string(not(containsString("id=\"register-rows\""))));
   }
 
+  // ── edit mode & void (plan stage 7c, register §3.1) ──────────────────────────
+
+  @Test
+  void editLoadsTheRowIntoTheDockInEditMode() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food");
+    commitSpend(cash, food, "2026-02-01", "20");
+    long txnId = latestTransactionId();
+
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        // Edit mode: the title, the hidden transaction id, the Save/Void affordances, and the
+        // pre-filled amount and category the re-save round-trips.
+        .andExpect(content().string(containsString("Edit transaction")))
+        .andExpect(content().string(containsString("name=\"transactionId\"")))
+        .andExpect(content().string(containsString("value=\"" + txnId + "\"")))
+        .andExpect(content().string(containsString(">Save<")))
+        .andExpect(content().string(containsString("/register/void")))
+        .andExpect(content().string(containsString("value=\"20,00\"")))
+        .andExpect(content().string(containsString("Food")));
+  }
+
+  @Test
+  void savingAnEditReThreadsTheBalanceInPlace() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food");
+    commitSpend(cash, food, "2026-02-01", "20"); // 500 − 20 = 480
+    long txnId = latestTransactionId();
+
+    // Re-save the same row with a bigger amount: it re-threads in place, not a second transaction.
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("transactionId", String.valueOf(txnId))
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "50")
+                .param("categoryId", String.valueOf(food))
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"register-rows\"")))
+        .andExpect(content().string(containsString("450,00")))
+        .andExpect(content().string(not(containsString("480,00"))))
+        // The dock resets to new mode via its out-of-band swap.
+        .andExpect(content().string(containsString("hx-swap-oob=\"true\"")));
+    // Exactly one non-opening transaction remains — the edit updated it in place.
+    assertThat(spendTransactionCount()).isEqualTo(1L);
+  }
+
+  @Test
+  void voidRemovesTheRowAndRepaintsTheThread() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food");
+    commitSpend(cash, food, "2026-02-01", "20");
+    long txnId = latestTransactionId();
+
+    mockMvc
+        .perform(
+            post("/register/void")
+                .param("transactionId", String.valueOf(txnId))
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        // The Food row is gone; Cash is back to its opening 500,00 and the −20 spend is not shown.
+        .andExpect(content().string(containsString("500,00")))
+        .andExpect(content().string(not(containsString("-20,00"))))
+        .andExpect(content().string(containsString("hx-swap-oob=\"true\"")));
+    assertThat(spendTransactionCount()).isEqualTo(0L);
+  }
+
+  @Test
+  void editRefusesAnOpeningBalanceWithMessage() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long openingTxn = openingBalanceTransactionId();
+
+    mockMvc
+        .perform(get("/register/edit/" + openingTxn).param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        // Not editable in the dock yet: the dock stays in new mode carrying the explanation.
+        .andExpect(content().string(containsString("New transaction")))
+        .andExpect(content().string(containsString("cannot be edited")))
+        .andExpect(content().string(not(containsString("name=\"transactionId\""))));
+  }
+
+  /** The most recent live transaction — the one a commit just created. */
+  private long latestTransactionId() {
+    return jdbcClient
+        .sql("select max(transaction_id) from transaction where deleted_at is null")
+        .query(Long.class)
+        .single();
+  }
+
+  /** The opening-balance transaction (an equity leg — not dock-editable). */
+  private long openingBalanceTransactionId() {
+    return jdbcClient
+        .sql(
+            "select transaction_id from transaction where note = 'Opening balance'"
+                + " order by transaction_id desc limit 1")
+        .query(Long.class)
+        .single();
+  }
+
+  /** Live transactions that are not opening balances — the ones the dock creates. */
+  private long spendTransactionCount() {
+    return jdbcClient
+        .sql(
+            "select count(*) from transaction where deleted_at is null"
+                + " and (note is null or note <> 'Opening balance')")
+        .query(Long.class)
+        .single();
+  }
+
   @Test
   void categoryResolveReturnsTheHiddenIdForAnExistingCategory() throws Exception {
     long food = insertCategory("Food");
