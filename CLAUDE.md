@@ -305,3 +305,5 @@ The docs are a navigation aid, not a worklog. Resist the urge to add prose.
 - **`ui-receipt-processing.md`** — receipt lifecycle, the four-step workflow, the `receipt` schema sketch.
 - **`implementation-plan.md`** — the staged build sequence and the backlog. *Start here for what's next.*
 - **`potential-feature-ideas.md`** — ideas that came up during implementation/testing, not yet planned.
+- **`ui-issue-list.md`** — a living list of UI issues discovered during testing and use. Check it
+  periodically to see if any can be fixed in the current cycle; remove them when fixed.

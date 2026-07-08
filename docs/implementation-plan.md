@@ -24,6 +24,7 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.17 (2026-07-08):** Stage 7b (Entry dock, simple transactions) marked **complete**.
 - **v0.16 (2026-07-05):** Stage 7a (Register, read-only) marked **complete**.
 - **v0.15 (2026-07-05):** Stage 7 made concrete and split into **7a–7e** in the new dedicated
   sub-plan `implementation-plan-stage-7.md`. Scope decisions: tags last (7e, schema migrates then);
@@ -340,12 +341,12 @@ piece lands (Q-UI-2 decided piecewise, never retrofitted):
 - **7a — Register, read-only.** ✅ **complete.** The list over a register query + the stage-3
   running-balance SQL rebound to a real repository; date/account/payee filters (column re-sorting
   deferred to §14); zebra, currency display, muted `pending_review`.
-- **7b — Entry dock, simple transactions.** Payee picker with create-new parsing (payee gains
-  city/country + a seeded `country` list), category picker with create-new and the lazy
-  per-currency-leaf routing (data-model §6.5), sign-free amounts with the `+`/`−` override, the
-  single-ghost-category autofill, backdated-insert slice refresh (Q-UI-5 decided here). First
-  **Playwright** smoke (entry → commit). Dock commit endpoint lives in `operations` (module-cycle
-  precedent from 6d).
+- **7b — Entry dock, simple transactions.** ✅ **complete.** Payee picker with create-new parsing
+  (payee gains city/country + a seeded ISO-3166 alpha-3 `country` list), category picker with
+  create-new and the lazy per-currency-leaf routing (data-model §6.5), sign-free amounts with the
+  `+`/`−` override, the single-ghost-category autofill, backdated-insert slice refresh (Q-UI-5
+  decided here). Acceptance via MockMvc in `integrationTest` (Playwright dropped — see §14). Dock
+  commit endpoint lives in `operations` (module-cycle precedent from 6d).
 - **7c — Edit mode, splits, void.** Edit-in-place with account/date re-threading, `voidTransaction`
   from the dock, the inline split panel with "the rest" defaulting, notes at both levels.
 - **7d — Cross-currency entry.** The dock's conversion mode over the already-complete stage-3
@@ -418,6 +419,15 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
 - **Ops & hardening:** minimal auth (ARCH-04 — prerequisite for any non-localhost, Telegram, or MCP
   exposure); Docker/compose for the Pi (ARCH-01); documented backups + export (NFR-03); HTTPS reverse
   proxy (ARCH-05).
+- **Testing — browser smoke (Playwright): dropped for the foreseeable future** (owner decision,
+  2026-07-05). The money-critical flows the tech-stack doc earmarked for Playwright (transaction
+  entry→commit, receipt review→commit, statement match→confirm) are instead covered end-to-end at
+  the **controller/htmx acceptance** level via MockMvc in the integration tier — which already
+  asserts the rendered `hx-*` wiring, the swap responses, and the resulting balances against real
+  Postgres, without the browser-binary/WSL setup cost. Revisit only if a defect surfaces that a
+  server-side acceptance test structurally cannot catch (e.g. a real client-JS interaction in one of
+  the sanctioned JS leaves). Supersedes the "Playwright arrives at 7b" line in the stage-7 sub-plan
+  and the Should-level UI-testing rows in `tech-stack.md`/§15.
 
 ---
 
