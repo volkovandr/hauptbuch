@@ -62,7 +62,7 @@ stage 6 provide live rows on day one).
 **Done when:** a fixture book renders exactly per §2.4–§2.10 defaults; filters work; every balance
 thread is correct per account.
 
-## 7b — Entry dock: new simple transactions
+## 7b — Entry dock: new simple transactions ✅ **complete**
 
 **Goal:** keyboard-first entry of a single-category transaction, committed through the stage-3
 `recordTransaction`, with the new row appearing without a full reload.
@@ -83,17 +83,21 @@ thread is correct per account.
   not later (refunds are unrepresentable without it).
 - **Ghost autofill (§3.9):** most-common-category-per-payee as a single uncommitted suggestion.
   Q-UI-3 settled: plain statistical mode, ties broken by most recent use.
-- **Commit & repaint:** newest row appends via `hx-swap="beforeend"` (§2.1); a **backdated** entry
-  triggers the affected-slice refresh — **Q-UI-5 decided here**, lean OOB slice-swap with bounded
-  re-fetch as the acceptable fallback (§2.2).
-- **Playwright arrives:** test infrastructure + the first money-critical smoke (enter transaction →
-  commit → row appears with the correct balance).
+- **Commit & repaint:** **Q-UI-5 decided here** — the commit re-renders the whole rows body for the
+  active filter (the **bounded re-fetch**, §2.2's acceptable fallback), so a **backdated** entry
+  re-threads every affected balance below it, not just the newest row. Chosen over `beforeend` +
+  targeted OOB slice-swaps because the re-fetch is always correct by construction and the register is
+  bounded to hundreds of rows; the newest-at-bottom scroll re-anchors via the `keyboard.js` leaf's
+  `htmx:afterSwap` hook.
+- **Browser smoke: dropped** (owner decision — see plan §14). The entry→commit→row-with-correct-
+  balance flow is covered end-to-end at the controller/htmx acceptance level (MockMvc) in the
+  integration tier instead.
 - **TDD:** mode/tie-break query and payee-match query in `sqlLogicTest`; create-new parsing and
-  sign resolution in the unit tier; dock rendering + swap behaviour in integration.
+  sign resolution in the unit tier; dock rendering + swap behaviour + the commit/backdated repaint in
+  integration (MockMvc).
 
-**Done when:** a transaction is enterable end-to-end by keyboard alone; payee and category
-create-new work inline; a backdated insert repaints every affected balance below it; the Playwright
-smoke is green.
+**Done when:** a transaction is enterable end-to-end through the dock; payee and category create-new
+work inline; a backdated insert repaints every affected balance below it; all three suites green.
 
 ## 7c — Edit mode, splits, void
 

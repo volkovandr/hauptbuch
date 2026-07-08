@@ -38,8 +38,14 @@ from the button, and the type (expense or income) from the parent category as we
 * Type of the new category should be automatically set to the type of the parent category when a non-top-level category is created.
 * Collapse-expand parent categories in the category list - a nice UX improvement. 
 
+## Register page UX improvements
+
+* the date range filter should provide quick selection of common ranges, like "Last 12 months", "This year", "This month".
+
 ## General UX improvements
 
 * In the various pages instead of "Back to..." links we should have a "Cancel" button. This makes the UX more consistent.
 * Modal dialogs should close on Enter accepting the changes, and on Esc discarding the changes, as if Save or Cancel buttons were clicked.
-
+* We need a payee editor page, where the user could create (not much sense)/edit (necessary)/merge (very necessary) or delete payees.
+* The difference between "zebra" light and dark colors is too big, bigger than the difference between different hue colors. 
+  This makes the register look a bit confusing
