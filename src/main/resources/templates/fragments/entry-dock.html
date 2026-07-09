@@ -224,8 +224,11 @@
     </th:block>
 
     <!-- GET /register/ghost response: the suggested category note (§3.9). Swapped into #entry-ghost;
-         when a suggestion exists it also OOB-fills the category field's text. -->
-    <th:block th:fragment="ghost(categoryName)">
+         when a suggestion exists it also OOB-fills the category field's text AND the resolved hidden
+         categoryId — the ghost is an existing category the query already resolved, so the dock is
+         immediately committable without the user re-triggering /categories/resolve by editing the
+         field (the change event never fires for a programmatic fill). -->
+    <th:block th:fragment="ghost(categoryId, categoryName)">
       <th:block th:if="${categoryName}">
         <span aria-hidden="true">auto · </span><span th:text="${categoryName}">Fuel</span>
         <!-- OOB-fill the category input with the suggestion so the single ghost line shows there. -->
@@ -242,6 +245,11 @@
           hx-target="#entry-category-resolved"
           hx-swap="innerHTML"
         />
+        <!-- OOB-fill the hidden categoryId the dock commits, so accepting the ghost as-is is enough
+             (register §3.9). Mirrors the /categories/resolve response's #entry-category-resolved. -->
+        <span id="entry-category-resolved" hx-swap-oob="true">
+          <input type="hidden" name="categoryId" th:value="${categoryId}" />
+        </span>
       </th:block>
     </th:block>
   </body>

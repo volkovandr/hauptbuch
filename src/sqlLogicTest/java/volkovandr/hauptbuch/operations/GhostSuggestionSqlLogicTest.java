@@ -143,6 +143,25 @@ class GhostSuggestionSqlLogicTest {
   }
 
   @Test
+  void keepsSemanticChildLeafInsteadOfRollingUpToTheParent() {
+    long cash = insertAccount("Cash", ASSET, EUR, null);
+    // Food has real sub-categories (semantic children, not per-currency variants). A posting lands
+    // on the "Sweets" leaf; the suggestion must be "Sweets", not its parent "Food" (Food cannot be
+    // posted to, so rolling up to it is useless — ui-issue-list).
+    long food = insertAccount("Food", EXPENSE, EUR, null);
+    long sweets = insertAccount("Sweets", EXPENSE, EUR, food);
+    insertAccount("Non-Sweets", EXPENSE, EUR, food);
+    long payee = insertPayee("Confiserie");
+
+    spend("2026-05-01", payee, cash, sweets, "6");
+    spend("2026-05-08", payee, cash, sweets, "7");
+
+    GhostSuggestion suggestion = ghostSuggestionRepository.suggestFor(payee).orElseThrow();
+    assertThat(suggestion.categoryId()).isEqualTo(sweets);
+    assertThat(suggestion.categoryName()).isEqualTo("Sweets");
+  }
+
+  @Test
   void ignoresVoidedTransactions() {
     long cash = insertAccount("Cash", ASSET, EUR, null);
     long fuel = insertAccount("Fuel", EXPENSE, EUR, null);

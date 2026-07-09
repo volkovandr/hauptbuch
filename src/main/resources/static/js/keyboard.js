@@ -19,7 +19,10 @@
  *      register entry dock's first field — so entry is reachable without the mouse (register §3.2,
  *      Q-UI-2 keyboard-first). Within the dock, Tab walks the fields and Enter on a field submits
  *      (native form behaviour, which htmx drives); the "n" jump is the one thing the browser lacks.
- *   5. Nothing else. New shortcuts are added here, by markup convention — never scattered into
+ *   5. Highlight the row under edit: on load and after each htmx swap, mirror the dock's edit state
+ *      onto the register — the row matching the dock's editing transactionId gets a marker class
+ *      (register §3.1). Pure reflection of server markup; nothing to clear by hand.
+ *   6. Nothing else. New shortcuts are added here, by markup convention — never scattered into
  *      page scripts.
  *
  * It re-scans after htmx swaps so freshly-inserted rows are navigable.
@@ -29,6 +32,7 @@
 
   const ROW = "[data-kbd-row]";
   const SELECTED = "row--selected";
+  const EDITING = "register__row--editing";
 
   /** All navigable rows across all lists, in document order. */
   function rows() {
@@ -124,15 +128,32 @@
       .forEach((el) => (el.scrollTop = el.scrollHeight));
   }
 
+  // Mirror the entry dock's edit state onto the register (register §3.1): mark the row whose
+  // transaction the dock is editing, clear it everywhere else. The dock only renders a
+  // transactionId field in edit mode, so this is driven entirely by server markup — save and cancel
+  // reset the dock, leaving no editing id, which clears the highlight for free. No-op off the
+  // register (no such rows / dock).
+  function syncEditingRow() {
+    const dockId = document.querySelector('#entry-dock input[name="transactionId"]');
+    const editing = dockId ? dockId.value : null;
+    document.querySelectorAll("[data-transaction-id]").forEach((row) => {
+      row.classList.toggle(EDITING, editing !== null && row.dataset.transactionId === editing);
+    });
+  }
+
   document.addEventListener("keydown", onKeydown);
-  document.addEventListener("DOMContentLoaded", scrollToBottom);
+  document.addEventListener("DOMContentLoaded", function () {
+    scrollToBottom();
+    syncEditingRow();
+  });
 
   // After an htmx swap, a selected row may have been replaced; drop a stale selection so the next
-  // arrow keypress re-selects from a clean state, and re-anchor the newest-at-bottom scroll (both
-  // no-ops when htmx is absent).
+  // arrow keypress re-selects from a clean state, re-anchor the newest-at-bottom scroll, and
+  // re-mirror the dock's edit state onto the rows (all no-ops when htmx is absent).
   document.body &&
     document.body.addEventListener("htmx:afterSwap", function () {
       rows().forEach((r) => r.classList.remove(SELECTED));
       scrollToBottom();
+      syncEditingRow();
     });
 })();

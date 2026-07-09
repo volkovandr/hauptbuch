@@ -637,6 +637,26 @@ th.register__spine {
   border-bottom-style: dashed;
 }
 
+/* The row whose transaction the dock is currently editing (register §3.1): an amber left tab plus a
+   faint amber wash on the cells so it is unmistakable which row the dock is threading — distinct
+   from the green selection tab and the blue focus outline. The wash sits on the <td>s (transparent
+   by default) so it layers over the row's inline account-hue background, which a class on the <tr>
+   cannot override. Mirrored from the dock's edit state by keyboard.js after every swap; cleared for
+   free on save/cancel (the reset dock has no editing id). */
+.register__row--editing {
+  box-shadow: inset 3px 0 0 var(--amber-ink, #b26a00);
+}
+
+.register__row--editing td {
+  background: rgba(178, 106, 0, 0.12);
+}
+
+/* Keep the edit affordance visible on the row under edit, not only on hover. */
+.register__row--editing .register__edit {
+  opacity: 1;
+  color: var(--amber-ink, #b26a00);
+}
+
 /* Reconciliation glyph: a small dot whose fill carries the state; unreconciled is a hollow hint. */
 .register__status {
   text-align: right;

@@ -323,7 +323,12 @@ class RegisterEntryScreenIntegrationTest {
     mockMvc
         .perform(get("/register/ghost").param("payeeText", "Shell"))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("Fuel")));
+        .andExpect(content().string(containsString("Fuel")))
+        // The suggestion also OOB-fills the resolved hidden categoryId (register §3.9), so
+        // accepting
+        // the ghost as-is is immediately committable — no manual re-trigger of /categories/resolve.
+        .andExpect(content().string(containsString("name=\"categoryId\"")))
+        .andExpect(content().string(containsString("value=\"" + fuel + "\"")));
   }
 
   @Test

@@ -174,14 +174,14 @@ class RegisterEntryController {
    */
   @GetMapping("/register/ghost")
   String ghost(@RequestParam(required = false) String payeeText, Model model) {
-    Optional<String> suggestion =
+    Optional<GhostSuggestion> suggestion =
         payeeService
             .findExisting(payeeText)
             .map(Payee::payeeId)
-            .flatMap(ghostSuggestionRepository::suggestFor)
-            .map(GhostSuggestion::categoryName);
-    model.addAttribute("categoryName", suggestion.orElse(null));
-    return DOCK_FRAGMENT + " :: ghost(categoryName=${categoryName})";
+            .flatMap(ghostSuggestionRepository::suggestFor);
+    model.addAttribute("categoryId", suggestion.map(GhostSuggestion::categoryId).orElse(null));
+    model.addAttribute("categoryName", suggestion.map(GhostSuggestion::categoryName).orElse(null));
+    return DOCK_FRAGMENT + " :: ghost(categoryId=${categoryId}, categoryName=${categoryName})";
   }
 
   private static String blankToNull(String value) {
