@@ -40,11 +40,16 @@ public class GhostSuggestionRepository {
             """
             with category_legs as (
               select
-                -- Roll a per-currency leaf up to its semantic category: the parent when the parent
-                -- is itself a category, otherwise the leaf itself (§6.5).
+                -- Roll a per-currency leaf up to its semantic category (§6.5), but ONLY when the
+                -- leaf really is a per-currency variant of its parent — named "<Parent> <CODE>"
+                -- (CurrencyLeafService). A real sub-category (e.g. "Sweets" under "Food") must stay
+                -- itself: its parent cannot be posted to, so rolling up would suggest an unusable
+                -- category (ui-issue-list).
                 case when parent.type in ('income', 'expense')
+                          and leaf.name = parent.name || ' ' || leaf.currency_code
                      then parent.account_id else leaf.account_id end as category_id,
                 case when parent.type in ('income', 'expense')
+                          and leaf.name = parent.name || ' ' || leaf.currency_code
                      then parent.name else leaf.name end as category_name,
                 t.date
               from transaction t

@@ -10,9 +10,4 @@ After the fix the issue should be removed from the list.
 
 ## UI Issues
 
-### REGISTER page
-
-* When creating a new transaction and selecting a Payee, the most used catagory should be pre-selected automatically.
-  but this is not working as expected: When my Food category has two children: Sweets and Non-Sweets, and I only use
-  Sweets for a given payee, when I select the payee, the Food (the parent category) is selected, instead of Sweets (the child category).
-  This is wrong, and since Food cannot be selected for a transaction, the user has to select Sweets manually. This is inconvenient and should be fixed.
+_No open issues._

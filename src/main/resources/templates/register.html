@@ -124,6 +124,7 @@
             th:each="r : ${register.rows()}"
             class="register__row"
             data-kbd-row
+            th:attr="data-transaction-id=${r.transactionId()}"
             tabindex="-1"
             th:classappend="${r.pending()} ? 'register__row--pending'"
             th:style="${r.accountHue() != null}
