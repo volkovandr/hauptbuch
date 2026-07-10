@@ -20,6 +20,12 @@ import volkovandr.hauptbuch.ledger.Payee;
 public class PayeeRepository {
 
   private static final String PAYEE_COLUMNS = "payee_id, name, city, country_code, deleted_at";
+  private static final String NAME = "name";
+  private static final String CITY = "city";
+  private static final String COUNTRY_CODE = "countryCode";
+  private static final String PAYEE_ID = "payeeId";
+  private static final String NORMALISED = "normalised";
+  private static final String LIMIT = "limit";
 
   private final JdbcClient jdbcClient;
 
@@ -33,9 +39,9 @@ public class PayeeRepository {
     jdbcClient
         .sql(
             "insert into payee (name, city, country_code) " + "values (:name, :city, :countryCode)")
-        .param("name", name)
-        .param("city", city)
-        .param("countryCode", countryCode)
+        .param(NAME, name)
+        .param(CITY, city)
+        .param(COUNTRY_CODE, countryCode)
         .update(keyHolder, "payee_id");
     Number key = keyHolder.getKey();
     if (key == null) {
@@ -104,9 +110,9 @@ public class PayeeRepository {
                 + " and city is not distinct from :city"
                 + " and country_code is not distinct from :countryCode"
                 + " order by payee_id limit 1")
-        .param("name", name)
-        .param("city", city)
-        .param("countryCode", countryCode)
+        .param(NAME, name)
+        .param(CITY, city)
+        .param(COUNTRY_CODE, countryCode)
         .query(Payee.class)
         .optional();
   }
@@ -115,7 +121,7 @@ public class PayeeRepository {
   public Optional<Payee> findById(long payeeId) {
     return jdbcClient
         .sql("select " + PAYEE_COLUMNS + " from payee where payee_id = :payeeId")
-        .param("payeeId", payeeId)
+        .param(PAYEE_ID, payeeId)
         .query(Payee.class)
         .optional();
   }
@@ -152,8 +158,8 @@ public class PayeeRepository {
               name
             limit :limit
             """)
-        .param("normalised", normalise(query))
-        .param("limit", limit)
+        .param(NORMALISED, normalise(query))
+        .param(LIMIT, limit)
         .query(Payee.class)
         .list();
   }

@@ -27,6 +27,9 @@ public class RegisterRepository {
   private static final String FROM_DATE = "fromDate";
   private static final String TO_DATE = "toDate";
   private static final String PAYEE_ID = "payeeId";
+  private static final String BASE_CURRENCY = "baseCurrency";
+  private static final String TRANSACTION_IDS = "transactionIds";
+  private static final String VIEWED_ACCOUNT_IDS = "viewedAccountIds";
 
   private final JdbcClient jdbcClient;
 
@@ -115,7 +118,7 @@ public class RegisterRepository {
         .param(FROM_DATE, fromDate)
         .param(TO_DATE, toDate)
         .param(PAYEE_ID, payeeId)
-        .param("baseCurrency", baseCurrency)
+        .param(BASE_CURRENCY, baseCurrency)
         .query(RegisterRow.class)
         .list();
   }
@@ -148,8 +151,8 @@ public class RegisterRepository {
               and p.account_id not in (:viewedAccountIds)
             order by p.transaction_id, abs(p.amount) desc, a.name
             """)
-        .param("transactionIds", transactionIds)
-        .param("viewedAccountIds", viewedAccountIds)
+        .param(TRANSACTION_IDS, transactionIds)
+        .param(VIEWED_ACCOUNT_IDS, viewedAccountIds)
         .query(RegisterCounterpartLeg.class)
         .list();
   }

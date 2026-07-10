@@ -42,8 +42,11 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
 public class DockSplitService {
 
   private static final String INCOME = "income";
-  private static final List<String> OWN_TYPES = List.of("asset", "liability");
-  private static final List<String> CATEGORY_TYPES = List.of(INCOME, "expense");
+  private static final String EXPENSE = "expense";
+  private static final String ASSET = "asset";
+  private static final String LIABILITY = "liability";
+  private static final List<String> OWN_TYPES = List.of(ASSET, LIABILITY);
+  private static final List<String> CATEGORY_TYPES = List.of(INCOME, EXPENSE);
 
   /** German entry is to the minor unit; two places covers EUR/CHF. */
   private static final int FRACTION_DIGITS = 2;

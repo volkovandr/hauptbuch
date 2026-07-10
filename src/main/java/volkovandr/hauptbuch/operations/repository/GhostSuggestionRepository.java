@@ -19,6 +19,8 @@ import volkovandr.hauptbuch.operations.GhostSuggestion;
 @Repository
 public class GhostSuggestionRepository {
 
+  private static final String PAYEE_ID = "payeeId";
+
   private final JdbcClient jdbcClient;
 
   GhostSuggestionRepository(JdbcClient jdbcClient) {
@@ -66,7 +68,7 @@ public class GhostSuggestionRepository {
             order by count(*) desc, max(date) desc, category_name
             limit 1
             """)
-        .param("payeeId", payeeId)
+        .param(PAYEE_ID, payeeId)
         .query(GhostSuggestion.class)
         .optional();
   }

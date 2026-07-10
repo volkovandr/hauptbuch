@@ -18,6 +18,10 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class PostingReassignmentRepository {
 
+  private static final String FROM_ACCOUNT_ID = "fromAccountId";
+  private static final String FROM_ACCOUNT_IDS = "fromAccountIds";
+  private static final String TO_ACCOUNT_ID = "toAccountId";
+
   private final JdbcClient jdbcClient;
 
   PostingReassignmentRepository(JdbcClient jdbcClient) {
@@ -28,8 +32,8 @@ public class PostingReassignmentRepository {
   public void reassignPostings(long fromAccountId, long toAccountId) {
     jdbcClient
         .sql("update posting set account_id = :toAccountId where account_id = :fromAccountId")
-        .param("toAccountId", toAccountId)
-        .param("fromAccountId", fromAccountId)
+        .param(TO_ACCOUNT_ID, toAccountId)
+        .param(FROM_ACCOUNT_ID, fromAccountId)
         .update();
   }
 
@@ -44,8 +48,8 @@ public class PostingReassignmentRepository {
     }
     jdbcClient
         .sql("update posting set account_id = :toAccountId where account_id in (:fromAccountIds)")
-        .param("toAccountId", toAccountId)
-        .param("fromAccountIds", fromAccountIds)
+        .param(TO_ACCOUNT_ID, toAccountId)
+        .param(FROM_ACCOUNT_IDS, fromAccountIds)
         .update();
   }
 }
