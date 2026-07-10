@@ -22,7 +22,17 @@
  *   5. Highlight the row under edit: on load and after each htmx swap, mirror the dock's edit state
  *      onto the register — the row matching the dock's editing transactionId gets a marker class
  *      (register §3.1). Pure reflection of server markup; nothing to clear by hand.
- *   6. Nothing else. New shortcuts are added here, by markup convention — never scattered into
+ *   6. Split panel live readout: while the split panel is open, sum the lines' signed contributions
+ *      as the user types (income +, expense −, by each line's resolved type) and write the
+ *      `remaining` readout, the pay/receive direction cue, and the Save-button label (register
+ *      §3.10). Display convenience only — the server re-derives all three authoritatively at Save.
+ *      Pressing "s" (when not typing) opens the split panel via [data-kbd-split].
+ *   7. Split focus: after the panel opens, focus the first line's amount (its category is already
+ *      chosen); after a line is added, focus the new line's category (its amount is pre-filled). So
+ *      the cursor lands where the user types next instead of nowhere (register §3.10).
+ *   8. Select-all on first focus of a [.num] field with a value, so typing replaces it; a later
+ *      click in the same field positions the caret normally (register entry UX).
+ *   9. Nothing else. New shortcuts are added here, by markup convention — never scattered into
  *      page scripts.
  *
  * It re-scans after htmx swaps so freshly-inserted rows are navigable.
@@ -105,6 +115,16 @@
       }
     }
 
+    // "s": open the split panel (register §3.9), if the dock offers one.
+    if (event.key === "s" || event.key === "S") {
+      const split = document.querySelector("[data-kbd-split]");
+      if (split) {
+        event.preventDefault();
+        split.click();
+        return;
+      }
+    }
+
     const all = rows();
     if (all.length === 0) return;
     const current = selectedIndex(all);
@@ -141,19 +161,152 @@
     });
   }
 
+  // ── Split panel live readout (register §3.10) ────────────────────────────────
+  // Parse a user-entered amount ("1.234,56", optional leading +/− or Unicode minus) to a float,
+  // leniently: the LAST separator (either "." or ",") is the decimal point and any earlier ones are
+  // grouping and dropped. This mirrors the server's MoneyFormat.parse (owner decision, 2026-07-09),
+  // so the live readout reads "15.50" as 15,5 like the commit does — not 1550.
+  function parseGerman(text) {
+    if (!text) return 0;
+    let t = text.trim().replace(/−/g, "-");
+    const negative = t.charAt(0) === "-";
+    if (negative || t.charAt(0) === "+") t = t.slice(1).trim();
+    const decimalPos = Math.max(t.lastIndexOf("."), t.lastIndexOf(","));
+    if (decimalPos < 0) {
+      t = t.replace(/[.,]/g, "");
+    } else {
+      const intPart = t.slice(0, decimalPos).replace(/[.,]/g, "");
+      const fracPart = t.slice(decimalPos + 1);
+      t = fracPart === "" ? intPart : intPart + "." + fracPart;
+    }
+    const n = parseFloat(t);
+    if (isNaN(n)) return 0;
+    return negative ? -n : n;
+  }
+
+  function formatGerman(n) {
+    return n.toLocaleString("de-DE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
+
+  // Sum the split lines' signed contributions (income +, expense − by each line's resolved type)
+  // and write the remaining readout, the pay/receive direction cue, and the Save-button label.
+  // Display-only; the server re-derives all three at Save. No-op when no panel is open.
+  function updateSplitReadout() {
+    const panel = document.querySelector("[data-split-panel]");
+    if (!panel) return;
+    const totalEl = panel.querySelector("[data-split-total-input]");
+    const total = totalEl ? parseGerman(totalEl.value) : 0;
+
+    let net = 0;
+    panel.querySelectorAll("[data-split-line]").forEach(function (line) {
+      const amountEl = line.querySelector("[data-split-amount]");
+      const typeEl = line.querySelector('input[name="lineCategoryType"]');
+      if (!amountEl || !amountEl.value.trim()) return;
+      const type = typeEl ? typeEl.value : "";
+      if (!type) return;
+      const value = parseGerman(amountEl.value);
+      net += type === "income" ? value : -value;
+    });
+
+    const magnitude = Math.abs(net);
+    const remaining = total - magnitude;
+    const balanced = Math.abs(remaining) < 0.005;
+
+    const remainingEl = panel.querySelector("[data-split-remaining]");
+    if (remainingEl) {
+      remainingEl.textContent = "remaining " + formatGerman(remaining) + (balanced ? " ✓" : "");
+      remainingEl.classList.toggle("is-balanced", balanced);
+    }
+    const directionEl = panel.querySelector("[data-split-direction]");
+    if (directionEl) {
+      if (net < -0.005) directionEl.textContent = "You will pay " + formatGerman(magnitude);
+      else if (net > 0.005) directionEl.textContent = "You will receive " + formatGerman(magnitude);
+      else directionEl.textContent = "No net payment";
+    }
+    const saveEl = panel.querySelector("[data-split-save]");
+    if (saveEl) saveEl.textContent = balanced ? "Save" : "Save and update amount";
+  }
+
+  // ── Split focus management (register §3.10) ──────────────────────────────────
+  // After the split panel opens or gains a line, put the cursor where the user will type next:
+  // opening a split → the first line's amount (its category is already pre-selected); adding a line
+  // → the new line's category (its amount is pre-filled from "the rest"). Keyed on the request path
+  // so ordinary swaps (category resolve, commit, register repaint) never steal focus.
+  function focusAfterSplitSwap(path) {
+    const panel = document.querySelector("[data-split-panel]");
+    if (!panel) return;
+    if (path === "/register/split") {
+      const amount = panel.querySelector("[data-split-amount]");
+      if (amount) amount.focus();
+    } else if (path === "/register/split/add-line") {
+      const categories = panel.querySelectorAll('input[name="categoryText"]');
+      const last = categories[categories.length - 1];
+      if (last) last.focus();
+    }
+  }
+
+  // ── Select-all on first focus of a numeric field (register UX) ───────────────
+  // When focus first lands on a `.num` field that holds a value — via Tab or a click — select its
+  // whole contents so typing replaces it (the common case). A further click in an already-focused
+  // field positions the caret normally. Empty (placeholder) fields select nothing, so their
+  // behaviour is unchanged. `pendingSelect` defers the mouse path to mouseup, because the browser's
+  // own caret placement on mouseup would otherwise clear a selection made on focus.
+  let pendingSelect = null;
+
+  function isNumField(el) {
+    return Boolean(el) && el.tagName === "INPUT" && el.classList.contains("num");
+  }
+
+  function onMouseDownSelect(event) {
+    const el = event.target;
+    pendingSelect = isNumField(el) && document.activeElement !== el ? el : null;
+  }
+
+  function onFocusInSelect(event) {
+    const el = event.target;
+    if (!isNumField(el)) return;
+    // Keyboard focus (Tab) has no mousedown on this field — select now. The mouse path selects on
+    // mouseup instead so the selection is not dropped by caret placement.
+    if (pendingSelect !== el) el.select();
+  }
+
+  function onMouseUpSelect(event) {
+    if (pendingSelect && pendingSelect === event.target) {
+      event.preventDefault();
+      pendingSelect.select();
+    }
+    pendingSelect = null;
+  }
+
   document.addEventListener("keydown", onKeydown);
+  document.addEventListener("mousedown", onMouseDownSelect);
+  document.addEventListener("focusin", onFocusInSelect);
+  document.addEventListener("mouseup", onMouseUpSelect);
+  // Recompute the split readout whenever a field inside the panel changes.
+  document.addEventListener("input", function (event) {
+    if (event.target.closest && event.target.closest("[data-split-panel]")) {
+      updateSplitReadout();
+    }
+  });
   document.addEventListener("DOMContentLoaded", function () {
     scrollToBottom();
     syncEditingRow();
+    updateSplitReadout();
   });
 
   // After an htmx swap, a selected row may have been replaced; drop a stale selection so the next
   // arrow keypress re-selects from a clean state, re-anchor the newest-at-bottom scroll, and
   // re-mirror the dock's edit state onto the rows (all no-ops when htmx is absent).
   document.body &&
-    document.body.addEventListener("htmx:afterSwap", function () {
+    document.body.addEventListener("htmx:afterSwap", function (event) {
       rows().forEach((r) => r.classList.remove(SELECTED));
       scrollToBottom();
       syncEditingRow();
+      updateSplitReadout();
+      const config = event.detail && event.detail.requestConfig;
+      focusAfterSplitSwap(config ? config.path : null);
     });
 })();

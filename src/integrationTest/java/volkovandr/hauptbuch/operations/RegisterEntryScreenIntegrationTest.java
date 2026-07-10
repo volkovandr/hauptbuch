@@ -305,6 +305,29 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
+  void categoryResolveSelectsTheLineByIndexWhenSeveralAreSubmitted() throws Exception {
+    // Regression (fixed UI issue): a split line's resolve carries every line's categoryText;
+    // without
+    // the index the values arrived joined ("Food,Fuel") and nothing matched. The index picks line
+    // 1.
+    insertCategory("Food");
+    long fuel = accountService.insertLeaf("Fuel", "expense", null, EUR).accountId();
+
+    mockMvc
+        .perform(
+            post("/categories/resolve")
+                .param("categoryText", "Food", "Fuel")
+                .param("index", "1")
+                .param("fieldName", "lineCategoryId")
+                .param("typeFieldName", "lineCategoryType"))
+        .andExpect(status().isOk())
+        // The second line ("Fuel") resolves — into the line's own hidden id and type fields.
+        .andExpect(content().string(containsString("name=\"lineCategoryId\"")))
+        .andExpect(content().string(containsString("value=\"" + fuel + "\"")))
+        .andExpect(content().string(containsString("name=\"lineCategoryType\"")));
+  }
+
+  @Test
   void categoryResolveReturnsAnErrorForAnUnknownBareName() throws Exception {
     mockMvc
         .perform(post("/categories/resolve").param("categoryText", "Nonexistent"))

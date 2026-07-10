@@ -3,7 +3,6 @@ package volkovandr.hauptbuch.shared;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
-import java.text.ParsePosition;
 import java.util.Locale;
 import java.util.Objects;
 import org.joda.money.Money;
@@ -63,22 +62,36 @@ public final class MoneyFormat {
   }
 
   /**
-   * Parse German-formatted user input back to a {@link BigDecimal}. Tolerant of present or absent
-   * grouping separators ({@code 1.234,56} or {@code 1234,56} or {@code 50}).
+   * Parse user-entered amount text back to a {@link BigDecimal}, leniently accepting both {@code .}
+   * and {@code ,} as the decimal separator (owner decision, 2026-07-09): the <em>last</em>
+   * separator in the string is the decimal point, and any earlier separators are grouping and are
+   * dropped. So {@code 15.50}, {@code 15,50}, {@code 1.234,56} and {@code 1,234.56} all parse
+   * correctly, and a value with no separator is a whole number ({@code 1234}). An optional leading
+   * sign is honoured ({@code -}/{@code +}); the register still <em>displays</em> German ({@link
+   * #number}).
    *
    * @param input the user-entered text
-   * @throws NumberFormatException if the input is not a parseable German-formatted number
+   * @throws NumberFormatException if the input is not a parseable number
    */
   public static BigDecimal parse(String input) {
     Objects.requireNonNull(input, "input");
     String trimmed = input.trim();
-    DecimalFormat format = new DecimalFormat("#,##0.###", DecimalFormatSymbols.getInstance(GERMAN));
-    format.setParseBigDecimal(true);
-    ParsePosition position = new ParsePosition(0);
-    Object parsed = format.parse(trimmed, position);
-    if (parsed == null || position.getIndex() != trimmed.length()) {
-      throw new NumberFormatException("Not a German-formatted number: \"" + input + "\"");
+    int decimalPos = Math.max(trimmed.lastIndexOf('.'), trimmed.lastIndexOf(','));
+    String normalized;
+    if (decimalPos < 0) {
+      normalized = trimmed; // no separator at all — a whole number
+    } else {
+      String integerPart = stripSeparators(trimmed.substring(0, decimalPos));
+      String fractionPart = trimmed.substring(decimalPos + 1);
+      normalized = fractionPart.isEmpty() ? integerPart : integerPart + "." + fractionPart;
     }
-    return (BigDecimal) parsed;
+    // A bad value (letters, stray separators) throws NumberFormatException from BigDecimal
+    // directly.
+    return new BigDecimal(normalized);
+  }
+
+  /** Drop grouping separators (both {@code .} and {@code ,}) from the integer part. */
+  private static String stripSeparators(String integerPart) {
+    return integerPart.replace(".", "").replace(",", "");
   }
 }

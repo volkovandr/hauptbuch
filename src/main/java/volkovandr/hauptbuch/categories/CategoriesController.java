@@ -68,11 +68,21 @@ class CategoriesController {
   }
 
   /**
-   * Resolve the dock's category field to a category id (register §3.5, plan stage 7b): an existing
-   * category by name, or a new {@code Parent - Child} leaf. Returns the {@code categoryResolved}
-   * dock fragment — the hidden {@code categoryId} the dock commits, plus a status. On a bad value
-   * it returns the fragment carrying the error and no id, so the dock cannot commit an unresolved
-   * category.
+   * Resolve a category field to a category id (register §3.5, plan stage 7b): an existing category
+   * by name, or a new {@code Parent - Child} leaf. Returns the {@code categoryResolved} fragment —
+   * the hidden category id the caller commits, plus a status. On a bad value it returns the
+   * fragment carrying the error and no id, so nothing can commit an unresolved category.
+   *
+   * <p>Parameterised so both the simple dock and the split panel's per-line pickers share it (plan
+   * stage 7c.2): {@code fieldName} names the hidden id input ({@code categoryId} for the dock,
+   * {@code lineCategoryId} for a split line), and {@code typeFieldName}, when present, adds a
+   * second hidden input carrying the resolved category's {@code income}/{@code expense} type — the
+   * split line needs it to sign its contribution in the live remaining/direction readout.
+   *
+   * <p>A split line's resolve request carries <em>every</em> line's {@code categoryText} (htmx
+   * includes the whole panel form), so {@code index} selects which one is being resolved —
+   * otherwise the values arrive joined ("Sweets,Non-Sweets,") and no category matches. The dock
+   * posts a single value at the default index 0.
    *
    * <p>Lives here, not in the dock's {@code operations} controller: creating a category is this
    * module's logic, and {@code operations → categories} would close a module cycle (plan stage 7
@@ -80,23 +90,34 @@ class CategoriesController {
    * operations} with the returned id.
    */
   @PostMapping("/categories/resolve")
-  String resolveCategory(@RequestParam String categoryText, Model model) {
+  String resolveCategory(
+      @RequestParam List<String> categoryText,
+      @RequestParam(defaultValue = "0") int index,
+      @RequestParam(defaultValue = "categoryId") String fieldName,
+      @RequestParam(required = false) String typeFieldName,
+      Model model) {
+    String text = index >= 0 && index < categoryText.size() ? categoryText.get(index) : "";
     try {
-      long categoryId = categoryService.resolveCategory(categoryText);
+      long categoryId = categoryService.resolveCategory(text);
       Account category =
           categoryService
               .findById(categoryId)
               .orElseThrow(() -> new IllegalStateException("resolved category vanished"));
       model.addAttribute("categoryId", categoryId);
       model.addAttribute("categoryName", category.name());
+      model.addAttribute("categoryType", category.type());
       model.addAttribute("error", null);
     } catch (IllegalArgumentException e) {
       model.addAttribute("categoryId", "");
       model.addAttribute("categoryName", null);
+      model.addAttribute("categoryType", "");
       model.addAttribute("error", e.getMessage());
     }
+    model.addAttribute("fieldName", fieldName);
+    model.addAttribute("typeFieldName", typeFieldName);
     return "fragments/entry-dock :: categoryResolved(categoryId=${categoryId},"
-        + " categoryName=${categoryName}, error=${error})";
+        + " categoryName=${categoryName}, error=${error}, fieldName=${fieldName},"
+        + " typeFieldName=${typeFieldName}, categoryType=${categoryType})";
   }
 
   /** The edit page for one category: rename only — type, currency, and parent are fixed. */

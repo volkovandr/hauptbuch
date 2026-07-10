@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<!--
+  The register's split panel (register §3.10, plan stage 7c.2) — the multi-line sibling of the entry
+  dock, shown in the same slot (#entry-dock) when a transaction is split across several categories.
+  One receipt is always ONE transaction, even when it mixes expense and income lines (e.g. food plus
+  a bottle-deposit return): each line's category type signs its share, the funding leg absorbs the
+  signed sum, and the whole thing balances by construction (the mixed-split rule, 2026-07-09).
+
+  It is opened from the dock's "Split" affordance (POST /register/split), which seeds one line at the
+  full amount. Add/Remove line re-render the whole panel server-side (the form is the single source
+  of truth — every field submitted and re-emitted, so resolved ids survive). A new line's amount
+  defaults to "the rest" (total − allocated).
+
+  No bespoke JS beyond the keyboard leaf (CLAUDE.md §1.6):
+    • Per-line Category is a native datalist; create-new resolves through /categories/resolve exactly
+      like the dock — parameterised so each line's change fills THAT line's hidden id + type.
+    • keyboard.js reads data-split-* to write the live `remaining` readout and pay/receive direction
+      cue and relabel the Save button as the user types — display only; the server re-derives them
+      authoritatively at Save.
+    • Save/Add/Remove/Void are server round-trips; remove this script and the panel still works.
+
+  `oob`: the commit response returns the panel out-of-band (over #entry-dock) only to redisplay a
+  validation error while leaving the rows untouched; open/add/remove swap it in directly (oob=false).
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <form
+      th:fragment="panel(register, panel, oob)"
+      id="entry-dock"
+      class="entry-dock entry-dock--split"
+      data-split-panel
+      hx-post="/register/split/commit"
+      hx-target="#register-body"
+      hx-swap="outerHTML"
+      th:attr="hx-swap-oob=${oob} ? 'true'"
+    >
+      <p class="entry-dock__title eyebrow" th:if="${panel.transactionId() == null}">⑃ Split transaction</p>
+      <p class="entry-dock__title eyebrow" th:if="${panel.transactionId() != null}">✎ Edit split</p>
+
+      <!-- Edit mode: the hidden id that turns the commit into an in-place re-thread (§3.1/§3.3). -->
+      <input th:if="${panel.transactionId() != null}" type="hidden" name="transactionId" th:value="${panel.transactionId()}" />
+
+      <!-- The active filter, so the commit re-renders exactly the current view (§2.2). -->
+      <th:block th:each="a : ${register.accounts()}">
+        <input th:if="${a.selected()}" type="hidden" name="viewAccountId" th:value="${a.accountId()}" />
+      </th:block>
+      <input type="hidden" name="viewFromDate" th:value="${register.filter().fromDate()}" />
+      <input type="hidden" name="viewToDate" th:value="${register.filter().toDate()}" />
+      <input type="hidden" name="viewPayeeId" th:value="${register.filter().payeeId()}" />
+
+      <div class="entry-dock__fields">
+        <div class="field">
+          <label class="field__label" for="split-date">Date</label>
+          <input id="split-date" name="date" type="date" class="input" th:value="${panel.date()}" required />
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="split-account">Account</label>
+          <select id="split-account" name="accountId" class="input" required>
+            <option
+              th:each="a : ${register.accounts()}"
+              th:value="${a.accountId()}"
+              th:selected="${panel.accountId() != null and panel.accountId() == a.accountId()}"
+              th:text="${a.name() + ' (' + a.currencyCode() + ')'}"
+            >
+              Cash (EUR)
+            </option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="split-payee">Payee</label>
+          <input
+            id="split-payee"
+            name="payeeText"
+            class="input"
+            list="entry-payee-options"
+            autocomplete="off"
+            placeholder="Rewe - Dortmund - Germany"
+            th:value="${panel.payeeText()}"
+          />
+          <datalist id="entry-payee-options">
+            <option th:each="p : ${register.payees()}" th:value="${p.entryValue()}"></option>
+          </datalist>
+        </div>
+
+        <!-- The total the receipt should come to — the reference the `remaining` readout counts
+             against (register §3.10). Editable: change it and remaining updates live (keyboard.js
+             reads data-split-total). The committed funding leg is the signed sum of the lines, which
+             may differ — the "Save and update amount" path. -->
+        <div class="field field--amount">
+          <label class="field__label" for="split-total">Total</label>
+          <input
+            id="split-total"
+            name="total"
+            class="input num"
+            inputmode="decimal"
+            autocomplete="off"
+            placeholder="20,00"
+            th:value="${panel.total()}"
+            th:attr="data-split-total=${panel.total()}"
+            data-split-total-input
+          />
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="split-note">Note</label>
+          <input id="split-note" name="note" class="input" autocomplete="off" th:value="${panel.note()}" />
+        </div>
+      </div>
+
+      <!-- The split lines. Each carries category + amount + optional note (register §3.10, §3.7).
+           A line's Category change resolves through /categories/resolve into THIS line's hidden id +
+           type (parameterised fieldName/typeFieldName), swapped into #line-<i>-resolved. -->
+      <ol class="split-lines" data-split-lines>
+        <li class="split-line" th:each="line : ${panel.lines()}" data-split-line>
+          <div class="field field--split-category">
+            <label class="field__label" th:for="'split-cat-' + ${line.index()}">Category</label>
+            <input
+              th:id="'split-cat-' + ${line.index()}"
+              name="categoryText"
+              class="input"
+              list="split-category-options"
+              autocomplete="off"
+              placeholder="Category"
+              th:value="${line.categoryText()}"
+              hx-post="/categories/resolve"
+              hx-trigger="change"
+              hx-swap="innerHTML"
+              th:attr="hx-target='#line-' + ${line.index()} + '-resolved',
+                       hx-vals=|{&quot;fieldName&quot;:&quot;lineCategoryId&quot;,&quot;typeFieldName&quot;:&quot;lineCategoryType&quot;,&quot;index&quot;:${line.index()}}|"
+            />
+          </div>
+          <div class="field field--amount">
+            <label class="field__label" th:for="'split-amt-' + ${line.index()}">Amount</label>
+            <input
+              th:id="'split-amt-' + ${line.index()}"
+              name="lineAmount"
+              class="input num"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="20,00"
+              th:value="${line.amount()}"
+              data-split-amount
+            />
+          </div>
+          <div class="field field--split-note">
+            <label class="field__label" th:for="'split-note-' + ${line.index()}">Note</label>
+            <input
+              th:id="'split-note-' + ${line.index()}"
+              name="lineNote"
+              class="input"
+              autocomplete="off"
+              th:value="${line.note()}"
+            />
+          </div>
+          <button
+            type="button"
+            class="btn btn--ghost split-line__remove"
+            title="Remove line"
+            name="index"
+            th:value="${line.index()}"
+            hx-post="/register/split/remove-line"
+            hx-include="closest form"
+            hx-target="#entry-dock"
+            hx-swap="outerHTML"
+          >
+            ✕
+          </button>
+          <!-- This line's resolved category id + type (hidden), filled by /categories/resolve. The
+               type feeds the live signed-sum readout (data via the hidden input's value). -->
+          <span th:id="'line-' + ${line.index()} + '-resolved'" class="split-line__resolved">
+            <input type="hidden" name="lineCategoryId" th:value="${line.categoryId()}" />
+            <input type="hidden" name="lineCategoryType" th:value="${line.categoryType()}" />
+          </span>
+        </li>
+      </ol>
+
+      <datalist id="split-category-options">
+        <option th:each="c : ${register.categories()}" th:value="${c.name()}"></option>
+      </datalist>
+
+      <p class="actions">
+        <button
+          type="button"
+          class="btn btn--ghost"
+          hx-post="/register/split/add-line"
+          hx-include="closest form"
+          hx-target="#entry-dock"
+          hx-swap="outerHTML"
+        >
+          ＋ Add line
+        </button>
+      </p>
+
+      <!-- Live readouts (register §3.10). keyboard.js recomputes these as the user types; the server
+           values here are authoritative on each round-trip. -->
+      <div class="entry-dock__status split-status">
+        <span class="split-status__remaining" data-split-remaining th:classappend="${panel.balanced()} ? 'is-balanced'">
+          <span th:text="'remaining ' + ${panel.remaining()}">remaining 0,00</span>
+          <span th:if="${panel.balanced()}" aria-hidden="true"> ✓</span>
+        </span>
+        <span class="split-status__direction muted" data-split-direction th:switch="${panel.direction()}">
+          <span th:case="'pay'" th:text="'You will pay ' + ${panel.netDisplay()}">You will pay 17,00</span>
+          <span th:case="'receive'" th:text="'You will receive ' + ${panel.netDisplay()}">You will receive 17,00</span>
+          <span th:case="*">No net payment</span>
+        </span>
+      </div>
+
+      <p class="actions">
+        <!-- Save relabels to "Save and update amount" when the lines do not match the reference
+             total (register §3.10) — the server sets the funding total to the sum of the lines. -->
+        <button type="submit" class="btn" data-split-save th:text="${panel.balanced()} ? 'Save' : 'Save and update amount'">Save</button>
+        <button
+          th:if="${panel.transactionId() != null}"
+          type="button"
+          class="btn btn--danger"
+          hx-post="/register/void"
+          hx-include="closest form"
+          hx-confirm="Void this transaction? It can be restored later."
+        >
+          Void
+        </button>
+        <!-- Cancel returns to the dock pre-filled with the header + first line (register §3.9), not
+             blank — so changing your mind after Split does not discard what you entered. -->
+        <button
+          type="button"
+          class="btn btn--ghost"
+          hx-post="/register/split/cancel"
+          hx-include="closest form"
+          hx-target="#entry-dock"
+          hx-swap="outerHTML"
+        >
+          Cancel
+        </button>
+      </p>
+
+      <p class="entry-dock__error warning" th:if="${panel.error()}" th:text="${panel.error()}"></p>
+    </form>
+  </body>
+</html>
