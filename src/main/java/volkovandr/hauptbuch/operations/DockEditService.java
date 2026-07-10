@@ -28,9 +28,12 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
 @Service
 public class DockEditService {
 
+  private static final String INCOME = "income";
   private static final String EXPENSE = "expense";
-  private static final List<String> OWN_TYPES = List.of("asset", "liability");
-  private static final List<String> CATEGORY_TYPES = List.of("income", EXPENSE);
+  private static final String ASSET = "asset";
+  private static final String LIABILITY = "liability";
+  private static final List<String> OWN_TYPES = List.of(ASSET, LIABILITY);
+  private static final List<String> CATEGORY_TYPES = List.of(INCOME, EXPENSE);
 
   /** Dock amounts are entered German-formatted to the minor unit; two places covers EUR/CHF. */
   private static final int AMOUNT_FRACTION_DIGITS = 2;

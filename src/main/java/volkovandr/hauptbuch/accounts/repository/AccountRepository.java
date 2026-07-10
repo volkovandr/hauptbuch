@@ -23,7 +23,17 @@ import volkovandr.hauptbuch.accounts.AccountNode;
 public class AccountRepository {
 
   private static final String ACCOUNT_ID = "accountId";
+  private static final String PARENT_NAME = "parentName";
+  private static final String CURRENCY_CODE = "currencyCode";
+  private static final String PARENT_ID = "parentId";
   private static final String NAME = "name";
+  private static final String TYPES = "types";
+  private static final String ROOT_ID = "rootId";
+  private static final String ACCOUNT_IDS = "accountIds";
+  private static final String OPENED_AT = "openedAt";
+  private static final String CLOSED_AT = "closedAt";
+  private static final String HUE = "hue";
+  private static final String TYPE = "type";
 
   private final JdbcClient jdbcClient;
 
@@ -64,8 +74,8 @@ public class AccountRepository {
               and parent.parent_id is null
               and child.currency_code = :currencyCode
             """)
-        .param("parentName", parentName)
-        .param("currencyCode", currencyCode)
+        .param(PARENT_NAME, parentName)
+        .param(CURRENCY_CODE, currencyCode)
         .query(Account.class)
         .optional();
   }
@@ -111,7 +121,7 @@ public class AccountRepository {
               and deleted_at is null
             order by name
             """)
-        .param("parentId", parentId)
+        .param(PARENT_ID, parentId)
         .query(Account.class)
         .list();
   }
@@ -131,7 +141,7 @@ public class AccountRepository {
               and deleted_at is null
             order by type, coalesce(parent_id, account_id), parent_id is not null, name
             """)
-        .param("types", types)
+        .param(TYPES, types)
         .query(Account.class)
         .list();
   }
@@ -170,7 +180,7 @@ public class AccountRepository {
             from tree
             order by type, sort_path
             """)
-        .param("types", types)
+        .param(TYPES, types)
         .query(
             (rs, rowNum) ->
                 new AccountNode(
@@ -210,7 +220,7 @@ public class AccountRepository {
             )
             select account_id from subtree
             """)
-        .param("rootId", rootId)
+        .param(ROOT_ID, rootId)
         .query(Long.class)
         .list();
   }
@@ -235,7 +245,7 @@ public class AccountRepository {
             where account_id in (:accountIds)
               and deleted_at is null
             """)
-        .param("accountIds", accountIds)
+        .param(ACCOUNT_IDS, accountIds)
         .update();
   }
 
@@ -263,11 +273,11 @@ public class AccountRepository {
             returning account_id
             """)
         .param(NAME, account.name())
-        .param("type", account.type())
-        .param("parentId", account.parentId())
-        .param("currencyCode", account.currencyCode())
-        .param("hue", account.hue())
-        .param("openedAt", account.openedAt())
+        .param(TYPE, account.type())
+        .param(PARENT_ID, account.parentId())
+        .param(CURRENCY_CODE, account.currencyCode())
+        .param(HUE, account.hue())
+        .param(OPENED_AT, account.openedAt())
         .query(Long.class)
         .single();
   }
@@ -277,7 +287,7 @@ public class AccountRepository {
     return jdbcClient
         .sql("update account set name = :name, hue = :hue where account_id = :accountId")
         .param(NAME, name)
-        .param("hue", hue)
+        .param(HUE, hue)
         .param(ACCOUNT_ID, accountId)
         .update();
   }
@@ -293,7 +303,7 @@ public class AccountRepository {
               and closed_at is null
               and deleted_at is null
             """)
-        .param("closedAt", closedAt)
+        .param(CLOSED_AT, closedAt)
         .param(ACCOUNT_ID, accountId)
         .update();
   }

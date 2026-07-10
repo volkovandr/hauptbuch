@@ -23,6 +23,14 @@ import volkovandr.hauptbuch.ledger.Transaction;
 public class TransactionRepository {
 
   private static final String TRANSACTION_ID = "transactionId";
+  private static final String DATE = "date";
+  private static final String PAYEE_ID = "payeeId";
+  private static final String NOTE = "note";
+  private static final String LIFECYCLE = "lifecycle";
+  private static final String ACCOUNT_ID = "accountId";
+  private static final String AMOUNT = "amount";
+  private static final String BASE_AMOUNT = "baseAmount";
+  private static final String RECONCILIATION = "reconciliation";
 
   private final JdbcClient jdbcClient;
 
@@ -39,10 +47,10 @@ public class TransactionRepository {
             insert into transaction (date, payee_id, note, lifecycle)
             values (:date, :payeeId, :note, :lifecycle)
             """)
-        .param("date", transaction.date())
-        .param("payeeId", transaction.payeeId())
-        .param("note", transaction.note())
-        .param("lifecycle", transaction.lifecycle())
+        .param(DATE, transaction.date())
+        .param(PAYEE_ID, transaction.payeeId())
+        .param(NOTE, transaction.note())
+        .param(LIFECYCLE, transaction.lifecycle())
         .update(keyHolder, "transaction_id");
     return requireKey(keyHolder);
   }
@@ -59,11 +67,11 @@ public class TransactionRepository {
               (:transactionId, :accountId, :amount, :baseAmount, :reconciliation, :note)
             """)
         .param(TRANSACTION_ID, posting.transactionId())
-        .param("accountId", posting.accountId())
-        .param("amount", posting.amount())
-        .param("baseAmount", posting.baseAmount())
-        .param("reconciliation", posting.reconciliation())
-        .param("note", posting.note())
+        .param(ACCOUNT_ID, posting.accountId())
+        .param(AMOUNT, posting.amount())
+        .param(BASE_AMOUNT, posting.baseAmount())
+        .param(RECONCILIATION, posting.reconciliation())
+        .param(NOTE, posting.note())
         .update(keyHolder, "posting_id");
     return requireKey(keyHolder);
   }
@@ -131,10 +139,10 @@ public class TransactionRepository {
             where transaction_id = :transactionId
             """)
         .param(TRANSACTION_ID, transaction.transactionId())
-        .param("date", transaction.date())
-        .param("payeeId", transaction.payeeId())
-        .param("note", transaction.note())
-        .param("lifecycle", transaction.lifecycle())
+        .param(DATE, transaction.date())
+        .param(PAYEE_ID, transaction.payeeId())
+        .param(NOTE, transaction.note())
+        .param(LIFECYCLE, transaction.lifecycle())
         .update();
   }
 

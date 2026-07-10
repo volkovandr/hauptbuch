@@ -12,6 +12,9 @@ import volkovandr.hauptbuch.ledger.Settings;
 @Repository
 public class SettingsRepository {
 
+  private static final String BASE_CURRENCY = "baseCurrency";
+  private static final String DISPLAY_NAME = "displayName";
+
   private final JdbcClient jdbcClient;
 
   SettingsRepository(JdbcClient jdbcClient) {
@@ -30,7 +33,7 @@ public class SettingsRepository {
   public void updateBaseCurrency(String baseCurrency) {
     jdbcClient
         .sql("update settings set base_currency = :baseCurrency where settings_id = 1")
-        .param("baseCurrency", baseCurrency)
+        .param(BASE_CURRENCY, baseCurrency)
         .update();
   }
 
@@ -38,7 +41,7 @@ public class SettingsRepository {
   public void updateDisplayName(String displayName) {
     jdbcClient
         .sql("update settings set display_name = :displayName where settings_id = 1")
-        .param("displayName", displayName)
+        .param(DISPLAY_NAME, displayName)
         .update();
   }
 }

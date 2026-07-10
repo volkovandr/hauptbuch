@@ -17,6 +17,11 @@ import volkovandr.hauptbuch.ledger.ExchangeRate;
 @Repository
 public class ExchangeRateRepository {
 
+  private static final String CURRENCY_CODE = "currencyCode";
+  private static final String DATE = "date";
+  private static final String RATE = "rate";
+  private static final String SOURCE = "source";
+
   private final JdbcClient jdbcClient;
 
   ExchangeRateRepository(JdbcClient jdbcClient) {
@@ -38,8 +43,8 @@ public class ExchangeRateRepository {
             order by date desc
             limit 1
             """)
-        .param("currencyCode", currencyCode)
-        .param("date", date)
+        .param(CURRENCY_CODE, currencyCode)
+        .param(DATE, date)
         .query(BigDecimal.class)
         .optional();
   }
@@ -52,10 +57,10 @@ public class ExchangeRateRepository {
             insert into exchange_rate (currency_code, date, rate, source)
             values (:currencyCode, :date, :rate, :source)
             """)
-        .param("currencyCode", rate.currencyCode())
-        .param("date", rate.date())
-        .param("rate", rate.rate())
-        .param("source", rate.source())
+        .param(CURRENCY_CODE, rate.currencyCode())
+        .param(DATE, rate.date())
+        .param(RATE, rate.rate())
+        .param(SOURCE, rate.source())
         .update();
   }
 }
