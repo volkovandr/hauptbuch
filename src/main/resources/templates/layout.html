@@ -9,7 +9,9 @@
   Visual identity (FR-UX-04 — dense, restrained, spreadsheet-like): the app is named "Hauptbuch"
   (German for the general ledger, the bound master accounting book), and the shell is dressed as a
   page from that book — warm ledger stock, faint green feint rules, a hard rule before the numeric
-  column, oxblood ink for credits/negatives, tabular figures throughout. Styles in /css/app.css.
+  column, oxblood ink for credits/negatives, tabular figures throughout. Styles are split across
+  /css/{base,shell,accounts,register}.css — base first (design tokens + shared primitives), then
+  the feature layers that build on it.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org" th:fragment="page(content)">
   <head>
@@ -17,7 +19,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title th:text="${title} ?: 'Hauptbuch'">Hauptbuch</title>
     <link rel="icon" type="image/svg+xml" th:href="@{/favicon.svg}" />
-    <link rel="stylesheet" th:href="@{/css/app.css}" />
+    <link rel="stylesheet" th:href="@{/css/base.css}" />
+    <link rel="stylesheet" th:href="@{/css/shell.css}" />
+    <link rel="stylesheet" th:href="@{/css/accounts.css}" />
+    <link rel="stylesheet" th:href="@{/css/register.css}" />
     <!-- htmx and the keyboard leaf are vendored locally (no CDN, no bundler) — offline-capable. -->
     <script th:src="@{/js/htmx.min.js}" defer></script>
     <script th:src="@{/js/keyboard.js}" defer></script>

@@ -1,0 +1,169 @@
+/*
+ * Hauptbuch — shell layer: the chrome every screen hangs on (app bar, nav, content surface) plus
+ * the app-wide overlays (native dialog, command palette) and the shared currency picker.
+ * Depends on the tokens/primitives in base.css.
+ */
+
+/* ── App bar: the bound spine of the book ─────────────────────────────── */
+.app-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 1.25rem;
+  padding: 0.5rem 1.25rem;
+  background: var(--paper-edge);
+  border-bottom: 2px solid var(--rule);
+}
+
+/* The brand doubles as the home link — it works like a link but reads as a wordmark, not one. */
+.app-bar__brand {
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.app-bar__brand:visited {
+  color: var(--ink);
+}
+
+.app-bar__sub {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.nav {
+  display: flex;
+  gap: 0.15rem;
+  margin-left: auto;
+}
+
+.nav__item {
+  padding: 0.2rem 0.65rem;
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 2px solid transparent;
+}
+
+.nav__item:hover {
+  color: var(--ink);
+}
+
+.nav__item--current {
+  color: var(--green-ink);
+  border-bottom-color: var(--green-ink);
+  font-weight: 600;
+}
+
+/* ── Content surface: the ledger leaf ─────────────────────────────────── */
+.content {
+  padding: 0.75rem 1rem 3rem;
+  max-width: 92rem;
+}
+
+.leaf-head {
+  padding-bottom: 0.75rem;
+  margin-bottom: var(--rhythm);
+  border-bottom: 2px solid var(--rule);
+}
+
+.panel {
+  padding: 1rem 0 0;
+  margin: var(--rhythm) 0 0;
+}
+
+.actions {
+  margin: 0.6rem 0;
+}
+
+/* ── Currency picker: the shared <select> + inline "Add currency…" affordance (stage 6d) ── */
+.currency-picker {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.currency-picker > select {
+  flex: 1;
+}
+
+.currency-picker__add {
+  white-space: nowrap;
+}
+
+/* ── Add-currency dialog: the app's first native <dialog>, dressed as a ledger slip ──────
+   Rendered as a centred modal with a pure-CSS backdrop — no showModal(), so no bespoke JS
+   (CLAUDE.md §1.6). The <dialog open> and its backdrop are htmx-swapped in together; these rules
+   lift the slip to the viewport centre and lay a separate dim layer over the page behind it. (Not
+   the browser top layer, which only matters for nested dialogs / Esc-to-close — neither of which
+   this single, button-dismissed dialog uses.) */
+
+/* The backdrop: a separate sibling, NOT a ::before of the slip — a pseudo would composite over the
+   slip's own paper and tint it. As its own fixed full-viewport layer at a lower z-index, it dims
+   only the page behind. */
+.dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+  background: rgba(33, 32, 27, 0.35);
+}
+
+.dialog[open] {
+  position: fixed;
+  inset: 0;
+  margin: auto; /* centre in the viewport */
+  z-index: 50; /* above the backdrop, so the slip's paper stays clean */
+  height: fit-content;
+  border: 1.5px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 1rem 1.25rem 1.25rem;
+  max-width: 24rem;
+  width: calc(100% - 2rem);
+  box-shadow: 0 0.5rem 1.5rem rgba(33, 32, 27, 0.18);
+}
+
+.dialog__title {
+  margin-top: 0.1rem;
+}
+
+.dialog__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ── Command palette stub (Ctrl-K) ────────────────────────────────────── */
+.palette {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  background: rgba(33, 32, 27, 0.28);
+}
+
+.palette[data-open="true"] {
+  display: flex;
+}
+
+.palette__box {
+  margin-top: 12vh;
+  width: min(34rem, 90vw);
+  background: var(--paper);
+  border: 2px solid var(--rule);
+  padding: 0.75rem;
+}
+
+.palette__input {
+  font: inherit;
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+}

@@ -43,6 +43,9 @@ class ShellIntegrationTest {
   void staticAssetsAreServed() throws Exception {
     mockMvc.perform(get("/js/htmx.min.js")).andExpect(status().isOk());
     mockMvc.perform(get("/js/keyboard.js")).andExpect(status().isOk());
-    mockMvc.perform(get("/css/app.css")).andExpect(status().isOk());
+    mockMvc.perform(get("/css/base.css")).andExpect(status().isOk());
+    mockMvc.perform(get("/css/shell.css")).andExpect(status().isOk());
+    mockMvc.perform(get("/css/accounts.css")).andExpect(status().isOk());
+    mockMvc.perform(get("/css/register.css")).andExpect(status().isOk());
   }
 }

@@ -1,0 +1,117 @@
+/*
+ * Hauptbuch — accounts screen (stage 6a) plus the generic ledger-row list. Depends on the
+ * tokens/primitives in base.css.
+ */
+
+/* ── Ledger rows: payee | memo | hard-ruled numeric column ────────────── */
+.rows {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.row {
+  display: grid;
+  /* Fixed final column so the hard rule before the numeric column is dead straight across
+     every row — the alignment is the whole point of the ledger device. */
+  grid-template-columns: 1fr 1.4fr 12rem;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.20rem 0.5rem 0.20rem 0.25rem;
+  border-bottom: 1px solid var(--feint);
+  outline: none;
+}
+
+.row__payee {
+  font-weight: 500;
+}
+
+.row__memo {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+/* The numeric column, set off by the hard rule — the spreadsheet device. */
+.row__amount {
+  border-left: 2px solid var(--rule);
+  padding-left: 1rem;
+}
+
+/* Selection / focus on a row: a wash plus a left tab in the active green. */
+.row--selected,
+.row:focus {
+  background: var(--green-wash);
+  box-shadow: inset 3px 0 0 var(--green-ink);
+}
+
+/* ── Accounts screen (stage 6a) ───────────────────────────────────────── */
+.acct-list {
+  list-style: none;
+  margin: 0.5rem 0 1rem;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.acct {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.3rem 0.25rem;
+  border-bottom: 1px solid var(--feint);
+}
+
+/* Indentation scales with the true hierarchy depth (--depth, set inline per row) rather than a
+   fixed "is this a child or not" class, so grandchildren and deeper nest correctly (data-model
+   §5's hierarchy is not limited to two levels). */
+.acct--child {
+  padding-left: calc(var(--depth, 1) * 1.75rem);
+}
+
+.acct__name {
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.acct__name:hover {
+  text-decoration: underline;
+}
+
+/* The currency code, pushed against the right edge like a ledger column. */
+.acct__meta {
+  margin-left: auto;
+}
+
+/* The account's stored register hue (register §2.8): the tint filled, the darker shade as the
+   border — the same two shades the register's zebra derives from the stored hue. */
+.swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  align-self: center;
+  flex: none;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+}
+
+.tag {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  padding: 0 0.35rem;
+}
+
+.hue-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin: 0.5rem 0;
+}
+
+.hue {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
