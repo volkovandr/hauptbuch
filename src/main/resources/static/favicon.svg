@@ -2,7 +2,7 @@
 <!--
   Hauptbuch favicon — the ledger mark in the app's own palette: a leaf of warm ledger stock with
   the green column rule, an oxblood credit tick, and a stamped "H". SVG so it stays crisp at every
-  size and needs no binary asset. Colours mirror /css/app.css (paper, green-ink, oxblood).
+  size and needs no binary asset. Colours mirror /css/base.css (paper, green-ink, oxblood).
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Hauptbuch">
   <rect width="32" height="32" rx="3" fill="#fbfaf6"/>

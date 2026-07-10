@@ -1,0 +1,240 @@
+/*
+ * Hauptbuch — base layer: design tokens + shared primitives (FR-UX-04: dense, restrained,
+ * spreadsheet-like, numbers-first). Loaded first; every other stylesheet builds on these vars.
+ *
+ * The name is German for the general ledger — the bound master accounting book. The shell is
+ * dressed as a leaf from that book rather than a generic admin panel:
+ *   • warm ledger stock instead of pure white;
+ *   • faint GREEN feint rules, the colour of accounting-pad paper — the signature;
+ *   • a hard vertical rule separating the right-aligned numeric column (the real spreadsheet device);
+ *   • oxblood ink reserved for credits / negative amounts, the one accent that carries meaning;
+ *   • tabular figures everywhere a number appears, so columns lock.
+ * Boldness is spent on the ledger surface alone; everything else stays quiet.
+ *
+ * Split across base.css (this file) / shell.css / accounts.css / register.css — see layout.html.
+ */
+:root {
+  /* Ledger-paper palette */
+  --paper: #fbfaf6; /* warm ledger stock */
+  --paper-edge: #f2efe6; /* the bound edge / app bar */
+  --ink: #21201b; /* brown-black ink */
+  --ink-soft: #6e6a5e; /* labels, secondary text */
+  --feint: #cdd8cf; /* faint green ledger rule — the signature */
+  --rule: #9bb3a4; /* heavier column / section rule */
+  --oxblood: #9e2b25; /* credits & negatives */
+  --green-ink: #2f5d3f; /* the active / "current" ledger green */
+  --green-wash: #e6efe7; /* its faint fill */
+  --focus: #1f6feb; /* a single clear focus blue, distinct from ledger greens */
+
+  --font-ui:
+    "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-num:
+    "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, "Liberation Mono",
+    monospace;
+
+  --rhythm: 0.1rem; /* the feint-line spacing, reused as vertical rhythm */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Keyboard-first: a visible skip link and a loud, consistent focus ring everywhere. */
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 0.4rem 0.75rem;
+  z-index: 10;
+}
+.skip-link:focus {
+  left: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ── Typography ───────────────────────────────────────────────────────── */
+.eyebrow {
+  margin: 0 0 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--green-ink);
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.3rem;
+}
+
+h2 {
+  font-size: 1.02rem;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+}
+
+.lede {
+  margin: 0;
+  max-width: 44rem;
+  color: var(--ink-soft);
+}
+
+.muted {
+  color: var(--ink-soft);
+}
+
+/* ── Buttons: stamped, rectilinear controls — no rounded corners, ink on wash ──────────── */
+.btn {
+  font: inherit;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  padding: 0.35rem 0.9rem;
+  border: 1.5px solid var(--green-ink);
+  background: var(--green-wash);
+  color: var(--green-ink);
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--green-ink);
+  color: var(--paper);
+}
+
+/* The one destructive control: oxblood, reserved for irreversible actions (category delete). */
+.btn--danger {
+  border-color: var(--oxblood);
+  background: var(--paper);
+  color: var(--oxblood);
+}
+
+.btn--danger:hover {
+  background: var(--oxblood);
+  color: var(--paper);
+}
+
+/* A quieter, secondary control — the same stamped shape in soft ink, for "Add currency…" / Cancel
+   where the primary .btn would over-shout. */
+.btn--ghost {
+  border-color: var(--rule);
+  background: var(--paper);
+  color: var(--ink-soft);
+}
+
+.btn--ghost:hover {
+  border-color: var(--green-ink);
+  background: var(--green-wash);
+  color: var(--green-ink);
+}
+
+/* Plain-text warning in the destructive ink — no icon, no box; just the ink carries the weight. */
+.warning {
+  color: var(--oxblood);
+  font-weight: 600;
+}
+
+/* ── Forms: labelled fields, stamped inputs in the ledger register ────── */
+.form {
+  margin-top: 0.5rem;
+  max-width: 30rem;
+}
+
+.field {
+  margin: 0.6rem 0;
+}
+
+.field__label {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* Rectilinear input on paper, matching the stamped .btn — no rounded corners. */
+.input {
+  font: inherit;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1.5px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.input:hover {
+  border-color: var(--green-ink);
+}
+
+/* A locked, read-only setting value — the base currency once it is set in stone. */
+.setting-value {
+  margin: 0.3rem 0 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.setting-value.num {
+  text-align: left;
+}
+
+/* ── Numeric primitives: tabular figures wherever a number appears, so columns lock ────── */
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Credits / negatives carry the oxblood ink; debits stay in black. */
+.num--credit {
+  color: var(--oxblood);
+}
+
+/* Income is the ledger green. */
+.num--income {
+  color: var(--green-ink);
+}
+
+/* Screen-reader-only text: present in the a11y tree, painted nowhere. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
