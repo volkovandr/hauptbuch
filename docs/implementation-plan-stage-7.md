@@ -103,10 +103,10 @@ thread is correct per account.
 **Done when:** a transaction is enterable end-to-end through the dock; payee and category create-new
 work inline; a backdated insert repaints every affected balance below it; all three suites green.
 
-## 7c — Edit mode, splits, void
+## 7c — Edit mode, splits, void ✅ **complete**
 
 **Goal:** the dock's second half — selecting, correcting, splitting, and removing rows. Two
-increments: **7c.1** edit/void (done), **7c.2** the split panel + posting notes (planned below).
+increments: **7c.1** edit/void (done), **7c.2** the split panel + posting notes (done).
 
 ### 7c.1 — Edit mode + void ✅ **complete**
 
@@ -120,26 +120,38 @@ text, and resolves the per-currency leaf back to its semantic parent; anything e
 opening balance, cross-currency, and — until 7c.2 — a split) is refused with a clear message.
 `DockEntry` gained a nullable `transactionId` (null = record, non-null = edit).
 
-### 7c.2 — Split panel + posting notes (planned)
+### 7c.2 — Split panel + posting notes ✅ **complete**
 
-**⚠ Blocked on one decision before coding — the mixed-type split sign.** 7c.2 as designed below
-treats a split as a decomposition of **one** funding flow: the funding total is fixed and every line
-is a bare **magnitude** sharing the funding leg's direction, so the lines sum to the total and it
-balances by construction (`remaining 0,00 ✓`). That assumes a single direction per split. A real
-receipt can mix directions — e.g. Food items (expense) **and** a bottle-deposit return (income),
-where the deposit should net **negative** against the spend. Which line goes negative, and how "the
-rest"/remaining behave across two directions, is unresolved (why the *deposit* and not the *food*? —
-no good answer yet). **Decide this first**; it changes the line/leg model below. Options to weigh:
-keep splits single-direction and enter a mixed receipt as two transactions; or let each line's sign
-follow its own category type and redefine "remaining" as the signed funding residual.
+**Mixed-type split sign — RESOLVED (owner, 2026-07-09).** One receipt = one transaction; a mixed
+income+expense receipt is **not** split into two transactions. Each line's sign follows its **own
+category type**, not a single shared funding direction:
 
-Assuming the single-direction model (revisit per the block above):
+- Define each line's **signed contribution**: income category → `+amount`, expense category →
+  `−amount`, where `amount` is the number the user typed **already signed** (a negative typed amount
+  — a storno — just flows through: `−3` on income → `−3`; `−5` on expense → `+5`). Users type
+  magnitudes without a sign in the normal case; the category type supplies the sign.
+- **Funding leg posting = Σ(contributions).** Its magnitude is `|Σ|`; its **side** is the sign
+  (`Σ > 0` → debit/inflow, `Σ < 0` → credit/outflow). **Convention (owner): `Σ = 0` books on the
+  debit side** (a zero-magnitude debit) — a net-zero receipt (e.g. return five bottles, take one
+  Cola, pay nothing) is a **legal, recordable** transaction, not blocked.
+- **Each category leg posting = −contribution**, so the funding leg + category legs sum to zero **by
+  construction** for any mix — the transaction always balances regardless of what was typed.
+- **`remaining` = pre-entered total − `|Σ|`**, and the existing Save-button relabel mechanic carries
+  over **unchanged**: `remaining = 0` → **Save**; `≠ 0` → **Save and update amount** (server sets the
+  funding total to `|Σ|`). The pre-entered total stays advisory. The readout shows `|Σ|` (the amount
+  that hits the account), not a signed residual.
+- **Direction cue (owner-approved UX):** because the funding side is now *derived*, not chosen, the
+  panel shows a live cue next to the remaining readout — **"You'll pay €X,XX"** when `Σ < 0` vs
+  **"You'll receive €X,XX"** when `Σ > 0` (and a neutral "No net payment" at `Σ = 0`) — so a split
+  that unexpectedly nets to an inflow is visible before Save. Lives in the `keyboard.js` leaf
+  alongside the live-remaining handler (§1.6 — no new script).
+
+The line/leg model below reflects this:
 
 - **Open (§3.9→§3.10):** a `Split` affordance (button + `S` in `keyboard.js`) hx-posts the committed
   single dock line to `POST /register/split`, which returns the **split panel** fragment (replacing
-  the dock) seeded with one line at the full amount and the committed category. The funding
-  direction (outflow/inflow), decided at open from that category's type and any explicit `+`/`−`,
-  rides along as a hidden field; all lines inherit it.
+  the dock) seeded with one line at the full amount and the committed category. There is **no** shared
+  funding-direction hidden field — each line's direction comes from its category type.
 - **Per-line fields (§3.10, §3.7):** each line carries category + amount + note. The panel form is
   the single source of truth — `lineCategoryText[] / lineCategoryId[] / lineAmount[] / lineNote[]`,
   index-aligned — all submitted and re-emitted, so a re-render preserves resolved ids.
@@ -153,23 +165,27 @@ Assuming the single-direction model (revisit per the block above):
 - **Live `remaining` readout + Save-button label — in the `keyboard.js` leaf (owner-confirmed
   2026-07-08):** rather than an htmx round-trip per keystroke, a small client-side handler in
   `keyboard.js` (the sanctioned JS home, §1.6 — no new script, nothing threaded through templates)
-  reacts to line-amount input: the panel exposes `data-split-*` hooks, keyboard.js sums the lines,
-  writes the `remaining 0,00 ✓` readout, and relabels the Save button (below). This is a **display
-  convenience only** — the server re-derives `remaining` authoritatively at Save (§1.7); there is no
-  `/register/split/recalc` endpoint.
+  reacts to line-amount input: the panel exposes `data-split-*` hooks (including each line's category
+  type so the client can sign contributions), keyboard.js sums the **signed** contributions, writes
+  the `remaining 0,00 ✓` readout and the pay/receive direction cue (above), and relabels the Save
+  button (below). This is a **display convenience only** — the server re-derives `remaining` and the
+  funding side authoritatively at Save (§1.7); there is no `/register/split/recalc` endpoint.
 - **Balancing on Save — Save-button relabel (owner-confirmed 2026-07-08, replaces the earlier
   prompt idea):** when `remaining = 0` the button reads **Save** and commits as entered. When
   `remaining ≠ 0` it reads **Save and update amount** (relabelled live by the keyboard.js handler
   above) — clicking it (or pressing Enter) commits, and the **server** adjusts the funding total to
   the sum of the lines. No modal/prompt; the relabelled button is the visible, single-keystroke
   confirmation.
-- **Commit:** `DockSplitService` (in `operations`) builds the funding leg + one leg per line
-  (`PostingDraft.of(id, amount, note)` carries the posting note — added in 7c.1) and records/edits
-  through the engine. The register Category cell already summarises the top one-to-three legs (7a
-  renderer) — assert, don't rebuild.
+- **Commit:** `DockSplitService` (in `operations`) signs each line by its category type, sums to the
+  funding leg (magnitude `|Σ|`, side from `sign(Σ)` with `Σ = 0` → debit), builds one leg per line
+  (`PostingDraft.of(id, amount, note)` carries the posting note — added in 7c.1) as `−contribution`,
+  and records/edits through the engine. The register Category cell already summarises the top
+  one-to-three legs (7a renderer) — assert, don't rebuild.
 - **Editing an existing split (owner-confirmed: land with new-split):** `GET /register/edit/{id}`
-  loads a transaction with one funding leg + ≥2 same-direction category legs (single currency) back
-  into the split panel, pre-filled; non-simple shapes stay refused (transfer/opening/cross-currency).
+  loads a transaction with one funding leg + ≥2 category legs (single currency, any mix of
+  income/expense) back into the split panel, pre-filled — each line's typed amount reconstructed as
+  the sign-free magnitude from its contribution; non-simple shapes stay refused
+  (transfer/opening/cross-currency).
 - **Out of scope here:** per-line tags → 7e; split beneficiary (`→ Person`) → stage 8.
 - **TDD:** leg-building + remaining/adjust-total and the direction/"the rest" defaulting in the unit
   tier; the open→add→resolve→save flow, the *Save and update amount* path, and split edit-load in

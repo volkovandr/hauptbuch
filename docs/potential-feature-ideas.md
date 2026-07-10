@@ -41,14 +41,14 @@ from the button, and the type (expense or income) from the parent category as we
 ## Register page UX improvements
 
 * the date range filter should provide quick selection of common ranges, like "Last 12 months", "This year", "This month".
-* the transaction editing works and available on clicking the edit button on the right. But when editing a transaction
-  it is totally unclear which of them is being edited. We should highlight the transaction being edited in the table.
-* Ideally the edit feature should be triggered not by a small button, but by simly clicking on the transaction row. This
+* Ideally the edit feature should be triggered not by a small button, but by simply clicking on the transaction row. This
   is how Money works.
 * Creating a new category inline works. But we need a confirmation, maybe user did not want to create a new category, but just made a typo.
   Another motivation, if I type "Food - Milk" it creates a subcategory under food, which is correct. But what if I wanted
   to create a new category called "Food - Milk" and not a subcategory? I would need to go to the category management
   which is fine, but it should be clear what the inline creation is going to do, that's why a confirmation is needed.
+* Top-level categories creation inline should be possible, but it should be clear whether that is an income or expense category.
+  Maybe typing something like "Income - Found on the street" should trigger creation of a new top-level income category?
 
 ## General UX improvements
 

@@ -24,6 +24,7 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.18 (2026-07-10):** Stage 7c (Edit mode, splits, void) marked **complete**.
 - **v0.17 (2026-07-08):** Stage 7b (Entry dock, simple transactions) marked **complete**.
 - **v0.16 (2026-07-05):** Stage 7a (Register, read-only) marked **complete**.
 - **v0.15 (2026-07-05):** Stage 7 made concrete and split into **7a–7e** in the new dedicated
@@ -347,8 +348,9 @@ piece lands (Q-UI-2 decided piecewise, never retrofitted):
   `+`/`−` override, the single-ghost-category autofill, backdated-insert slice refresh (Q-UI-5
   decided here). Acceptance via MockMvc in `integrationTest` (Playwright dropped — see §14). Dock
   commit endpoint lives in `operations` (module-cycle precedent from 6d).
-- **7c — Edit mode, splits, void.** Edit-in-place with account/date re-threading, `voidTransaction`
-  from the dock, the inline split panel with "the rest" defaulting, notes at both levels.
+- **7c — Edit mode, splits, void.** ✅ **complete.** Edit-in-place with account/date re-threading,
+  `voidTransaction` from the dock, the inline split panel with "the rest" defaulting, notes at both
+  levels.
 - **7d — Cross-currency entry.** The dock's conversion mode over the already-complete stage-3
   engine (both native amounts entered; rate proposed; FX residual verified end-to-end).
 - **7e — Tags.** `tag`/`posting_tag` migration (data-model §10, owned by `categories`), the

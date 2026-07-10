@@ -10,4 +10,6 @@ After the fix the issue should be removed from the list.
 
 ## UI Issues
 
-_No open issues._
+### Transaction register
+
+-- no issues so far --
