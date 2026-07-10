@@ -75,6 +75,25 @@ class MoneyFormatTest {
   }
 
   @Test
+  void parsesDotAsDecimalSeparator() {
+    // A numeric-keypad dot is honoured as the decimal point (owner decision, 2026-07-09): "15.50"
+    // is
+    // fifteen-fifty, not one-thousand-five-hundred-fifty.
+    assertThat(MoneyFormat.parse("15.50")).isEqualByComparingTo("15.50");
+  }
+
+  @Test
+  void parsesAngloGroupingWithDotDecimal() {
+    // The last separator is the decimal; the earlier one is grouping and dropped.
+    assertThat(MoneyFormat.parse("1,234.56")).isEqualByComparingTo("1234.56");
+  }
+
+  @Test
+  void parsesNegativeDotDecimal() {
+    assertThat(MoneyFormat.parse("-15.50")).isEqualByComparingTo("-15.50");
+  }
+
+  @Test
   void parseRejectsUnparseableInput() {
     assertThatThrownBy(() -> MoneyFormat.parse("not a number"))
         .isInstanceOf(NumberFormatException.class);

@@ -45,8 +45,13 @@ class RegisterEntryController {
   /** Repaint the rows (primary) and reset the dock to new mode (out-of-band) in one response. */
   private static final String COMMITTED = DOCK_FRAGMENT + " :: committed(register=${register})";
 
+  private static final String SPLIT_PANEL =
+      "fragments/split-panel :: panel(register=${register}, panel=${panel}, oob=false)";
+
   private final DockCommitService dockCommitService;
   private final DockEditService dockEditService;
+  private final DockSplitService dockSplitService;
+  private final SplitPanelAssembler splitPanelAssembler;
   private final RegisterService registerService;
   private final PayeeService payeeService;
   private final GhostSuggestionRepository ghostSuggestionRepository;
@@ -54,11 +59,15 @@ class RegisterEntryController {
   RegisterEntryController(
       DockCommitService dockCommitService,
       DockEditService dockEditService,
+      DockSplitService dockSplitService,
+      SplitPanelAssembler splitPanelAssembler,
       RegisterService registerService,
       PayeeService payeeService,
       GhostSuggestionRepository ghostSuggestionRepository) {
     this.dockCommitService = dockCommitService;
     this.dockEditService = dockEditService;
+    this.dockSplitService = dockSplitService;
+    this.splitPanelAssembler = splitPanelAssembler;
     this.registerService = registerService;
     this.payeeService = payeeService;
     this.ghostSuggestionRepository = ghostSuggestionRepository;
@@ -111,11 +120,19 @@ class RegisterEntryController {
     try {
       model.addAttribute("edit", dockEditService.load(transactionId));
       return DOCK_FRAGMENT + " :: dock(register=${register}, oob=false, edit=${edit})";
-    } catch (IllegalArgumentException e) {
-      // Not editable in the dock yet: stay in new mode, carrying the explanation (not an OOB swap —
-      // the edit affordance targets #entry-dock directly).
-      model.addAttribute("entryError", e.getMessage());
-      return DOCK_FRAGMENT + " :: dock(register=${register}, oob=false, edit=null)";
+    } catch (IllegalArgumentException notSimple) {
+      // Not a simple one-category transaction: it may still be a split the panel edits (register
+      // §3.10). Try that before giving up.
+      try {
+        model.addAttribute(
+            "panel", splitPanelAssembler.panel(dockSplitService.load(transactionId), null));
+        return SPLIT_PANEL;
+      } catch (IllegalArgumentException notSplit) {
+        // Neither shape (a transfer, opening balance, or cross-currency): stay in new mode carrying
+        // the simple-dock explanation. Not an OOB swap — the edit affordance targets #entry-dock.
+        model.addAttribute("entryError", notSimple.getMessage());
+        return DOCK_FRAGMENT + " :: dock(register=${register}, oob=false, edit=null)";
+      }
     }
   }
 

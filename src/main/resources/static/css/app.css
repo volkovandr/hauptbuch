@@ -793,3 +793,66 @@ th.register__spine {
 .entry-dock__error {
   margin: 0.4rem 0 0;
 }
+
+/* Split panel (register §3.10): the multi-line variant of the dock, shown in the same slot. A cool
+   left accent distinguishes it from new (green) and edit (amber). */
+.entry-dock--split {
+  border-left: 3px solid var(--blue-ink, #2a5db0);
+}
+
+.entry-dock--split .entry-dock__title {
+  color: var(--blue-ink, #2a5db0);
+}
+
+/* One row per split line: category flexes, amount is the fixed numeric slot, note flexes, and the
+   remove button sits on the input baseline — mirroring the dock's field rhythm (§3.2). */
+.split-lines {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.split-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.4rem 0.9rem;
+}
+
+.split-line .field {
+  margin: 0;
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.split-line .field--amount {
+  flex: 0 0 8rem;
+}
+
+.split-line__remove {
+  flex: 0 0 auto;
+}
+
+/* The resolved hidden id/type carrier takes no visual space. */
+.split-line__resolved {
+  flex: 0 0 0;
+}
+
+/* The live readout row: the `remaining` figure (accented when balanced) and the pay/receive cue. */
+.split-status {
+  display: flex;
+  gap: 0.9rem;
+  align-items: baseline;
+}
+
+.split-status__remaining.is-balanced {
+  color: var(--green-ink);
+  font-weight: 600;
+}
+
+.split-status__direction {
+  font-size: 0.72rem;
+}

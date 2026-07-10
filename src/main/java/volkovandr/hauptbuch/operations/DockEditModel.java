@@ -3,11 +3,12 @@ package volkovandr.hauptbuch.operations;
 import java.time.LocalDate;
 
 /**
- * A live transaction pre-filled back into the entry dock's <em>edit</em> mode (register §3.1) — the
- * dock's own fields, reconstructed from the transaction's legs by {@link DockEditService}, plus the
- * {@code transactionId} that flips the dock from "new" to "edit". Saving re-threads the transaction
- * in place; the same dock form posts to the same commit endpoint, carrying this id so the commit
- * edits rather than records.
+ * A transaction pre-filled back into the entry dock (register §3.1) — the dock's own fields,
+ * reconstructed from the transaction's legs by {@link DockEditService}. A non-null {@code
+ * transactionId} flips the dock into <em>edit</em> mode (Save/Void, re-threads in place); a {@code
+ * null} id is a pre-filled <em>new</em> dock (all other fields carried, but a fresh transaction on
+ * Save) — used when Cancel returns a split panel to the dock without losing the header and first
+ * line (register §3.9).
  *
  * <p>Edit mode covers a <em>simple</em> transaction (one funding own-account leg, one category leg,
  * single currency) — the shape the dock creates at 7b. Splits arrive later in 7c; transfers and
@@ -28,11 +29,11 @@ import java.time.LocalDate;
  * @param note the transaction note; {@code null} if none
  */
 public record DockEditModel(
-    long transactionId,
+    Long transactionId,
     LocalDate date,
-    long accountId,
+    Long accountId,
     String payeeText,
     String amount,
-    long categoryId,
+    Long categoryId,
     String categoryName,
     String note) {}
