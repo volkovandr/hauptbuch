@@ -1,14 +1,11 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.16
-**Date:** 2026-07-05
+**Status:** Draft v0.19
+**Date:** 2026-07-11
 **Owner:** volkovandr
-**Companion to:** `requirements.md` (v0.4),
-`tech-stack.md` (v0.1),
-`data-model.md` (v0.3),
-`ui-transaction-register.md` (v0.2),
-`ui-receipt-processing.md` (v0.2)
+**Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
+`ui-transaction-register.md`, `ui-receipt-processing.md` (the five authoritative design docs)
 
 > This document records the **build sequence** — the order in which the system is implemented, what
 > each stage delivers, and *why that order*, in keeping with the house rule that the *why* must
@@ -20,70 +17,30 @@
 > position). §14 is an **unordered backlog inventory** — nothing in it is sequenced or staged yet;
 > priority is set during implementation, once the system is in use.
 >
-> Several decisions in §1 are leans pending confirmation; they are listed in §16 as «A» working
-> assumptions that can be overturned.
+> The cross-cutting decisions in §1 began as «A» working assumptions, listed in §16 with their
+> overturn cost; all are realised as of stage 6, but §16 is kept as the record of what was assumed.
 
-**Changelog**
-- **v0.19 (2026-07-11):** **FX gain/loss auto-booking retired** (data-model §6.3) and **stage 7d
-  re-scoped** into four packages (7d.0 engine retirement; 7d.1 currency selector + cross-currency
-  single-line; 7d.2 splits; 7d.3 transfers). Multi-currency entry now carries a **category-currency
-  selector** and **per-currency amount fields balanced in base**; the engine books no FX residual.
-  Detail in `implementation-plan-stage-7.md`.
-- **v0.18 (2026-07-10):** Stage 7c (Edit mode, splits, void) marked **complete**.
-- **v0.17 (2026-07-08):** Stage 7b (Entry dock, simple transactions) marked **complete**.
-- **v0.16 (2026-07-05):** Stage 7a (Register, read-only) marked **complete**.
-- **v0.15 (2026-07-05):** Stage 7 made concrete and split into **7a–7e** in the new dedicated
-  sub-plan `implementation-plan-stage-7.md`. Scope decisions: tags last (7e, schema migrates then);
-  cross-currency entry after edit/splits (7d); keyboard-first as each piece lands (Q-UI-2 piecewise);
-  column re-sorting + the balance-hide rule deferred to §14. Payee gains city/country + a seeded
-  `country` table at 7b; the dock's commit endpoint lives in `operations` (module cycles — the 6d
-  precedent).
-- **v0.14 (2026-07-04):** Stage 6d (Currency-list editor) marked **complete** — with it, all of
-  Stage 6 (6a–6d) is done.
-- **v0.13 (2026-07-04):** Stage 6d scope narrowed: `createCurrency` provisions the two **system**
-  backing leaves only (`Opening Balances <CODE>`, `FX gain/loss <CODE>`), **not** a back-filled leaf
-  under every category parent. The earlier "back-fill category leaves" line contradicted data-model
-  §6.5, where a category's currency-leaf appears lazily on first spend via subdivision; eager
-  back-fill would manufacture the empty per-currency leaves §6.5 avoids.
-- **v0.12 (2026-07-04):** Stage 6c (Category deletion) marked **complete**. The target-leaf rule was
-  refined during implementation: "leaf" is judged **after** the deletion, so an ancestor whose only
-  surviving children are inside the deleted subtree is a valid target (deleting `M&Ms` lets `Sweets`
-  receive the postings) — the initial cut wrongly excluded every current parent.
-- **v0.11 (2026-07-04):** Inserted a new **6c — Category deletion** (leaf or whole-subtree delete,
-  postings reassigned to a user-picked surviving leaf outside the deleted subtree); the former 6c
-  (currency-list editor) renumbered to **6d**, unchanged in scope. Prompted by testing 6b: category
-  create/rename exist but there was no way to remove a mis-created category.
-- **v0.10 (2026-07-04):** Stage 6b implemented: subdivision is **implicit**, not a standalone UI
-  action — creating a category whose chosen parent is currently a posted-to leaf triggers it
-  automatically, adding the requested child plus an `Uncategorized` catch-all sibling that absorbs
-  the leaf's existing postings. Category creation takes no currency (unlike accounts): every
-  category leaf is created in the book's base currency; per-currency leaves arrive with real usage
-  once the register exists. `subdivideAccount` itself is generic over any account type, living in
-  the new `operations` module; `categories` is its first caller.
-- **v0.9 (2026-07-03):** Stage 6a (Accounts + opening balances) marked **complete**.
-- **v0.8 (2026-07-01):** Stage 6 formally split into **6a** (accounts + opening balances), **6b**
-  (categories + subdivision), and a new **6c** (currency-list editor). 6c adds user-managed
-  currencies via an "Add currency…" affordance in every picker (base picker included); it is a
-  `createCurrency` **operation** that provisions per-currency backing leaves (back-filling under
-  existing parents), reusing 6b's provisioning path. Interaction is htmx + native `<dialog>` with
-  **no bespoke JS** (§1.6 preserved).
-- **v0.7 (2026-07-01):** Stage 5 (Settings UI) marked **complete**.
-- **v0.6 (2026-06-30):** Stage 4 (UI shell) marked **complete**; a `web` module (UI shell only)
-  was added to the §3 module map — feature controllers stay in their own modules.
-- **v0.5 (2026-06-28):** Stage 3 (Transaction core) marked **complete** 
-- **v0.4 (2026-06-28):** Stage 2 (Skeleton) marked **complete** 
-- **v0.3 (2026-06-26):** Stage 1 (Project setup) marked **complete**
-- **v0.2 (2026-06-25):** Multi-currency is now **fully live from stage 3** (no single-currency early
-  phase) — only the ECB feed automation and held-balance revaluation defer, as feed/reporting
-  concerns. Base currency moved out of config **into a root `settings` entity in the database**,
-  write-once, required before any transaction; the entity is born at stage 3 (the engine needs it),
-  UI at stage 5, and is sketched here for ratification into the data-model doc (which currently has
-  no root settings entity). §14 reduced from a proposed ordering to a flat, unordered inventory — no
-  stages assigned to backlog features.
-- **v0.1 (2026-06-25):** Initial plan. 13 staged increments + a backlog; cross-cutting decisions
-  settled up front (module-first from day one; three-tier test strategy with container reuse).
-  Reframed the stage-3 "CRUD service" as an invariant-upholding domain-ops layer. Folded categories
-  + opening balances into stage 6.
+**Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
+entity added. Routine implementation lives in git; a completed stage's own description records what
+it shipped. "Stage N complete" needs no recap here.
+- **v0.19 (2026-07-11):** **FX gain/loss auto-booking retired** (data-model §6.3); **stage 7d
+  re-scoped** into 7d.0–7d.3 with a category-currency selector and per-currency amounts balanced in
+  base. Detail in `implementation-plan-stage-7.md`.
+- **v0.15 (2026-07-05):** Stage 7 made concrete, split into **7a–7e** in the sub-plan
+  `implementation-plan-stage-7.md` (tags last; cross-currency after edit/splits; keyboard-first
+  piecewise; sorting deferred to §14). Payee gains city/country + a seeded `country` table at 7b.
+- **v0.11 (2026-07-04):** Inserted **6c — Category deletion**; the former 6c (currency-list editor)
+  renumbered to **6d**.
+- **v0.8 (2026-07-01):** Stage 6 split into **6a/6b/6c** (later renumbered by v0.11).
+- **v0.6 (2026-06-30):** `web` module (UI shell only) added to the §3 map — feature controllers stay
+  in their own modules.
+- **v0.2 (2026-06-25):** Base currency moved from config into a DB **`settings` entity**
+  (write-once); multi-currency **fully live from stage 3** (no single-currency phase). §14 reduced to
+  a flat, unordered backlog inventory.
+- **v0.1 (2026-06-25):** Initial plan — staged increments + backlog; module-first from day one;
+  three-tier test strategy; the stage-3 service framed as invariant-upholding domain ops, not CRUD.
+- **Stages marked complete** (routine, no recap): 1 (v0.3), 2 (v0.4), 3 (v0.5), 4 (v0.6), 5 (v0.7),
+  6a (v0.9), 6b (v0.10), 6c (v0.12), 6d (v0.14), 7a (v0.16), 7b (v0.17), 7c (v0.18).
 
 ---
 
@@ -174,166 +131,75 @@ Postgres-backed suites fast enough for a tight TDD loop.
 ## 2. The staged plan
 
 ### Stage 1 — Project setup ✅ **complete**
-**Goal:** a repository a stranger (or the owner, months later) can orient in.
-- ✅ GitHub repo; license; `README.md`; `CLAUDE.md` (state the Modulith rule with teeth — "boundaries
-  are enforced by `ApplicationModules.verify()`; run the module test after changes" — per tech-stack
-  §3, not a prose description the agent may ignore).
-- ✅ Move the design docs into the repo (`/docs`), so the *why* travels with the code.
-- ✅ `.gitignore`.
-
-**Done when:** repo cloneable, docs in place, contribution conventions written down. — **Met.**
+Repo, license, `README.md`, `CLAUDE.md` (the Modulith rule stated with teeth — enforced by
+`ApplicationModules.verify()`, not prose), the design docs moved into `/docs`, `.gitignore`.
 
 ### Stage 2 — Skeleton ✅ **complete**
-**Goal:** an empty but *enforced* modular monolith that boots and tests green.
-- ✅ Spring Initializr (Java 25, Spring Boot 4.1, Web, Thymeleaf, JdbcClient, Flyway, Testcontainers).
-  *Validation deferred — added when a screen first needs it.*
-- ✅ Module-first packages from §1.1 (empty stubs), each an explicit `@ApplicationModule`; plus an
-  **open** `shared` kernel module for cross-cutting types (the money type lives there).
-- ✅ Spring Modulith dependency + the `verify()` test (§1.1) in the unit suite. **Scoped to
-  `spring-modulith-starter-core`** — the `-jdbc` starter (event-publication/outbox registry) is
-  deliberately **not** used (events deferred in v1 — CLAUDE.md §3/§8).
-- ✅ Gradle test suites scaffolded (§1.5) via the JVM Test Suite plugin: `test`, `integrationTest`,
-  `sqlLogicTest`, each with a sample green test; Testcontainers Postgres singleton + reuse wired;
-  `check` runs all three plus module-verify.
-- ✅ Money type chosen — **Joda-Money** (T1 / P-5) — with a thin `MoneyFactory` wrapper (one
-  sanctioned, currency-rounded construction path; does not hide Joda-Money).
-- ✅ Local `docker-compose` for a dev Postgres on host port **15432** (app stays on the JVM for now).
-
-**Done when:** `./gradlew check` runs all three suites and the module-verify test, all green; app
-boots against the compose Postgres. — **Met** (all green; boots against compose Postgres 17.9 on
-15432, Flyway applies its empty migration set cleanly).
+An enforced-but-empty modular monolith that boots and tests green. Choices that outlive the code:
+Java 25 / Spring Boot 4.1; module-first packages (§1.1) as empty stubs + an **open** `shared` kernel
+(the money type); Spring Modulith scoped to **`-starter-core`** with `verify()` in the unit suite —
+the `-jdbc` event/outbox starter is deliberately unused (events deferred, CLAUDE.md §3/§8); the three
+Gradle test suites (§1.5) with Testcontainers reuse; **Joda-Money** (T1/P-5) behind a thin
+`MoneyFactory`; dev Postgres on host port **15432**.
 
 ### Stage 3 — The transaction core (the engine, fully multi-currency) ✅ **complete**
-**Goal:** the uniform posting model, correct and tested, with **no UI**.
-- ✅ **Settings entity** (§1.3) + migration: single-row `settings`, write-once `base_currency`. The
-  engine treats "base currency set" as a precondition for recording transactions. (Tests set it via
-  fixtures; the UI to set it is stage 5.)
-- ✅ **Migrations (Flyway):** `currency` (seed the currencies actually used — data-model §3.1),
-  `account`, `transaction`, `posting`, `exchange_rate`, `payee`. Seed the **system accounts**
-  (Opening Balances equity; `FX gain/loss` leaf), per-currency leaves following the category rule.
-- ✅ **Records + repositories** (JdbcClient): `Account`, `Transaction`, `Posting`, `ExchangeRate`,
-  mapped from rows.
-- ✅ **Domain-ops service** (§1.4): `recordTransaction` (validates balanced postings — native sum for
-  single-currency, base sum with frozen `base_amount` for cross-currency — before insert),
-  `voidTransaction` (soft-delete cascading to postings), `editTransaction`.
-- ✅ **Cross-currency is live here:** a non-par conversion freezes `base_amount` on its legs
-  (data-model §6.4). Exercised by real ops + tests. *(The original residual auto-booking to
-  `FX gain/loss` shipped here is **retired in 7d.0** per the 2026-07-11 decision — see data-model §6.3.)*
-- ✅ **Invariants as SQL-logic tests** (data-model §8): conditional sum-to-zero (both branches),
-  leaves-only, currency consistency, soft-delete coherence.
-- ✅ **Running-balance query** (windowed `sum` per account) — SQL-logic tier; the backdated-insert
-  correctness test (invariant 5) starts here even though the register that surfaces it is stage 7.
-
-**Done when:** the engine records, voids, and edits balanced transactions including cross-currency
-conversions; all invariants are tested against real Postgres; running balance computes correctly
-including backdated inserts. — **Met.**
+The uniform posting model, correct and tested, with **no UI**. Delivered: the write-once `settings`
+entity (§1.3, base currency a precondition for recording); Flyway migrations for
+`currency`/`account`/`transaction`/`posting`/`exchange_rate`/`payee` with seeded system accounts;
+JdbcClient records + repositories; the domain-ops service (§1.4:
+`recordTransaction`/`voidTransaction`/`editTransaction`) validating conditional sum-to-zero before
+insert; cross-currency freezing `base_amount` on non-par conversions (data-model §6.4); the
+invariants as `sqlLogicTest`s (data-model §8); the windowed running-balance query incl. the
+backdated-insert case.
+> The residual auto-booking to `FX gain/loss` shipped here is **retired in 7d.0** (data-model §6.3,
+> 2026-07-11).
 
 ### Stage 4 — UI container (the shell) ✅ **complete**
-**Goal:** the server-rendered scaffold every later screen hangs on.
-- Base Thymeleaf layout; htmx wired; the dense, restrained, spreadsheet-like house style
-  (FR-UX-04; consult the frontend-design conventions); navigation shell.
-- The **keyboard-layer leaf** scaffolded (small isolated Alpine.js/vanilla module — tech-stack §4.3),
-  reviewed as the UI's main maintainability risk.
-- **German formatting** utilities (display + parse): `1.234,56`, base currency bare, non-base carries
-  symbol/ISO (register §2.9, NFR-08) — cross-cutting, lives here.
-- A trivial demo page proving fragment swaps and keyboard nav work.
-
-**Done when:** the shell renders, htmx swaps work, keyboard nav moves focus, numbers format
-German-style. — **Met.**
+The server-rendered scaffold: base Thymeleaf layout, htmx wired, the dense spreadsheet-like house
+style, nav shell; the **keyboard-layer leaf** scaffolded (the UI's main maintainability risk); the
+shared **German number-formatting** utilities (§1.6, register §2.9).
 
 ### Stage 5 — Settings UI ✅ **complete**
-**Goal:** the smallest real screen, the greeting, and the first-run base-currency gate.
-- Settings screen over the §1.3 entity: **base currency** — set on first run (chosen from seeded
-  currencies), then shown **read-only** once locked; editable **display name**.
-- "Hello, %name%" landing reads the display name.
-- Confirm the write-once guard end to end (UI cannot change a locked base currency).
-
-**Done when:** base currency can be set once on a fresh book and is read-only thereafter; a name set
-in settings shows in the greeting.
+The first real screen over the §1.3 entity: base currency set once on a fresh book then **read-only**
+(write-once guard confirmed end to end); an editable display name feeding the "Hello, %name%"
+landing.
 
 ### Stage 6 — Accounts & categories (with opening balances) ✅ **complete**
-**Goal:** the reference data the register needs, plus the equity plumbing.
-> Prerequisite ordering holds: base currency is set (stage 5) before any account, since every account
-> carries a currency.
-> **Module-boundary note (carried from stage 3):** the `Account` record and a *read-only*
-> `AccountRepository` were born in **`ledger`** at stage 3, because the engine needs to read accounts
-> (currency lookup, leaves-only check, resolving a system leaf) before the `accounts` module exists.
-> **Stage 6 moves ownership of `Account` (and the account table's writes) into `accounts`**, exposes a
-> read API from it, and has `ledger` depend on `accounts`' public type — closing the deliberate
-> stage-3 placement so a concept does not stay split across two modules. (Decision: keep in `ledger`
-> for stage 3, relocate here. `verify()` stays green throughout — repositories were package-private,
-> so nothing cross-module was ever exposed.)
-- **Account management UI:** create/edit/close accounts (name, type, parent, **currency — any seeded
-  currency**, multi-currency live per §1.2). Stored two-tone hue per account assigned here
-  (register §2.8).
-- **Category management UI:** the *same* table, presented as a separate income/expense list
-  (data-model §3.2). Create-new `Parent - Child` with inherited type; the per-currency leaf is
-  resolved from the paying account at post time (register §3.5, data-model §6.5). Optionally seed a
-  starter category tree.
-- **Opening balances:** account creation can take an opening balance, posting as a transaction
-  (`Asset +X` / `Opening Balances −X`, sum-to-zero ✓ — data-model T-DM-4) through the stage-3 engine,
-  against the per-currency Opening Balances leaf.
-- **`operations` module is born here, minimal:** the **subdivision** op (promote a former leaf,
-  reassign its postings to a `…:General` leaf) — required by category-create (register §3.5 /
-  data-model §5). The broader merge/reassign suite is backlog (§14).
+The reference data the register needs, plus the equity plumbing; built as four ordered sub-stages,
+each green and demoable. The `operations` module is born here.
+> **Module-boundary decision (carried from stage 3):** `Account` + a read-only `AccountRepository`
+> were born in `ledger` because the engine reads accounts before `accounts` exists. **6a moved
+> ownership of `Account` and the account table's writes into `accounts`**; `ledger` now depends on
+> `accounts`' public read type. `verify()` stayed green throughout — the repositories were
+> package-private, so nothing cross-module was ever exposed.
 
-**Split (confirmed):** the slice is large, so stage 6 is built as three ordered sub-stages, each
-ending green and demoable:
+- **6a — Accounts + opening balances.** ✅ Account management UI (any seeded currency; stored two-tone
+  hue per account, register §2.8); an opening balance posts as a real balanced transaction against the
+  per-currency `Opening Balances` leaf.
+- **6b — Categories + subdivision.** ✅ Category management over the *same* account table (income/
+  expense, data-model §3.2). `operations` gains **`subdivideAccount`** (leaf → parent, postings
+  reassigned to an `Uncategorized` sibling), triggered **implicitly** by creating a child under a
+  posted-to leaf. Categories take **no currency** — every leaf is base-currency; per-currency leaves
+  arrive lazily with real usage (data-model §6.5).
+- **6c — Category deletion.** ✅ A category is truly *deleted* (unlike accounts, which close/reopen):
+  the user picks a **surviving leaf** that receives all reassigned postings; deleting a parent
+  cascades the **whole subtree**. `deleteCategory` in `operations` reuses 6b's reassignment repo in
+  reverse (many → one). **Load-bearing rule:** "leaf" is judged **after** the deletion, so a node
+  whose only children are inside the deleted subtree is a valid target (deleting `M&Ms` lets `Sweets`
+  receive the postings); the target may not be the deleted node or any descendant (data-model §5).
+- **6d — Currency-list editor.** ✅ An "Add currency…" affordance in **every** picker (base-currency
+  picker included). `createCurrency` (an `operations`, not CRUD) provisions only the currency's
+  **system** backing leaves (`Opening Balances <CODE>`, `FX gain/loss <CODE>`), mirroring the V2 seed;
+  it does **not** back-fill category leaves — those stay lazy (data-model §6.5). Interaction is htmx +
+  native `<dialog>`, **no bespoke JS** (§1.6). **Two gotchas worth remembering:** htmx attributes emit
+  via `th:attr` (no htmx Thymeleaf dialect — `th:hx-*` silently drops), and the modal backdrop is a
+  sibling `<div>`, not a `::before`. The htmx-driving controller lives in `operations`, not `ledger`,
+  to avoid a `ledger ↔ operations` cycle (the 6d precedent reused by stage 7).
 
-- **6a — Accounts + opening balances.** ✅ **complete.** Move `Account` ownership into `accounts`;
-  account management UI (any seeded currency); opening balance as a real balanced transaction.
-- **6b — Categories + subdivision.** ✅ **complete.** Category management over the same table; the
-  `operations` module is born here with the **subdivision** op (leaf → parent, postings reassigned
-  to an `Uncategorized` sibling), triggered implicitly by creating a child under a posted-to leaf.
-- **6c — Category deletion.** ✅ **complete.** Unlike accounts (closed/reopened, never deleted), a
-  category is truly deleted: the user picks a **surviving leaf** (never inside the subtree being
-  deleted) that
-  receives every reassigned posting, then confirms. Deleting a parent deletes its **whole subtree**
-  (every descendant, not just the parent row) after moving all of their postings — descendants,
-  not only the parent's own — onto the chosen target. This is a `deleteCategory` **operation** in
-  `operations`, reusing `subdivideAccount`'s posting-reassignment repository in reverse (many
-  sources → one target instead of one source → new target).
-  - **Validation:** the target must be a live leaf **after** the deletion — not the category being
-    deleted nor any of its descendants (rejects a self-referential target, data-model §5), and with
-    no children left *outside* the subtree. A node whose only children are inside the deleted subtree
-    becomes a leaf once they are gone, so it is a valid target (e.g. deleting `M&Ms` lets its parent
-    `Sweets` receive the postings).
-  - **UI:** the category edit page gains a "Delete" panel — pick the target from a leaf-only picker,
-    one confirm button (no second are-you-sure step, consistent with account close/reopen), with a
-    plain-text warning in the destructive/oxblood ink noting the operation is **irreversible**.
-  - **TDD:** `sqlLogicTest`/integration coverage for a childless leaf (simple reassign-then-delete),
-    a parent with children (cascade), and the rejected-target-inside-subtree case.
-- **6d — Currency-list editor.** ✅ **complete.** An "Add currency…" affordance in **every** currency
-  picker (including the first-run base-currency picker). Adding a currency is not one insert — it provisions
-  the currency's per-currency **system** backing leaves (`Opening Balances <CODE>`, `FX gain/loss
-  <CODE>`), mirroring what the V2 seed does per currency on an empty book (data-model §3.1/§6.3), so
-  opening-balance entry and cross-currency conversion work in the new currency the moment it exists
-  (CLAUDE.md §1.7, §4). It does **not** pre-create a leaf under every category parent: per data-model
-  §6.5 a category's currency-leaf appears **lazily** — the first time you actually spend that
-  currency, via the stage-6b subdivision path — so eagerly back-filling category leaves would
-  manufacture the empty per-currency leaves §6.5 deliberately avoids. So it is a `createCurrency`
-  **operation** in `operations`, not CRUD, reusing `accounts`' leaf-insertion path.
-  - **Interaction (no bespoke JS — htmx + native `<dialog>`, upholds CLAUDE.md §1.6):** a reusable
-    Thymeleaf currency-picker fragment (`<select>` + "Add currency…" button) lives with the currency
-    in `ledger`'s template dir; screens include it. The button `hx-get`s a `<dialog>` add-form;
-    **OK** `hx-post`s to create + provision, and the response `hx-swap-oob`s the picker back with the
-    new currency **pre-selected** (its empty dialog-mount target dismissing the dialog); **Cancel**
-    clears the mount. The htmx-driving *controller* lives in `operations`, not `ledger` — `ledger →
-    operations` would close a module cycle with `operations → ledger` (the currency insert). Two
-    implementation gotchas, both worth remembering: htmx attributes are emitted via `th:attr` (there
-    is no htmx Thymeleaf dialect, so `th:hx-*` silently drops), and the modal backdrop is a sibling
-    `<div>`, not a `::before` (a pseudo tints the slip). This is the app's first htmx partial-swap
-    and first `<dialog>`; minimal `<dialog>` CSS centres it with a pure-CSS backdrop (no
-    `showModal()`).
-  - **TDD:** the `createCurrency` test asserts the two system leaves land under the right parents
-    (`Opening Balances`, `FX gain/loss`) and are the new currency's, on both a fresh book and a book
-    that already has categories (confirming categories are *not* back-filled — they stay lazy, §6.5).
-
-**Done when (6a–6d):** accounts (any currency) and categories can be created and managed; an account
-can be opened with a starting balance that is a real, balanced transaction; subdividing a leaf works;
-a category (leaf or whole subtree) can be deleted with its postings reassigned to a chosen surviving
-leaf; a new currency can be added from any picker and is provisioned with its backing leaves and
-pre-selected.
+**Done when (6a–6d):** accounts (any currency) and categories can be created/managed; an account opens
+with a starting balance that is a real balanced transaction; subdivision works; a category (leaf or
+whole subtree) is deletable with its postings reassigned to a chosen surviving leaf; a new currency
+is addable from any picker, provisioned with its backing leaves and pre-selected.
 
 ---
 
@@ -442,13 +308,11 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
 
 ---
 
-## 15. Testing strategy (the three tiers)
+## 15. Testing strategy — the rationale
 
-| Tier | Source set | Runs against | Tests | Speed |
-|------|-----------|--------------|-------|-------|
-| **Unit** | `test` | nothing (Mockito mocks the repo/integration points) | Service orchestration & validation logic (e.g. `recordTransaction` rejects unbalanced input *before* the DB) | Fast |
-| **Integration** | `integrationTest` | Testcontainers Postgres | Flyway migrations apply cleanly on a fresh container; repositories map rows ↔ records correctly | Slower |
-| **SQL-logic** | logic suite | Testcontainers Postgres | Logic that *lives in* SQL and cannot be mocked: the matrix query, running balances, tag rollups, conditional sum-to-zero, FX valuation | Slower |
+The three-tier mechanics (which suite runs against what, and which tier a given repository method
+belongs in) are the operational rules in **CLAUDE.md §6** — not restated here. This section keeps only
+the *why* behind the shape:
 
 - **The unit tier is thin by design** for query-heavy modules. When the real logic is in the SQL, the
   SQL-logic tier carries the weight — do not pad the unit tier to chase a coverage number; that buys
@@ -462,13 +326,13 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
 - **Migrations** are forward-only (Flyway Community); "tested migrations" (NFR-06) = apply on a fresh
   container and assert the resulting schema/data, plus data-preserving checks where a migration
   transforms existing rows.
-- **UI tier (added when flows exist):** thin **Playwright** smoke tests only on money-critical flows
-  (transaction entry, receipt review→commit, statement match→confirm — tech-stack §4.4). Do **not**
-  unit-test templates; server-rendering means most "UI logic" is backend logic already covered above.
+- **No separate UI tier:** browser smoke (Playwright) is dropped (§14); money-critical flows are
+  covered at the controller/htmx acceptance level (MockMvc) in the integration tier. Do **not**
+  unit-test templates — server-rendering means most "UI logic" is backend logic already covered above.
 
 ---
 
-## 16. Open decisions folded into this plan (confirm or overturn)
+## 16. Working assumptions folded into this plan (all now realised)
 
 | # | «A» working assumption baked into this plan | Overturn impact |
 |---|----------------------------------------------|-----------------|
@@ -478,18 +342,5 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
 | P-4 | Stage-3 service is invariant-upholding domain ops, not generic CRUD | Naming/shape of the `ledger` service |
 | P-5 | Money type picked at stage 2 (T1); test suites named at stage 2 | Low-risk, local |
 
----
-
-### Decisions captured this round (summary)
-- **Module-first packaging + `verify()` test from the skeleton** (stage 2), not retrofitted.
-- **Multi-currency fully live from stage 3** — no single-currency phase; only the ECB feed automation
-  and held-balance revaluation defer, as feed/reporting concerns.
-- **Base currency lives in a root `settings` entity in the DB**, write-once, required before any
-  transaction; the entity is born at stage 3 (the engine needs it), UI at stage 5; now ratified into
-  the data-model doc (§3.8).
-- **Categories, opening balances, and the subdivision op land together at stage 6**, since categories
-  are accounts and opening balances are transactions.
-- **The core service is a domain-operations layer** (`recordTransaction`/`voidTransaction`), not CRUD.
-- **Three test suites, real Postgres, reused containers**; unit tier thin by design; Playwright only
-  on money-critical UI flows.
-- **Stages 7+ kept rough; §14 is an unordered inventory** — backlog priority set during implementation.
+*(P-1–P-5 are all realised as of stage 6; retained as the record of what was assumed and its
+overturn cost, per the "why survives" rule.)*
