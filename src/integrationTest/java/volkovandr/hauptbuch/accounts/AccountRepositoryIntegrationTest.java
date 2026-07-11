@@ -62,13 +62,13 @@ class AccountRepositoryIntegrationTest {
 
   @Test
   void parentAccountIdsAreTheNonLeafAccounts() {
-    // The two seeded system parents (Opening Balances, FX gain/loss) are parents of their leaves.
+    // The seeded system parent (Opening Balances) is a parent of its per-currency leaves.
     List<Long> parentIds = accountRepository.findParentAccountIds();
     List<Long> systemParentIds =
         jdbcClient
             .sql(
                 "select account_id from account "
-                    + "where name in ('Opening Balances', 'FX gain/loss') and parent_id is null")
+                    + "where name = 'Opening Balances' and parent_id is null")
             .query(Long.class)
             .list();
     assertThat(parentIds).containsAll(systemParentIds);

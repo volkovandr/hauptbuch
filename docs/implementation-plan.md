@@ -25,7 +25,9 @@ entity added. Routine implementation lives in git; a completed stage's own descr
 it shipped. "Stage N complete" needs no recap here.
 - **v0.19 (2026-07-11):** **FX gain/loss auto-booking retired** (data-model §6.3); **stage 7d
   re-scoped** into 7d.0–7d.3 with a category-currency selector and per-currency amounts balanced in
-  base. Detail in `implementation-plan-stage-7.md`.
+  base. 7d.0 additionally **un-seeds `FX gain/loss`** — with no code path resolving it by name it is
+  no longer a system leaf (dropped from the V2 seed and `createCurrency`), just a lazy user category.
+  Detail in `implementation-plan-stage-7.md`.
 - **v0.15 (2026-07-05):** Stage 7 made concrete, split into **7a–7e** in the sub-plan
   `implementation-plan-stage-7.md` (tags last; cross-currency after edit/splits; keyboard-first
   piecewise; sorting deferred to §14). Payee gains city/country + a seeded `country` table at 7b.
@@ -189,7 +191,8 @@ each green and demoable. The `operations` module is born here.
   receive the postings); the target may not be the deleted node or any descendant (data-model §5).
 - **6d — Currency-list editor.** ✅ An "Add currency…" affordance in **every** picker (base-currency
   picker included). `createCurrency` (an `operations`, not CRUD) provisions only the currency's
-  **system** backing leaves (`Opening Balances <CODE>`, `FX gain/loss <CODE>`), mirroring the V2 seed;
+  **system** backing leaf (`Opening Balances <CODE>`), mirroring the V2 seed (the `FX gain/loss <CODE>`
+  leaf 6d originally provisioned was **retired in 7d.0** — no longer a system leaf, data-model §6.3);
   it does **not** back-fill category leaves — those stay lazy (data-model §6.5). Interaction is htmx +
   native `<dialog>`, **no bespoke JS** (§1.6). **Two gotchas worth remembering:** htmx attributes emit
   via `th:attr` (no htmx Thymeleaf dialect — `th:hx-*` silently drops), and the modal backdrop is a
@@ -199,7 +202,7 @@ each green and demoable. The `operations` module is born here.
 **Done when (6a–6d):** accounts (any currency) and categories can be created/managed; an account opens
 with a starting balance that is a real balanced transaction; subdivision works; a category (leaf or
 whole subtree) is deletable with its postings reassigned to a chosen surviving leaf; a new currency
-is addable from any picker, provisioned with its backing leaves and pre-selected.
+is addable from any picker, provisioned with its backing leaf and pre-selected.
 
 ---
 

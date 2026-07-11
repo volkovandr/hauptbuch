@@ -20,7 +20,8 @@
 - **v0.5 (2026-07-11):** **FX gain/loss auto-booking retired** (§6.3). The engine no longer invents a
   residual leg at a conversion; a cross-currency transaction must balance in base **from the entered
   legs**, and the rare over-determined case is refused by the sum-to-zero invariant for the user to
-  resolve by hand. `FX gain/loss` stays a seeded leaf but is now **manual-only**. Refined the
+  resolve by hand. With no code path resolving it by name, `FX gain/loss` is **no longer a seeded
+  system leaf** — it is a plain category the user creates on demand and posts to by hand. Refined the
   category-currency rule (§6.5): the leaf currency **defaults** to the paying account's currency but
   is **selectable** in entry — overriding it declares a cross-currency purchase (an EUR card buying a
   CHF-priced item). No change to `base_amount` freezing or mark-to-market valuation.
@@ -478,10 +479,12 @@ two independent base values that disagree (a statement stating the base value of
 a third-currency hop carrying a spread the bank kept). There the sum-to-zero invariant (§8.1)
 **refuses the transaction**, and the user adds the balancing leg by hand — normally to `FX gain/loss`.
 
-So `FX gain/loss` is just a seeded income leaf you **post to manually**, exactly like any other
-category, when a statement hands you an explicit conversion gain/loss. It is a **single signed leaf**
-(sign tells gain vs loss), not a receivable/payable-style pair — same reasoning as the per-person
-debt account.
+So `FX gain/loss` is just a category you **create on demand and post to manually**, exactly like any
+other, when a statement hands you an explicit conversion gain/loss. Because no code path resolves it
+by name (unlike `Opening Balances`, which the engine looks up), it is **not seeded and not
+per-currency-provisioned** — it comes into being lazily on first use, the same way every category
+leaf does (§6.5). It is a **single signed leaf** (sign tells gain vs loss), not a
+receivable/payable-style pair — same reasoning as the per-person debt account.
 
 **Why no auto-booking (decision, 2026-07-11).** Under policy #3 the honest conversion gain already
 lives in net worth via mark-to-market (§6.2) — the Switzerland round-trip in §6.2 reconciles to the

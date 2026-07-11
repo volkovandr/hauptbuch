@@ -22,20 +22,19 @@ import volkovandr.hauptbuch.ledger.CurrencyService;
 
 /**
  * Unit tier (plan §1.5): the add-a-currency operation's orchestration with the DB mocked — the
- * currency insert is followed by exactly two system leaves, hung under the {@code Opening Balances}
- * and {@code FX gain/loss} parents with the parent's own type and the new currency (plan stage 6d).
- * Category parents are intentionally never touched (leaves stay lazy, data-model §6.5).
+ * currency insert is followed by exactly one system leaf, hung under the {@code Opening Balances}
+ * parent with the parent's own type and the new currency (plan stage 6d). {@code FX gain/loss} is
+ * no longer provisioned (auto-booking retired, data-model §6.3); category parents are likewise
+ * never touched (leaves stay lazy, data-model §6.5).
  */
 @ExtendWith(MockitoExtension.class)
 class CurrencyProvisioningServiceTest {
 
   private static final String OPENING_BALANCES = "Opening Balances";
-  private static final String FX_GAIN_LOSS = "FX gain/loss";
   private static final String NOK = "NOK";
   private static final String KRONE = "Norwegian Krone";
   private static final String KR = "kr";
   private static final long OPENING_PARENT_ID = 100L;
-  private static final long FX_PARENT_ID = 200L;
 
   @Mock private CurrencyService currencyService;
   @Mock private AccountService accountService;
@@ -52,19 +51,16 @@ class CurrencyProvisioningServiceTest {
   }
 
   @Test
-  void createsCurrencyThenBothSystemLeavesUnderTheirParents() {
+  void createsCurrencyThenOpeningBalancesLeafUnderItsParent() {
     Currency nok = new Currency(NOK, 2, KR, KRONE);
     when(currencyService.insert(NOK, 2, KR, KRONE)).thenReturn(nok);
     when(accountService.findTopLevelByName(OPENING_BALANCES))
         .thenReturn(Optional.of(topLevel(OPENING_PARENT_ID, OPENING_BALANCES, "equity")));
-    when(accountService.findTopLevelByName(FX_GAIN_LOSS))
-        .thenReturn(Optional.of(topLevel(FX_PARENT_ID, FX_GAIN_LOSS, "income")));
 
     Currency result = service.createCurrency(NOK, 2, KR, KRONE);
 
     assertThat(result).isEqualTo(nok);
     verify(accountService).insertLeaf("Opening Balances NOK", "equity", OPENING_PARENT_ID, NOK);
-    verify(accountService).insertLeaf("FX gain/loss NOK", "income", FX_PARENT_ID, NOK);
   }
 
   @Test

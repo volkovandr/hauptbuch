@@ -64,8 +64,8 @@ public class AccountService {
 
   /**
    * Resolve a system leaf by its parent's name and the leaf's currency (e.g. the {@code Opening
-   * Balances} leaf for EUR, the {@code FX gain/loss} leaf for the base currency). The seed (V2)
-   * creates exactly one such leaf per currency under each named system parent.
+   * Balances} leaf for EUR). The seed (V2) creates exactly one such leaf per currency under the
+   * named system parent.
    */
   public Optional<Account> findLeafUnderParentNamed(String parentName, String currencyCode) {
     return accountRepository.findLeafUnderParentNamed(parentName, currencyCode);
@@ -77,9 +77,9 @@ public class AccountService {
   }
 
   /**
-   * Resolve a top-level (parentless) system parent by name — e.g. the {@code Opening Balances} or
-   * {@code FX gain/loss} tree the seed creates once. Used by the {@code createCurrency} operation
-   * to hang a new currency's system leaves under the right parent (plan stage 6d).
+   * Resolve a top-level (parentless) system parent by name — e.g. the {@code Opening Balances} tree
+   * the seed creates once. Used by the {@code createCurrency} operation to hang a new currency's
+   * system leaf under the right parent (plan stage 6d).
    */
   public Optional<Account> findTopLevelByName(String name) {
     return accountRepository.findTopLevelByName(name);

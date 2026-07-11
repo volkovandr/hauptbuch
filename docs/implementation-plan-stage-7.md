@@ -130,16 +130,21 @@ base **from its entered legs**, and an unbalanced one is **refused** (data-model
   `findLeafUnderParentNamed` insert). Cross-currency validation becomes: every leg has a non-null
   `base_amount` and `Σ base_amount = 0`; otherwise **reject** with the base gap in the message. No
   new leg is ever inserted by the engine.
-- **`FX gain/loss` stays seeded** (V2 migration) and per-currency-provisioned (6d) — it is now a
-  **manual** category the user may post to like any other; only the automation goes.
+- **`FX gain/loss` is un-seeded** — since no code path resolves it by name any more, it is dropped
+  from the V2 seed and from `createCurrency`'s per-currency provisioning (6d). It becomes a **plain
+  category** the user creates on demand and posts to like any other, arriving lazily on first use
+  exactly as every category leaf does (data-model §6.3/§6.5). `Opening Balances` stays seeded — the
+  engine still resolves *it* by name (opening-balance recording), which is the line: seed only the
+  system leaves code looks up.
 - **Tests:** `recordsParBalancedCrossCurrencyTransferWithNoFxResidual` stays green;
   `booksResidualOfNonParConversionToBaseFxLeaf` → becomes
-  `rejectsCrossCurrencyWhenBaseAmountsDoNotSumToZero`. The `InvariantSqlLogicTest` base-sum cases
-  already assert `Σ base ≠ 0` is a violation — keep.
+  `rejectsCrossCurrencyWhenBaseAmountsDoNotSumToZero`; the currency-provisioning and
+  schema-migration tests that asserted an FX gain/loss leaf are dropped. The `InvariantSqlLogicTest`
+  base-sum cases already assert `Σ base ≠ 0` is a violation — keep.
 
 **Done when:** a non-par conversion with unbalanced base is rejected (not silently patched); a
-par/base-balanced conversion still records; `FX gain/loss` exists but is never auto-written; `check`
-green.
+par/base-balanced conversion still records; `FX gain/loss` is no longer seeded or auto-provisioned
+(a user category created on demand); `check` green.
 
 ### 7d.1 — Category-currency selector + cross-currency single-line entry *(was «a»)*
 
