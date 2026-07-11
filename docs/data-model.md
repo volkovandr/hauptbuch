@@ -1,8 +1,8 @@
 # Hauptbuch — Core Data Model
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.4
-**Date:** 2026-06-26
+**Status:** Draft v0.5
+**Date:** 2026-07-11
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1)
@@ -17,6 +17,13 @@
 > modeled here yet** — see §12.
 
 **Changelog**
+- **v0.5 (2026-07-11):** **FX gain/loss auto-booking retired** (§6.3). The engine no longer invents a
+  residual leg at a conversion; a cross-currency transaction must balance in base **from the entered
+  legs**, and the rare over-determined case is refused by the sum-to-zero invariant for the user to
+  resolve by hand. `FX gain/loss` stays a seeded leaf but is now **manual-only**. Refined the
+  category-currency rule (§6.5): the leaf currency **defaults** to the paying account's currency but
+  is **selectable** in entry — overriding it declares a cross-currency purchase (an EUR card buying a
+  CHF-priced item). No change to `base_amount` freezing or mark-to-market valuation.
 - **v0.4 (2026-06-26):** Ratified the root **`settings`** entity (§3.8) — single-row table holding
   the **write-once `base_currency`** (required before any transaction, immutable thereafter) and the
   `display_name`. Base currency thus lives **in the database**, not config (it is a property of the
@@ -457,19 +464,35 @@ noise. #2 (realize on disposal) needs cost-basis lot tracking (FIFO/average) the
 partial conversions, round-trips, or third-currency hops — an accounting engine not worth building
 or hand-auditing (legibility constraint).
 
-### 6.3 When FX *is* booked — real two-currency conversion events only
+### 6.3 `FX gain/loss` is a manual account, not an engine behaviour
 
-The `FX gain/loss` account is booked **only when a transaction is genuinely two-currency at the
-moment it happens** — a real conversion you can point at (a bank statement conversion line,
-cross-currency settle-up). **A rate number changing is not an event** and books nothing.
+Holding a foreign balance books no posting (§6.2); **neither does the engine invent one at a
+conversion.** A cross-currency transaction must balance in base (`Σ base_amount = 0`) **from the legs
+the user actually enters** — the engine never auto-inserts a residual leg. **A rate number changing
+is not an event** and books nothing either.
 
-It is a **single signed leaf** (sign tells gain vs loss), not a receivable/payable-style pair —
-same reasoning as the per-person debt account. File it under income (or expense) per preference;
-the sign carries direction.
+Almost every real conversion balances by construction: you know one side in base (the EUR that
+actually moved) and freeze the other leg's `base_amount` to match (§6.4), so there is no residual.
+The base sum *only* fails to reach zero in a genuinely **over-determined** event — reality hands you
+two independent base values that disagree (a statement stating the base value of *both* foreign legs;
+a third-currency hop carrying a spread the bank kept). There the sum-to-zero invariant (§8.1)
+**refuses the transaction**, and the user adds the balancing leg by hand — normally to `FX gain/loss`.
 
-Mechanically this is **not a new mechanism** — it's the cross-currency path of §6.4: the FX leaf is
-the residual that makes a non-par conversion balance. A plain transfer whose two real amounts fully
-determine the rate has no residual and books no FX (its holding gain is in net worth per #3).
+So `FX gain/loss` is just a seeded income leaf you **post to manually**, exactly like any other
+category, when a statement hands you an explicit conversion gain/loss. It is a **single signed leaf**
+(sign tells gain vs loss), not a receivable/payable-style pair — same reasoning as the per-person
+debt account.
+
+**Why no auto-booking (decision, 2026-07-11).** Under policy #3 the honest conversion gain already
+lives in net worth via mark-to-market (§6.2) — the Switzerland round-trip in §6.2 reconciles to the
+real cash gain with *no* FX posting. An auto-booked residual would therefore either double-count that
+gain or fire only in the rare over-determined case: machinery that is invisible when it matters and
+wrong when it doesn't. Making it a manual leg keeps the engine legible (§0) — it enforces balance and
+never silently conjures a posting; when money genuinely doesn't reconcile, *you* say why.
+
+> **Caveat when entering a statement's "FX gain" line:** enter it only when it is a **separate**
+> credit the bank actually posted — not a restatement of the spread already embedded in the two
+> converted amounts, which is already in net worth. Otherwise you count it twice.
 
 ### 6.4 Cross-currency vs single-currency (and what `base_amount` is for)
 
@@ -517,9 +540,13 @@ debit   Food(EUR)  +? EUR     ← a conversion that never occurred in reality
 — which manufactures a cross-currency transaction (legs no longer sum to zero natively; a frozen
 `base_amount` and an invented rate/FX event required) out of a purchase that was pure CHF end to
 end. Wrong. So `Food-CHF` **must** exist precisely so the CHF purchase stays a clean single-currency
-transaction (§6.4). Hence: **the expense leaf's currency is _determined_ by the payment currency,
-not chosen** — for any single-currency transaction every leg shares one currency, so the expense
-leaf's currency equals the paying account's currency.
+transaction (§6.4). Hence: **for a single-currency transaction the expense leaf's currency equals the
+paying account's currency** — not a free choice, because every leg shares one currency. In entry the
+category-currency selector therefore **defaults** to the paying account's currency (the
+single-currency path, 95%+ of transactions, where currency is never touched); **overriding it to
+another currency is precisely how the user declares a cross-currency purchase** (EUR card, CHF price
+tag → the `Food-CHF` leaf, base frozen per §6.4). On a **transfer** both legs are real accounts, so
+both currencies are fixed and nothing is chosen.
 
 **Why the lifetime balance of `Food` is meaningless — two reasons, one deep.** The shallow one is
 that `10 CHF + 10 EUR` is a nonsense native sum. The deeper one is that **the standing balance of
@@ -578,7 +605,8 @@ Falls entirely out of the account model — no separate debt machinery (requirem
   alongside (`Σ balance_base`) is a *supplementary* gloss; the per-currency figures are the truth
   and the settlement basis.
 - **Settle-up is the one place currencies meet** — a real, dated, rate-stamped cross-currency
-  transaction (§6.4) that zeroes the accounts; any non-par residual lands in `FX gain/loss` (§6.3).
+  transaction (§6.4) that zeroes the accounts; it balances in base like any conversion, and a genuine
+  over-determined residual is entered by hand into `FX gain/loss` (§6.3, no auto-booking).
 
 ---
 
@@ -744,8 +772,9 @@ to be designed next:
   `account_owner`; `beneficiary_id` dropped.
 - **Two valuation rules**: flows posting-wise (frozen history), balances `native × rate@D`
   (mark-to-market).
-- **FX policy #3**: holding-period FX in net worth only; P&L FX-blind; `FX gain/loss` (single signed
-  leaf) booked **only at real conversion events**.
+- **FX policy #3**: holding-period FX in net worth only; P&L FX-blind. `FX gain/loss` (single signed
+  leaf) is a **manual** account — no auto-booking; an over-determined conversion is refused by the
+  sum-to-zero invariant and the user resolves it by hand.
 - **`base_amount` nullable**: `NULL` = derive on the fly; non-null = frozen cross-currency fact.
 - **No materialized balances, no universal materialized base_amount** — derive until measured slow.
 - **Conditional sum-to-zero** invariant (native for single-currency, base for cross-currency).

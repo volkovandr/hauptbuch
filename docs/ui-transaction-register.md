@@ -1,12 +1,12 @@
 # Personal Finance Manager — UI: Transaction Register & Entry Dock
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.2
-**Date:** 2026-06-22
+**Status:** Draft v0.3
+**Date:** 2026-07-11
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
-`data-model.md` (v0.3)
+`data-model.md` (v0.5)
 
 > This document records the **interaction design** of the two central surfaces — the transaction
 > **register** (the list) and the **entry/edit dock** (the persistent form) — together with the
@@ -20,6 +20,13 @@
 > pinning them now would be premature.
 
 **Changelog**
+- **v0.3 (2026-07-11):** Added the **category-currency selector** (§3.5): the leaf currency defaults
+  to the paying account's currency but is selectable, and overriding it declares a cross-currency
+  purchase. Added **cross-currency amount entry** (§3.8a): one amount field per distinct currency
+  (1/2/3 fields via progressive disclosure), balanced in **base**, with the neither-side-is-base case
+  taking a confirmable base amount from `rate_as_of`; the same rule applies per split line. **No FX
+  field** — the engine books no residual (data-model §6.3); an over-determined transaction is refused
+  with the base gap shown, for the user to close with a manual `FX gain/loss` line.
 - **v0.2 (2026-06-22):** Reworked the per-person debt display rule (§2.6): the **column** of a
   person's leg is set by whether one of *your own* accounts moved, and the **arrow direction** is set
   independently by the flow (`Max →` = from Max / you owe; `→ Max` = to Max / Max owes). This
@@ -276,8 +283,12 @@ text** (no gazetteer). The pre-filled mini-form is the safety net for any mis-cl
 - **Create-new parsing:** `Parent - Child` → **Parent** must resolve to an **existing** account;
   **Child** is the new leaf; **Type is inherited** from the parent (`expense`/`income`). Example:
   `Food - Milk` → parent `Food`, new leaf `Milk`, type `expense`.
-- **Currency is not asked.** The per-currency leaf (`Milk-EUR` etc.) is determined by the **paying
-  account** at post time (data-model §6.5); the user picks the category *semantically*.
+- **Currency defaults, but is selectable.** The per-currency leaf (`Milk-EUR` etc.) **defaults to the
+  paying account's currency** (data-model §6.5) — the single-currency path, where the user picks the
+  category *semantically* and never touches currency. A **currency selector beside the category** lets
+  the user override it to another currency; doing so **declares the transaction cross-currency** and
+  reveals the extra amount field(s) (§3.8). On a **transfer** both legs are real accounts, so their
+  currencies are fixed and no selector is shown.
 - **Subdivision tie-in:** if the chosen parent was itself a **leaf**, creating a child under it is
   exactly the §5 **subdivision domain operation** — the parent is promoted and its existing postings
   move to a `…:General` leaf. No new machinery.
@@ -339,6 +350,32 @@ sign errors and keeps entry fast and keyboard-light; the rare inversion opts in 
 > suppress the leading minus on expense rows in the *display* (since the category already conveys
 > direction) is left open; leaning keep, low-stakes.
 
+### 3.8a Cross-currency entry — one amount per currency, balanced in base
+
+When the counterpart's currency differs from the funding account's (the category-currency selector
+was overridden, §3.5, or a transfer targets a differently-denominated account), the transaction is
+**cross-currency** and the single Amount field **splits into one field per distinct currency present**
+— because the legs no longer sum to zero natively; they must balance in **base** (data-model §6.4).
+
+- **One foreign side, base present** (EUR card → CHF food): **two** fields — the paying account's
+  amount and the counterpart's amount. The base-currency leg's `base_amount` equals its own amount, so
+  no separate base field is shown.
+- **Neither side is base** (CHF card → USD goods, base EUR): **three** fields — each native amount
+  plus a single **base amount**. The base is **pre-filled from `rate_as_of`** on one leg and is
+  **confirmable/editable**; it is frozen on both legs so `Σ base_amount = 0`. The implied cross-rate
+  may be shown read-only, but is **never written back to the `exchange_rate` feed** (data-model §6.4:
+  the frozen transaction fact and the revaluation feed are separate sources).
+- **The amounts are irreducible facts, not clutter.** Three fields means three real numbers (you paid
+  USD, the goods cost CHF, it is worth EUR); progressive disclosure keeps them hidden until a currency
+  actually diverges, so the ≥95% single-currency path stays a single field.
+- **No FX field, ever.** The engine books no residual (data-model §6.3). If the entered legs don't
+  balance in base — only possible when reality over-determines them — the save is **refused with the
+  base gap shown**, and the user adds a manual `FX gain/loss` line to close it.
+
+In **splits** the same rule applies **per line**: a line whose currency differs carries its own native
+amount *and* a base amount, and it is the **base amounts** that must sum to zero across all legs
+("the rest" closes the gap in base, not native).
+
 ### 3.9 The autofill rule (the core behaviour)
 
 The decision that fixes Money's most annoying entry pattern:
@@ -389,7 +426,7 @@ The decision that fixes Money's most annoying entry pattern:
 | Split panel | Inline-expand | Modal dialog | Honours FR-UX-01; modal kept only as fallback. |
 | Split amounts | New line defaults to "the rest" | Manual balancing | Sum-to-zero by construction. |
 | Payee create | Parse Name / City / Country; country list validates last segment | Gazetteer / freeform | Country list is small, stable, offline; cities stay free text. |
-| Category create | `Parent - Child`, type inherited, currency auto | Ask type/currency each time | Inherits from parent; per-currency leaf set by paying account (§6.5). |
+| Category create | `Parent - Child`, type inherited, currency defaults to paying account | Ask type/currency each time | Inherits from parent; leaf currency defaults to paying account, selector overrides for cross-currency (§3.5, §6.5). |
 | Tag input | JIRA-style chips, cursor stays | One tag per commit | Fast multi-tag entry. |
 | Tag→split | Inherit txn-level tags, else previous line | No inheritance | Avoids re-typing on every split line. |
 | Notes | Transaction **and** split level | Transaction only | Maps to existing `transaction.note` + `posting.note`. |
