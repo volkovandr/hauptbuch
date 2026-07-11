@@ -1,7 +1,7 @@
 # Hauptbuch — Stage 7 Plan: Transaction Register & Entry Dock
 
-**Status:** Draft v1.0
-**Date:** 2026-07-05
+**Status:** Draft v1.1
+**Date:** 2026-07-11
 **Owner:** volkovandr
 **Parent:** `implementation-plan.md` (stage 7 — this doc is the detail the >30-line rule pushed out)
 **Authoritative interaction design:** `ui-transaction-register.md` (v0.2). This doc sequences the
@@ -18,6 +18,11 @@ point there. Visual inspiration mock-ups: `docs/pic/register-*.png`.
   (data-model §10) migrates only then.
 - **Cross-currency entry follows edit/splits (7d)** — single-currency entry is usable day-to-day
   before the conversion mode lands.
+- **7d re-scoped into 7d.0–7d.3 (2026-07-11):** `FX gain/loss` auto-booking is **retired** (the
+  engine books no residual — data-model §6.3), and cross-currency entry now includes a
+  **category-currency selector** (register §3.5) and **per-currency amount fields balanced in base**
+  (register §3.8a). Transfers (`To→/From←` routing the counter-leg to a real account) land in 7d.3
+  for single + split together. See §7d below.
 - **Keyboard-first as each piece lands** — every picker/field ships with its key map from the
   start; the Q-UI-2 state machine is decided **piecewise, in the sub-stage that builds the piece**,
   never retrofitted. All key handling stays in the sanctioned `keyboard.js` leaf.
@@ -198,23 +203,88 @@ readout, and commits (adjusting the total when the button so indicates); an exis
 in the panel for edit; posting-level notes persist; the register cell shows the summarised
 categories.
 
-## 7d — Cross-currency entry
+## 7d — Cross-currency entry & transfers
 
-**Goal:** the dock's conversion mode over the already-complete stage-3 engine — this sub-stage is
-entry UX, not engine work.
+**Re-scoped 2026-07-11** (data-model §6.3/§6.5, register §3.5/§3.8a). The FX-gain/loss automation is
+being **removed**, and adding the category-currency selector grew 7d well past a single sub-stage. It
+is now **four ordered packages**, each ending green and demoable. 7d.0 is engine work; 7d.1–7d.3 are
+entry UX over the (post-7d.0) engine. Packages stay **separate, not merged**: 7d.1 builds and
+de-risks the whole multi-amount machinery, so 7d.2 is a small per-line delta, but its
+base-across-lines balancing is a distinct correctness surface deserving its own tests (plan §0).
 
-- **Conversion entry:** a transfer between own accounts of different currencies takes **both native
-  amounts** (the two real amounts stay the source of truth, frozen per data-model §6.3); the
-  implied rate is shown, and `rate_as_of` proposes a starting value where a stored rate exists.
-- The engine books frozen `base_amount`s and routes the non-par residual to the `FX gain/loss`
-  leaf — verify end-to-end from the dock, including the neither-leg-is-base case.
-- **Register display:** each leg is already its own row in its own currency thread (7a §2.9) —
-  assert, don't rebuild.
-- Optionally offer to store the conversion's implied rate as a `manual` `exchange_rate` row —
-  decide at implementation.
+### 7d.0 — Retire `FX gain/loss` auto-booking (engine)
 
-**Done when:** a non-par EUR→CHF transfer entered in the dock books balanced with frozen base
-amounts and the FX residual, and both legs render in their native threads.
+**Goal:** the engine stops inventing a residual leg; a cross-currency transaction must balance in
+base **from its entered legs**, and an unbalanced one is **refused** (data-model §6.3).
+
+- **`LedgerService`:** remove the residual-booking path (the `FX_GAIN_LOSS_PARENT` lookup +
+  `findLeafUnderParentNamed` insert). Cross-currency validation becomes: every leg has a non-null
+  `base_amount` and `Σ base_amount = 0`; otherwise **reject** with the base gap in the message. No
+  new leg is ever inserted by the engine.
+- **`FX gain/loss` stays seeded** (V2 migration) and per-currency-provisioned (6d) — it is now a
+  **manual** category the user may post to like any other; only the automation goes.
+- **Tests:** `recordsParBalancedCrossCurrencyTransferWithNoFxResidual` stays green;
+  `booksResidualOfNonParConversionToBaseFxLeaf` → becomes
+  `rejectsCrossCurrencyWhenBaseAmountsDoNotSumToZero`. The `InvariantSqlLogicTest` base-sum cases
+  already assert `Σ base ≠ 0` is a violation — keep.
+
+**Done when:** a non-par conversion with unbalanced base is rejected (not silently patched); a
+par/base-balanced conversion still records; `FX gain/loss` exists but is never auto-written; `check`
+green.
+
+### 7d.1 — Category-currency selector + cross-currency single-line entry *(was «a»)*
+
+**Goal:** a plain income/expense can be entered in a currency other than the paying account's,
+producing a correct cross-currency transaction — the whole multi-amount machinery, end to end.
+
+- **Currency selector beside the category** (register §3.5): **defaults to the paying account's
+  currency** (single-currency path, untouched in the ≥95% case); overriding it routes to that
+  currency's leaf (`Food-CHF`) and **declares the transaction cross-currency**.
+- **Progressive amount fields** (register §3.8a): the Amount field splits into **one per distinct
+  currency** — 1 field single-currency; 2 when base is one side; 3 when **neither** side is base
+  (base amount **pre-filled from `rate_as_of`**, confirmable, frozen on both legs so `Σ base = 0`).
+- **Implied cross-rate** may be shown read-only; **never written back** to `exchange_rate` (§6.4).
+- **No FX field**: an over-determined entry that can't balance is refused with the base gap shown
+  (7d.0), prompting a manual `FX gain/loss` line.
+- **Register display:** each leg already renders in its own currency thread (7a §2.9) — assert.
+- **TDD:** leg-building + base-freeze + the reject-on-gap in the unit tier; the
+  select-currency→reveal-fields→save flow (incl. the neither-is-base 3-field case) in MockMvc
+  acceptance.
+
+**Done when:** an EUR-card purchase of a CHF-priced item, and a CHF→USD purchase (neither base),
+both enter from the dock, book balanced with frozen `base_amount`, and render in their native
+threads; `check` green.
+
+### 7d.2 — Cross-currency in splits *(was «b»)*
+
+**Goal:** the same selector + amount fields **per split line**, balancing in base across all legs.
+
+- Each split line carries its own **currency selector**; a differing line shows **native + base**
+  amounts. It is the **base amounts** that must sum to zero across all legs — "the rest" closes the
+  gap **in base**, not native (extends the 7c split-panel balancing).
+- Reuses the 7d.1 widget wholesale; the new surface is the **N-leg base balancing** and its edit-load.
+- **TDD:** the base-remaining/"the rest" defaulting and the cross-line base sum-to-zero in the unit
+  tier; open→add mixed-currency lines→resolve→save in MockMvc acceptance.
+
+**Done when:** a split funded from one account into lines of ≥2 currencies balances in base with a
+live base-`remaining` readout, commits, and re-opens for edit; `check` green.
+
+### 7d.3 — Transfers, single + split *(was «c»)*
+
+**Goal:** selecting **`To → <account>`** / **`From ← <account>`** in the Category field routes the
+counter-leg to a **real account** instead of a category — making transfers enterable at last. Enabled
+for **single-line and split in one package** (the routing is the same act in both).
+
+- **Same-currency transfer** is trivial: the counter-leg is just an account, currency fixed by it
+  (no selector — register §3.5), sign from the `⇄`/direction counterpart (register §3.8 table).
+- **Cross-currency transfer** reuses the 7d.1/7d.2 multi-amount machinery unchanged (both legs are
+  accounts; both currencies fixed; base balanced from entered legs).
+- **Register display:** a transfer is already **two rows, one per leg** (7a §2.2/§2.6) — assert.
+- **TDD:** counter-leg-to-account routing + direction in the unit tier; the `To→/From←` pick→save
+  (same- and cross-currency, single and split) in MockMvc acceptance.
+
+**Done when:** a same-currency and a cross-currency transfer both enter from the dock (single and
+split), book balanced, and render as two native-thread rows; `check` green.
 
 ## 7e — Tags
 

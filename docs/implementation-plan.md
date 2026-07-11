@@ -24,6 +24,11 @@
 > assumptions that can be overturned.
 
 **Changelog**
+- **v0.19 (2026-07-11):** **FX gain/loss auto-booking retired** (data-model §6.3) and **stage 7d
+  re-scoped** into four packages (7d.0 engine retirement; 7d.1 currency selector + cross-currency
+  single-line; 7d.2 splits; 7d.3 transfers). Multi-currency entry now carries a **category-currency
+  selector** and **per-currency amount fields balanced in base**; the engine books no FX residual.
+  Detail in `implementation-plan-stage-7.md`.
 - **v0.18 (2026-07-10):** Stage 7c (Edit mode, splits, void) marked **complete**.
 - **v0.17 (2026-07-08):** Stage 7b (Entry dock, simple transactions) marked **complete**.
 - **v0.16 (2026-07-05):** Stage 7a (Register, read-only) marked **complete**.
@@ -113,10 +118,12 @@ before there is anything to violate.
 
 ### 1.2 Multi-currency is fully live from stage 3
 There is no single-currency early phase. The posting engine handles cross-currency from the start:
-the conditional sum-to-zero invariant (both branches), frozen `base_amount` on genuinely
-two-currency postings, and the single signed `FX gain/loss` leaf as the residual that balances a
-non-par conversion (data-model §6.3/§6.4 — *not* a new mechanism, just the cross-currency path). The
-`exchange_rate` table exists from stage 3 with manual rows and the carry-forward `rate_as_of` lookup.
+the conditional sum-to-zero invariant (both branches) and frozen `base_amount` on genuinely
+two-currency postings (data-model §6.4 — *not* a new mechanism, just the cross-currency path). A
+cross-currency transaction must **balance in base from its entered legs**; the engine books no FX
+residual (data-model §6.3, decision 2026-07-11 — `FX gain/loss` is a manual leg; the earlier
+auto-booking is retired in stage **7d.0**). The `exchange_rate` table exists from stage 3 with manual
+rows and the carry-forward `rate_as_of` lookup.
 
 Two currency-related pieces arrive **later, with the reports/integration that consume them** — this
 is *not* deferring multi-currency, it is building each report when it is built:
@@ -209,8 +216,9 @@ boots against the compose Postgres. — **Met** (all green; boots against compos
 - ✅ **Domain-ops service** (§1.4): `recordTransaction` (validates balanced postings — native sum for
   single-currency, base sum with frozen `base_amount` for cross-currency — before insert),
   `voidTransaction` (soft-delete cascading to postings), `editTransaction`.
-- ✅ **Cross-currency is live here:** a non-par conversion freezes `base_amount` on its legs and routes
-  the residual to the `FX gain/loss` leaf (data-model §6.3/§6.4). Exercised by real ops + tests.
+- ✅ **Cross-currency is live here:** a non-par conversion freezes `base_amount` on its legs
+  (data-model §6.4). Exercised by real ops + tests. *(The original residual auto-booking to
+  `FX gain/loss` shipped here is **retired in 7d.0** per the 2026-07-11 decision — see data-model §6.3.)*
 - ✅ **Invariants as SQL-logic tests** (data-model §8): conditional sum-to-zero (both branches),
   leaves-only, currency consistency, soft-delete coherence.
 - ✅ **Running-balance query** (windowed `sum` per account) — SQL-logic tier; the backdated-insert
@@ -351,8 +359,9 @@ piece lands (Q-UI-2 decided piecewise, never retrofitted):
 - **7c — Edit mode, splits, void.** ✅ **complete.** Edit-in-place with account/date re-threading,
   `voidTransaction` from the dock, the inline split panel with "the rest" defaulting, notes at both
   levels.
-- **7d — Cross-currency entry.** The dock's conversion mode over the already-complete stage-3
-  engine (both native amounts entered; rate proposed; FX residual verified end-to-end).
+- **7d — Cross-currency entry.** Re-scoped into four packages (2026-07-11): **7d.0** retire FX
+  auto-booking (engine); **7d.1** category-currency selector + cross-currency single-line entry;
+  **7d.2** cross-currency in splits; **7d.3** transfers (single + split). Detail in the stage-7 plan.
 - **7e — Tags.** `tag`/`posting_tag` migration (data-model §10, owned by `categories`), the
   keyboard-first chip field, split inheritance, register display.
 
@@ -463,7 +472,7 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
 
 | # | «A» working assumption baked into this plan | Overturn impact |
 |---|----------------------------------------------|-----------------|
-| P-1 | Multi-currency fully live from stage 3 (cross-currency, frozen `base_amount`, `FX gain/loss` residual, `exchange_rate` table); only ECB feed automation + held-balance revaluation arrive with the reports/integration that consume them | Re-scopes stage 3 vs §14 |
+| P-1 | Multi-currency fully live from stage 3 (cross-currency, frozen `base_amount`, `exchange_rate` table); `FX gain/loss` is a manual leg, no auto-booking (2026-07-11 decision); only ECB feed automation + held-balance revaluation arrive with the reports/integration that consume them | Re-scopes stage 3 vs §14 |
 | P-2 | Root `settings` entity in the DB holds base currency (write-once, required before any transaction); entity born at stage 3, UI at stage 5; now ratified into the data-model doc (§3.8) | Small schema; entity defined |
 | P-3 | Stage 6 covers accounts **and** categories **and** opening balances; `operations` born here (subdivision) | Re-scopes stage 6 |
 | P-4 | Stage-3 service is invariant-upholding domain ops, not generic CRUD | Naming/shape of the `ledger` service |
