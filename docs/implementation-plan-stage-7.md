@@ -4,9 +4,9 @@
 **Date:** 2026-07-11
 **Owner:** volkovandr
 **Parent:** `implementation-plan.md` (stage 7 — this doc is the detail the >30-line rule pushed out)
-**Authoritative interaction design:** `ui-transaction-register.md` (v0.2). This doc sequences the
-build; the register doc owns every display and entry rule — section references below (§2.x/§3.x)
-point there. Visual inspiration mock-ups: `docs/pic/register-*.png`.
+**Authoritative interaction design:** `ui-transaction-register.md`. This doc sequences the build; the
+register doc owns every display and entry rule — section references below (§2.x/§3.x) point there.
+Visual inspiration mock-ups: `docs/pic/register-*.png`.
 
 > Stage 7 builds the two central surfaces — the newest-at-bottom register and the persistent
 > entry/edit dock — as **five ordered sub-stages, each ending green and demoable** (plan §0). The
@@ -29,9 +29,9 @@ point there. Visual inspiration mock-ups: `docs/pic/register-*.png`.
 - **Filters yes, sorting deferred** — date-range / account / payee filters are in 7a; column
   re-sorting and the §2.7 balance-hide rule go to the backlog (plan §14) until missed.
 - **7c in two increments, split-edit bundled (owner-confirmed, 2026-07-08)** — edit/void shipped
-  first (7c.1 ✅); the split panel (7c.2) delivers new-split entry *and* editing an existing split
-  back into the panel together. **Blocked on one open decision** — the sign of a mixed
-  income+expense split line (see 7c.2).
+  first (7c.1); the split panel (7c.2) delivers new-split entry *and* editing an existing split back
+  into the panel together. The one open question — the sign of a mixed income+expense split line —
+  was resolved 2026-07-09 (see 7c.2).
 
 **Module-boundary note (decided up front — the 6d lesson, again).** `categories → ledger`,
 `categories → operations`, and `operations → ledger` all already exist, so a dock controller in
@@ -48,160 +48,69 @@ point there. Visual inspiration mock-ups: `docs/pic/register-*.png`.
 
 ## 7a — Register, read-only ✅ **complete**
 
-**Goal:** the list renders a real book correctly; no entry yet (opening-balance transactions from
-stage 6 provide live rows on day one).
-
-- **Register query** (SQL-resident): rows = postings to the viewed accounts (§2.4); per-row payee;
-  Category cell summarising the sibling legs — biggest wins, `· +n` overflow hint; transfer legs as
-  `⇄ Account`; per-account running balance by **rebinding the stage-3 TDD-ahead running-balance
-  SQL to a real `ledger` repository method** (closing that marker per CLAUDE.md §6).
-- **Filters (§2.3):** date range (default last 12 months), account multi-select (default: every
-  open, non-system asset/liability account — "your own real accounts"; per-person debt accounts
-  join the exclusion at stage 8), payee. Order is fixed date-ascending; re-sorting deferred.
-- **Rendering:** newest-at-bottom with scroll-to-bottom on load (§2.1); fixed column order (§2.5);
-  two-tone same-hue zebra from the stored account hue (§2.8); German formatting, base bare /
-  non-base symbol-or-ISO (§2.9); green income, red negative balances; `pending_review` rows muted
-  with `—` balance (§2.10 — nothing produces them yet; covered by fixture).
-- **Status icons:** minimal set only — reconciliation glyph + pending clock; paperclip/recurring
-  markers arrive with their features (Q-UI-4 stays open).
-- **TDD:** `sqlLogicTest` for the register query with crafted scenarios (interleaved accounts,
-  split summarisation, two-row transfer, filters, cross-currency rows, backdated ordering);
-  integration test for the rendered page (hx attributes, zebra classes, formatting).
-
-**Done when:** a fixture book renders exactly per §2.4–§2.10 defaults; filters work; every balance
-thread is correct per account.
+The list renders a real book (opening-balance transactions from stage 6 give live rows on day one);
+no entry yet. Delivered: the SQL-resident register query (rows = postings to viewed accounts, §2.4;
+Category cell summarising sibling legs with a `· +n` overflow hint; transfer legs as `⇄ Account`); the
+per-account running balance by **rebinding the stage-3 TDD-ahead running-balance SQL to a real
+`ledger` repository method** (closing that CLAUDE.md §6 marker); date/account/payee filters (§2.3,
+account default = open non-system asset/liability accounts; fixed date-ascending — re-sorting deferred
+to plan §14); newest-at-bottom rendering per §2.4–§2.10 (two-tone stored-hue zebra, German formatting,
+muted `pending_review`). Minimal status-icon set only (Q-UI-4 stays open).
 
 ## 7b — Entry dock: new simple transactions ✅ **complete**
 
-**Goal:** keyboard-first entry of a single-category transaction, committed through the stage-3
-`recordTransaction`, with the new row appearing without a full reload.
+Keyboard-first entry of a single-category transaction through `recordTransaction`, the new row
+appearing without a full reload. Delivered: the seeded `country` table + nullable
+`payee.city`/`country` (§3.4); the dock (new mode, field order per §3.2); payee and category pickers
+with inline create-new (`Name - City - Country` / `Parent - Child` parsing, reusing 6b's creation path
+incl. implicit subdivision); the **lazy per-currency-leaf routing** of data-model §6.5 —
+`resolveCurrencyLeaf` in `operations` (first CHF spend on `Food` promotes the leaf and lands
+`Food-CHF`); sign-free amounts with the `+`/`−` override (§3.8, required — refunds are otherwise
+unrepresentable); the single-ghost-category autofill (§3.9; Q-UI-3: plain mode, ties broken by most
+recent use).
 
-- **Migration:** seeded `country` reference table (ISO 3166 names + common aliases incl. German —
-  §3.4); `payee` gains nullable `city` / `country` columns.
-- **Dock** (new mode), field order Date · Account · Payee · Amount · Category · Note · Add (§3.2;
-  Tags slot in at 7e).
-- **Payee picker (§3.4):** match on the normalised name+city+country concatenation; "Create new
-  payee" always last; create-new parses `Name - City - Country` against the country list, opening
-  the pre-filled mini-form.
-- **Category picker (§3.5):** same pattern; create-new `Parent - Child` with inherited type,
-  reusing the 6b creation path incl. implicit subdivision; **per-currency leaf resolved from the
-  paying account at post time** — this sub-stage implements the lazy leaf routing of data-model
-  §6.5 (`resolveCurrencyLeaf`, see the boundary note above): first CHF spend on `Food` promotes
-  the leaf via subdivision and lands `Food-CHF`.
-- **Sign-free amount** with the explicit leading `+`/`−` override (§3.8) — the override ships now,
-  not later (refunds are unrepresentable without it).
-- **Ghost autofill (§3.9):** most-common-category-per-payee as a single uncommitted suggestion.
-  Q-UI-3 settled: plain statistical mode, ties broken by most recent use.
-- **Commit & repaint:** **Q-UI-5 decided here** — the commit re-renders the whole rows body for the
-  active filter (the **bounded re-fetch**, §2.2's acceptable fallback), so a **backdated** entry
-  re-threads every affected balance below it, not just the newest row. Chosen over `beforeend` +
-  targeted OOB slice-swaps because the re-fetch is always correct by construction and the register is
-  bounded to hundreds of rows; the newest-at-bottom scroll re-anchors via the `keyboard.js` leaf's
-  `htmx:afterSwap` hook.
-- **Browser smoke: dropped** (owner decision — see plan §14). The entry→commit→row-with-correct-
-  balance flow is covered end-to-end at the controller/htmx acceptance level (MockMvc) in the
-  integration tier instead.
-- **TDD:** mode/tie-break query and payee-match query in `sqlLogicTest`; create-new parsing and
-  sign resolution in the unit tier; dock rendering + swap behaviour + the commit/backdated repaint in
-  integration (MockMvc).
-
-**Done when:** a transaction is enterable end-to-end through the dock; payee and category create-new
-work inline; a backdated insert repaints every affected balance below it; all three suites green.
+- **Q-UI-5 decided here:** commit re-renders the whole rows body for the active filter (the bounded
+  re-fetch, §2.2) so a **backdated** entry re-threads every affected balance below it — correct by
+  construction, the register being bounded to hundreds of rows. Chosen over targeted OOB slice-swaps;
+  the scroll re-anchors via the `keyboard.js` leaf's `htmx:afterSwap` hook.
+- **Browser smoke dropped** (plan §14): the entry→commit→correct-balance flow is covered at the
+  controller/htmx acceptance level (MockMvc) in the integration tier.
 
 ## 7c — Edit mode, splits, void ✅ **complete**
 
-**Goal:** the dock's second half — selecting, correcting, splitting, and removing rows. Two
-increments: **7c.1** edit/void (done), **7c.2** the split panel + posting notes (done).
+The dock's second half — selecting, correcting, splitting, removing rows — in two increments:
+**7c.1** edit/void, **7c.2** the split panel + posting notes.
 
-### 7c.1 — Edit mode + void ✅ **complete**
+**7c.1 — Edit + void.** Selecting a row loads it into the dock (edit mode, §3.1); Save re-threads in
+place via `editTransaction`; changing Account or date recomputes both affected balance threads from
+that date down (§3.3); a Void affordance soft-deletes via `voidTransaction`; the dock returns to new
+mode after any commit. `DockEditService` (in `operations`) classifies a live transaction into the
+dock's simple shape (one funding leg + one category leg, single currency) and refuses anything else
+(transfer, opening balance, cross-currency, and — until 7c.2 — a split) with a clear message.
 
-Selecting a row loads it into the dock (edit mode, §3.1); Save re-threads it in place via
-`editTransaction`; changing the Account or date recomputes both affected balance threads from that
-date down (§3.3, the backdated-insert slice); a Void affordance soft-deletes via `voidTransaction`
-and the slice repaints; the dock returns to new mode after any commit. `DockEditService` (in
-`operations`) classifies a live transaction's legs into the dock's simple shape — one own-account
-funding leg + one income/expense category leg, single currency — reconstructs the sign-free amount
-text, and resolves the per-currency leaf back to its semantic parent; anything else (transfer,
-opening balance, cross-currency, and — until 7c.2 — a split) is refused with a clear message.
-`DockEntry` gained a nullable `transactionId` (null = record, non-null = edit).
+**7c.2 — Split panel + posting notes.** The split panel replaces the dock, seeded with one line at
+the full amount; **Add/Remove line** full-re-render server-side with a new line defaulting to the
+current remaining ("the rest", §3.10). Per-line category create-new works from every picker (the
+browser posts ids back; `operations` never resolves categories itself — the `operations → categories`
+cycle). Posting-level notes persist at both levels (§3.7). A live `remaining 0,00 ✓` readout and the
+Save-button relabel live in the `keyboard.js` leaf (§1.6 — no new script, a display convenience only);
+the **server** re-derives `remaining` and the funding side authoritatively at Save.
 
-### 7c.2 — Split panel + posting notes ✅ **complete**
+**Mixed-type split sign — owner-decided 2026-07-09 (the load-bearing rule; not in the register doc).**
+One receipt = one transaction, even when it mixes income and expense — not two transactions. Each
+line's **signed contribution** is `+amount` for an income category, `−amount` for an expense one (a
+negative typed amount — a storno — flows through). The **funding leg = Σ(contributions)**: magnitude
+`|Σ|`, side from `sign(Σ)`, with the owner convention **`Σ = 0` books on the debit side** (a net-zero
+receipt — return five bottles, take one Cola, pay nothing — is legal and recordable). Each **category
+leg = −contribution**, so everything sums to zero **by construction** for any mix. `remaining =
+pre-entered total − |Σ|`; when `remaining ≠ 0` the Save button reads **"Save and update amount"** and
+the server sets the funding total to `|Σ|` (no modal — the relabel *is* the confirmation). Because the
+funding side is now *derived*, the panel shows a live direction cue — **"You'll pay / receive €X,XX"**
+(neutral at `Σ = 0`) — so a split that unexpectedly nets to an inflow is visible before Save. Editing
+an existing split re-opens it in the panel with each typed amount reconstructed as the sign-free
+magnitude; non-simple shapes (transfer/opening/cross-currency) stay refused.
 
-**Mixed-type split sign — RESOLVED (owner, 2026-07-09).** One receipt = one transaction; a mixed
-income+expense receipt is **not** split into two transactions. Each line's sign follows its **own
-category type**, not a single shared funding direction:
-
-- Define each line's **signed contribution**: income category → `+amount`, expense category →
-  `−amount`, where `amount` is the number the user typed **already signed** (a negative typed amount
-  — a storno — just flows through: `−3` on income → `−3`; `−5` on expense → `+5`). Users type
-  magnitudes without a sign in the normal case; the category type supplies the sign.
-- **Funding leg posting = Σ(contributions).** Its magnitude is `|Σ|`; its **side** is the sign
-  (`Σ > 0` → debit/inflow, `Σ < 0` → credit/outflow). **Convention (owner): `Σ = 0` books on the
-  debit side** (a zero-magnitude debit) — a net-zero receipt (e.g. return five bottles, take one
-  Cola, pay nothing) is a **legal, recordable** transaction, not blocked.
-- **Each category leg posting = −contribution**, so the funding leg + category legs sum to zero **by
-  construction** for any mix — the transaction always balances regardless of what was typed.
-- **`remaining` = pre-entered total − `|Σ|`**, and the existing Save-button relabel mechanic carries
-  over **unchanged**: `remaining = 0` → **Save**; `≠ 0` → **Save and update amount** (server sets the
-  funding total to `|Σ|`). The pre-entered total stays advisory. The readout shows `|Σ|` (the amount
-  that hits the account), not a signed residual.
-- **Direction cue (owner-approved UX):** because the funding side is now *derived*, not chosen, the
-  panel shows a live cue next to the remaining readout — **"You'll pay €X,XX"** when `Σ < 0` vs
-  **"You'll receive €X,XX"** when `Σ > 0` (and a neutral "No net payment" at `Σ = 0`) — so a split
-  that unexpectedly nets to an inflow is visible before Save. Lives in the `keyboard.js` leaf
-  alongside the live-remaining handler (§1.6 — no new script).
-
-The line/leg model below reflects this:
-
-- **Open (§3.9→§3.10):** a `Split` affordance (button + `S` in `keyboard.js`) hx-posts the committed
-  single dock line to `POST /register/split`, which returns the **split panel** fragment (replacing
-  the dock) seeded with one line at the full amount and the committed category. There is **no** shared
-  funding-direction hidden field — each line's direction comes from its category type.
-- **Per-line fields (§3.10, §3.7):** each line carries category + amount + note. The panel form is
-  the single source of truth — `lineCategoryText[] / lineCategoryId[] / lineAmount[] / lineNote[]`,
-  index-aligned — all submitted and re-emitted, so a re-render preserves resolved ids.
-- **Per-line category create-new (owner-confirmed):** create-new must work from **every** category
-  picker, split lines included. Reuse the browser bridge — `POST /categories/resolve` — but
-  **parameterise its output field name** (`fieldName`, default `categoryId`) so each line resolves
-  into its own list-bound hidden `lineCategoryId`. `operations` still never resolves categories
-  itself (the `operations → categories` cycle); it only echoes the ids the browser posts back.
-- **"The rest" defaulting (§3.10):** **Add line** / **Remove line** full-re-render the panel
-  server-side; a new line's amount defaults to the current remaining (total − allocated).
-- **Live `remaining` readout + Save-button label — in the `keyboard.js` leaf (owner-confirmed
-  2026-07-08):** rather than an htmx round-trip per keystroke, a small client-side handler in
-  `keyboard.js` (the sanctioned JS home, §1.6 — no new script, nothing threaded through templates)
-  reacts to line-amount input: the panel exposes `data-split-*` hooks (including each line's category
-  type so the client can sign contributions), keyboard.js sums the **signed** contributions, writes
-  the `remaining 0,00 ✓` readout and the pay/receive direction cue (above), and relabels the Save
-  button (below). This is a **display convenience only** — the server re-derives `remaining` and the
-  funding side authoritatively at Save (§1.7); there is no `/register/split/recalc` endpoint.
-- **Balancing on Save — Save-button relabel (owner-confirmed 2026-07-08, replaces the earlier
-  prompt idea):** when `remaining = 0` the button reads **Save** and commits as entered. When
-  `remaining ≠ 0` it reads **Save and update amount** (relabelled live by the keyboard.js handler
-  above) — clicking it (or pressing Enter) commits, and the **server** adjusts the funding total to
-  the sum of the lines. No modal/prompt; the relabelled button is the visible, single-keystroke
-  confirmation.
-- **Commit:** `DockSplitService` (in `operations`) signs each line by its category type, sums to the
-  funding leg (magnitude `|Σ|`, side from `sign(Σ)` with `Σ = 0` → debit), builds one leg per line
-  (`PostingDraft.of(id, amount, note)` carries the posting note — added in 7c.1) as `−contribution`,
-  and records/edits through the engine. The register Category cell already summarises the top
-  one-to-three legs (7a renderer) — assert, don't rebuild.
-- **Editing an existing split (owner-confirmed: land with new-split):** `GET /register/edit/{id}`
-  loads a transaction with one funding leg + ≥2 category legs (single currency, any mix of
-  income/expense) back into the split panel, pre-filled — each line's typed amount reconstructed as
-  the sign-free magnitude from its contribution; non-simple shapes stay refused
-  (transfer/opening/cross-currency).
 - **Out of scope here:** per-line tags → 7e; split beneficiary (`→ Person`) → stage 8.
-- **TDD:** leg-building + remaining/adjust-total and the direction/"the rest" defaulting in the unit
-  tier; the open→add→resolve→save flow, the *Save and update amount* path, and split edit-load in
-  MockMvc acceptance (browser smoke stays dropped, plan §14). The keyboard.js live-remaining/relabel
-  handler stays in the leaf (not unit-tested); the server's authoritative balancing is what the unit
-  + MockMvc tiers assert.
-
-**Done when:** a split is enterable from the dock, balances by construction with a live `remaining`
-readout, and commits (adjusting the total when the button so indicates); an existing split re-opens
-in the panel for edit; posting-level notes persist; the register cell shows the summarised
-categories.
 
 ## 7d — Cross-currency entry & transfers
 
