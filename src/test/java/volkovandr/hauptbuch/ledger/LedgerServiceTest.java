@@ -16,7 +16,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
@@ -42,7 +41,6 @@ class LedgerServiceTest {
   private static final long FOOD_EUR = 11L;
   private static final long CARD_CHF = 12L;
   private static final long FOOD_PARENT = 99L;
-  private static final long FX_LEAF_EUR = 7L;
 
   @Mock private SettingsService settingsService;
   @Mock private AccountService accountService;
@@ -209,47 +207,31 @@ class LedgerServiceTest {
   }
 
   @Test
-  void booksResidualOfNonParConversionToBaseFxLeaf() {
+  void rejectsCrossCurrencyWhenBaseAmountsDoNotSumToZero() {
     stubBaseCurrency(EUR);
     stubAccount(CARD_CHF, CHF);
     stubAccount(CASH_EUR, EUR);
     when(accountService.findParentAccountIds()).thenReturn(List.of());
-    when(transactionRepository.insertTransaction(any())).thenReturn(700L);
-    when(accountService.findLeafUnderParentNamed(LedgerService.FX_GAIN_LOSS_PARENT, EUR))
-        .thenReturn(
-            Optional.of(
-                new Account(
-                    FX_LEAF_EUR, "FX gain/loss EUR", "income", null, EUR, null, null, null, null)));
 
-    // Base amounts sum to +2.00 (−95 + 97): a non-par conversion. Residual −2.00 → FX leaf.
-    ledgerService.recordTransaction(
-        TransactionDraft.confirmed(
-            LocalDate.of(2026, 6, 1),
-            null,
-            "settle-up",
-            List.of(
-                PostingDraft.ofCrossCurrency(
-                    CARD_CHF, new BigDecimal("-100.00"), new BigDecimal("-95.00")),
-                PostingDraft.ofCrossCurrency(
-                    CASH_EUR, new BigDecimal("97.00"), new BigDecimal("97.00")))));
+    // Base amounts sum to +2.00 (−95 + 97): a non-par conversion. The engine books no residual —
+    // it rejects and the caller must add a manual FX gain/loss line (data-model §6.3, 2026-07-11).
+    assertThatExceptionOfType(UnbalancedTransactionException.class)
+        .isThrownBy(
+            () ->
+                ledgerService.recordTransaction(
+                    TransactionDraft.confirmed(
+                        LocalDate.of(2026, 6, 1),
+                        null,
+                        "settle-up",
+                        List.of(
+                            PostingDraft.ofCrossCurrency(
+                                CARD_CHF, new BigDecimal("-100.00"), new BigDecimal("-95.00")),
+                            PostingDraft.ofCrossCurrency(
+                                CASH_EUR, new BigDecimal("97.00"), new BigDecimal("97.00"))))))
+        .withMessageContaining("does not balance in base");
 
-    ArgumentCaptor<Posting> captor = ArgumentCaptor.forClass(Posting.class);
-    verify(transactionRepository, times(3)).insertPosting(captor.capture());
-
-    Posting fxLeg =
-        captor.getAllValues().stream()
-            .filter(p -> p.accountId() == FX_LEAF_EUR)
-            .findFirst()
-            .orElseThrow();
-    assertThat(fxLeg.amount()).isEqualByComparingTo("-2.00");
-    assertThat(fxLeg.baseAmount()).isEqualByComparingTo("-2.00");
-
-    // With the residual leg, the base amounts now sum to zero.
-    BigDecimal baseSum =
-        captor.getAllValues().stream()
-            .map(Posting::baseAmount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-    assertThat(baseSum).isEqualByComparingTo("0.00");
+    verify(transactionRepository, never()).insertPosting(any());
+    verify(accountService, never()).findLeafUnderParentNamed(any(), any());
   }
 
   @Test

@@ -1,7 +1,6 @@
 package volkovandr.hauptbuch.ledger;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -28,15 +27,12 @@ import volkovandr.hauptbuch.ledger.repository.TransactionRepository;
  *
  * <p>Multi-currency is live here (plan §1.2). A single-currency transaction must sum to zero in
  * native amounts. A cross-currency transaction must carry a frozen {@code baseAmount} on every leg
- * and sum to zero in base; if the supplied base amounts do not balance, the residual is a genuine
- * conversion gain/loss and is booked to the base-currency {@code FX gain/loss} leaf (data-model
- * §6.3/§6.4) — the residual that makes a non-par conversion balance.
+ * and sum to zero in base; if the supplied base amounts do not balance, the transaction is
+ * <em>rejected</em> (data-model §6.3, 2026-07-11). The engine never invents a residual leg — a
+ * genuine conversion gain/loss is a manual {@code FX gain/loss} line the caller supplies.
  */
 @Service
 public class LedgerService {
-
-  /** The seeded system parent whose per-currency leaf receives a conversion residual (§6.3). */
-  static final String FX_GAIN_LOSS_PARENT = "FX gain/loss";
 
   /** A balanced transaction has at least two legs (one debit, one credit). */
   private static final int MIN_LEGS = 2;
@@ -158,9 +154,9 @@ public class LedgerService {
   }
 
   /**
-   * Validate the submitted legs and return the legs to persist — the same legs for a balanced
-   * single-currency or already-balanced cross-currency transaction, plus an FX gain/loss residual
-   * leg when a cross-currency conversion does not balance.
+   * Validate the submitted legs and return the legs to persist — the very legs supplied, once they
+   * are proven to balance (native sum-to-zero when single-currency, base sum-to-zero when
+   * cross-currency). The engine adds no leg; an unbalanced set is rejected.
    */
   private List<PostingDraft> balancedLegs(List<PostingDraft> postings, String baseCurrency) {
     if (postings.size() < MIN_LEGS) {
@@ -196,8 +192,10 @@ public class LedgerService {
   }
 
   /**
-   * Cross-currency: every leg must carry a frozen {@code baseAmount}; the base amounts must sum to
-   * zero, or the residual is booked to the base-currency FX gain/loss leaf (data-model §6.3/§6.4).
+   * Cross-currency: every leg must carry a frozen {@code baseAmount} and the base amounts must sum
+   * to zero exactly (data-model §8, branch 2). The engine books no residual — a base gap is a
+   * genuine conversion gain/loss the caller must record as a manual {@code FX gain/loss} line, so
+   * an unbalanced set is rejected with the gap shown (data-model §6.3, 2026-07-11).
    */
   private List<PostingDraft> validatedCrossCurrency(
       List<PostingDraft> postings, String baseCurrency) {
@@ -214,23 +212,15 @@ public class LedgerService {
       baseSum = baseSum.add(leg.baseAmount());
     }
 
-    if (baseSum.signum() == 0) {
-      return List.copyOf(postings);
+    if (baseSum.signum() != 0) {
+      throw new UnbalancedTransactionException(
+          "Cross-currency transaction does not balance in base currency "
+              + baseCurrency
+              + ": base sum is "
+              + baseSum
+              + " (add a manual FX gain/loss line for the residual — data-model §6.3)");
     }
-
-    // A non-par conversion: the residual that makes it balance is a real FX gain/loss (§6.3).
-    Account fxLeaf =
-        accountService
-            .findLeafUnderParentNamed(FX_GAIN_LOSS_PARENT, baseCurrency)
-            .orElseThrow(
-                () ->
-                    new IllegalStateException(
-                        "No FX gain/loss leaf for base currency " + baseCurrency));
-    BigDecimal residual = baseSum.negate();
-    List<PostingDraft> withResidual = new ArrayList<>(postings);
-    // The FX leaf is in the base currency, so its native amount equals its base amount.
-    withResidual.add(PostingDraft.ofCrossCurrency(fxLeaf.accountId(), residual, residual));
-    return List.copyOf(withResidual);
+    return List.copyOf(postings);
   }
 
   private void insertLegs(long transactionId, List<PostingDraft> legs) {

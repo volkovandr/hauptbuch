@@ -58,8 +58,8 @@ public class AccountRepository {
 
   /**
    * Resolve a system leaf by its parent's name and the leaf's currency (e.g. the {@code Opening
-   * Balances} leaf for EUR, the {@code FX gain/loss} leaf for the base currency). The seed (V2)
-   * creates exactly one such leaf per currency under each named system parent.
+   * Balances} leaf for EUR). The seed (V2) creates exactly one such leaf per currency under the
+   * named system parent.
    */
   public Optional<Account> findLeafUnderParentNamed(String parentName, String currencyCode) {
     return jdbcClient
@@ -81,9 +81,9 @@ public class AccountRepository {
   }
 
   /**
-   * Resolve a top-level (parentless) account by name — e.g. the {@code Opening Balances} or {@code
-   * FX gain/loss} system parent the seed (V2) creates once, under which each currency has one leaf.
-   * Used by the {@code createCurrency} operation to hang the new currency's system leaves.
+   * Resolve a top-level (parentless) account by name — e.g. the {@code Opening Balances} system
+   * parent the seed (V2) creates once, under which each currency has one leaf. Used by the {@code
+   * createCurrency} operation to hang the new currency's system leaf.
    */
   public Optional<Account> findTopLevelByName(String name) {
     return jdbcClient

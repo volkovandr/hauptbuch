@@ -121,14 +121,6 @@ class SchemaMigrationIntegrationTest {
   }
 
   @Test
-  void seedsAnFxGainLossIncomeLeafPerCurrency() {
-    List<String> allCurrencies = jdbcClient.sql(ALL_CURRENCIES).query(String.class).list();
-    assertThat(leafCurrenciesUnder("FX gain/loss"))
-        .containsExactlyInAnyOrderElementsOf(allCurrencies);
-    assertThat(leafTypeUnder("FX gain/loss")).isEqualTo("income");
-  }
-
-  @Test
   void seedsCountriesWithIsoAlpha3NaturalKeys() {
     // V4: the country reference list for the payee create-new parser (register §3.4). Natural key
     // is

@@ -9,16 +9,17 @@ import volkovandr.hauptbuch.ledger.CurrencyService;
 
 /**
  * The add-a-currency domain operation (plan stage 6d). Adding a currency is not one insert: the V2
- * seed fans each seeded currency out into a per-currency <em>system</em> leaf under each system
- * parent, and a runtime add must do the same against an already-populated book, or opening-balance
- * entry and cross-currency conversion in the new currency silently break (CLAUDE.md §1.7, §4).
+ * seed fans each seeded currency out into a per-currency <em>system</em> leaf under the {@code
+ * Opening Balances} parent, and a runtime add must do the same against an already-populated book,
+ * or opening-balance entry in the new currency silently breaks (CLAUDE.md §1.7, §4).
  *
  * <p>So this composes {@code ledger}'s currency insert with {@code accounts}' leaf creation, in one
  * transaction: the {@code currency} row, then one {@code Opening Balances &lt;CODE&gt;} equity leaf
- * (data-model §3.2/T-DM-4) and one {@code FX gain/loss &lt;CODE&gt;} income leaf (data-model §6.3),
- * each hung under the system parent the seed created once.
+ * (data-model §3.2/T-DM-4), hung under the system parent the seed created once. {@code FX
+ * gain/loss} is deliberately <em>not</em> provisioned — with the auto-booking retired (data-model
+ * §6.3, 2026-07-11) it is no longer a system leaf but a plain category the user creates on demand.
  *
- * <p>It deliberately does <em>not</em> back-fill a leaf under every category parent: per data-model
+ * <p>It likewise does <em>not</em> back-fill a leaf under every category parent: per data-model
  * §6.5 a category's currency-leaf appears lazily — the first time you actually spend that currency,
  * via the stage-6b subdivision path — so eager back-fill would manufacture the empty per-currency
  * leaves §6.5 avoids.
@@ -26,10 +27,8 @@ import volkovandr.hauptbuch.ledger.CurrencyService;
 @Service
 public class CurrencyProvisioningService {
 
-  /** The system parents the seed creates once; each currency gets one leaf under each. */
+  /** The system parent the seed creates once; each currency gets one leaf under it. */
   private static final String OPENING_BALANCES = "Opening Balances";
-
-  private static final String FX_GAIN_LOSS = "FX gain/loss";
 
   private final CurrencyService currencyService;
   private final AccountService accountService;
@@ -40,8 +39,8 @@ public class CurrencyProvisioningService {
   }
 
   /**
-   * Add a currency and provision its system leaves. Atomic: either the currency and both leaves
-   * land together, or nothing does.
+   * Add a currency and provision its system leaf. Atomic: either the currency and its Opening
+   * Balances leaf land together, or nothing does.
    *
    * @param code ISO-4217 code (case-insensitive; stored upper-case)
    * @param minorUnits fractional digits (2 for EUR, 0 for JPY)
@@ -55,7 +54,6 @@ public class CurrencyProvisioningService {
   public Currency createCurrency(String code, int minorUnits, String symbol, String name) {
     Currency currency = currencyService.insert(code, minorUnits, symbol, name);
     provisionSystemLeaf(OPENING_BALANCES, currency.code());
-    provisionSystemLeaf(FX_GAIN_LOSS, currency.code());
     return currency;
   }
 
