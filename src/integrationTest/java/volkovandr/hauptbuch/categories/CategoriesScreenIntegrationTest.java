@@ -93,6 +93,19 @@ class CategoriesScreenIntegrationTest {
         .single();
   }
 
+  private long insertCurrencyLeafAccount(String currencyCode, String type, long parentId) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code, parent_id, currency_leaf) "
+                + "values (:n, :t, :n, :p, true) "
+                + RETURNING_ID)
+        .param("n", currencyCode)
+        .param("t", type)
+        .param("p", parentId)
+        .query(Long.class)
+        .single();
+  }
+
   private void insertPosting(long txnId, long accountId, String amount) {
     jdbcClient
         .sql(INSERT_POSTING)
@@ -176,6 +189,66 @@ class CategoriesScreenIntegrationTest {
             .query(BigDecimal.class)
             .single();
     assertThat(foodBalance).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void creatingChildUnderCategoryWithOnlyCurrencyLeafChildrenGroupsThemUnderUncategorized()
+      throws Exception {
+    // The plan stage 7d.1 follow-up bug: "Food" was never posted to directly — its EUR and CHF
+    // spends already routed onto auto-managed currency leaves (data-model §6.5) — so adding a real
+    // child ("Restaurants") must still subdivide, grouping the existing currency leaves under a
+    // new Uncategorized, not just insert a plain sibling next to them.
+    long food = insertAccount(FOOD, EXPENSE);
+    long eurLeaf = insertCurrencyLeafAccount(EUR, EXPENSE, food);
+    long chfLeaf = insertCurrencyLeafAccount("CHF", EXPENSE, food);
+    long cash = insertAccount("Cash", "asset");
+    long firstSpend = newTransaction();
+    insertPosting(firstSpend, eurLeaf, "10.00");
+    insertPosting(firstSpend, cash, "-10.00");
+    long secondSpend = newTransaction();
+    insertPosting(secondSpend, chfLeaf, "8.00");
+    insertPosting(secondSpend, cash, "-8.00");
+
+    mockMvc
+        .perform(
+            post(CATEGORIES_PATH)
+                .param(NAME, "Restaurants")
+                .param(TYPE, EXPENSE)
+                .param(PARENT_ID, String.valueOf(food)))
+        .andExpect(status().is3xxRedirection());
+
+    // Food gains exactly "Restaurants" and "Uncategorized" — not a third currency-named sibling.
+    List<String> foodChildren =
+        jdbcClient
+            .sql("select name from account where parent_id = :id order by name")
+            .param("id", food)
+            .query(String.class)
+            .list();
+    assertThat(foodChildren).containsExactly("Restaurants", "Uncategorized");
+
+    // The pre-existing currency leaves moved under Uncategorized, keeping their own identity.
+    long uncategorizedId = accountIdNamed("Uncategorized");
+    List<String> uncategorizedChildren =
+        jdbcClient
+            .sql("select name from account where parent_id = :id order by name")
+            .param("id", uncategorizedId)
+            .query(String.class)
+            .list();
+    assertThat(uncategorizedChildren).containsExactly("CHF", "EUR");
+
+    // Their postings were never touched — only re-parented, not reassigned.
+    BigDecimal eurBalance =
+        jdbcClient
+            .sql("select coalesce(sum(amount), 0) from posting where account_id = :id")
+            .param("id", eurLeaf)
+            .query(BigDecimal.class)
+            .single();
+    assertThat(eurBalance).isEqualByComparingTo("10.00");
+
+    mockMvc
+        .perform(get(CATEGORIES_PATH))
+        .andExpect(content().string(containsString("Restaurants")))
+        .andExpect(content().string(containsString("Uncategorized")));
   }
 
   @Test

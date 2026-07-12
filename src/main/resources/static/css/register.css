@@ -264,6 +264,13 @@ th.register__spine {
   flex: 0 0 8rem;
 }
 
+/* The cross-currency extra amount fields' wrapper (register §3.8a, plan stage 7d.1) is a plain
+   swap-target div, not a field itself — `display: contents` lets its 0–2 .field children join the
+   row directly as flex items, exactly as if they sat in .entry-dock__fields themselves. */
+.entry-dock__extra-amounts {
+  display: contents;
+}
+
 .field--amount .input {
   text-align: right;
 }

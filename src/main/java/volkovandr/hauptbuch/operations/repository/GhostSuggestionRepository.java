@@ -11,10 +11,11 @@ import volkovandr.hauptbuch.operations.GhostSuggestion;
  * plain statistical mode, recency as the tie-break).
  *
  * <p>This is SQL-resident logic (grouping, per-payee aggregation, a two-key tie-break over a
- * multi-table join), so it lives here rather than being reconstructed in Java. It rolls a
- * per-currency leaf up to its <em>semantic</em> category (the parent — data-model §6.5) so {@code
- * Food EUR} and {@code Food CHF} count as one {@code Food}, which is what the user actually picks.
- * It lives in {@code operations} beside the dock's commit path (plan stage 7 boundary note).
+ * multi-table join), so it lives here rather than being reconstructed in Java. It rolls an
+ * auto-managed currency leaf up to its <em>semantic</em> category (the parent — data-model §6.5) so
+ * a {@code Food} spend in EUR and one in CHF count as one {@code Food}, which is what the user
+ * actually picks. It lives in {@code operations} beside the dock's commit path (plan stage 7
+ * boundary note).
  */
 @Repository
 public class GhostSuggestionRepository {
@@ -30,9 +31,9 @@ public class GhostSuggestionRepository {
   /**
    * The single most-common category for a payee's live transactions, or empty if the payee has
    * none. A counterpart leg is a category (income/expense) leg; each is rolled up to its semantic
-   * category — its parent when that parent is itself a category (the per-currency-leaf case, §6.5),
-   * else the leaf itself. Categories are ranked by how many of the payee's transactions used them,
-   * ties broken by the most recent transaction date (register §3.9, Q-UI-3).
+   * category — its parent when the leg is an auto-managed currency leaf (data-model §6.5), else the
+   * leaf itself. Categories are ranked by how many of the payee's transactions used them, ties
+   * broken by the most recent transaction date (register §3.9, Q-UI-3).
    *
    * @param payeeId the accepted payee
    */
@@ -42,17 +43,11 @@ public class GhostSuggestionRepository {
             """
             with category_legs as (
               select
-                -- Roll a per-currency leaf up to its semantic category (§6.5), but ONLY when the
-                -- leaf really is a per-currency variant of its parent — named "<Parent> <CODE>"
-                -- (CurrencyLeafService). A real sub-category (e.g. "Sweets" under "Food") must stay
-                -- itself: its parent cannot be posted to, so rolling up would suggest an unusable
-                -- category (ui-issue-list).
-                case when parent.type in ('income', 'expense')
-                          and leaf.name = parent.name || ' ' || leaf.currency_code
-                     then parent.account_id else leaf.account_id end as category_id,
-                case when parent.type in ('income', 'expense')
-                          and leaf.name = parent.name || ' ' || leaf.currency_code
-                     then parent.name else leaf.name end as category_name,
+                -- Roll an auto-managed currency leaf up to its semantic category (§6.5); a real
+                -- sub-category (e.g. "Sweets" under "Food") stays itself.
+                case when leaf.currency_leaf then parent.account_id else leaf.account_id end
+                  as category_id,
+                case when leaf.currency_leaf then parent.name else leaf.name end as category_name,
                 t.date
               from transaction t
               join posting p on p.transaction_id = t.transaction_id

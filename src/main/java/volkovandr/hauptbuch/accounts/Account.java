@@ -27,6 +27,10 @@ import java.time.OffsetDateTime;
  * @param openedAt date the account was opened; nullable
  * @param closedAt date the account was closed; nullable
  * @param deletedAt soft-delete timestamp; null while live
+ * @param currencyLeaf whether this is a per-currency leaf {@code CurrencyLeafService}
+ *     auto-provisioned under its parent category (data-model §6.5) — hidden from every picker and
+ *     the categories screen, and carried along automatically when its parent is subdivided,
+ *     renamed, or deleted. {@code false} for every other account.
  */
 public record Account(
     Long accountId,
@@ -37,4 +41,5 @@ public record Account(
     Integer hue,
     LocalDate openedAt,
     LocalDate closedAt,
-    OffsetDateTime deletedAt) {}
+    OffsetDateTime deletedAt,
+    boolean currencyLeaf) {}

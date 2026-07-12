@@ -41,11 +41,16 @@ class AccountRepositoryIntegrationTest {
   @Autowired CurrencyOptionRepository currencyOptionRepository;
 
   private Account draft(String name, String type, Integer hue) {
-    return new Account(null, name, type, null, EUR, hue, OPENED, null, null);
+    return new Account(null, name, type, null, EUR, hue, OPENED, null, null, false);
   }
 
   private Account childDraft(String name, String type, long parentId) {
-    return new Account(null, name, type, parentId, EUR, null, null, null, null);
+    return new Account(null, name, type, parentId, EUR, null, null, null, null, false);
+  }
+
+  private Account currencyLeafDraft(String currencyCode, long parentId) {
+    return new Account(
+        null, currencyCode, EXPENSE, parentId, currencyCode, null, null, null, null, true);
   }
 
   @Test
@@ -177,6 +182,40 @@ class AccountRepositoryIntegrationTest {
     List<Account> children = accountRepository.findChildrenOf(parent);
 
     assertThat(children).extracting(Account::accountId).containsExactly(bread, milk);
+  }
+
+  @Test
+  void currencyLeafRoundTripsMarkedAndFindableAmongChildren() {
+    long parent = accountRepository.insert(draft("Food", EXPENSE, null));
+    long eurLeaf = accountRepository.insert(currencyLeafDraft(EUR, parent));
+
+    Account loaded = accountRepository.findById(eurLeaf).orElseThrow();
+    assertThat(loaded.name()).isEqualTo(EUR);
+    assertThat(loaded.currencyLeaf()).isTrue();
+    assertThat(accountRepository.findChildrenOf(parent))
+        .extracting(Account::accountId)
+        .containsExactly(eurLeaf);
+
+    // A plain leaf is never marked — the default stays false.
+    long milk = accountRepository.insert(childDraft("Milk", EXPENSE, parent));
+    assertThat(accountRepository.findById(milk).orElseThrow().currencyLeaf()).isFalse();
+  }
+
+  @Test
+  void updateParentMovesAnAccountToItsNewParent() {
+    long oldParent = accountRepository.insert(draft("Food", EXPENSE, null));
+    long newParent = accountRepository.insert(childDraft("Uncategorized", EXPENSE, oldParent));
+    long eurLeaf = accountRepository.insert(currencyLeafDraft(EUR, oldParent));
+
+    assertThat(accountRepository.updateParent(eurLeaf, newParent)).isEqualTo(1);
+
+    assertThat(accountRepository.findById(eurLeaf).orElseThrow().parentId()).isEqualTo(newParent);
+    assertThat(accountRepository.findChildrenOf(oldParent))
+        .extracting(Account::accountId)
+        .containsExactly(newParent);
+    assertThat(accountRepository.findChildrenOf(newParent))
+        .extracting(Account::accountId)
+        .containsExactly(eurLeaf);
   }
 
   @Test

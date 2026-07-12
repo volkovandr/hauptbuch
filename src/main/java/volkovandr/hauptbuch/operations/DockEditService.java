@@ -121,19 +121,16 @@ public class DockEditService {
   private record SimpleLegs(Posting fundingLeg, Account fundingAccount, Account categoryLeaf) {}
 
   /**
-   * The <em>semantic</em> category the user picked: the parent when the leg hits a per-currency
-   * leaf (named {@code "<Parent> <CODE>"} by the §6.5 routing), otherwise the leaf itself.
-   * Pre-filling the parent means a re-save routes back through {@code resolveCurrencyLeaf} to the
-   * same leaf, rather than showing the user the internal {@code "Food EUR"} name.
+   * The <em>semantic</em> category the user picked: the parent when the leg hits an auto-managed
+   * currency leaf (data-model §6.5), otherwise the leaf itself. Pre-filling the parent means a
+   * re-save routes back through {@code resolveCurrencyLeaf} to the same leaf, rather than showing
+   * the user the internal, hidden currency-leaf account.
    */
   private Account semanticCategory(Account leaf) {
-    if (leaf.parentId() == null) {
+    if (!leaf.currencyLeaf() || leaf.parentId() == null) {
       return leaf;
     }
-    return accountService
-        .findById(leaf.parentId())
-        .filter(parent -> leaf.name().equals(parent.name() + " " + leaf.currencyCode()))
-        .orElse(leaf);
+    return accountService.findById(leaf.parentId()).orElse(leaf);
   }
 
   /**

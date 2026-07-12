@@ -66,6 +66,21 @@ class RegisterSqlLogicTest {
         .single();
   }
 
+  /** An auto-managed currency leaf (data-model §6.5) — named after the bare currency code. */
+  private long insertCurrencyLeaf(String currency, String type, long parentId) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code, parent_id, currency_leaf) "
+                + "values (:n, :t, :c, :p, true) "
+                + "returning account_id")
+        .param("n", currency)
+        .param("t", type)
+        .param("c", currency)
+        .param("p", parentId)
+        .query(Long.class)
+        .single();
+  }
+
   private long insertPayee(String name) {
     return jdbcClient
         .sql("insert into payee (name) values (:n) returning payee_id")
@@ -386,6 +401,30 @@ class RegisterSqlLogicTest {
   void counterpartLegsOfNoTransactionsIsEmpty() {
     long cash = insertAccount(CASH, ASSET, EUR, 210);
     assertThat(registerRepository.findCounterpartLegs(List.of(), List.of(cash))).isEmpty();
+  }
+
+  @Test
+  void counterpartLegOnAnAutoManagedCurrencyLeafRollsUpToItsSemanticParent() {
+    // A cross-currency spend routes onto a hidden per-currency leaf (data-model §6.5, plan stage
+    // 7d.1); the Category cell must show the semantic parent, never the leaf's own bare-code name.
+    long cash = insertAccount(CASH, ASSET, EUR, 210);
+    long food = insertAccount(FOOD, EXPENSE, EUR, null);
+    long foodChf = insertCurrencyLeaf(CHF, EXPENSE, food);
+    long txn = insertTxn(JAN_1, null, "confirmed");
+    insertPosting(txn, cash, "-9.10");
+    insertPosting(txn, foodChf, TEN);
+
+    List<RegisterCounterpartLeg> legs =
+        registerRepository.findCounterpartLegs(List.of(txn), List.of(cash));
+
+    assertThat(legs)
+        .singleElement()
+        .satisfies(
+            leg -> {
+              assertThat(leg.accountId()).isEqualTo(food);
+              assertThat(leg.accountName()).isEqualTo(FOOD);
+              assertThat(leg.accountType()).isEqualTo(EXPENSE);
+            });
   }
 
   private static BigDecimal bd(String value) {

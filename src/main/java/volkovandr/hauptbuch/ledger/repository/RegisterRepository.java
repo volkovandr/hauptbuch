@@ -129,6 +129,10 @@ public class RegisterRepository {
    * shows as its category name, another own account as {@code ⇄ Account}. The viewed legs are the
    * rows themselves and so are excluded here.
    *
+   * <p>A leg on one of {@code CurrencyLeafService}'s auto-managed per-currency leaves (data-model
+   * §6.5) rolls up to its semantic parent's id/name/type — the currency leaf itself is never shown
+   * (the leg's own {@link RegisterRow} already displays the posting's actual currency, §2.9).
+   *
    * @param transactionIds the transactions on screen (typically the ids of {@link #findRows})
    * @param viewedAccountIds the accounts whose legs are the register rows, hence not counterparts
    */
@@ -141,15 +145,16 @@ public class RegisterRepository {
         .sql(
             """
             select p.transaction_id,
-                   a.account_id,
-                   a.name as account_name,
-                   a.type as account_type,
+                   coalesce(parent.account_id, a.account_id) as account_id,
+                   coalesce(parent.name, a.name) as account_name,
+                   coalesce(parent.type, a.type) as account_type,
                    p.amount
             from posting p
             join account a on p.account_id = a.account_id
+            left join account parent on a.currency_leaf and a.parent_id = parent.account_id
             where p.transaction_id in (:transactionIds)
               and p.account_id not in (:viewedAccountIds)
-            order by p.transaction_id, abs(p.amount) desc, a.name
+            order by p.transaction_id, abs(p.amount) desc, coalesce(parent.name, a.name)
             """)
         .param(TRANSACTION_IDS, transactionIds)
         .param(VIEWED_ACCOUNT_IDS, viewedAccountIds)

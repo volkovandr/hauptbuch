@@ -36,17 +36,21 @@
         </option>
       </select>
       <!-- htmx attributes are emitted via th:attr — this project has no htmx Thymeleaf dialect, so
-           th:hx-get would be an unknown th:* attribute and silently dropped. -->
+           th:hx-get would be an unknown th:* attribute and silently dropped. A rarely-pressed
+           action, so it is a small square icon button — the native title attribute is the tooltip,
+           no bespoke JS needed. -->
       <button
         type="button"
         class="btn btn--ghost currency-picker__add"
+        title="Add currency"
+        aria-label="Add currency"
         hx-swap="innerHTML"
         th:attr="
           hx-get=@{/currencies/new(fieldId=${fieldId},fieldName=${fieldName})},
           hx-target='#currency-dialog-' + ${fieldId}
         "
       >
-        Add currency…
+        +
       </button>
     </div>
 

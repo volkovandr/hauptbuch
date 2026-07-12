@@ -10,24 +10,25 @@ import volkovandr.hauptbuch.operations.repository.PostingReassignmentRepository;
 /**
  * The lazy per-currency-leaf routing of data-model §6.5 (plan stage 7b), as a structural domain
  * operation beside {@link SubdivisionService#subdivideAccount subdivision}. Every account has one
- * currency, so a "category" is a set of same-named per-currency leaves under a common parent
- * ({@code Food EUR}, {@code Food CHF} under {@code Food}); the leaf's currency is
- * <em>determined</em> by the paying account, never chosen (§6.5). This resolves the semantic
- * category the user picked to the concrete leaf a posting in a given currency must hit, creating
- * the leaf on first use.
+ * currency, so a "category" is a set of per-currency leaves under a common parent (e.g. {@code EUR}
+ * and {@code CHF} under {@code Food}); the leaf's currency is <em>determined</em> by the paying
+ * account, never chosen (§6.5). This resolves the semantic category the user picked to the concrete
+ * leaf a posting in a given currency must hit, creating the leaf on first use.
  *
  * <p>It lives in {@code operations} (called by both the dock and, later, the MCP surface —
  * CLAUDE.md §3) and composes {@code accounts}' leaf creation with the posting-reassignment
- * repository; the dock's commit path calls it once per leg. The three cases (§6.5):
+ * repository; the dock's commit path calls it once per leg. Every leaf it creates is marked {@code
+ * currencyLeaf} (data-model §6.5) — auto-managed, hidden from every picker and the categories
+ * screen, and named after the bare currency code (e.g. {@code "EUR"}) rather than the parent's
+ * name, since the flag is what marks it. The three cases (§6.5):
  *
  * <ul>
  *   <li><strong>Leaf already in the target currency</strong> → post to it directly;
  *   <li><strong>Leaf in a different currency</strong> → the first spend in a new currency
- *       <em>subdivides</em> it: it becomes a parent, its existing postings move to a {@code
- *       &lt;Name&gt; &lt;ownCode&gt;} leaf, and a {@code &lt;Name&gt; &lt;targetCode&gt;} leaf is
- *       created for the incoming posting (§6.5's "old postings move to Restaurants-EUR");
- *   <li><strong>Already a parent</strong> → find its {@code &lt;Name&gt; &lt;targetCode&gt;} child,
- *       or create it if this is the first spend in that currency.
+ *       <em>subdivides</em> it: it becomes a parent, its existing postings move to a same-currency
+ *       leaf, and a new leaf is created for the incoming posting's currency;
+ *   <li><strong>Already a parent</strong> → find its leaf for the target currency, or create it if
+ *       this is the first spend in that currency.
  * </ul>
  */
 @Service
@@ -76,8 +77,8 @@ public class CurrencyLeafService {
 
   /**
    * The picked account is a leaf: post to it directly if its currency matches, otherwise subdivide
-   * it into per-currency leaves (its own postings to {@code <Name> <ownCode>}, a new leaf for the
-   * incoming currency).
+   * it into per-currency leaves (its own postings move to a same-currency leaf, a new leaf is
+   * created for the incoming currency).
    */
   private Account resolveForLeaf(Account leaf, String currencyCode) {
     if (leaf.currencyCode().equals(currencyCode)) {
@@ -95,11 +96,8 @@ public class CurrencyLeafService {
     return currencyLeaf(leaf, currencyCode);
   }
 
-  /**
-   * A {@code <parentName> <CODE>} leaf under the parent, in the given currency, inheriting type.
-   */
+  /** An auto-managed currency leaf under the parent, named after {@code currencyCode} itself. */
   private Account currencyLeaf(Account parent, String currencyCode) {
-    return accountService.insertLeaf(
-        parent.name() + " " + currencyCode, parent.type(), parent.accountId(), currencyCode);
+    return accountService.insertCurrencyLeaf(currencyCode, parent.type(), parent.accountId());
   }
 }

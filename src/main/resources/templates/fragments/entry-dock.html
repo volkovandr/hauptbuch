@@ -1,14 +1,17 @@
 <!DOCTYPE html>
 <!--
-  The register's entry dock (register §3, plan stage 7b/7c) — the persistent bottom form for
+  The register's entry dock (register §3, plan stages 7b/7c/7d.1) — the persistent bottom form for
   entering a new single-category transaction, or editing an existing one in place (§3.1). The
   `edit` fragment argument drives the two modes: null → new mode (＋ New transaction, Add button);
   a DockEditModel → edit mode (✎ Edit transaction, pre-filled fields, a hidden transactionId, and
   Save · Void · Cancel). Saving posts to the same /register/entry endpoint — the hidden
   transactionId makes it re-thread rather than record (§3.3).
 
-  Field order (register §3.2): Date · Account · Payee · Amount · Category · Note · Add — driven by
-  the autofill rule (the amount precedes the category so the single ghost suggestion is correct).
+  Field order (register §3.2): Date · Account · Payee · Amount · Category · Currency · Note · Add —
+  driven by the autofill rule (the amount precedes the category so the single ghost suggestion is
+  correct). The category-currency selector sits beside Category (register §3.5); overriding it away
+  from the funding account's currency declares the transaction cross-currency and reveals the extra
+  amount field(s) (§3.8a).
 
   No bespoke JS beyond the keyboard leaf (CLAUDE.md §1.6):
     • Payee and Category are native <input list="…"> datalists — browser type-ahead, zero custom JS.
@@ -17,6 +20,11 @@
       categories module via /categories/resolve, which OOB-swaps the hidden categoryId.
     • The ghost suggestion (§3.9) is fetched on payee change (GET /register/ghost) and fills the
       category field — a single suggestion, never a replayed split.
+    • The currency selector and the funding Account select both hx-post to /register/currency-fields
+      on change (plan stage 7d.1): the response OOB-swaps the currency picker (so its shown value
+      stays in sync — e.g. reset to the new account's currency) and swaps in the extra amount
+      field(s) for the resolved selection. The Account select's hx-include deliberately omits the
+      (possibly stale) categoryCurrencyCode, so an account change always re-derives the default.
 
   On commit the form hx-posts to /register/entry (operations — plan stage 7 boundary note). The
   response re-renders the whole rows body for the active filter (carried as hidden fields) — a
@@ -32,7 +40,7 @@
          it out to replace the live #entry-dock (reset), while the rows region is the primary swap.
          The initial page render passes oob=false — an inert form, no self-OOB. -->
     <form
-      th:fragment="dock(register, oob, edit)"
+      th:fragment="dock(register, oob, edit, amountFields)"
       th:with="isEdit=${edit != null and edit.transactionId() != null}"
       id="entry-dock"
       class="entry-dock"
@@ -79,10 +87,22 @@
           />
         </div>
 
-        <!-- 2 · Account (funding account) -->
+        <!-- 2 · Account (funding account). Changing it resets the currency-selector default and
+             recomputes the amount fields (§3.5) — the hx-include deliberately omits the current
+             categoryCurrencyCode, so the server always re-derives it from the new account. -->
         <div class="field">
           <label class="field__label" for="entry-account">Account</label>
-          <select id="entry-account" name="accountId" class="input" required>
+          <select
+            id="entry-account"
+            name="accountId"
+            class="input"
+            required
+            hx-post="/register/currency-fields"
+            hx-trigger="change"
+            hx-include="[name='date'], [name='accountId'], [name='amount']"
+            hx-target="#entry-currency-amount"
+            hx-swap="outerHTML"
+          >
             <option
               th:each="a : ${register.accounts()}"
               th:value="${a.accountId()}"
@@ -120,20 +140,17 @@
           </datalist>
         </div>
 
-        <!-- 4 · Amount (sign-free magnitude; explicit +/- overrides — §3.8) -->
-        <div class="field field--amount">
-          <label class="field__label" for="entry-amount">Amount</label>
-          <input
-            id="entry-amount"
-            name="amount"
-            class="input num"
-            inputmode="decimal"
-            autocomplete="off"
-            placeholder="31,50"
-            th:value="${edit != null} ? ${edit.amount()}"
-            required
-          />
-        </div>
+        <!-- 4 · Amount (sign-free magnitude; explicit +/- overrides — §3.8). Labelled with the
+             funding account's own currency (register §3.8a, plan stage 7d.1) so it stays
+             unambiguous once the category-currency override reveals further currencies — a
+             separate fragment (with hx-swap-oob baked in, inert here since it is nested, not
+             top-level) so /register/currency-fields can refresh just the label when the account
+             changes, carrying the currently-typed value along rather than resetting it. -->
+        <th:block th:with="entryAmountText=${edit != null} ? ${edit.amount()}">
+          <div
+            th:replace="~{fragments/entry-dock :: fundingAmountField(fields=${amountFields}, amountText=${entryAmountText})}"
+          ></div>
+        </th:block>
 
         <!-- 5 · Category (datalist; resolve/create via categories on change, into the hidden id) -->
         <div class="field">
@@ -158,6 +175,33 @@
             ></option>
           </datalist>
         </div>
+
+        <!-- Category currency (register §3.5): defaults to the funding account's currency; the
+             shared currency-picker fragment offers "Add currency…" like every other picker
+             (CLAUDE.md 6d). Overriding it declares the transaction cross-currency and reveals the
+             extra amount field(s) below (§3.8a). -->
+        <div
+          class="field"
+          hx-post="/register/currency-fields"
+          hx-trigger="change"
+          hx-include="closest form"
+          hx-target="#entry-currency-amount"
+          hx-swap="outerHTML"
+        >
+          <label class="field__label" for="entry-category-currency">Currency</label>
+          <div
+            th:replace="~{fragments/currency-picker :: picker('entry-category-currency', 'categoryCurrencyCode', ${amountFields.categoryCurrencyCode()})}"
+          ></div>
+        </div>
+
+        <!-- The extra amount field(s) for a cross-currency entry (§3.8a): the category leg's own
+             native magnitude, and — only when neither leg is the book's base currency — a
+             confirmable base amount pre-filled from rate_as_of. Empty (no fields) in the
+             untouched single-currency case. -->
+        <div
+          id="entry-currency-amount"
+          th:replace="~{fragments/entry-dock :: extraAmountFields(fields=${amountFields})}"
+        ></div>
 
         <!-- 6 · Note -->
         <div class="field">
@@ -225,9 +269,99 @@
          #register-body) plus the reset dock (oob=true, so its hx-swap-oob lifts it out to replace
          #entry-dock). One response repaints the affected thread and clears the dock for the next
          entry — both top-level elements are parse-safe (a div and a form). -->
-    <th:block th:fragment="committed(register)">
+    <th:block th:fragment="committed(register, amountFields)">
       <div th:replace="~{register :: rows(${register})}"></div>
-      <div th:replace="~{fragments/entry-dock :: dock(${register}, true, null)}"></div>
+      <div th:replace="~{fragments/entry-dock :: dock(${register}, true, null, ${amountFields})}"></div>
+    </th:block>
+
+    <!-- The extra amount field(s) themselves (§3.8a) — inlined directly within `dock` (so a normal
+         whole-dock re-render, e.g. edit/reset/error, always shows the right fields) AND reused as
+         the primary-swap body of the /register/currency-fields response below. Empty (no inputs) in
+         the untouched single-currency case — the ≥95% path renders nothing extra. -->
+    <div
+      th:fragment="extraAmountFields(fields)"
+      id="entry-currency-amount"
+      class="entry-dock__extra-amounts"
+    >
+      <!-- Category leg's own native magnitude (§3.8a) — shown once the currency selector diverges
+           from the funding account's. Plain sign-free magnitude; direction always mirrors the
+           funding leg's, so no override is offered here (register §3.8). -->
+      <div class="field field--amount" th:if="${fields.crossCurrency()}">
+        <label
+          class="field__label"
+          for="entry-category-amount"
+          th:text="'Amount (' + ${fields.categoryCurrencyCode()} + ')'"
+        >
+          Amount (CHF)
+        </label>
+        <input
+          id="entry-category-amount"
+          name="categoryAmount"
+          class="input num"
+          inputmode="decimal"
+          autocomplete="off"
+          th:value="${fields.categoryAmountText()}"
+        />
+      </div>
+      <!-- Base amount (§3.8a) — only when neither leg is the book's base currency. Pre-filled from
+           rate_as_of, confirmable/editable; frozen on both legs (data-model §6.4), never written
+           back to the exchange-rate feed. -->
+      <div class="field field--amount" th:if="${fields.neitherIsBase()}">
+        <label class="field__label" for="entry-base-amount">Base amount</label>
+        <input
+          id="entry-base-amount"
+          name="baseAmount"
+          class="input num"
+          inputmode="decimal"
+          autocomplete="off"
+          th:value="${fields.baseAmountText()}"
+        />
+      </div>
+    </div>
+
+    <!-- The funding Amount field itself (register §3.8a) — its own fragment (hx-swap-oob baked
+         in, inert unless returned as a top-level element of a response) so a funding-account
+         change can refresh just its currency label via /register/currency-fields, below, without
+         resetting whatever the user has already typed. -->
+    <div
+      th:fragment="fundingAmountField(fields, amountText)"
+      id="entry-amount-field"
+      class="field field--amount"
+      hx-swap-oob="true"
+    >
+      <label
+        class="field__label"
+        for="entry-amount"
+        th:text="'Amount (' + ${fields.fundingCurrencyCode()} + ')'"
+      >
+        Amount (EUR)
+      </label>
+      <input
+        id="entry-amount"
+        name="amount"
+        class="input num"
+        inputmode="decimal"
+        autocomplete="off"
+        placeholder="31,50"
+        th:value="${amountText}"
+        required
+      />
+    </div>
+
+    <!-- POST /register/currency-fields response (plan stage 7d.1) — controller-only, never included
+         from within `dock` itself (that would duplicate the picker on a plain page load): the
+         currency picker and the funding Amount field, both out-of-band (each keeps its own shown
+         value/label in sync with whichever select triggered the recompute — the currency
+         selector's own change, or the funding account's), plus the primary swap of the extra
+         amount field(s) into #entry-currency-amount. -->
+    <th:block th:fragment="currencyFieldsResponse(fields, fundingAmountText)">
+      <div
+        th:replace="~{fragments/currency-picker :: picker('entry-category-currency', 'categoryCurrencyCode', ${fields.categoryCurrencyCode()})}"
+      ></div>
+      <div
+        th:replace="~{fragments/entry-dock :: fundingAmountField(fields=${fields}, amountText=${fundingAmountText})}"
+      ></div>
+      <div th:replace="~{fragments/entry-dock :: extraAmountFields(fields=${fields})}"></div>
     </th:block>
 
     <!-- POST /categories/resolve response: the hidden category id the caller submits, plus a small

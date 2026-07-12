@@ -82,19 +82,30 @@
   margin: 0.6rem 0;
 }
 
-/* ── Currency picker: the shared <select> + inline "Add currency…" affordance (stage 6d) ── */
+/* ── Currency picker: the shared <select> + inline "Add currency" affordance (stage 6d) ── */
 .currency-picker {
   display: flex;
-  gap: 0.5rem;
-  align-items: stretch;
+  gap: 0.4rem;
+  align-items: center;
 }
 
 .currency-picker > select {
   flex: 1;
 }
 
+/* A rarely-pressed action (owner feedback, 2026-07-11): a small square "+" icon, not a full-width
+   text button, so it never competes with the select for attention. The title attribute supplies
+   the tooltip — no bespoke JS. */
 .currency-picker__add {
-  white-space: nowrap;
+  flex: 0 0 auto;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
 }
 
 /* ── Add-currency dialog: the app's first native <dialog>, dressed as a ledger slip ──────

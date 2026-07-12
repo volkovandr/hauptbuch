@@ -58,7 +58,7 @@ class AccountServiceTest {
   }
 
   private static Account account(long id, String name, String type, Integer hue) {
-    return new Account(id, name, type, null, EUR, hue, OPENED, null, null);
+    return new Account(id, name, type, null, EUR, hue, OPENED, null, null, false);
   }
 
   private void stubInsertReturning(long id) {
@@ -182,7 +182,8 @@ class AccountServiceTest {
     Account posted = account(2L, "Cash", ASSET, 210);
     Account fresh = account(3L, GIRO, ASSET, 30);
     Account closed =
-        new Account(4L, "Old", ASSET, null, EUR, 140, OPENED, LocalDate.of(2026, 7, 2), null);
+        new Account(
+            4L, "Old", ASSET, null, EUR, 140, OPENED, LocalDate.of(2026, 7, 2), null, false);
     when(accountRepository.findLiveByTypes(any()))
         .thenReturn(List.of(parent, posted, fresh, closed));
     when(accountRepository.findPostedAccountIds()).thenReturn(List.of(2L));
@@ -244,5 +245,43 @@ class AccountServiceTest {
     assertThatExceptionOfType(IllegalStateException.class)
         .isThrownBy(() -> accountService.reopenAccount(NEW_ID))
         .withMessageContaining("not closed");
+  }
+
+  // ── currency leaves (data-model §6.5, plan stage 7d.1 follow-up) ─────────────
+
+  @Test
+  void insertCurrencyLeafIsNamedAfterTheBareCurrencyCodeAndMarked() {
+    Account chfLeaf =
+        new Account(NEW_ID, "CHF", "expense", PARENT_ID, "CHF", null, null, null, null, true);
+    when(accountRepository.insert(any())).thenReturn(NEW_ID);
+    when(accountRepository.findById(NEW_ID)).thenReturn(Optional.of(chfLeaf));
+
+    Account result = accountService.insertCurrencyLeaf("CHF", "expense", PARENT_ID);
+
+    assertThat(result).isEqualTo(chfLeaf);
+    ArgumentCaptor<Account> captor = ArgumentCaptor.forClass(Account.class);
+    verify(accountRepository).insert(captor.capture());
+    assertThat(captor.getValue().name()).isEqualTo("CHF");
+    assertThat(captor.getValue().currencyCode()).isEqualTo("CHF");
+    assertThat(captor.getValue().parentId()).isEqualTo(PARENT_ID);
+    assertThat(captor.getValue().currencyLeaf()).isTrue();
+  }
+
+  @Test
+  void insertLeafIsNeverMarkedAsCurrencyLeaf() {
+    stubInsertReturning(NEW_ID);
+
+    accountService.insertLeaf(GIRO, ASSET, null, EUR);
+
+    ArgumentCaptor<Account> captor = ArgumentCaptor.forClass(Account.class);
+    verify(accountRepository).insert(captor.capture());
+    assertThat(captor.getValue().currencyLeaf()).isFalse();
+  }
+
+  @Test
+  void reparentDelegatesToTheRepository() {
+    accountService.reparent(NEW_ID, PARENT_ID);
+
+    verify(accountRepository).updateParent(NEW_ID, PARENT_ID);
   }
 }

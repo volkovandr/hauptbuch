@@ -205,7 +205,13 @@
     <!-- The persistent entry dock (register §3). Included from its own fragment so the commit
          response can re-render it (reset to a fresh new-transaction state). -->
     <div
-      th:replace="~{fragments/entry-dock :: dock(${register}, false, null)}"
+      th:replace="~{fragments/entry-dock :: dock(${register}, false, null, ${amountFields})}"
+    ></div>
+    <!-- The category-currency picker's add-currency dialog mount (plan stage 7d.1) — outside the
+         dock's own <form>: the dialog carries its own <form>, and nesting forms is invalid HTML
+         (the 6d precedent, accounts.html). Stable by id, so it survives every dock re-render. -->
+    <div
+      th:replace="~{fragments/currency-picker :: dialogMount('entry-category-currency')}"
     ></div>
   </main>
 </html>

@@ -46,7 +46,12 @@ class DockEditServiceTest {
 
   private static Account account(
       long id, String name, String type, Long parentId, String currency) {
-    return new Account(id, name, type, parentId, currency, null, null, null, null);
+    return new Account(id, name, type, parentId, currency, null, null, null, null, false);
+  }
+
+  private static Account currencyLeaf(long id, String currencyCode, String type, long parentId) {
+    return new Account(
+        id, currencyCode, type, parentId, currencyCode, null, null, null, null, true);
   }
 
   private static Posting posting(long accountId, String amount) {
@@ -106,8 +111,9 @@ class DockEditServiceTest {
 
   @Test
   void resolvesThePerCurrencyLeafBackToItsSemanticParent() {
-    // The category leg hits "Food EUR" (a §6.5 per-currency child of "Food"); the dock should
-    // pre-fill the semantic parent "Food" so a re-save routes back through resolveCurrencyLeaf.
+    // The category leg hits an auto-managed EUR currency leaf (a §6.5 per-currency child of
+    // "Food"); the dock should pre-fill the semantic parent "Food" so a re-save routes back
+    // through resolveCurrencyLeaf.
     long foodEur = 3L;
     when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
     when(ledgerService.findPostings(TXN_ID))
@@ -115,7 +121,7 @@ class DockEditServiceTest {
     when(accountService.findById(CASH_ID))
         .thenReturn(Optional.of(account(CASH_ID, "Cash", "asset", null, EUR)));
     when(accountService.findById(foodEur))
-        .thenReturn(Optional.of(account(foodEur, "Food EUR", EXPENSE, FOOD_ID, EUR)));
+        .thenReturn(Optional.of(currencyLeaf(foodEur, EUR, EXPENSE, FOOD_ID)));
     when(accountService.findById(FOOD_ID))
         .thenReturn(Optional.of(account(FOOD_ID, "Food", EXPENSE, null, EUR)));
 

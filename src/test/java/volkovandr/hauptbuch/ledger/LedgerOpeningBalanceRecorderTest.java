@@ -47,7 +47,8 @@ class LedgerOpeningBalanceRecorderTest {
   void booksTheBalancedOpeningTransactionAgainstThePerCurrencyLeaf() {
     when(accountService.findById(CARD))
         .thenReturn(
-            Optional.of(new Account(CARD, "Card", "asset", null, CHF, 210, OPENED, null, null)));
+            Optional.of(
+                new Account(CARD, "Card", "asset", null, CHF, 210, OPENED, null, null, false)));
     when(accountService.findLeafUnderParentNamed(
             LedgerOpeningBalanceRecorder.OPENING_BALANCES_PARENT, CHF))
         .thenReturn(
@@ -61,7 +62,8 @@ class LedgerOpeningBalanceRecorderTest {
                     null,
                     null,
                     null,
-                    null)));
+                    null,
+                    false)));
     when(ledgerService.recordTransaction(any())).thenReturn(900L);
 
     long txnId = recorder.recordOpeningBalance(CARD, new BigDecimal("250.00"), OPENED);
@@ -88,7 +90,8 @@ class LedgerOpeningBalanceRecorderTest {
 
     when(accountService.findById(CARD))
         .thenReturn(
-            Optional.of(new Account(CARD, "Card", "asset", null, CHF, 210, OPENED, null, null)));
+            Optional.of(
+                new Account(CARD, "Card", "asset", null, CHF, 210, OPENED, null, null, false)));
     when(accountService.findLeafUnderParentNamed(
             LedgerOpeningBalanceRecorder.OPENING_BALANCES_PARENT, CHF))
         .thenReturn(Optional.empty());

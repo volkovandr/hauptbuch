@@ -44,7 +44,7 @@ class DeletionServiceTest {
   }
 
   private static Account account(long id, String name, Long parentId) {
-    return new Account(id, name, EXPENSE, parentId, EUR, null, null, null, null);
+    return new Account(id, name, EXPENSE, parentId, EUR, null, null, null, null, false);
   }
 
   @Test

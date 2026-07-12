@@ -22,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.RegisterView.RegisterAccountOption;
+import volkovandr.hauptbuch.ledger.RegisterView.RegisterCategoryOption;
 import volkovandr.hauptbuch.ledger.repository.PayeeRepository;
 import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
 
@@ -61,12 +62,30 @@ class RegisterServiceTest {
   }
 
   private static Account ownAccount(long id, String name) {
-    return new Account(id, name, ASSET, null, EUR, 210, LocalDate.now(), null, null);
+    return new Account(id, name, ASSET, null, EUR, 210, LocalDate.now(), null, null, false);
   }
 
   private static Account closed(long id, String name) {
     return new Account(
-        id, name, ASSET, null, EUR, 30, LocalDate.now().minusYears(1), LocalDate.now(), null);
+        id,
+        name,
+        ASSET,
+        null,
+        EUR,
+        30,
+        LocalDate.now().minusYears(1),
+        LocalDate.now(),
+        null,
+        false);
+  }
+
+  private static Account category(long id, String name) {
+    return new Account(id, name, "expense", null, EUR, null, null, null, null, false);
+  }
+
+  private static Account currencyLeaf(long id, String currencyCode, long parentId) {
+    return new Account(
+        id, currencyCode, "expense", parentId, currencyCode, null, null, null, null, true);
   }
 
   private RegisterFilter defaultFilter() {
@@ -107,5 +126,17 @@ class RegisterServiceTest {
 
     assertThat(view.rows()).isEmpty();
     verify(registerRepository, never()).findRows(anyList(), any(), any(), any(), anyString());
+  }
+
+  @Test
+  void categoryOptionsExcludeAutoManagedCurrencyLeaves() {
+    when(accountService.findLiveByTypes(List.of("asset", "liability")))
+        .thenReturn(List.of(ownAccount(CASH, "Cash")));
+    when(accountService.findLiveByTypes(List.of("income", "expense")))
+        .thenReturn(List.of(category(1L, "Food"), currencyLeaf(2L, "EUR", 1L)));
+
+    RegisterView view = registerService.view(defaultFilter());
+
+    assertThat(view.categories()).extracting(RegisterCategoryOption::name).containsExactly("Food");
   }
 }

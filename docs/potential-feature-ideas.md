@@ -49,6 +49,11 @@ from the button, and the type (expense or income) from the parent category as we
   which is fine, but it should be clear what the inline creation is going to do, that's why a confirmation is needed.
 * Top-level categories creation inline should be possible, but it should be clear whether that is an income or expense category.
   Maybe typing something like "Income - Found on the street" should trigger creation of a new top-level income category?
+* When created a new transaction and want to create another one, the form should pre-select the same date and account as the previously created transaction.
+  Two reasons: most transactions a made with the same account, and purely statistically one account will appear much more often, but it is unlikely that
+  it would appear the first one alphabetically. Secondly, when I have a bunch of receipts in my wallet, they usually are from the same day, or close to each other.
+* The register should get another column - Base amount (in base currency), displaying it should be optional.
+* The currency of the expense/income should be pre-selected based on the Payee. Usually we pay in a given shop in the same currency.
 
 ## General UX improvements
 

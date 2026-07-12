@@ -14,6 +14,7 @@ import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.RegisterFilter;
 import volkovandr.hauptbuch.ledger.RegisterService;
+import volkovandr.hauptbuch.ledger.RegisterView;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 
 /**
@@ -38,22 +39,26 @@ class RegisterSplitController {
       "fragments/split-panel :: panel(register=${register}," + " panel=${panel}, oob=%s)";
   private static final String PANEL_DIRECT = String.format(PANEL, "false");
   private static final String PANEL_OOB = String.format(PANEL, "true");
-  private static final String COMMITTED = "fragments/entry-dock :: committed(register=${register})";
+  private static final String COMMITTED =
+      "fragments/entry-dock :: committed(register=${register}, amountFields=${amountFields})";
 
   private final DockSplitService dockSplitService;
   private final SplitPanelAssembler assembler;
   private final RegisterService registerService;
   private final AccountService accountService;
+  private final DockAmountFieldsService dockAmountFieldsService;
 
   RegisterSplitController(
       DockSplitService dockSplitService,
       SplitPanelAssembler assembler,
       RegisterService registerService,
-      AccountService accountService) {
+      AccountService accountService,
+      DockAmountFieldsService dockAmountFieldsService) {
     this.dockSplitService = dockSplitService;
     this.assembler = assembler;
     this.registerService = registerService;
     this.accountService = accountService;
+    this.dockAmountFieldsService = dockAmountFieldsService;
   }
 
   /**
@@ -131,7 +136,10 @@ class RegisterSplitController {
     } catch (IllegalArgumentException e) {
       return renderPanel(form, e.getMessage(), PANEL_OOB, model);
     }
-    model.addAttribute(REGISTER, registerService.view(filter));
+    RegisterView register = registerService.view(filter);
+    model.addAttribute(REGISTER, register);
+    model.addAttribute("currencies", dockAmountFieldsService.currencies());
+    model.addAttribute("amountFields", dockAmountFieldsService.fresh(register));
     return COMMITTED;
   }
 
@@ -160,7 +168,10 @@ class RegisterSplitController {
             form.note());
     model.addAttribute(REGISTER, registerService.view(filterFrom(form)));
     model.addAttribute("edit", prefill);
-    return "fragments/entry-dock :: dock(register=${register}, oob=false, edit=${edit})";
+    model.addAttribute("currencies", dockAmountFieldsService.currencies());
+    model.addAttribute("amountFields", dockAmountFieldsService.forAccount(form.accountId()));
+    return "fragments/entry-dock :: dock(register=${register}, oob=false, edit=${edit},"
+        + " amountFields=${amountFields})";
   }
 
   /** Build the panel view model, add it plus the register view, and return the chosen fragment. */

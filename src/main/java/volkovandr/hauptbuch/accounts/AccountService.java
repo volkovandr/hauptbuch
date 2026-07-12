@@ -126,8 +126,35 @@ public class AccountService {
   public Account insertLeaf(String name, String type, Long parentId, String currencyCode) {
     long accountId =
         accountRepository.insert(
-            new Account(null, name, type, parentId, currencyCode, null, null, null, null));
+            new Account(null, name, type, parentId, currencyCode, null, null, null, null, false));
     return accountRepository.findById(accountId).orElseThrow();
+  }
+
+  /**
+   * Insert a per-currency leaf, marked as auto-managed by its parent (data-model §6.5) — hidden
+   * from every picker and the categories screen, and carried along automatically when its parent is
+   * subdivided, renamed, or deleted. Named after the bare currency code (e.g. {@code "EUR"}), never
+   * the parent's name — the flag, not the name, is what marks it. Used only by {@code
+   * CurrencyLeafService}.
+   *
+   * @return the persisted account
+   */
+  public Account insertCurrencyLeaf(String currencyCode, String type, long parentId) {
+    long accountId =
+        accountRepository.insert(
+            new Account(
+                null, currencyCode, type, parentId, currencyCode, null, null, null, null, true));
+    return accountRepository.findById(accountId).orElseThrow();
+  }
+
+  /**
+   * Re-parent an account — used only by the currency-leaf-aware subdivision operation to move a
+   * category's existing per-currency leaves under its new catch-all sibling when the category
+   * itself gains a real child (data-model §6.5). Not a user-facing edit.
+   */
+  @Transactional
+  public void reparent(long accountId, long newParentId) {
+    accountRepository.updateParent(accountId, newParentId);
   }
 
   /**
@@ -207,7 +234,8 @@ public class AccountService {
                 nextHue(),
                 openedAt,
                 null,
-                null));
+                null,
+                false));
 
     if (draft.openingBalance() != null && draft.openingBalance().signum() != 0) {
       openingBalanceRecorder

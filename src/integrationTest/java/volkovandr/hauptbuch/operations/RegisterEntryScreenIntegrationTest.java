@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.operations;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -57,13 +58,17 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   private long openAccount(String name, String openingBalance) {
+    return openAccount(name, EUR, openingBalance);
+  }
+
+  private long openAccount(String name, String currencyCode, String openingBalance) {
     Account account =
         accountService.openAccount(
             new AccountDraft(
                 name,
                 "asset",
                 null,
-                EUR,
+                currencyCode,
                 LocalDate.parse(OPEN_DAY),
                 new BigDecimal(openingBalance)));
     return account.accountId();
@@ -136,6 +141,189 @@ class RegisterEntryScreenIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("-20,00")))
         .andExpect(content().string(containsString("480,00")));
+  }
+
+  // ── cross-currency entry (register §3.5/§3.8a, plan stage 7d.1) ──────────────
+
+  @Test
+  void registerDefaultsTheCurrencyPickerToTheFundingAccountsCurrencyWithNoExtraFields()
+      throws Exception {
+    openAccount("Cash", "100");
+    insertCategory("Food");
+
+    mockMvc
+        .perform(get(REGISTER_PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"entry-category-currency\"")))
+        // The Amount label carries the funding account's own currency, unambiguous even before
+        // any override (register §3.8a).
+        .andExpect(content().string(containsString("Amount (EUR)")))
+        // No override yet: the ≥95% single-currency path stays a single Amount field.
+        .andExpect(content().string(not(containsString("name=\"categoryAmount\""))))
+        .andExpect(content().string(not(containsString("name=\"baseAmount\""))));
+  }
+
+  @Test
+  void currencyFieldsRelabelsTheFundingAmountFieldWhenTheAccountChangesWithoutLosingItsValue()
+      throws Exception {
+    long chfCard = openAccount("Cash CHF", "CHF", "500");
+    insertCategory("Food");
+
+    // Simulates the funding Account select changing to the CHF card: the Amount label switches to
+    // the new account's currency, and the already-typed magnitude rides along unchanged.
+    mockMvc
+        .perform(
+            post("/register/currency-fields")
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(chfCard))
+                .param("amount", "9,10"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Amount (CHF)")))
+        .andExpect(content().string(containsString("value=\"9,10\"")));
+  }
+
+  @Test
+  void currencyFieldsRevealsTheCategoryAmountFieldForTwoSidedOverride() throws Exception {
+    long cash = openAccount("Cash", "500");
+    insertCategory("Food");
+
+    mockMvc
+        .perform(
+            post("/register/currency-fields")
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "9,10")
+                .param("categoryCurrencyCode", "CHF"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"categoryAmount\"")))
+        .andExpect(content().string(containsString("Amount (CHF)")))
+        // The funding account (EUR) is the book's base, so no separate base field is shown (§3.8a).
+        .andExpect(content().string(not(containsString("name=\"baseAmount\""))));
+  }
+
+  @Test
+  void currencyFieldsRevealsPrefilledBaseAmountWhenNeitherLegIsBase() throws Exception {
+    long chfCard = openAccount("Cash CHF", "CHF", "500");
+    insertCategory("Shopping");
+    jdbcClient
+        .sql(
+            "insert into exchange_rate (currency_code, date, rate, source)"
+                + " values ('CHF', '2026-01-01', 0.95, 'manual')")
+        .update();
+
+    mockMvc
+        .perform(
+            post("/register/currency-fields")
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(chfCard))
+                .param("amount", "10")
+                .param("categoryCurrencyCode", "USD"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"baseAmount\"")))
+        // 10 CHF carried forward at the January rate (0.95) pre-fills 9,50 EUR.
+        .andExpect(content().string(containsString("value=\"9,50\"")));
+  }
+
+  @Test
+  void committingEurCardPurchaseOfChfPricedItemBooksBalancedAndUpdatesEurThread() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "9,10")
+                .param("categoryId", String.valueOf(food))
+                .param("categoryCurrencyCode", "CHF")
+                .param("categoryAmount", "10")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"register-rows\"")))
+        // Cash (EUR, the book's base) drops by the entered EUR amount, not the CHF price.
+        .andExpect(content().string(containsString("490,90")));
+
+    // One balanced cross-currency transaction: Σ base_amount = 0 across its (frozen) legs.
+    assertThat(spendTransactionCount()).isEqualTo(1L);
+    assertThat(baseAmountSum()).isEqualByComparingTo(BigDecimal.ZERO);
+  }
+
+  @Test
+  void resolvedCurrencyLeafNeverAppearsInTheCategoryPickerAfterwards() throws Exception {
+    // Plan stage 7d.1 follow-up bug: overriding the currency created a "Food EUR"-style leaf that
+    // then leaked into the category picker as a second, confusing option alongside plain "Food".
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "9,10")
+                .param("categoryId", String.valueOf(food))
+                .param("categoryCurrencyCode", "CHF")
+                .param("categoryAmount", "10")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk());
+
+    // Exactly one live child of Food exists now (the auto-managed CHF leaf) — it must never be
+    // individually offered in the category datalist, only "Food" itself. The category datalist's
+    // <option> is empty (just a value, register §3.5); the currency picker's own CHF option (a
+    // legitimate, unrelated currency choice) carries visible text, so this stays unambiguous.
+    mockMvc
+        .perform(get(REGISTER_PATH))
+        .andExpect(status().isOk())
+        .andExpect(
+            content().string(matchesPattern("(?s).*<option\\s+value=\"Food\"\\s*></option>.*")))
+        .andExpect(
+            content()
+                .string(not(matchesPattern("(?s).*<option\\s+value=\"CHF\"\\s*></option>.*"))));
+  }
+
+  @Test
+  void committingChfCardPurchaseOfUsdPricedItemFreezesTheConfirmedBaseAmount() throws Exception {
+    long chfCard = openAccount("Cash CHF", "CHF", "500");
+    long shopping = insertCategory("Shopping");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(chfCard))
+                .param("amount", "9")
+                .param("categoryId", String.valueOf(shopping))
+                .param("categoryCurrencyCode", "USD")
+                .param("categoryAmount", "10")
+                .param("baseAmount", "8,50")
+                .param("viewAccountId", String.valueOf(chfCard)))
+        .andExpect(status().isOk())
+        // Cash CHF drops by the entered CHF amount (500 − 9 = 491,00).
+        .andExpect(content().string(containsString("491,00")));
+
+    assertThat(spendTransactionCount()).isEqualTo(1L);
+    assertThat(baseAmountSum()).isEqualByComparingTo(BigDecimal.ZERO);
+  }
+
+  @Test
+  void committingCrossCurrencyWithoutTheCategoryAmountShowsClearErrorAndLeavesRowsUntouched()
+      throws Exception {
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "9,10")
+                .param("categoryId", String.valueOf(food))
+                .param("categoryCurrencyCode", "CHF")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("CHF amount is required")))
+        .andExpect(content().string(not(containsString("id=\"register-rows\""))));
   }
 
   @Test
@@ -290,6 +478,17 @@ class RegisterEntryScreenIntegrationTest {
             "select count(*) from transaction where deleted_at is null"
                 + " and (note is null or note <> 'Opening balance')")
         .query(Long.class)
+        .single();
+  }
+
+  /** The sum of every live posting's frozen {@code base_amount} — zero when everything balances. */
+  private BigDecimal baseAmountSum() {
+    return jdbcClient
+        .sql(
+            "select coalesce(sum(p.base_amount), 0) from posting p"
+                + " join transaction t on p.transaction_id = t.transaction_id"
+                + " where t.deleted_at is null")
+        .query(BigDecimal.class)
         .single();
   }
 

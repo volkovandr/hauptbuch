@@ -26,9 +26,11 @@ class RegisterController {
   private static final String VIEW = "register";
 
   private final RegisterService registerService;
+  private final CurrencyService currencyService;
 
-  RegisterController(RegisterService registerService) {
+  RegisterController(RegisterService registerService, CurrencyService currencyService) {
     this.registerService = registerService;
+    this.currencyService = currencyService;
   }
 
   /**
@@ -56,9 +58,24 @@ class RegisterController {
     RegisterView register = registerService.view(filter);
 
     model.addAttribute("register", register);
+    model.addAttribute("currencies", currencyService.findAll());
+    model.addAttribute("amountFields", defaultAmountFields(register));
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", "Register · Hauptbuch");
     return VIEW;
+  }
+
+  /**
+   * The dock's initial amount-field state (register §3.5/§3.8a): no currency override has been made
+   * yet, so it is single-currency in the funding account the dock implicitly pre-selects — the
+   * first of the viewed own accounts, mirroring the account {@code <select>}'s own
+   * no-explicit-selection default. A book with no accounts yet has nothing to default to.
+   */
+  private static CrossCurrencyFields defaultAmountFields(RegisterView register) {
+    return register.accounts().stream()
+        .findFirst()
+        .map(a -> CrossCurrencyFields.singleCurrency(a.currencyCode()))
+        .orElseGet(() -> CrossCurrencyFields.singleCurrency(""));
   }
 
   /**
