@@ -49,6 +49,21 @@ class GhostSuggestionSqlLogicTest {
         .single();
   }
 
+  /** An auto-managed currency leaf (data-model §6.5) — named after the bare currency code. */
+  private long insertCurrencyLeaf(String currency, String type, long parentId) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code, parent_id, currency_leaf) "
+                + "values (:n, :t, :c, :p, true) "
+                + "returning account_id")
+        .param("n", currency)
+        .param("t", type)
+        .param("c", currency)
+        .param("p", parentId)
+        .query(Long.class)
+        .single();
+  }
+
   private long insertPayee(String name) {
     return jdbcClient
         .sql("insert into payee (name) values (:n) returning payee_id")
@@ -126,8 +141,8 @@ class GhostSuggestionSqlLogicTest {
     long chfCard = insertAccount("CHF Card", ASSET, CHF, null);
     // Food is subdivided into per-currency leaves (§6.5).
     long food = insertAccount("Food", EXPENSE, EUR, null);
-    long foodEur = insertAccount("Food EUR", EXPENSE, EUR, food);
-    long foodChf = insertAccount("Food CHF", EXPENSE, CHF, food);
+    long foodEur = insertCurrencyLeaf(EUR, EXPENSE, food);
+    long foodChf = insertCurrencyLeaf(CHF, EXPENSE, food);
     long other = insertAccount("Other", EXPENSE, EUR, null);
     long payee = insertPayee("Migros");
 

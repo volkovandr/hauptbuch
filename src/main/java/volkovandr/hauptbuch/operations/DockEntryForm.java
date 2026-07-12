@@ -4,7 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * The register entry dock's form fields, bound in one shot (register §3, plan stage 7b) — the
+ * The register entry dock's form fields, bound in one shot (register §3, plan stage 7b/7d.1) — the
  * dock's own inputs plus the active-filter {@code view*} hidden fields it carries so the commit can
  * repaint exactly the current view (§2.2). Spring MVC binds the POST body to this record; keeping
  * the fields together (rather than a long parameter list on the controller method) is the readable
@@ -14,8 +14,14 @@ import java.util.List;
  * @param date booking date
  * @param accountId the funding account
  * @param payeeText the payee text (a picked datalist value or a create-new string); nullable
- * @param amount the sign-free magnitude with an optional leading {@code +}/{@code −} (§3.8)
+ * @param amount the funding leg's sign-free magnitude with an optional leading {@code +}/{@code −}
+ *     (§3.8)
  * @param categoryId the category id the {@code categories} resolve step produced
+ * @param categoryCurrencyCode the (possibly overridden) leaf currency; null/blank defaults to the
+ *     funding account's currency (§3.5)
+ * @param categoryAmount the category leg's own native magnitude; present only when cross-currency
+ *     (§3.8a)
+ * @param baseAmount the frozen base-currency magnitude; present only when neither leg is base
  * @param note transaction note; nullable
  * @param viewAccountId the active filter's viewed accounts; empty for the default set
  * @param viewFromDate the active filter's lower date bound; nullable
@@ -29,6 +35,9 @@ public record DockEntryForm(
     String payeeText,
     String amount,
     Long categoryId,
+    String categoryCurrencyCode,
+    String categoryAmount,
+    String baseAmount,
     String note,
     List<Long> viewAccountId,
     LocalDate viewFromDate,

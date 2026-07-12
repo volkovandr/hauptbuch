@@ -17,6 +17,12 @@
 > modeled here yet** — see §12.
 
 **Changelog**
+- **v0.6 (2026-07-12):** Currency leaves get a real marker (§6.5): `account.currency_leaf` (boolean)
+  replaces the old `"<Parent> <CODE>"` name-matching heuristic, which two services duplicated and
+  which a user-named category could collide with. Currency leaves are now named after their bare
+  currency code and are structurally invisible (pickers, categories screen); subdividing a category
+  that already has currency leaves re-parents them onto the new `Uncategorized` catch-all rather than
+  leaving them stranded as siblings of the new real child.
 - **v0.5 (2026-07-11):** **FX gain/loss auto-booking retired** (§6.3). The engine no longer invents a
   residual leg at a conversion; a cross-currency transaction must balance in base **from the entered
   legs**, and the rare over-determined case is refused by the sum-to-zero invariant for the user to
@@ -528,8 +534,16 @@ a frozen historical fact. `NULL` everywhere else.
 ### 6.5 Multi-currency categories — expense/income leaves are per-currency
 
 A consequence of "every account has exactly one currency" (§3.2), applied to categories. It is the
-**same pattern as per-person debts** (§7): one leaf per (category, currency), e.g. `Food-CHF` and
-`Food-EUR` under a common `Food` parent — not one `Food` account holding mixed-currency postings.
+**same pattern as per-person debts** (§7): one leaf per (category, currency) under a common `Food`
+parent — not one `Food` account holding mixed-currency postings.
+
+**The leaf is marked, not named.** `account.currency_leaf` (boolean, default `false`) flags a leaf
+as auto-provisioned by the currency-routing operation, as opposed to a real category a human named.
+A currency leaf is simply named after its own currency code (`EUR`, `CHF`) — the flag, not the name,
+is what marks it, so no naming convention can collide with a genuine user category. Marked leaves
+are **structurally invisible**: excluded from every category picker and the categories screen, never
+independently selectable, and carried along automatically wherever their parent goes (subdivided,
+deleted) — renaming the parent needs no cascade, since the leaf's own name never referenced it.
 
 **This is forced, not a preference.** Consider 10 CHF of food paid from a CHF card. The bank bills
 10 CHF; **no conversion happens anywhere.** If `Food` were EUR-only, the debit would have to be in
@@ -542,14 +556,14 @@ debit   Food(EUR)  +? EUR     ← a conversion that never occurred in reality
 
 — which manufactures a cross-currency transaction (legs no longer sum to zero natively; a frozen
 `base_amount` and an invented rate/FX event required) out of a purchase that was pure CHF end to
-end. Wrong. So `Food-CHF` **must** exist precisely so the CHF purchase stays a clean single-currency
-transaction (§6.4). Hence: **for a single-currency transaction the expense leaf's currency equals the
-paying account's currency** — not a free choice, because every leg shares one currency. In entry the
-category-currency selector therefore **defaults** to the paying account's currency (the
-single-currency path, 95%+ of transactions, where currency is never touched); **overriding it to
-another currency is precisely how the user declares a cross-currency purchase** (EUR card, CHF price
-tag → the `Food-CHF` leaf, base frozen per §6.4). On a **transfer** both legs are real accounts, so
-both currencies are fixed and nothing is chosen.
+end. Wrong. So a CHF currency leaf under `Food` **must** exist precisely so the CHF purchase stays a
+clean single-currency transaction (§6.4). Hence: **for a single-currency transaction the expense
+leaf's currency equals the paying account's currency** — not a free choice, because every leg shares
+one currency. In entry the category-currency selector therefore **defaults** to the paying account's
+currency (the single-currency path, 95%+ of transactions, where currency is never touched);
+**overriding it to another currency is precisely how the user declares a cross-currency purchase**
+(EUR card, CHF price tag → `Food`'s CHF leaf, base frozen per §6.4). On a **transfer** both legs are
+real accounts, so both currencies are fixed and nothing is chosen.
 
 **Why the lifetime balance of `Food` is meaningless — two reasons, one deep.** The shallow one is
 that `10 CHF + 10 EUR` is a nonsense native sum. The deeper one is that **the standing balance of
@@ -563,8 +577,8 @@ rules (§6.1) in fact partition exactly by account type:
 
 `Food` is an expense account ⇒ inherently a flow account; its since-forever balance is something you
 never ask for. **"How much on Food in January" is a flow**, and the flow rule converts *each posting
-at its own date's rate*, so it absorbs however many currency leaves `Food` has: `Food-EUR` January
-postings at ×1, `Food-CHF` January postings at January's CHF rate, summed in EUR. The two-Food-leaves
+at its own date's rate*, so it absorbs however many currency leaves `Food` has: its EUR leaf's
+January postings at ×1, its CHF leaf's at January's CHF rate, summed in EUR. The multiple-leaves
 fact adds **zero** complexity to the January report — the flow rule already handles it.
 
 **The general rule this instance illustrates:** *cross-currency aggregation is always done in base,
@@ -576,14 +590,23 @@ instance — the model stays uniform.
 **Ergonomics (so the proliferation doesn't bite):**
 
 - A leaf appears **only if you actually spend that currency** on it; most categories stay
-  single-currency forever.
+  single-currency forever, and a currency leaf is invisible in every picker and the categories
+  screen (it never competes with `Food` itself for attention there).
 - Because the leaf currency is *determined*, the UI lets you pick `Food` **semantically** and
-  auto-routes the posting to the right currency leaf — you never hand-pick `Food-CHF`.
+  auto-routes the posting to the right currency leaf — you never hand-pick it directly.
 - The first time a EUR-only `Restaurants` leaf receives a CHF expense, it becomes a parent and its
-  old postings move to `Restaurants-EUR` — which **is** the subdivision domain operation already
+  old postings move to a new CHF leaf — which **is** the subdivision domain operation already
   specced under leaves-only (§5). No new machinery.
+- **A category that already has currency leaves is still a leaf, for subdivision purposes.** Giving
+  `Food` (already split into currency leaves from ordinary spending) a genuine new child — say
+  `Restaurants` — must not just insert it as a plain sibling of the hidden currency leaves: it
+  subdivides exactly as the posted-leaf case above, spawning `Food`'s usual `Uncategorized` catch-all
+  and **re-parenting the existing currency leaves onto it** (not reassigning their postings — the
+  leaves keep their own identity and history, only their `parent_id` changes). `Food` ends up with
+  two real children, `Restaurants` and `Uncategorized`; the currency leaves live one level deeper,
+  still invisible, still holding their original postings.
 - Minor: expense accounts are *mostly* debit-only, but **refunds credit them** (return the CHF food,
-  get 10 CHF back = credit `Food-CHF`). The leaf stays single-currency; its period flow stays
+  get 10 CHF back = credit its leaf). The leaf stays single-currency; its period flow stays
   well-defined.
 
 ---

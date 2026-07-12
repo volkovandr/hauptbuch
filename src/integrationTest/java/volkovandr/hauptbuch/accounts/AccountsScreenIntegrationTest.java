@@ -87,7 +87,7 @@ class AccountsScreenIntegrationTest {
     mockMvc
         .perform(get(ACCOUNTS_PATH))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("Add currency…")))
+        .andExpect(content().string(containsString("title=\"Add currency\"")))
         .andExpect(
             content().string(containsString("hx-get=\"/currencies/new?fieldId=currencyCode")))
         .andExpect(content().string(containsString("hx-target=\"#currency-dialog-currencyCode\"")));

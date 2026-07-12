@@ -60,7 +60,7 @@ class DockSplitServiceTest {
   }
 
   private static Account account(long id, String type, String currency) {
-    return new Account(id, "n", type, null, currency, null, null, null, null);
+    return new Account(id, "n", type, null, currency, null, null, null, null, false);
   }
 
   private void cashFunds() {

@@ -3,7 +3,6 @@ package volkovandr.hauptbuch.categories;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
@@ -58,10 +57,15 @@ public class CategoryService {
   /**
    * The live income and expense accounts (categories) the screen lists and manages, each annotated
    * with its true hierarchy depth and listed depth-first so multi-level trees indent correctly
-   * (data-model §5's hierarchy is not limited to two levels).
+   * (data-model §5's hierarchy is not limited to two levels). Excludes {@code
+   * CurrencyLeafService}'s auto-managed per-currency leaves (data-model §6.5) — those are never
+   * individually visible or selectable; they are carried along automatically with whichever
+   * category they sit under.
    */
   public List<AccountNode> manageableCategories() {
-    return accountService.findLiveByTypesWithDepth(MANAGEABLE_TYPES);
+    return accountService.findLiveByTypesWithDepth(MANAGEABLE_TYPES).stream()
+        .filter(n -> !n.account().currencyLeaf())
+        .toList();
   }
 
   /** The live categories of one type that could take a new child, i.e. every category of it. */
@@ -71,9 +75,12 @@ public class CategoryService {
 
   /**
    * Create a category. A top-level category (no parent) is a single new leaf in the book's base
-   * currency. A child of a currently-childless, posted-to leaf triggers subdivision: the leaf gains
-   * the requested child and an {@value #UNCATEGORIZED} sibling that absorbs its postings. A child
-   * of an already-subdivided (or never-posted) parent is a plain new leaf alongside its siblings.
+   * currency. A child of a parent with no <em>real</em> children yet (data-model §6.5's
+   * auto-managed currency leaves don't count) that is either directly posted-to or already has
+   * currency leaves of its own triggers subdivision: the parent gains the requested child and an
+   * {@value #UNCATEGORIZED} sibling that absorbs its existing postings and currency leaves alike. A
+   * child of an already-subdivided (or never-posted) parent is a plain new leaf alongside its
+   * siblings.
    *
    * @return the persisted category
    * @throws IllegalArgumentException if the draft violates a rule (blank name, unmanaged type, or a
@@ -87,8 +94,13 @@ public class CategoryService {
     }
 
     Account parent = requireUsableParent(draft.parentId(), draft.type());
-    boolean parentIsLeaf = accountService.findChildrenOf(parent.accountId()).isEmpty();
-    if (parentIsLeaf && accountService.hasPostings(parent.accountId())) {
+    List<Account> children = accountService.findChildrenOf(parent.accountId());
+    boolean parentHasRealChildren = children.stream().anyMatch(c -> !c.currencyLeaf());
+    boolean parentHasCurrencyLeaves = children.stream().anyMatch(Account::currencyLeaf);
+    boolean needsSubdivision =
+        !parentHasRealChildren
+            && (parentHasCurrencyLeaves || accountService.hasPostings(parent.accountId()));
+    if (needsSubdivision) {
       SubdivisionResult result =
           subdivisionService.subdivideAccount(parent.accountId(), draft.name(), UNCATEGORIZED);
       return result.child();
@@ -185,28 +197,30 @@ public class CategoryService {
    * subtree itself (a target within the subtree would be deleted too). The leaf-only picker for the
    * delete panel (plan stage 6c).
    *
-   * <p>"Leaf" is judged against the state <em>after</em> the deletion: a node whose only children
-   * are inside the subtree becomes a leaf once they are gone, so it is a valid target. E.g.
-   * deleting {@code M&Ms} leaves {@code Sweets} childless — {@code Sweets} may receive the
-   * postings.
+   * <p>"Leaf" is judged against the state <em>after</em> the deletion, counting <em>every</em> live
+   * child — including {@code CurrencyLeafService}'s hidden auto-managed currency leaves, which are
+   * never individually offered as a target (they are excluded from {@link #manageableCategories()})
+   * but still hold real postings, so a category that has them is not a safe direct-posting target
+   * (data-model §6.5). E.g. deleting {@code M&Ms} leaves {@code Sweets} childless — {@code Sweets}
+   * may receive the postings.
    */
   public List<AccountNode> deleteTargetOptions(long subtreeRootId) {
     Account root = requireManageable(subtreeRootId);
     Set<Long> subtree = Set.copyOf(accountService.findSubtreeAccountIds(subtreeRootId));
-    List<AccountNode> survivors =
-        manageableCategories().stream()
-            .filter(n -> root.type().equals(n.account().type()))
-            .filter(n -> !subtree.contains(n.account().accountId()))
-            .toList();
-    // A survivor is still a parent only if one of its children also survives the deletion.
-    Set<Long> survivingParents =
-        survivors.stream()
-            .map(n -> n.account().parentId())
-            .filter(id -> id != null)
-            .collect(Collectors.toSet());
-    return survivors.stream()
-        .filter(n -> !survivingParents.contains(n.account().accountId()))
+    return manageableCategories().stream()
+        .filter(n -> root.type().equals(n.account().type()))
+        .filter(n -> !subtree.contains(n.account().accountId()))
+        .filter(n -> isLeafAfterDeletion(n.account().accountId(), subtree))
         .toList();
+  }
+
+  /**
+   * Whether an account would still be a genuine leaf after the given subtree is deleted — counting
+   * every live child (real or currency leaf) except those about to be deleted with it.
+   */
+  private boolean isLeafAfterDeletion(long accountId, Set<Long> deletedSubtree) {
+    return accountService.findChildrenOf(accountId).stream()
+        .allMatch(child -> deletedSubtree.contains(child.accountId()));
   }
 
   /**

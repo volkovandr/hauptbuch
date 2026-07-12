@@ -26,6 +26,7 @@ public class AccountRepository {
   private static final String PARENT_NAME = "parentName";
   private static final String CURRENCY_CODE = "currencyCode";
   private static final String PARENT_ID = "parentId";
+  private static final String NEW_PARENT_ID = "newParentId";
   private static final String NAME = "name";
   private static final String TYPES = "types";
   private static final String ROOT_ID = "rootId";
@@ -34,6 +35,14 @@ public class AccountRepository {
   private static final String CLOSED_AT = "closedAt";
   private static final String HUE = "hue";
   private static final String TYPE = "type";
+  private static final String CURRENCY_LEAF = "currencyLeaf";
+
+  /** The {@code select} clause every {@link Account}-mapping query starts with. */
+  private static final String SELECT_ACCOUNT_COLUMNS =
+      """
+      select account_id, name, type, parent_id, currency_code, hue,
+             opened_at, closed_at, deleted_at, currency_leaf
+      """;
 
   private final JdbcClient jdbcClient;
 
@@ -44,13 +53,7 @@ public class AccountRepository {
   /** Find an account by id. */
   public Optional<Account> findById(long accountId) {
     return jdbcClient
-        .sql(
-            """
-            select account_id, name, type, parent_id, currency_code, hue,
-                   opened_at, closed_at, deleted_at
-            from account
-            where account_id = :accountId
-            """)
+        .sql(SELECT_ACCOUNT_COLUMNS + "from account where account_id = :accountId")
         .param(ACCOUNT_ID, accountId)
         .query(Account.class)
         .optional();
@@ -67,7 +70,7 @@ public class AccountRepository {
             """
             select child.account_id, child.name, child.type, child.parent_id,
                    child.currency_code, child.hue, child.opened_at, child.closed_at,
-                   child.deleted_at
+                   child.deleted_at, child.currency_leaf
             from account child
             join account parent on child.parent_id = parent.account_id
             where parent.name = :parentName
@@ -88,14 +91,13 @@ public class AccountRepository {
   public Optional<Account> findTopLevelByName(String name) {
     return jdbcClient
         .sql(
-            """
-            select account_id, name, type, parent_id, currency_code, hue,
-                   opened_at, closed_at, deleted_at
-            from account
-            where name = :name
-              and parent_id is null
-              and deleted_at is null
-            """)
+            SELECT_ACCOUNT_COLUMNS
+                + """
+                from account
+                where name = :name
+                  and parent_id is null
+                  and deleted_at is null
+                """)
         .param(NAME, name)
         .query(Account.class)
         .optional();
@@ -113,14 +115,13 @@ public class AccountRepository {
   public List<Account> findChildrenOf(long parentId) {
     return jdbcClient
         .sql(
-            """
-            select account_id, name, type, parent_id, currency_code, hue,
-                   opened_at, closed_at, deleted_at
-            from account
-            where parent_id = :parentId
-              and deleted_at is null
-            order by name
-            """)
+            SELECT_ACCOUNT_COLUMNS
+                + """
+                from account
+                where parent_id = :parentId
+                  and deleted_at is null
+                order by name
+                """)
         .param(PARENT_ID, parentId)
         .query(Account.class)
         .list();
@@ -133,14 +134,13 @@ public class AccountRepository {
   public List<Account> findLiveByTypes(List<String> types) {
     return jdbcClient
         .sql(
-            """
-            select account_id, name, type, parent_id, currency_code, hue,
-                   opened_at, closed_at, deleted_at
-            from account
-            where type in (:types)
-              and deleted_at is null
-            order by type, coalesce(parent_id, account_id), parent_id is not null, name
-            """)
+            SELECT_ACCOUNT_COLUMNS
+                + """
+                from account
+                where type in (:types)
+                  and deleted_at is null
+                order by type, coalesce(parent_id, account_id), parent_id is not null, name
+                """)
         .param(TYPES, types)
         .query(Account.class)
         .list();
@@ -159,7 +159,7 @@ public class AccountRepository {
             """
             with recursive tree as (
               select account_id, name, type, parent_id, currency_code, hue,
-                     opened_at, closed_at, deleted_at,
+                     opened_at, closed_at, deleted_at, currency_leaf,
                      0 as depth,
                      array[name] as sort_path
               from account
@@ -168,7 +168,7 @@ public class AccountRepository {
                 and parent_id is null
               union all
               select a.account_id, a.name, a.type, a.parent_id, a.currency_code, a.hue,
-                     a.opened_at, a.closed_at, a.deleted_at,
+                     a.opened_at, a.closed_at, a.deleted_at, a.currency_leaf,
                      tree.depth + 1,
                      tree.sort_path || a.name
               from account a
@@ -176,7 +176,7 @@ public class AccountRepository {
               where a.deleted_at is null
             )
             select account_id, name, type, parent_id, currency_code, hue,
-                   opened_at, closed_at, deleted_at, depth
+                   opened_at, closed_at, deleted_at, currency_leaf, depth
             from tree
             order by type, sort_path
             """)
@@ -193,7 +193,8 @@ public class AccountRepository {
                         rs.getObject("hue", Integer.class),
                         rs.getObject("opened_at", LocalDate.class),
                         rs.getObject("closed_at", LocalDate.class),
-                        rs.getObject("deleted_at", OffsetDateTime.class)),
+                        rs.getObject("deleted_at", OffsetDateTime.class),
+                        rs.getBoolean("currency_leaf")),
                     rs.getInt("depth")))
         .list();
   }
@@ -268,8 +269,10 @@ public class AccountRepository {
     return jdbcClient
         .sql(
             """
-            insert into account (name, type, parent_id, currency_code, hue, opened_at)
-            values (:name, :type, :parentId, :currencyCode, :hue, :openedAt)
+            insert into account
+              (name, type, parent_id, currency_code, hue, opened_at, currency_leaf)
+            values
+              (:name, :type, :parentId, :currencyCode, :hue, :openedAt, :currencyLeaf)
             returning account_id
             """)
         .param(NAME, account.name())
@@ -278,6 +281,7 @@ public class AccountRepository {
         .param(CURRENCY_CODE, account.currencyCode())
         .param(HUE, account.hue())
         .param(OPENED_AT, account.openedAt())
+        .param(CURRENCY_LEAF, account.currencyLeaf())
         .query(Long.class)
         .single();
   }
@@ -288,6 +292,19 @@ public class AccountRepository {
         .sql("update account set name = :name, hue = :hue where account_id = :accountId")
         .param(NAME, name)
         .param(HUE, hue)
+        .param(ACCOUNT_ID, accountId)
+        .update();
+  }
+
+  /**
+   * Re-parent an account — used only by the currency-leaf-aware subdivision operation to move a
+   * category's existing per-currency leaves under its new catch-all sibling (data-model §6.5); not
+   * a user-facing edit (re-parenting a posted-to account is otherwise forbidden, data-model §5).
+   */
+  public int updateParent(long accountId, long newParentId) {
+    return jdbcClient
+        .sql("update account set parent_id = :newParentId where account_id = :accountId")
+        .param(NEW_PARENT_ID, newParentId)
         .param(ACCOUNT_ID, accountId)
         .update();
   }

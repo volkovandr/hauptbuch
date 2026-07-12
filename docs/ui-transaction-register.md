@@ -289,9 +289,10 @@ text** (no gazetteer). The pre-filled mini-form is the safety net for any mis-cl
   the user override it to another currency; doing so **declares the transaction cross-currency** and
   reveals the extra amount field(s) (§3.8). On a **transfer** both legs are real accounts, so their
   currencies are fixed and no selector is shown.
-- **Subdivision tie-in:** if the chosen parent was itself a **leaf**, creating a child under it is
-  exactly the §5 **subdivision domain operation** — the parent is promoted and its existing postings
-  move to a `…:General` leaf. No new machinery.
+- **Subdivision tie-in:** if the chosen parent was itself a **leaf** (or had only hidden currency
+  leaves, data-model §6.5), creating a child under it is exactly the §5 **subdivision domain
+  operation** — the parent is promoted and its existing postings (and currency leaves) move to an
+  `Uncategorized` sibling. No new machinery.
 - **The category type drives entry direction** (§3.8): choosing an expense vs income (vs `→ Person` /
   `Person →`) counterpart sets the sign of the funding leg, so the amount stays sign-free.
 

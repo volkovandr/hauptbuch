@@ -61,7 +61,8 @@ class LedgerServiceTest {
     when(accountService.findById(id))
         .thenReturn(
             Optional.of(
-                new Account(id, "acct" + id, "asset", null, currency, null, null, null, null)));
+                new Account(
+                    id, "acct" + id, "asset", null, currency, null, null, null, null, false)));
   }
 
   @Test
@@ -137,7 +138,8 @@ class LedgerServiceTest {
     when(accountService.findById(FOOD_PARENT))
         .thenReturn(
             Optional.of(
-                new Account(FOOD_PARENT, "Food", "expense", null, EUR, null, null, null, null)));
+                new Account(
+                    FOOD_PARENT, "Food", "expense", null, EUR, null, null, null, null, false)));
     when(accountService.findParentAccountIds()).thenReturn(List.of(FOOD_PARENT));
 
     assertThatExceptionOfType(UnbalancedTransactionException.class)

@@ -111,10 +111,13 @@ public class RegisterService {
   /**
    * The categories the dock offers (register §3.5): live income/expense accounts, listed by name.
    * The user picks semantically; the currency leaf is resolved from the paying account at commit
-   * (data-model §6.5), so both parents and leaves are offered as-is.
+   * (data-model §6.5), so real categories — parents and never-subdivided leaves alike — are offered
+   * as-is. {@code CurrencyLeafService}'s auto-managed per-currency leaves are excluded: they are
+   * never individually selectable, only ever reached by routing through their semantic parent.
    */
   private List<RegisterCategoryOption> categoryOptions() {
     return accountService.findLiveByTypes(CATEGORY_TYPES).stream()
+        .filter(a -> !a.currencyLeaf())
         .map(a -> new RegisterCategoryOption(a.accountId(), a.name()))
         .sorted((x, y) -> x.name().compareToIgnoreCase(y.name()))
         .toList();

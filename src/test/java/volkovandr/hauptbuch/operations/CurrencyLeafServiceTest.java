@@ -23,7 +23,9 @@ import volkovandr.hauptbuch.operations.repository.PostingReassignmentRepository;
  * Unit tier (plan §1.5): the lazy per-currency-leaf routing of data-model §6.5 with the DB mocked —
  * the three cases the dock's commit path relies on: a matching-currency leaf is posted to directly;
  * a differing-currency leaf subdivides into per-currency leaves (postings moved); an
- * already-subdivided parent reuses or creates its currency child.
+ * already-subdivided parent reuses or creates its currency child. Every created leaf is marked
+ * {@code currencyLeaf} and named after the bare currency code (plan stage 7d.1 follow-up) — hidden
+ * from every picker, never named after its parent.
  */
 @ExtendWith(MockitoExtension.class)
 class CurrencyLeafServiceTest {
@@ -47,7 +49,12 @@ class CurrencyLeafServiceTest {
   }
 
   private static Account account(long id, String name, Long parentId, String currency) {
-    return new Account(id, name, EXPENSE, parentId, currency, null, null, null, null);
+    return new Account(id, name, EXPENSE, parentId, currency, null, null, null, null, false);
+  }
+
+  private static Account currencyLeaf(long id, String currencyCode, long parentId) {
+    return new Account(
+        id, currencyCode, EXPENSE, parentId, currencyCode, null, null, null, null, true);
   }
 
   @Test
@@ -60,7 +67,7 @@ class CurrencyLeafServiceTest {
 
     assertThat(resolved).isEqualTo(food);
     // No leaf created, no postings moved — the leaf already fits (§6.5).
-    verify(accountService, never()).insertLeaf(any(), any(), any(), any());
+    verify(accountService, never()).insertCurrencyLeaf(any(), any(), anyLong());
     verify(postingReassignmentRepository, never()).reassignPostings(anyLong(), anyLong());
   }
 
@@ -70,59 +77,59 @@ class CurrencyLeafServiceTest {
     when(accountService.findById(FOOD_ID)).thenReturn(Optional.of(food));
     when(accountService.findChildrenOf(FOOD_ID)).thenReturn(List.of());
     when(accountService.hasPostings(FOOD_ID)).thenReturn(true);
-    Account ownLeaf = account(OWN_LEAF_ID, "Food EUR", FOOD_ID, EUR);
-    Account chfLeaf = account(NEW_LEAF_ID, "Food CHF", FOOD_ID, CHF);
-    when(accountService.insertLeaf("Food EUR", EXPENSE, FOOD_ID, EUR)).thenReturn(ownLeaf);
-    when(accountService.insertLeaf("Food CHF", EXPENSE, FOOD_ID, CHF)).thenReturn(chfLeaf);
+    Account ownLeaf = currencyLeaf(OWN_LEAF_ID, EUR, FOOD_ID);
+    Account chfLeaf = currencyLeaf(NEW_LEAF_ID, CHF, FOOD_ID);
+    when(accountService.insertCurrencyLeaf(EUR, EXPENSE, FOOD_ID)).thenReturn(ownLeaf);
+    when(accountService.insertCurrencyLeaf(CHF, EXPENSE, FOOD_ID)).thenReturn(chfLeaf);
 
     Account resolved = currencyLeafService.resolveCurrencyLeaf(FOOD_ID, CHF);
 
-    // The incoming CHF posting lands on the new CHF leaf; the leaf's old EUR postings move to Food
-    // EUR, so the promoted Food is a pure rollup (leaves-only, §6.5).
+    // The incoming CHF posting lands on the new CHF leaf; the leaf's old EUR postings move to the
+    // new EUR leaf, so the promoted Food is a pure rollup (leaves-only, §6.5).
     assertThat(resolved).isEqualTo(chfLeaf);
     verify(postingReassignmentRepository).reassignPostings(FOOD_ID, OWN_LEAF_ID);
   }
 
   @Test
   void promotesAnUnpostedLeafWithoutManufacturingAnEmptyOwnCurrencyLeaf() {
-    // A never-posted EUR leaf getting its first spend in CHF: it becomes a parent of Food CHF, but
-    // no empty Food EUR is created (leaves appear only when spent — §6.5).
+    // A never-posted EUR leaf getting its first spend in CHF: it becomes a parent of a CHF leaf,
+    // but no empty EUR leaf is created (leaves appear only when spent — §6.5).
     Account food = account(FOOD_ID, FOOD, null, EUR);
     when(accountService.findById(FOOD_ID)).thenReturn(Optional.of(food));
     when(accountService.findChildrenOf(FOOD_ID)).thenReturn(List.of());
     when(accountService.hasPostings(FOOD_ID)).thenReturn(false);
-    Account chfLeaf = account(NEW_LEAF_ID, "Food CHF", FOOD_ID, CHF);
-    when(accountService.insertLeaf("Food CHF", EXPENSE, FOOD_ID, CHF)).thenReturn(chfLeaf);
+    Account chfLeaf = currencyLeaf(NEW_LEAF_ID, CHF, FOOD_ID);
+    when(accountService.insertCurrencyLeaf(CHF, EXPENSE, FOOD_ID)).thenReturn(chfLeaf);
 
     Account resolved = currencyLeafService.resolveCurrencyLeaf(FOOD_ID, CHF);
 
     assertThat(resolved).isEqualTo(chfLeaf);
-    verify(accountService, never()).insertLeaf("Food EUR", EXPENSE, FOOD_ID, EUR);
+    verify(accountService, never()).insertCurrencyLeaf(EUR, EXPENSE, FOOD_ID);
     verify(postingReassignmentRepository, never()).reassignPostings(anyLong(), anyLong());
   }
 
   @Test
   void reusesAnExistingCurrencyChildUnderAnAlreadySubdividedParent() {
     Account food = account(FOOD_ID, FOOD, null, EUR);
-    Account eurChild = account(OWN_LEAF_ID, "Food EUR", FOOD_ID, EUR);
-    Account chfChild = account(NEW_LEAF_ID, "Food CHF", FOOD_ID, CHF);
+    Account eurChild = currencyLeaf(OWN_LEAF_ID, EUR, FOOD_ID);
+    Account chfChild = currencyLeaf(NEW_LEAF_ID, CHF, FOOD_ID);
     when(accountService.findById(FOOD_ID)).thenReturn(Optional.of(food));
     when(accountService.findChildrenOf(FOOD_ID)).thenReturn(List.of(eurChild, chfChild));
 
     Account resolved = currencyLeafService.resolveCurrencyLeaf(FOOD_ID, CHF);
 
     assertThat(resolved).isEqualTo(chfChild);
-    verify(accountService, never()).insertLeaf(any(), any(), any(), any());
+    verify(accountService, never()).insertCurrencyLeaf(any(), any(), anyLong());
   }
 
   @Test
   void createsMissingCurrencyChildUnderAnAlreadySubdividedParent() {
     Account food = account(FOOD_ID, FOOD, null, EUR);
-    Account eurChild = account(OWN_LEAF_ID, "Food EUR", FOOD_ID, EUR);
+    Account eurChild = currencyLeaf(OWN_LEAF_ID, EUR, FOOD_ID);
     when(accountService.findById(FOOD_ID)).thenReturn(Optional.of(food));
     when(accountService.findChildrenOf(FOOD_ID)).thenReturn(List.of(eurChild));
-    Account chfChild = account(NEW_LEAF_ID, "Food CHF", FOOD_ID, CHF);
-    when(accountService.insertLeaf("Food CHF", EXPENSE, FOOD_ID, CHF)).thenReturn(chfChild);
+    Account chfChild = currencyLeaf(NEW_LEAF_ID, CHF, FOOD_ID);
+    when(accountService.insertCurrencyLeaf(CHF, EXPENSE, FOOD_ID)).thenReturn(chfChild);
 
     Account resolved = currencyLeafService.resolveCurrencyLeaf(FOOD_ID, CHF);
 
