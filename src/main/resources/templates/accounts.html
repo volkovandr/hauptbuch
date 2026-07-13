@@ -100,7 +100,7 @@
           <!-- Shared currency picker (plan stage 6d): any known currency, plus "Add currency…" to
                provision a new one inline without leaving the open-account form. -->
           <div
-            th:replace="~{fragments/currency-picker :: picker('currencyCode', 'currencyCode', null)}"
+            th:replace="~{fragments/currency-picker :: picker('currencyCode', 'currencyCode', null, false)}"
           ></div>
         </div>
         <div class="field">

@@ -23,9 +23,16 @@ import java.util.List;
  * @param accountId the funding account — fixes the split's currency
  * @param payeeText the payee text (a picked datalist value or a create-new string); nullable
  * @param note transaction-level note; nullable
- * @param total the reference funding magnitude the "remaining" readout counts against (German-
- *     formatted); the committed funding leg is the signed sum of the lines, which may differ (the
- *     "Save and update amount" path)
+ * @param total the reference total the lines subdivide, in the <em>spending</em> currency (German-
+ *     formatted). For a single-currency split this is the funding magnitude the "remaining" readout
+ *     counts against; when cross-currency (§3.8a) it is the spending-currency receipt total the
+ *     lines sum to, alongside {@code fundingTotal} and {@code baseTotal}
+ * @param spendingCurrencyCode the one currency the lines are denominated in (register §3.5, §3.10);
+ *     null/blank means the funding account's currency — the untouched single-currency split
+ * @param fundingTotal the funding-currency total off the account (the frozen funding-leg magnitude,
+ *     §3.8a); blank unless cross-currency
+ * @param baseTotal the base-currency total (the frozen funding-leg base magnitude); blank unless
+ *     cross-currency and neither leg is the book's base currency
  * @param categoryText each line's category text, for re-prefill and the per-line resolve call
  * @param lineCategoryId each line's resolved category id ({@code ""} until resolved)
  * @param lineCategoryType each line's resolved category type ({@code income}/{@code expense},
@@ -46,6 +53,9 @@ public record SplitForm(
     String payeeText,
     String note,
     String total,
+    String spendingCurrencyCode,
+    String fundingTotal,
+    String baseTotal,
     List<String> categoryText,
     List<String> lineCategoryId,
     List<String> lineCategoryType,

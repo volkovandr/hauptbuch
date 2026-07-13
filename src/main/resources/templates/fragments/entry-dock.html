@@ -148,7 +148,7 @@
              changes, carrying the currently-typed value along rather than resetting it. -->
         <th:block th:with="entryAmountText=${edit != null} ? ${edit.amount()}">
           <div
-            th:replace="~{fragments/entry-dock :: fundingAmountField(fields=${amountFields}, amountText=${entryAmountText})}"
+            th:replace="~{fragments/entry-dock :: fundingAmountField(fields=${amountFields}, amountText=${entryAmountText}, oob=false)}"
           ></div>
         </th:block>
 
@@ -190,7 +190,7 @@
         >
           <label class="field__label" for="entry-category-currency">Currency</label>
           <div
-            th:replace="~{fragments/currency-picker :: picker('entry-category-currency', 'categoryCurrencyCode', ${amountFields.categoryCurrencyCode()})}"
+            th:replace="~{fragments/currency-picker :: picker('entry-category-currency', 'categoryCurrencyCode', ${amountFields.categoryCurrencyCode()}, false)}"
           ></div>
         </div>
 
@@ -324,10 +324,10 @@
          change can refresh just its currency label via /register/currency-fields, below, without
          resetting whatever the user has already typed. -->
     <div
-      th:fragment="fundingAmountField(fields, amountText)"
+      th:fragment="fundingAmountField(fields, amountText, oob)"
       id="entry-amount-field"
       class="field field--amount"
-      hx-swap-oob="true"
+      th:attr="hx-swap-oob=${oob} ? 'true'"
     >
       <label
         class="field__label"
@@ -356,10 +356,10 @@
          amount field(s) into #entry-currency-amount. -->
     <th:block th:fragment="currencyFieldsResponse(fields, fundingAmountText)">
       <div
-        th:replace="~{fragments/currency-picker :: picker('entry-category-currency', 'categoryCurrencyCode', ${fields.categoryCurrencyCode()})}"
+        th:replace="~{fragments/currency-picker :: picker('entry-category-currency', 'categoryCurrencyCode', ${fields.categoryCurrencyCode()}, true)}"
       ></div>
       <div
-        th:replace="~{fragments/entry-dock :: fundingAmountField(fields=${fields}, amountText=${fundingAmountText})}"
+        th:replace="~{fragments/entry-dock :: fundingAmountField(fields=${fields}, amountText=${fundingAmountText}, oob=true)}"
       ></div>
       <div th:replace="~{fragments/entry-dock :: extraAmountFields(fields=${fields})}"></div>
     </th:block>

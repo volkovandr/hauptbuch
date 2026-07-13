@@ -22,13 +22,17 @@ import java.util.List;
  * @param accountId the funding account
  * @param payeeText the payee text to prefill; nullable
  * @param note transaction-level note to prefill; nullable
- * @param total the reference funding magnitude (German-formatted) the remaining counts against
+ * @param total the reference total (German-formatted) the remaining counts against — in the
+ *     spending currency when cross-currency (register §3.8a)
+ * @param currency the cross-currency header state (§3.8a/§3.10, plan 7d.2); {@link
+ *     SplitCurrency#singleCurrency} for the untouched single-currency split
  * @param lines the rendered lines
  * @param remaining {@code total − |Σ|}, German-formatted — {@code 0,00} when the lines match the
- *     reference total
+ *     reference total (the spending-currency remaining when cross-currency)
  * @param balanced whether {@code remaining} is zero (drives the Save-button label: Save vs Save and
- *     update amount)
+ *     update amount); one shared rate means every currency's remaining reaches zero together
  * @param netDisplay {@code |Σ|}, German-formatted — the amount that will hit the funding account
+ *     (in the funding currency when cross-currency)
  * @param direction {@code pay} / {@code receive} / {@code none} (the derived funding side)
  * @param error a validation message to show, or {@code null}
  */
@@ -39,6 +43,7 @@ public record SplitPanel(
     String payeeText,
     String note,
     String total,
+    SplitCurrency currency,
     List<SplitLineView> lines,
     String remaining,
     boolean balanced,

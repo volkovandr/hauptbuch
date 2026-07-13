@@ -11,14 +11,25 @@ package volkovandr.hauptbuch.operations;
  * sign this line's contribution in the live remaining/direction readout; empty until the line's
  * category resolves.
  *
+ * <p>Cross-currency (register §3.8a/§3.10, plan stage 7d.2): the typed {@code amount} is the
+ * spending-currency figure on the receipt; its funding-account and base equivalents ({@code
+ * accountAmount}, {@code baseAmount}) are <em>derived</em> from the header's shared rate and shown
+ * <em>read-only</em> beside the line. Both are {@code ""} for a single-currency split (no
+ * conversion, nothing to derive).
+ *
  * @param index the line's zero-based position (drives its resolve target id)
  * @param categoryText the category text to prefill
  * @param categoryId the resolved category id; {@code ""} until resolved
  * @param categoryType the resolved category type ({@code income}/{@code expense}); {@code ""} until
  *     resolved
  * @param amount the typed amount to prefill (a bare magnitude, optionally a leading {@code −}
- *     storno)
+ *     storno), in the spending currency
  * @param note the line's posting-level note; {@code ""} if none
+ * @param accountAmount the derived funding-currency equivalent, read-only; {@code ""} when single-
+ *     currency
+ * @param baseAmount the derived base-currency equivalent, read-only (the last line absorbs the
+ *     rounding residual so the column sums to the base total exactly); {@code ""} when single-
+ *     currency
  */
 public record SplitLineView(
     int index,
@@ -26,4 +37,6 @@ public record SplitLineView(
     String categoryId,
     String categoryType,
     String amount,
-    String note) {}
+    String note,
+    String accountAmount,
+    String baseAmount) {}

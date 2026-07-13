@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.operations;
 
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.accounts.Account;
@@ -37,6 +38,37 @@ class DockAmountFieldsService {
   /** Every currency the book knows, for the category-currency picker's options. */
   List<Currency> currencies() {
     return currencyService.findAll();
+  }
+
+  /**
+   * The split header's base total (register §3.8a, plan stage 7d.2): when the split is
+   * cross-currency with neither leg the base currency and the base field is still blank, pre-fill
+   * it from the carry-forward rate (confirmable); otherwise return the entered value unchanged.
+   * Reuses the same {@link CrossCurrencyFieldsService} as the simple dock, so the proposal is
+   * identical.
+   */
+  String splitBaseTotalPrefill(
+      Long accountId,
+      String spendingCurrencyCode,
+      LocalDate date,
+      String fundingTotal,
+      String baseTotal) {
+    if (accountId == null || spendingCurrencyCode == null || spendingCurrencyCode.isBlank()) {
+      return baseTotal;
+    }
+    String fundingCurrency =
+        accountService.findById(accountId).map(Account::currencyCode).orElse(null);
+    if (fundingCurrency == null || spendingCurrencyCode.equals(fundingCurrency)) {
+      return baseTotal;
+    }
+    CrossCurrencyFields fields =
+        crossCurrencyFieldsService.resolve(
+            new CrossCurrencyFieldsQuery(
+                fundingCurrency, spendingCurrencyCode, date, fundingTotal, null, baseTotal));
+    if (!fields.neitherIsBase() || fields.baseAmountText() == null) {
+      return baseTotal;
+    }
+    return fields.baseAmountText();
   }
 
   /**

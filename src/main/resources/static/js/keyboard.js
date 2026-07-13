@@ -192,23 +192,36 @@
   }
 
   // Sum the split lines' signed contributions (income +, expense − by each line's resolved type)
-  // and write the remaining readout, the pay/receive direction cue, and the Save-button label.
-  // Display-only; the server re-derives all three at Save. No-op when no panel is open.
+  // and write the remaining readout(s), the pay/receive direction cue, and the Save-button label.
+  // For a cross-currency split (register §3.8a) the lines are in the spending currency; the funding
+  // and base equivalents (per line and remaining) are derived live from the header's shared rate,
+  // exposed as data attributes. Display-only; the server re-derives everything at Save. No-op when
+  // no panel is open.
   function updateSplitReadout() {
     const panel = document.querySelector("[data-split-panel]");
     if (!panel) return;
     const totalEl = panel.querySelector("[data-split-total-input]");
     const total = totalEl ? parseGerman(totalEl.value) : 0;
+    const cross = panel.dataset.splitCross === "true";
+    const rateFunding = parseFloat(panel.dataset.splitRateFunding || "0") || 0;
+    const rateBase = parseFloat(panel.dataset.splitRateBase || "0") || 0;
 
     let net = 0;
     panel.querySelectorAll("[data-split-line]").forEach(function (line) {
       const amountEl = line.querySelector("[data-split-amount]");
       const typeEl = line.querySelector('input[name="lineCategoryType"]');
+      const magnitude = amountEl ? Math.abs(parseGerman(amountEl.value)) : 0;
+      // Per-line derived equivalents (read-only) — refreshed as the user types the spending amount.
+      if (cross) {
+        const acctCell = line.querySelector("[data-split-account-cell]");
+        if (acctCell) acctCell.textContent = magnitude ? formatGerman(magnitude * rateFunding) : "";
+        const baseCell = line.querySelector("[data-split-base-cell]");
+        if (baseCell) baseCell.textContent = magnitude ? formatGerman(magnitude * rateBase) : "";
+      }
       if (!amountEl || !amountEl.value.trim()) return;
       const type = typeEl ? typeEl.value : "";
       if (!type) return;
-      const value = parseGerman(amountEl.value);
-      net += type === "income" ? value : -value;
+      net += type === "income" ? parseGerman(amountEl.value) : -parseGerman(amountEl.value);
     });
 
     const magnitude = Math.abs(net);
@@ -216,18 +229,42 @@
     const balanced = Math.abs(remaining) < 0.005;
 
     const remainingEl = panel.querySelector("[data-split-remaining]");
-    if (remainingEl) {
-      remainingEl.textContent = "remaining " + formatGerman(remaining) + (balanced ? " ✓" : "");
-      remainingEl.classList.toggle("is-balanced", balanced);
+    if (remainingEl) remainingEl.classList.toggle("is-balanced", balanced);
+    setText(panel, "[data-split-remaining-value]", formatGerman(remaining));
+    const checkEl = panel.querySelector("[data-split-remaining-check]");
+    if (checkEl) checkEl.style.display = balanced ? "" : "none";
+    if (cross) {
+      setText(panel, "[data-split-remaining-funding]", formatGerman(fundingTotalOf(panel) - magnitude * rateFunding));
+      setText(panel, "[data-split-remaining-base]", formatGerman(baseTotalOf(panel) - magnitude * rateBase));
     }
+
     const directionEl = panel.querySelector("[data-split-direction]");
     if (directionEl) {
-      if (net < -0.005) directionEl.textContent = "You will pay " + formatGerman(magnitude);
-      else if (net > 0.005) directionEl.textContent = "You will receive " + formatGerman(magnitude);
+      const shown = cross ? magnitude * rateFunding : magnitude;
+      const currency = panel.dataset.splitFundingCurrency;
+      const code = currency ? " " + currency : "";
+      if (net < -0.005) directionEl.textContent = "You will pay " + formatGerman(shown) + code;
+      else if (net > 0.005)
+        directionEl.textContent = "You will receive " + formatGerman(shown) + code;
       else directionEl.textContent = "No net payment";
     }
     const saveEl = panel.querySelector("[data-split-save]");
     if (saveEl) saveEl.textContent = balanced ? "Save" : "Save and update amount";
+  }
+
+  function setText(panel, selector, text) {
+    const el = panel.querySelector(selector);
+    if (el) el.textContent = text;
+  }
+
+  function fundingTotalOf(panel) {
+    const el = panel.querySelector('input[name="fundingTotal"]');
+    return el ? parseGerman(el.value) : 0;
+  }
+
+  function baseTotalOf(panel) {
+    const el = panel.querySelector('input[name="baseTotal"]');
+    return el ? parseGerman(el.value) : 0;
   }
 
   // ── Split focus management (register §3.10) ──────────────────────────────────
