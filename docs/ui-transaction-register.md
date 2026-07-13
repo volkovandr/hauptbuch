@@ -20,6 +20,12 @@
 > pinning them now would be premature.
 
 **Changelog**
+- **v0.4 (2026-07-13):** Redesigned **cross-currency splits** (§3.8a, §3.10). A split spans **at most
+  two currencies** (funding + spending), chosen **once at the header** with one shared rate — not the
+  per-line currency of v0.3. Each line is a **single spending-currency amount**; its account and base
+  equivalents are derived and shown read-only per line; only **base** sums to zero, and `remaining` is
+  shown in every currency in play (all converge to zero together). Overturns v0.3's "same rule applies
+  per split line (own native + base)".
 - **v0.3 (2026-07-11):** Added the **category-currency selector** (§3.5): the leaf currency defaults
   to the paying account's currency but is selectable, and overriding it declares a cross-currency
   purchase. Added **cross-currency amount entry** (§3.8a): one amount field per distinct currency
@@ -373,9 +379,16 @@ was overridden, §3.5, or a transfer targets a differently-denominated account),
   balance in base — only possible when reality over-determines them — the save is **refused with the
   base gap shown**, and the user adds a manual `FX gain/loss` line to close it.
 
-In **splits** the same rule applies **per line**: a line whose currency differs carries its own native
-amount *and* a base amount, and it is the **base amounts** that must sum to zero across all legs
-("the rest" closes the gap in base, not native).
+In **splits** the currencies are fixed **once, at the header** — never per line. A single receipt is
+one merchant billing one currency, paid from one account at one rate, so a split spans **at most two
+currencies** (funding + spending) with a **single shared rate**; the header carries the same 1/2/3
+total amount fields as a single line (above). Each split **line** then takes a **single amount** — the
+spending-currency figure on the receipt — and its account-currency and base equivalents are **derived**
+from the shared rate and shown **read-only per line**. Only the **base** amounts sum to zero in the
+ledger (the legs are in different currencies); the panel shows `remaining` in **every currency in
+play**, all reaching zero together. "The rest" defaulting extends to base, so the last line absorbs the
+rounding residual and `Σ base_amount = 0` holds exactly. A receipt that genuinely mixed currencies
+would be two transactions.
 
 ### 3.9 The autofill rule (the core behaviour)
 
@@ -402,6 +415,10 @@ The decision that fixes Money's most annoying entry pattern:
   it.
 - **Each line carries** category + optional tags (§3.6) + optional beneficiary (`→ Person`) +
   optional note (§3.7).
+- **Cross-currency splits carry their currencies at the header, not per line** (§3.8a): the funding
+  account and the one spending-currency selector fix both currencies and the shared rate once; each
+  line is a single spending-currency amount with its account-currency and base equivalents derived and
+  shown read-only per line, and a `remaining` readout per currency in play (all reach zero together).
 - **Result visible without extra clicks:** on commit the register's Category cell shows the **top
   one-to-three** categories (e.g. `Food · → Max`).
 

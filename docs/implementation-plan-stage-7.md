@@ -118,8 +118,8 @@ magnitude; non-simple shapes (transfer/opening/cross-currency) stay refused.
 being **removed**, and adding the category-currency selector grew 7d well past a single sub-stage. It
 is now **four ordered packages**, each ending green and demoable. 7d.0 is engine work; 7d.1–7d.3 are
 entry UX over the (post-7d.0) engine. Packages stay **separate, not merged**: 7d.1 builds and
-de-risks the whole multi-amount machinery, so 7d.2 is a small per-line delta, but its
-base-across-lines balancing is a distinct correctness surface deserving its own tests (plan §0).
+de-risks the whole multi-amount machinery, which 7d.2 reuses at the header while adding
+subdivision-in-base across lines — a distinct correctness surface deserving its own tests (plan §0).
 
 ### 7d.0 — Retire `FX gain/loss` auto-booking (engine)
 
@@ -171,17 +171,31 @@ threads; `check` green.
 
 ### 7d.2 — Cross-currency in splits *(was «b»)*
 
-**Goal:** the same selector + amount fields **per split line**, balancing in base across all legs.
+**Redesigned 2026-07-13 (owner-decided).** A split is one receipt → one merchant → one billing
+currency → one rate, so it spans **at most two currencies** (funding + spending), fixed **once at the
+header**, never per line. This retires the earlier per-line-currency design (per-line selector +
+per-line base amount), which modelled a case that can't occur for a single receipt and produced an
+incoherent readout (ambiguous total currency, mixed-currency `remaining`, dead base readout).
 
-- Each split line carries its own **currency selector**; a differing line shows **native + base**
-  amounts. It is the **base amounts** that must sum to zero across all legs — "the rest" closes the
-  gap **in base**, not native (extends the 7c split-panel balancing).
-- Reuses the 7d.1 widget wholesale; the new surface is the **N-leg base balancing** and its edit-load.
-- **TDD:** the base-remaining/"the rest" defaulting and the cross-line base sum-to-zero in the unit
-  tier; open→add mixed-currency lines→resolve→save in MockMvc acceptance.
+**Goal:** subdivide an already-cross-currency single-line entry (7d.1) across categories, with the
+currencies and rate set once at the header and each line adding one spending-currency amount.
 
-**Done when:** a split funded from one account into lines of ≥2 currencies balances in base with a
-live base-`remaining` readout, commits, and re-opens for edit; `check` green.
+- **Currencies at the header, reusing 7d.1 wholesale:** the funding account + the one §3.5 spending
+  selector fix both currencies and the shared rate; the header shows 7d.1's 1/2/3 total amount fields
+  unchanged. The split panel keeps **no** per-line currency machinery.
+- **One amount per line:** each line takes a single amount in the **spending** currency (the receipt
+  figure); its **account-currency and base equivalents are derived** from the shared rate and shown
+  **read-only per line** (register §3.8a/§3.10).
+- **Balance in base, display in all:** only **base** sums to zero in the ledger; the panel shows a
+  live `remaining` in **every currency in play** (all reach zero together). "The rest" defaulting
+  extends to base, so the last line absorbs the rounding residual and `Σ base_amount = 0` holds
+  exactly.
+- **TDD:** the per-line derived-share allocation + the cross-line base sum-to-zero incl. the rounding
+  residual in the unit tier; open→add lines→save (three-currency case) in MockMvc acceptance.
+
+**Done when:** a split funded from a **non-base** account into a **non-base** spending currency (three
+currencies) subdivides across ≥2 lines, shows `remaining` in all three converging to zero together,
+commits with `Σ base_amount = 0` and frozen `base_amount`, and re-opens for edit; `check` green.
 
 ### 7d.3 — Transfers, single + split *(was «c»)*
 
