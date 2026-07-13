@@ -121,7 +121,7 @@ entry UX over the (post-7d.0) engine. Packages stay **separate, not merged**: 7d
 de-risks the whole multi-amount machinery, which 7d.2 reuses at the header while adding
 subdivision-in-base across lines — a distinct correctness surface deserving its own tests (plan §0).
 
-### 7d.0 — Retire `FX gain/loss` auto-booking (engine)
+### 7d.0 — Retire `FX gain/loss` auto-booking (engine) ✅ **complete**
 
 **Goal:** the engine stops inventing a residual leg; a cross-currency transaction must balance in
 base **from its entered legs**, and an unbalanced one is **refused** (data-model §6.3).
@@ -146,7 +146,7 @@ base **from its entered legs**, and an unbalanced one is **refused** (data-model
 par/base-balanced conversion still records; `FX gain/loss` is no longer seeded or auto-provisioned
 (a user category created on demand); `check` green.
 
-### 7d.1 — Category-currency selector + cross-currency single-line entry *(was «a»)*
+### 7d.1 — Category-currency selector + cross-currency single-line entry *(was «a»)* ✅ **complete**
 
 **Goal:** a plain income/expense can be entered in a currency other than the paying account's,
 producing a correct cross-currency transaction — the whole multi-amount machinery, end to end.
@@ -169,7 +169,7 @@ producing a correct cross-currency transaction — the whole multi-amount machin
 both enter from the dock, book balanced with frozen `base_amount`, and render in their native
 threads; `check` green.
 
-### 7d.2 — Cross-currency in splits *(was «b»)*
+### 7d.2 — Cross-currency in splits *(was «b»)* ✅ **complete**
 
 **Redesigned 2026-07-13 (owner-decided).** A split is one receipt → one merchant → one billing
 currency → one rate, so it spans **at most two currencies** (funding + spending), fixed **once at the

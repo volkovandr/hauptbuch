@@ -229,8 +229,8 @@ piece lands (Q-UI-2 decided piecewise, never retrofitted):
   `voidTransaction` from the dock, the inline split panel with "the rest" defaulting, notes at both
   levels.
 - **7d — Cross-currency entry.** Re-scoped into four packages (2026-07-11): **7d.0** retire FX
-  auto-booking (engine); **7d.1** category-currency selector + cross-currency single-line entry;
-  **7d.2** cross-currency in splits; **7d.3** transfers (single + split). Detail in the stage-7 plan.
+  auto-booking (engine) ✅; **7d.1** category-currency selector + cross-currency single-line entry ✅;
+  **7d.2** cross-currency in splits ✅; **7d.3** transfers (single + split). Detail in the stage-7 plan.
 - **7e — Tags.** `tag`/`posting_tag` migration (data-model §10, owned by `categories`), the
   keyboard-first chip field, split inheritance, register display.
 
