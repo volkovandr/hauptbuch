@@ -199,6 +199,12 @@ commits with `Σ base_amount = 0` and frozen `base_amount`, and re-opens for edi
 
 ### 7d.3 — Transfers, single + split *(was «c»)*
 
+**Progress (2026-07-13):** **single-line** transfers are done and owner-confirmed — same- and
+cross-currency, `To →`/`From ←` routing the counter-leg to a real account, the counterpart-currency
+reveal, and the register Category cell showing the other account with a `→`/`←` direction arrow
+(this replaced the old `⇄` and fixed the empty-cell bug for a transfer between two viewed accounts).
+**Split transfers remain** — the stage stays open until they land.
+
 **Goal:** selecting **`To → <account>`** / **`From ← <account>`** in the Category field routes the
 counter-leg to a **real account** instead of a category — making transfers enterable at last. Enabled
 for **single-line and split in one package** (the routing is the same act in both).

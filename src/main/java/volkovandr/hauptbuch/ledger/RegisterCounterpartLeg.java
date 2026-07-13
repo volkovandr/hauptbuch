@@ -4,10 +4,11 @@ import java.math.BigDecimal;
 
 /**
  * A sibling leg of a register row's transaction — the raw material for the Category cell (register
- * §2.6). For a transaction on screen, its counterpart legs are every leg <em>other than</em> the
- * viewed one: the income/expense legs shown as category names, and another of your own accounts
- * shown as {@code ⇄ Account} (a transfer). The service turns a transaction's counterpart legs into
- * the summarised cell ("biggest wins · +n"); the SQL only fetches them.
+ * §2.6). A row's counterpart legs are every leg <em>other than</em> the row's own account: the
+ * income/expense legs shown as category names, and another of your own accounts shown as a
+ * direction-arrowed transfer ({@code → Account} / {@code ← Account}). The renderer turns a row's
+ * counterpart legs into the summarised cell ("biggest wins · +n"); the SQL fetches every leg and
+ * the renderer drops the row's own.
  *
  * <p>Per-person debt legs (asset accounts with an owner) get their arrow-chip treatment at stage 8;
  * at 7a a debt leg simply renders like any other account leg.

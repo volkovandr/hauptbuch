@@ -18,7 +18,7 @@ import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
 /**
  * SQL-logic tier (plan §1.5): the register's two queries on {@link RegisterRepository} — {@link
  * RegisterRepository#findRows} (a windowed per-account running balance over multi-table joins with
- * three interacting filters) and {@link RegisterRepository#findCounterpartLegs} (the sibling-leg
+ * three interacting filters) and {@link RegisterRepository#findTransactionLegs} (the sibling-leg
  * lookup, ordered by magnitude, feeding the Category cell). Both are logic that lives in the SQL,
  * so they are tested here rather than as row-mapping round-trips (CLAUDE.md §6).
  *
@@ -345,10 +345,10 @@ class RegisterSqlLogicTest {
     assertThat(rows).singleElement().extracting(RegisterRow::lifecycle).isEqualTo("pending_review");
   }
 
-  // ── findCounterpartLegs: the Category-cell material ───────────────────────
+  // ── findTransactionLegs: the Category-cell material ───────────────────────
 
   @Test
-  void counterpartLegsExcludeTheViewedLegAndRankByMagnitude() {
+  void transactionLegsReturnEveryLegRankedByMagnitude() {
     long cash = insertAccount(CASH, ASSET, EUR, 210);
     long food = insertAccount(FOOD, EXPENSE, EUR, null);
     long fun = insertAccount("Fun", EXPENSE, EUR, null);
@@ -358,53 +358,40 @@ class RegisterSqlLogicTest {
     insertPosting(txn, food, "21.50");
     insertPosting(txn, fun, TEN);
 
-    List<RegisterCounterpartLeg> legs =
-        registerRepository.findCounterpartLegs(List.of(txn), List.of(cash));
+    List<RegisterCounterpartLeg> legs = registerRepository.findTransactionLegs(List.of(txn));
 
-    // The Cash (viewed) leg is excluded; the two category legs come back biggest-first.
+    // Every leg comes back biggest-magnitude first — the renderer, not the SQL, drops each row's
+    // own
+    // leg (register §2.6): Cash (31,50), Food (21,50), Fun (10,00).
     assertThat(legs)
         .extracting(RegisterCounterpartLeg::accountName, RegisterCounterpartLeg::accountType)
-        .containsExactly(tuple(FOOD, EXPENSE), tuple("Fun", EXPENSE));
+        .containsExactly(tuple(CASH, ASSET), tuple(FOOD, EXPENSE), tuple("Fun", EXPENSE));
   }
 
   @Test
-  void counterpartLegsOfTransferAreTheOtherOwnAccount() {
+  void transactionLegsOfTransferReturnBothOwnAccounts() {
     long cash = insertAccount(CASH, ASSET, EUR, 210);
     long giro = insertAccount(GIRO, ASSET, EUR, 30);
     long txn = insertTxn(JAN_1, null, "confirmed");
     insertPosting(txn, giro, MINUS_200);
     insertPosting(txn, cash, "200.00");
 
-    // Viewing only Cash: the counterpart is the Giro leg (a transfer → ⇄ Giro in the cell).
-    List<RegisterCounterpartLeg> legs =
-        registerRepository.findCounterpartLegs(List.of(txn), List.of(cash));
+    // A transfer's two own-account legs both come back — so each row can show the other one, even
+    // when both accounts are viewed (plan stage 7d.3, the empty-Category-cell fix).
+    List<RegisterCounterpartLeg> legs = registerRepository.findTransactionLegs(List.of(txn));
 
     assertThat(legs)
-        .singleElement()
-        .extracting(RegisterCounterpartLeg::accountName, RegisterCounterpartLeg::accountType)
-        .containsExactly(GIRO, ASSET);
+        .extracting(RegisterCounterpartLeg::accountName)
+        .containsExactlyInAnyOrder(CASH, GIRO);
   }
 
   @Test
-  void counterpartLegsExcludeEveryViewedAccountSoTransferHasNoCategoryLeg() {
-    long cash = insertAccount(CASH, ASSET, EUR, 210);
-    long giro = insertAccount(GIRO, ASSET, EUR, 30);
-    long txn = insertTxn(JAN_1, null, "confirmed");
-    insertPosting(txn, giro, MINUS_200);
-    insertPosting(txn, cash, "200.00");
-
-    // Both accounts viewed: neither leg is a "counterpart" — both are rows in their own right.
-    assertThat(registerRepository.findCounterpartLegs(List.of(txn), List.of(cash, giro))).isEmpty();
+  void transactionLegsOfNoTransactionsIsEmpty() {
+    assertThat(registerRepository.findTransactionLegs(List.of())).isEmpty();
   }
 
   @Test
-  void counterpartLegsOfNoTransactionsIsEmpty() {
-    long cash = insertAccount(CASH, ASSET, EUR, 210);
-    assertThat(registerRepository.findCounterpartLegs(List.of(), List.of(cash))).isEmpty();
-  }
-
-  @Test
-  void counterpartLegOnAnAutoManagedCurrencyLeafRollsUpToItsSemanticParent() {
+  void transactionLegOnAnAutoManagedCurrencyLeafRollsUpToItsSemanticParent() {
     // A cross-currency spend routes onto a hidden per-currency leaf (data-model §6.5, plan stage
     // 7d.1); the Category cell must show the semantic parent, never the leaf's own bare-code name.
     long cash = insertAccount(CASH, ASSET, EUR, 210);
@@ -414,10 +401,12 @@ class RegisterSqlLogicTest {
     insertPosting(txn, cash, "-9.10");
     insertPosting(txn, foodChf, TEN);
 
-    List<RegisterCounterpartLeg> legs =
-        registerRepository.findCounterpartLegs(List.of(txn), List.of(cash));
+    List<RegisterCounterpartLeg> legs = registerRepository.findTransactionLegs(List.of(txn));
 
+    // The foodChf leg rolls up to Food; the Cash leg is returned as-is (own accounts are never
+    // currency leaves).
     assertThat(legs)
+        .filteredOn(leg -> !CASH.equals(leg.accountName()))
         .singleElement()
         .satisfies(
             leg -> {

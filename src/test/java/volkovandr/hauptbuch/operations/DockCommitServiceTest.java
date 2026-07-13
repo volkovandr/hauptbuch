@@ -25,6 +25,7 @@ import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.PostingDraft;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.ledger.TransactionDraft;
+import volkovandr.hauptbuch.ledger.TransferTarget;
 
 /**
  * Unit tier (plan §1.5): the dock commit path's decision logic with the engine and its
@@ -44,6 +45,9 @@ class DockCommitServiceTest {
   private static final long CASH_ID = 1L;
   private static final long CATEGORY_ID = 2L;
   private static final long LEAF_ID = 3L;
+  private static final long VISA_ID = 4L;
+  private static final String TO = TransferTarget.Direction.TO.name();
+  private static final String FROM = TransferTarget.Direction.FROM.name();
   private static final LocalDate DATE = LocalDate.of(2026, 2, 1);
 
   @Mock private AccountService accountService;
@@ -67,7 +71,7 @@ class DockCommitServiceTest {
 
   private static DockEntry simpleEntry(String amount) {
     return new DockEntry(
-        null, DATE, CASH_ID, 42L, null, CATEGORY_ID, null, amount, null, null, "lunch");
+        null, DATE, CASH_ID, 42L, null, CATEGORY_ID, null, amount, null, null, "lunch", null);
   }
 
   // ── sign resolution (register §3.8) ─────────────────────────────────────────
@@ -160,6 +164,7 @@ class DockCommitServiceTest {
             "10",
             null,
             null,
+            null,
             null);
     dockCommitService.commit(entry);
 
@@ -189,7 +194,8 @@ class DockCommitServiceTest {
     when(ledgerService.recordTransaction(any())).thenReturn(1L);
 
     DockEntry entry =
-        new DockEntry(null, DATE, CASH_ID, null, null, CATEGORY_ID, CHF, "9,10", "10", null, null);
+        new DockEntry(
+            null, DATE, CASH_ID, null, null, CATEGORY_ID, CHF, "9,10", "10", null, null, null);
     dockCommitService.commit(entry);
 
     verify(currencyLeafService).resolveCurrencyLeaf(CATEGORY_ID, CHF);
@@ -208,7 +214,8 @@ class DockCommitServiceTest {
     when(ledgerService.recordTransaction(any())).thenReturn(1L);
 
     DockEntry entry =
-        new DockEntry(null, DATE, CASH_ID, null, null, CATEGORY_ID, CHF, "9,10", "10", null, null);
+        new DockEntry(
+            null, DATE, CASH_ID, null, null, CATEGORY_ID, CHF, "9,10", "10", null, null, null);
     dockCommitService.commit(entry);
 
     ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
@@ -236,7 +243,8 @@ class DockCommitServiceTest {
     when(ledgerService.recordTransaction(any())).thenReturn(1L);
 
     DockEntry entry =
-        new DockEntry(null, DATE, CASH_ID, null, null, CATEGORY_ID, USD, "9", "10", "8,50", null);
+        new DockEntry(
+            null, DATE, CASH_ID, null, null, CATEGORY_ID, USD, "9", "10", "8,50", null, null);
     dockCommitService.commit(entry);
 
     ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
@@ -258,7 +266,8 @@ class DockCommitServiceTest {
     when(payeeService.resolvePayee(null, null)).thenReturn(null);
 
     DockEntry entry =
-        new DockEntry(null, DATE, CASH_ID, null, null, CATEGORY_ID, CHF, "9,10", null, null, null);
+        new DockEntry(
+            null, DATE, CASH_ID, null, null, CATEGORY_ID, CHF, "9,10", null, null, null, null);
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockCommitService.commit(entry))
         .withMessageContaining("CHF");
@@ -274,7 +283,8 @@ class DockCommitServiceTest {
     when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
 
     DockEntry entry =
-        new DockEntry(null, DATE, CASH_ID, null, null, CATEGORY_ID, USD, "9", "10", null, null);
+        new DockEntry(
+            null, DATE, CASH_ID, null, null, CATEGORY_ID, USD, "9", "10", null, null, null);
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockCommitService.commit(entry))
         .withMessageContaining(EUR);
@@ -290,9 +300,120 @@ class DockCommitServiceTest {
     when(settingsService.baseCurrency()).thenReturn(Optional.empty());
 
     DockEntry entry =
-        new DockEntry(null, DATE, CASH_ID, null, null, CATEGORY_ID, CHF, "9,10", "10", null, null);
+        new DockEntry(
+            null, DATE, CASH_ID, null, null, CATEGORY_ID, CHF, "9,10", "10", null, null, null);
     assertThatExceptionOfType(IllegalStateException.class)
         .isThrownBy(() -> dockCommitService.commit(entry));
+  }
+
+  // ── transfers (register §3.5/§3.8, plan stage 7d.3) ──────────────────────────
+
+  private static DockEntry transferEntry(
+      String amount, String direction, String counterpartAmount, String baseAmount) {
+    return new DockEntry(
+        null,
+        DATE,
+        CASH_ID,
+        null,
+        null,
+        VISA_ID,
+        null,
+        amount,
+        counterpartAmount,
+        baseAmount,
+        null,
+        direction);
+  }
+
+  @Test
+  void transferToAnotherAccountIsAnOutflowFromTheFundingLeg() {
+    Account cash = account(CASH_ID, "asset", EUR);
+    Account visa = account(VISA_ID, "liability", EUR);
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(cash));
+    when(accountService.findById(VISA_ID)).thenReturn(Optional.of(visa));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(1L);
+
+    dockCommitService.commit(transferEntry("20", TO, null, null));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    // Cash −20 / Visa +20 — a same-currency transfer routes the counter-leg to the real account,
+    // not a category leaf (register §3.8). The currency-leaf router is never consulted.
+    assertThat(legs).hasSize(2);
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("-20");
+    assertThat(leg(legs, VISA_ID)).isEqualByComparingTo("20");
+    assertThat(baseAmount(legs, CASH_ID)).isNull();
+    verify(currencyLeafService, never()).resolveCurrencyLeaf(any(Long.class), any());
+  }
+
+  @Test
+  void transferFromAnotherAccountIsAnInflowToTheFundingLeg() {
+    Account cash = account(CASH_ID, "asset", EUR);
+    Account visa = account(VISA_ID, "asset", EUR);
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(cash));
+    when(accountService.findById(VISA_ID)).thenReturn(Optional.of(visa));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(1L);
+
+    dockCommitService.commit(transferEntry("20", FROM, null, null));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    // From ← Visa: funds enter the funding account (Cash +20 / Visa −20).
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("20");
+    assertThat(leg(legs, VISA_ID)).isEqualByComparingTo("-20");
+  }
+
+  @Test
+  void crossCurrencyTransferBalancesInBaseFromTheEnteredLegs() {
+    // EUR (base) Cash → CHF Visa: one foreign side, so the funding leg's own amount is both legs'
+    // base_amount (register §3.8a) — no separate base field. Cash −20 (base −20), Visa +25 CHF
+    // (base +20).
+    Account cash = account(CASH_ID, "asset", EUR);
+    Account visa = account(VISA_ID, "liability", CHF);
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(cash));
+    when(accountService.findById(VISA_ID)).thenReturn(Optional.of(visa));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
+    when(ledgerService.recordTransaction(any())).thenReturn(1L);
+
+    dockCommitService.commit(transferEntry("20", TO, "25", null));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("-20");
+    assertThat(leg(legs, VISA_ID)).isEqualByComparingTo("25");
+    assertThat(baseAmount(legs, CASH_ID)).isEqualByComparingTo("-20");
+    assertThat(baseAmount(legs, VISA_ID)).isEqualByComparingTo("20");
+  }
+
+  @Test
+  void transferToTheSameAccountIsRejected() {
+    Account cash = account(CASH_ID, "asset", EUR);
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(cash));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+
+    DockEntry entry =
+        new DockEntry(null, DATE, CASH_ID, null, null, CASH_ID, null, "20", null, null, null, TO);
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> dockCommitService.commit(entry))
+        .withMessageContaining("two different accounts");
+  }
+
+  @Test
+  void transferToAnUnknownCounterpartAccountIsRejected() {
+    Account cash = account(CASH_ID, "asset", EUR);
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(cash));
+    when(accountService.findById(VISA_ID)).thenReturn(Optional.empty());
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> dockCommitService.commit(transferEntry("20", TO, null, null)))
+        .withMessageContaining("No account");
   }
 
   // ── edit & void (register §3.1) ───────────────────────────────────────────────
@@ -308,7 +429,8 @@ class DockCommitServiceTest {
     // A non-null transactionId means edit mode: editTransaction is called, recordTransaction is
     // not.
     DockEntry entry =
-        new DockEntry(55L, DATE, CASH_ID, null, null, CATEGORY_ID, null, "30", null, null, null);
+        new DockEntry(
+            55L, DATE, CASH_ID, null, null, CATEGORY_ID, null, "30", null, null, null, null);
     long txnId = dockCommitService.commit(entry);
 
     assertThat(txnId).isEqualTo(55L);

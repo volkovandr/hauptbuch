@@ -61,15 +61,20 @@ class RegisterRowRendererTest {
   }
 
   private RegisterCounterpartLeg leg(long txnId, String name, String type, String amount) {
-    return new RegisterCounterpartLeg(txnId, 99L, name, type, new BigDecimal(amount));
+    return leg(txnId, 99L, name, type, amount);
+  }
+
+  private RegisterCounterpartLeg leg(
+      long txnId, long accountId, String name, String type, String amount) {
+    return new RegisterCounterpartLeg(txnId, accountId, name, type, new BigDecimal(amount));
   }
 
   private void stubLegs(RegisterCounterpartLeg... legs) {
-    when(registerRepository.findCounterpartLegs(anyList(), anyList())).thenReturn(List.of(legs));
+    when(registerRepository.findTransactionLegs(anyList())).thenReturn(List.of(legs));
   }
 
   private RegisterRowView renderOne(RegisterRow row) {
-    return renderer.render(List.of(row), List.of(CASH)).get(0);
+    return renderer.render(List.of(row)).get(0);
   }
 
   // ── Category cell ─────────────────────────────────────────────────────────
@@ -80,7 +85,7 @@ class RegisterRowRendererTest {
 
     RegisterRowView view = renderOne(row(1L, 100L, CASH, EUR, "-20.00"));
 
-    assertThat(view.category().chips()).containsExactly(new CategoryChip("Food", false));
+    assertThat(view.category().chips()).containsExactly(new CategoryChip("Food", false, false));
     assertThat(view.category().overflow()).isZero();
   }
 
@@ -102,12 +107,34 @@ class RegisterRowRendererTest {
   }
 
   @Test
-  void ownAccountCounterpartRendersAsTransfer() {
+  void ownAccountCounterpartRendersAsInboundTransfer() {
+    // Cash +200 came from Giro (Giro −200, a credit) → the chip is an inbound transfer, ← Giro.
     stubLegs(leg(100L, "Giro", ASSET, "-200.00"));
 
     RegisterRowView view = renderOne(row(1L, 100L, CASH, EUR, "200.00"));
 
-    assertThat(view.category().chips()).containsExactly(new CategoryChip("Giro", true));
+    assertThat(view.category().chips()).containsExactly(new CategoryChip("Giro", true, true));
+  }
+
+  @Test
+  void transferBetweenTwoViewedAccountsShowsEachOtherWithOppositeArrows() {
+    // A transfer Cash −20 / Giro +20, both accounts in view: two rows, each showing the other leg
+    // (register §2.6, plan stage 7d.3) — the bug this fixes left both Category cells empty because
+    // the counterpart was a viewed account.
+    RegisterCounterpartLeg cashLeg = leg(100L, CASH, "Cash", ASSET, "-20.00");
+    RegisterCounterpartLeg giroLeg = leg(100L, GIRO, "Giro", ASSET, "20.00");
+    when(registerRepository.findTransactionLegs(anyList())).thenReturn(List.of(cashLeg, giroLeg));
+
+    List<RegisterRowView> views =
+        renderer.render(
+            List.of(row(1L, 100L, CASH, EUR, "-20.00"), row(2L, 100L, GIRO, EUR, "20.00")));
+
+    // Cash's row: money went out to Giro → → Giro (outbound). Giro's row: money came from Cash →
+    // ← Cash (inbound).
+    assertThat(views.get(0).category().chips())
+        .containsExactly(new CategoryChip("Giro", true, false));
+    assertThat(views.get(1).category().chips())
+        .containsExactly(new CategoryChip("Cash", true, true));
   }
 
   // ── Formatting, colour, lifecycle ─────────────────────────────────────────
@@ -171,7 +198,7 @@ class RegisterRowRendererTest {
             row(2L, 101L, GIRO, EUR, "-40.00"),
             row(3L, 102L, CASH, EUR, "-5.00"));
 
-    List<RegisterRowView> views = renderer.render(rows, List.of(CASH, GIRO));
+    List<RegisterRowView> views = renderer.render(rows);
 
     // Cash: 1st light, 2nd dark. Giro: 1st light. Zebra is per-thread, so the middle (Giro) row
     // being light does not shift Cash's alternation.

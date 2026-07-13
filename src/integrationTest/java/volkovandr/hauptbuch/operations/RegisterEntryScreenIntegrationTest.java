@@ -7,6 +7,7 @@ import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
@@ -367,6 +368,144 @@ class RegisterEntryScreenIntegrationTest {
         // The dock re-renders carrying the message; the rows body is not swapped.
         .andExpect(content().string(containsString("id=\"entry-dock\"")))
         .andExpect(content().string(not(containsString("id=\"register-rows\""))));
+  }
+
+  // ── transfers, single line (plan stage 7d.3, register §3.5/§3.8) ─────────────
+
+  @Test
+  void registerOffersTransferTargetsInTheCategoryDatalist() throws Exception {
+    openAccount("Cash", "100");
+    openAccount("Visa", "0");
+
+    mockMvc
+        .perform(get(REGISTER_PATH))
+        .andExpect(status().isOk())
+        // Every own account contributes a To → and From ← option to the Category datalist.
+        .andExpect(content().string(containsString("value=\"To → Visa\"")))
+        .andExpect(content().string(containsString("value=\"From ← Visa\"")));
+  }
+
+  @Test
+  void resolvingTransferTargetReturnsAccountIdDirectionAndRevealTrigger() throws Exception {
+    openAccount("Cash", "100");
+    long visa = openAccount("Visa", "0");
+
+    mockMvc
+        .perform(post("/categories/resolve").param("categoryText", "To → Visa"))
+        .andExpect(status().isOk())
+        // The counter-leg is the real account, carried in the same hidden id the commit reads, plus
+        // the direction it signs the funding leg by.
+        .andExpect(content().string(containsString("name=\"categoryId\"")))
+        .andExpect(content().string(containsString("value=\"" + visa + "\"")))
+        .andExpect(content().string(containsString("name=\"transferDirection\"")))
+        .andExpect(content().string(containsString("value=\"TO\"")))
+        // The reveal trigger so the dock recomputes its amount fields for a cross-currency
+        // transfer — after-swap, so the recompute serialises the form with the resolved
+        // id/direction already in place.
+        .andExpect(header().string("HX-Trigger-After-Swap", "counterpart-resolved"));
+  }
+
+  @Test
+  void resolvingTransferTargetWithUnknownAccountReturnsErrorAndNoId() throws Exception {
+    mockMvc
+        .perform(post("/categories/resolve").param("categoryText", "To → Nowhere"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("No account named Nowhere")))
+        .andExpect(content().string(containsString("value=\"\"")))
+        .andExpect(content().string(not(containsString("name=\"transferDirection\""))));
+  }
+
+  @Test
+  void sameCurrencyTransferBooksBothLegsAsTwoThreads() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long visa = openAccount("Visa", "0");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(visa))
+                .param("transferDirection", "TO")
+                .param("viewAccountId", String.valueOf(cash))
+                .param("viewAccountId", String.valueOf(visa)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"register-rows\"")))
+        // Cash −20 (500 → 480), Visa +20 (0 → 20): two rows, one per leg (register §2.6).
+        .andExpect(content().string(containsString("480,00")))
+        .andExpect(content().string(containsString("20,00")))
+        // The Category cell shows the counterpart with a direction arrow (plan stage 7d.3): Cash's
+        // row → Visa (outbound), Visa's row ← Cash (inbound). Both arrows appear.
+        .andExpect(content().string(containsString("→ ")))
+        .andExpect(content().string(containsString("← ")));
+    assertThat(spendTransactionCount()).isEqualTo(1L);
+  }
+
+  @Test
+  void fromDirectionTransferIsAnInflowToTheFundingAccount() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long visa = openAccount("Visa", "200");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(visa))
+                .param("transferDirection", "FROM")
+                .param("viewAccountId", String.valueOf(cash))
+                .param("viewAccountId", String.valueOf(visa)))
+        .andExpect(status().isOk())
+        // From ← Visa: Cash +20 (500 → 520), Visa −20 (200 → 180).
+        .andExpect(content().string(containsString("520,00")))
+        .andExpect(content().string(containsString("180,00")));
+  }
+
+  @Test
+  void crossCurrencyTransferRevealsTheCounterpartAmountField() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long visaChf = openAccount("Visa CHF", "CHF", "0");
+
+    // The reveal the counterpart-resolved trigger fires: the counterpart currency comes from the
+    // resolved account (CHF), not the currency selector.
+    mockMvc
+        .perform(
+            post("/register/currency-fields")
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(visaChf))
+                .param("transferDirection", "TO"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"categoryAmount\"")))
+        .andExpect(content().string(containsString("Amount (CHF)")));
+  }
+
+  @Test
+  void crossCurrencyTransferBooksBalancedInBase() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long visaChf = openAccount("Visa CHF", "CHF", "0");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(visaChf))
+                .param("transferDirection", "TO")
+                .param("categoryAmount", "25")
+                .param("viewAccountId", String.valueOf(cash))
+                .param("viewAccountId", String.valueOf(visaChf)))
+        .andExpect(status().isOk())
+        // Cash EUR (base) drops by the entered EUR amount (500 − 20 = 480,00).
+        .andExpect(content().string(containsString("480,00")));
+
+    // One balanced cross-currency transfer: Σ base_amount = 0 across the frozen legs.
+    assertThat(spendTransactionCount()).isEqualTo(1L);
+    assertThat(baseAmountSum()).isEqualByComparingTo(BigDecimal.ZERO);
   }
 
   // ── edit mode & void (plan stage 7c, register §3.1) ──────────────────────────

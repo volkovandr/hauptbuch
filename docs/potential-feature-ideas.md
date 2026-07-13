@@ -54,6 +54,12 @@ from the button, and the type (expense or income) from the parent category as we
   it would appear the first one alphabetically. Secondly, when I have a bunch of receipts in my wallet, they usually are from the same day, or close to each other.
 * The register should get another column - Base amount (in base currency), displaying it should be optional.
 * The currency of the expense/income should be pre-selected based on the Payee. Usually we pay in a given shop in the same currency.
+* The category selector should present the categories in a tree-like view (with indentation) so it is clear which subcategory
+  belongs to which parent category. Since parent categories cannot be used for transactions, they should be displayed in 
+  grey color (or not displayed at all). Currently the selector allows picking them, and pressing "Save" causes exceptions
+  in the backend and no error on the frontend. This is actually an issue.
+* When anything is wrong and I press Add it displays the error message, but the table gets emtptied and the form is cleared. I would prefer to fix whatever was wrong and press Add again.
+  And why the whole table get cleared? That is actually a bug.
 
 ## General UX improvements
 

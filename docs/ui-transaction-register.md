@@ -142,8 +142,11 @@ This is the one genuinely subtle presentation rule. Each transaction is shown th
   accounts** (asset/liability: Cash, Giro, Visa, …). If more than one such leg is in view (a transfer
   between two viewed accounts), the transaction yields **one row per such leg** (§2.4).
 - **Counterpart legs → the Category column.** Income/expense legs show as the category name (biggest
-  wins, with an overflow hint like `Food · +2`); another of your real accounts shows as `⇄ Account`
-  (transfer); a person's debt leg shows as an **arrow chip** (below).
+  wins, with an overflow hint like `Food · +2`); another of your real accounts shows as a
+  **direction-arrowed transfer** — `→ Account` when funds went **to** it (its leg is a debit),
+  `← Account` when they came **from** it (its leg is a credit); a person's debt leg shows as an
+  **arrow chip** (below). Each row of a transfer shows the *other* leg, so a transfer between two
+  viewed accounts reads `→ Visa` on the Cash row and `← Cash` on the Visa row.
 - **When no own-account leg exists** — a pure expense or income that a *person* funded — the
   **person's debt leg becomes the primary** and occupies the **Account** column.
 

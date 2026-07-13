@@ -11,6 +11,7 @@ import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.PostingDraft;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.ledger.TransactionDraft;
+import volkovandr.hauptbuch.ledger.TransferTarget;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 
 /**
@@ -80,19 +81,17 @@ public class DockCommitService {
             .findById(entry.accountId())
             .orElseThrow(
                 () -> new IllegalArgumentException("No account with id " + entry.accountId()));
-
-    String override = blankToNull(entry.categoryCurrencyCode());
-    String targetCurrency = override == null ? fundingAccount.currencyCode() : override;
-    Account leaf = currencyLeafService.resolveCurrencyLeaf(entry.categoryId(), targetCurrency);
     Long payeeId = payeeService.resolvePayee(entry.payeeId(), entry.payeeText());
 
-    BigDecimal fundingAmount = signedFundingAmount(entry.amount(), leaf.type());
+    Counterpart counterpart = resolveCounterpart(entry, fundingAccount);
+    BigDecimal fundingAmount = signedAmount(entry.amount(), counterpart.defaultOutflow());
+    Account other = counterpart.account();
     List<PostingDraft> legs =
-        fundingAccount.currencyCode().equals(leaf.currencyCode())
+        fundingAccount.currencyCode().equals(other.currencyCode())
             ? List.of(
                 PostingDraft.of(fundingAccount.accountId(), fundingAmount),
-                PostingDraft.of(leaf.accountId(), fundingAmount.negate()))
-            : crossCurrencyLegs(entry, fundingAccount, leaf, fundingAmount);
+                PostingDraft.of(other.accountId(), fundingAmount.negate()))
+            : crossCurrencyLegs(entry, fundingAccount, other, fundingAmount);
 
     TransactionDraft draft = TransactionDraft.confirmed(entry.date(), payeeId, entry.note(), legs);
 
@@ -104,23 +103,61 @@ public class DockCommitService {
   }
 
   /**
-   * Build the cross-currency pair (register §3.8a): the category leg gets its own native magnitude
-   * (opposite sign from the funding leg), and both legs' {@code baseAmount} are derived so they
-   * always balance in base by construction (data-model §6.4) —
+   * Resolve the entry's counter-leg (register §3.5/§3.8): a <em>transfer</em> to a real own account
+   * when {@link DockEntry#transferDirection()} is set (its currency fixed by the account, its
+   * funding direction from {@code TO}/{@code FROM}), otherwise the picked category's per-currency
+   * leaf (routed to the overridden currency, or the funding account's by default — §6.5). The
+   * returned {@link Counterpart} carries the account plus the funding leg's default direction
+   * (which an explicit {@code +}/{@code −} on the amount can still override, §3.8).
+   */
+  private Counterpart resolveCounterpart(DockEntry entry, Account fundingAccount) {
+    String direction = blankToNull(entry.transferDirection());
+    if (direction != null) {
+      Account other =
+          accountService
+              .findById(entry.categoryId())
+              .orElseThrow(
+                  () -> new IllegalArgumentException("No account with id " + entry.categoryId()));
+      if (other.accountId().equals(fundingAccount.accountId())) {
+        throw new IllegalArgumentException("A transfer needs two different accounts");
+      }
+      return new Counterpart(other, TransferTarget.Direction.TO.name().equals(direction));
+    }
+    String override = blankToNull(entry.categoryCurrencyCode());
+    String targetCurrency = override == null ? fundingAccount.currencyCode() : override;
+    Account leaf = currencyLeafService.resolveCurrencyLeaf(entry.categoryId(), targetCurrency);
+    return new Counterpart(leaf, "expense".equals(leaf.type()));
+  }
+
+  /**
+   * The resolved counter-leg: the account it hits, and whether the funding leg defaults to an
+   * outflow (an expense category, or a {@code TO} transfer). The sign convention is identical for
+   * both kinds — only the source of the default direction differs (register §3.8).
+   */
+  private record Counterpart(Account account, boolean defaultOutflow) {}
+
+  /**
+   * Build the cross-currency pair (register §3.8a): the counterpart leg gets its own native
+   * magnitude (opposite sign from the funding leg), and both legs' {@code baseAmount} are derived
+   * so they always balance in base by construction (data-model §6.4) —
    *
    * <ul>
-   *   <li>funding leg already base → its {@code baseAmount} is its own amount, the category leg's
-   *       is the negation ("no separate base field is shown", register §3.8a);
-   *   <li>category leg already base → the same, mirrored;
+   *   <li>funding leg already base → its {@code baseAmount} is its own amount, the counterpart
+   *       leg's is the negation ("no separate base field is shown", register §3.8a);
+   *   <li>counterpart leg already base → the same, mirrored;
    *   <li>neither is base → the confirmed base-amount field is the funding leg's magnitude (signed
-   *       to match its direction), the category leg's is the negation.
+   *       to match its direction), the counterpart leg's is the negation.
    * </ul>
+   *
+   * <p>The counterpart is a category leaf or a real transfer account (both are just accounts here);
+   * the frozen-base derivation is the same either way.
    */
   private List<PostingDraft> crossCurrencyLegs(
-      DockEntry entry, Account fundingAccount, Account leaf, BigDecimal fundingAmount) {
-    BigDecimal categoryMagnitude = requiredMagnitude(entry.categoryAmount(), leaf.currencyCode());
-    BigDecimal categoryAmount =
-        fundingAmount.signum() < 0 ? categoryMagnitude : categoryMagnitude.negate();
+      DockEntry entry, Account fundingAccount, Account counterpart, BigDecimal fundingAmount) {
+    BigDecimal counterpartMagnitude =
+        requiredMagnitude(entry.categoryAmount(), counterpart.currencyCode());
+    BigDecimal counterpartAmount =
+        fundingAmount.signum() < 0 ? counterpartMagnitude : counterpartMagnitude.negate();
 
     String baseCurrency =
         settingsService
@@ -132,22 +169,22 @@ public class DockCommitService {
                             + "balance (data-model §3.8)"));
 
     BigDecimal fundingBase;
-    BigDecimal categoryBase;
+    BigDecimal counterpartBase;
     if (fundingAccount.currencyCode().equals(baseCurrency)) {
       fundingBase = fundingAmount;
-      categoryBase = fundingAmount.negate();
-    } else if (leaf.currencyCode().equals(baseCurrency)) {
-      categoryBase = categoryAmount;
-      fundingBase = categoryAmount.negate();
+      counterpartBase = fundingAmount.negate();
+    } else if (counterpart.currencyCode().equals(baseCurrency)) {
+      counterpartBase = counterpartAmount;
+      fundingBase = counterpartAmount.negate();
     } else {
       BigDecimal baseMagnitude = requiredMagnitude(entry.baseAmount(), baseCurrency);
       fundingBase = fundingAmount.signum() < 0 ? baseMagnitude.negate() : baseMagnitude;
-      categoryBase = fundingBase.negate();
+      counterpartBase = fundingBase.negate();
     }
 
     return List.of(
         PostingDraft.ofCrossCurrency(fundingAccount.accountId(), fundingAmount, fundingBase),
-        PostingDraft.ofCrossCurrency(leaf.accountId(), categoryAmount, categoryBase));
+        PostingDraft.ofCrossCurrency(counterpart.accountId(), counterpartAmount, counterpartBase));
   }
 
   /**
@@ -188,6 +225,20 @@ public class DockCommitService {
    * @param counterpartType the resolved leaf's type ({@code income}/{@code expense})
    */
   static BigDecimal signedFundingAmount(String amountText, String counterpartType) {
+    // The counterpart type fixes the default direction: expense is an outflow, income an inflow.
+    return signedAmount(amountText, "expense".equals(counterpartType));
+  }
+
+  /**
+   * The signed funding-leg amount (register §3.8): a bare magnitude signed by {@code
+   * defaultOutflow} — the counterpart's default direction (an expense category, or a {@code TO}
+   * transfer) — unless a leading {@code +}/{@code −} overrides it ({@code +} = funds enter, {@code
+   * −} = funds leave), the refund/reversal case a sign-free scheme cannot otherwise express.
+   *
+   * @param amountText the typed amount, German-formatted, with an optional leading sign
+   * @param defaultOutflow whether the counterpart makes the funding leg an outflow by default
+   */
+  static BigDecimal signedAmount(String amountText, boolean defaultOutflow) {
     if (amountText == null || amountText.isBlank()) {
       throw new IllegalArgumentException("An amount is required");
     }
@@ -206,8 +257,7 @@ public class DockCommitService {
     } else if (explicitMinus) {
       outflow = true; // funds leave the account
     } else {
-      // No override: the counterpart type fixes direction (§3.8).
-      outflow = "expense".equals(counterpartType);
+      outflow = defaultOutflow;
     }
     return outflow ? magnitude.negate() : magnitude;
   }

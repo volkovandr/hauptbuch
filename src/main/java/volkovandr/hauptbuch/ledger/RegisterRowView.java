@@ -59,8 +59,17 @@ public record RegisterRowView(
   /**
    * One chip in the Category cell.
    *
+   * <p>A transfer chip shows the counterpart account with a direction arrow set by the flow
+   * (register §2.6, plan stage 7d.3): {@code → Account} when money went <em>to</em> that account
+   * (its leg is a debit), {@code ← Account} when it came <em>from</em> it (its leg is a credit). A
+   * category chip is a plain name with no arrow.
+   *
    * @param label the display text (the category name, or the account name for a transfer)
-   * @param transfer whether this is a transfer to another own account (rendered as {@code ⇄ label})
+   * @param transfer whether this is a transfer to another own account (rendered with a direction
+   *     arrow)
+   * @param inbound for a transfer, whether funds flowed from the counterpart into the row's account
+   *     ({@code ← label}); {@code false} means they flowed out to it ({@code → label}). Meaningless
+   *     for a category chip.
    */
-  public record CategoryChip(String label, boolean transfer) {}
+  public record CategoryChip(String label, boolean transfer, boolean inbound) {}
 }

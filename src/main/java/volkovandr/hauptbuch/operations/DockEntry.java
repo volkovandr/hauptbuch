@@ -20,6 +20,14 @@ import java.time.LocalDate;
  * neither leg is the book's base currency, {@code baseAmount} freezes the real base-currency value
  * on both legs (data-model §6.4).
  *
+ * <p>Transfers (register §3.5/§3.8, plan stage 7d.3): when {@code transferDirection} is set, the
+ * counterpart is a <em>real own account</em> — {@code categoryId} carries that account's id (not a
+ * category), no currency leaf is resolved (its currency is fixed by the account), and the funding
+ * leg's direction comes from the transfer direction ({@code TO} = outflow, {@code FROM} = inflow)
+ * rather than a category type. A cross-currency transfer (the two accounts' currencies differ)
+ * reuses the same {@code categoryAmount}/{@code baseAmount} machinery as a cross-currency category
+ * entry.
+ *
  * <p>{@code transactionId} distinguishes the dock's two modes (register §3.1): {@code null} is a
  * <em>new</em> entry that {@link DockCommitService} records; a non-null id is an <em>edit</em> that
  * re-threads that existing transaction in place ({@code editTransaction}). Editing the account or
@@ -39,6 +47,8 @@ import java.time.LocalDate;
  * @param categoryAmount the category leg's own native magnitude; required only when cross-currency
  * @param baseAmount the frozen base-currency magnitude; required only when neither leg is base
  * @param note free-text transaction note; nullable
+ * @param transferDirection {@code TO}/{@code FROM} when the counterpart is a transfer account
+ *     (register §3.8); {@code null} for a category counterpart
  */
 public record DockEntry(
     Long transactionId,
@@ -51,4 +61,5 @@ public record DockEntry(
     String amount,
     String categoryAmount,
     String baseAmount,
-    String note) {}
+    String note,
+    String transferDirection) {}

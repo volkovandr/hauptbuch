@@ -10,6 +10,9 @@ import java.util.List;
  * @param rows the register rows, oldest-first (newest at the bottom — register §2.1)
  * @param accounts every account offered in the account multi-select, in list order
  * @param payees every payee offered in the payee filter, alphabetical
+ * @param transferTargets the {@code To → <account>} / {@code From ← <account>} values the Category
+ *     datalist also offers, routing the counter-leg to a real account (register §3.5, plan stage
+ *     7d.3)
  * @param filter the currently-applied filter (selected accounts, date range, payee), for redisplay
  */
 public record RegisterView(
@@ -17,6 +20,7 @@ public record RegisterView(
     List<RegisterAccountOption> accounts,
     List<RegisterPayeeOption> payees,
     List<RegisterCategoryOption> categories,
+    List<String> transferTargets,
     RegisterFilter filter) {
 
   /** Defensively copy the row and option lists to immutable lists. */
@@ -25,6 +29,7 @@ public record RegisterView(
     accounts = List.copyOf(accounts);
     payees = List.copyOf(payees);
     categories = List.copyOf(categories);
+    transferTargets = List.copyOf(transferTargets);
   }
 
   /**

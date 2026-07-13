@@ -58,7 +58,7 @@ class RegisterServiceTest {
     lenient()
         .when(registerRepository.findRows(anyList(), any(), any(), any(), anyString()))
         .thenReturn(List.of());
-    lenient().when(rowRenderer.render(anyList(), anyList())).thenReturn(List.of());
+    lenient().when(rowRenderer.render(anyList())).thenReturn(List.of());
   }
 
   private static Account ownAccount(long id, String name) {
@@ -138,5 +138,19 @@ class RegisterServiceTest {
     RegisterView view = registerService.view(defaultFilter());
 
     assertThat(view.categories()).extracting(RegisterCategoryOption::name).containsExactly("Food");
+  }
+
+  @Test
+  void offersToAndFromTransferTargetsForEveryOpenOwnAccount() {
+    when(accountService.findLiveByTypes(List.of("asset", "liability")))
+        .thenReturn(List.of(ownAccount(CASH, "Cash"), ownAccount(GIRO, "Giro")));
+    when(accountService.findLiveByTypes(List.of("income", "expense"))).thenReturn(List.of());
+
+    RegisterView view = registerService.view(defaultFilter());
+
+    // Each open own account contributes a To → and a From ← target (register §3.5, plan stage
+    // 7d.3).
+    assertThat(view.transferTargets())
+        .containsExactly("To → Cash", "From ← Cash", "To → Giro", "From ← Giro");
   }
 }
