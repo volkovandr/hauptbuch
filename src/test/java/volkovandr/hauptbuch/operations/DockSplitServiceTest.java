@@ -22,6 +22,7 @@ import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.PostingDraft;
+import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.ledger.TransactionDraft;
 
 /**
@@ -40,7 +41,10 @@ class DockSplitServiceTest {
   private static final String EXPENSE = "expense";
   private static final String INCOME = "income";
   private static final String EUR = "EUR";
+  private static final String CHF = "CHF";
+  private static final String USD = "USD";
   private static final long CASH_ID = 1L;
+  private static final long CARD_ID = 2L;
   private static final long FOOD_ID = 10L;
   private static final long FOOD_LEAF_ID = 11L;
   private static final long DEPOSIT_ID = 20L;
@@ -50,13 +54,15 @@ class DockSplitServiceTest {
   @Mock private PayeeService payeeService;
   @Mock private CurrencyLeafService currencyLeafService;
   @Mock private LedgerService ledgerService;
+  @Mock private SettingsService settingsService;
 
   private DockSplitService dockSplitService;
 
   @BeforeEach
   void setUp() {
     dockSplitService =
-        new DockSplitService(accountService, payeeService, currencyLeafService, ledgerService);
+        new DockSplitService(
+            accountService, payeeService, currencyLeafService, ledgerService, settingsService);
   }
 
   private static Account account(long id, String type, String currency) {
@@ -80,6 +86,12 @@ class DockSplitServiceTest {
 
   private static SplitLineDraft line(long categoryId, String amount) {
     return new SplitLineDraft(categoryId, amount, null);
+  }
+
+  /** A same-currency split entry (the 7c.2 shape) — the 7d.2 header currency fields left blank. */
+  private static SplitEntry entry(
+      Long txnId, LocalDate date, long accountId, String note, List<SplitLineDraft> lines) {
+    return new SplitEntry(txnId, date, accountId, null, null, note, null, null, null, lines);
   }
 
   // ── signed contribution (register §3.8, mixed-split rule) ──────────────────────
@@ -124,12 +136,10 @@ class DockSplitServiceTest {
     when(ledgerService.recordTransaction(any())).thenReturn(99L);
 
     SplitEntry entry =
-        new SplitEntry(
+        entry(
             null,
             LocalDate.of(2026, 2, 1),
             CASH_ID,
-            null,
-            null,
             "groceries",
             List.of(line(FOOD_ID, "20"), line(DEPOSIT_ID, "3")));
     long txnId = dockSplitService.commit(entry);
@@ -156,12 +166,10 @@ class DockSplitServiceTest {
     when(ledgerService.recordTransaction(any())).thenReturn(1L);
 
     dockSplitService.commit(
-        new SplitEntry(
+        entry(
             null,
             LocalDate.of(2026, 2, 1),
             CASH_ID,
-            null,
-            null,
             null,
             List.of(line(FOOD_ID, "15"), line(DEPOSIT_ID, "5"))));
 
@@ -185,12 +193,10 @@ class DockSplitServiceTest {
     when(ledgerService.recordTransaction(any())).thenReturn(2L);
 
     dockSplitService.commit(
-        new SplitEntry(
+        entry(
             null,
             LocalDate.of(2026, 2, 1),
             CASH_ID,
-            null,
-            null,
             null,
             List.of(line(FOOD_ID, "5"), line(DEPOSIT_ID, "5"))));
 
@@ -209,12 +215,10 @@ class DockSplitServiceTest {
     when(ledgerService.recordTransaction(any())).thenReturn(1L);
 
     dockSplitService.commit(
-        new SplitEntry(
+        entry(
             null,
             LocalDate.of(2026, 2, 1),
             CASH_ID,
-            null,
-            null,
             null,
             List.of(new SplitLineDraft(FOOD_ID, "20", "organic aisle"))));
 
@@ -237,12 +241,10 @@ class DockSplitServiceTest {
 
     long txnId =
         dockSplitService.commit(
-            new SplitEntry(
+            entry(
                 55L,
                 LocalDate.of(2026, 2, 1),
                 CASH_ID,
-                null,
-                null,
                 null,
                 List.of(line(FOOD_ID, "20"), line(DEPOSIT_ID, "3"))));
 
@@ -253,8 +255,7 @@ class DockSplitServiceTest {
 
   @Test
   void rejectsanEmptyLineList() {
-    SplitEntry entry =
-        new SplitEntry(null, LocalDate.of(2026, 2, 1), CASH_ID, null, null, null, List.of());
+    SplitEntry entry = entry(null, LocalDate.of(2026, 2, 1), CASH_ID, null, List.of());
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockSplitService.commit(entry));
   }
@@ -263,24 +264,143 @@ class DockSplitServiceTest {
   void rejectsanUnknownFundingAccount() {
     when(accountService.findById(CASH_ID)).thenReturn(java.util.Optional.empty());
     SplitEntry entry =
-        new SplitEntry(
-            null,
-            LocalDate.of(2026, 2, 1),
-            CASH_ID,
-            null,
-            null,
-            null,
-            List.of(line(FOOD_ID, "20")));
+        entry(null, LocalDate.of(2026, 2, 1), CASH_ID, null, List.of(line(FOOD_ID, "20")));
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockSplitService.commit(entry))
         .withMessageContaining("No account");
+  }
+
+  // ── cross-currency split (register §3.8a, plan stage 7d.2, owner-decided 2026-07-13) ───────────
+
+  private static SplitEntry crossEntry(
+      String spendingCurrency, String fundingTotal, String baseTotal, List<SplitLineDraft> lines) {
+    return new SplitEntry(
+        null,
+        LocalDate.of(2026, 2, 1),
+        CARD_ID,
+        null,
+        null,
+        null,
+        spendingCurrency,
+        fundingTotal,
+        baseTotal,
+        lines);
+  }
+
+  @Test
+  void crossCurrencySplitPinsFundingToHeaderTotalsAndBalancesInBase() {
+    // The owner's worked example: CHF card, USD receipt (90), EUR base. Header 100 CHF off the
+    // card, 95 EUR base; two expense lines 60 + 30 USD. Funding is pinned to the header totals and
+    // the category legs' base amounts sum to the base total, the last line closing the residual.
+    when(accountService.findById(CARD_ID))
+        .thenReturn(java.util.Optional.of(account(CARD_ID, "asset", CHF)));
+    when(settingsService.baseCurrency()).thenReturn(java.util.Optional.of(EUR));
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, USD))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, USD));
+    when(currencyLeafService.resolveCurrencyLeaf(DEPOSIT_ID, USD))
+        .thenReturn(account(DEPOSIT_LEAF_ID, EXPENSE, USD));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(7L);
+
+    dockSplitService.commit(
+        crossEntry(USD, "100", "95", List.of(line(FOOD_ID, "60"), line(DEPOSIT_ID, "30"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(legs).hasSize(3);
+    // Funding pinned to the header totals: −100 CHF native, −95 EUR base (an outflow).
+    assertThat(leg(legs, CARD_ID)).isEqualByComparingTo("-100");
+    assertThat(base(legs, CARD_ID)).isEqualByComparingTo("-95");
+    // Category legs in USD; base derived proportionally, the last line absorbing the residual.
+    assertThat(leg(legs, FOOD_LEAF_ID)).isEqualByComparingTo("60");
+    assertThat(base(legs, FOOD_LEAF_ID)).isEqualByComparingTo("63.33");
+    assertThat(leg(legs, DEPOSIT_LEAF_ID)).isEqualByComparingTo("30");
+    assertThat(base(legs, DEPOSIT_LEAF_ID)).isEqualByComparingTo("31.67");
+    assertThat(baseSum(legs)).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void crossCurrencySplitWhereFundingIsBaseNeedsNoSeparateBaseTotal() {
+    // EUR card (base), USD spending — two fields, the funding leg's base equals its own amount.
+    when(accountService.findById(CARD_ID))
+        .thenReturn(java.util.Optional.of(account(CARD_ID, "asset", EUR)));
+    when(settingsService.baseCurrency()).thenReturn(java.util.Optional.of(EUR));
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, USD))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, USD));
+    when(currencyLeafService.resolveCurrencyLeaf(DEPOSIT_ID, USD))
+        .thenReturn(account(DEPOSIT_LEAF_ID, EXPENSE, USD));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(8L);
+
+    dockSplitService.commit(
+        crossEntry(USD, "95", null, List.of(line(FOOD_ID, "60"), line(DEPOSIT_ID, "30"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(leg(legs, CARD_ID)).isEqualByComparingTo("-95");
+    assertThat(base(legs, CARD_ID)).isEqualByComparingTo("-95");
+    assertThat(baseSum(legs)).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void crossCurrencySplitWhereSpendingIsBaseDerivesBaseFromTheLines() {
+    // CHF card, EUR spending (base) — the lines are already in base, so each leg's base equals its
+    // own amount and the base total is their sum; no separate base field.
+    when(accountService.findById(CARD_ID))
+        .thenReturn(java.util.Optional.of(account(CARD_ID, "asset", CHF)));
+    when(settingsService.baseCurrency()).thenReturn(java.util.Optional.of(EUR));
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, EUR))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, EUR));
+    when(currencyLeafService.resolveCurrencyLeaf(DEPOSIT_ID, EUR))
+        .thenReturn(account(DEPOSIT_LEAF_ID, EXPENSE, EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(9L);
+
+    dockSplitService.commit(
+        crossEntry(EUR, "100", null, List.of(line(FOOD_ID, "60"), line(DEPOSIT_ID, "35"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(leg(legs, CARD_ID)).isEqualByComparingTo("-100"); // native off the CHF card
+    assertThat(base(legs, CARD_ID)).isEqualByComparingTo("-95"); // base = summed EUR lines
+    assertThat(base(legs, FOOD_LEAF_ID)).isEqualByComparingTo("60");
+    assertThat(base(legs, DEPOSIT_LEAF_ID)).isEqualByComparingTo("35");
+    assertThat(baseSum(legs)).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void crossCurrencySplitRejectsaBlankFundingTotal() {
+    when(accountService.findById(CARD_ID))
+        .thenReturn(java.util.Optional.of(account(CARD_ID, "asset", CHF)));
+    when(settingsService.baseCurrency()).thenReturn(java.util.Optional.of(EUR));
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, USD))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, USD));
+    SplitEntry entry = crossEntry(USD, "  ", "95", List.of(line(FOOD_ID, "60")));
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> dockSplitService.commit(entry))
+        .withMessageContaining("total is required");
   }
 
   private static BigDecimal leg(List<PostingDraft> legs, long accountId) {
     return legs.stream().filter(l -> l.accountId() == accountId).findFirst().orElseThrow().amount();
   }
 
+  private static BigDecimal base(List<PostingDraft> legs, long accountId) {
+    return legs.stream()
+        .filter(l -> l.accountId() == accountId)
+        .findFirst()
+        .orElseThrow()
+        .baseAmount();
+  }
+
   private static BigDecimal sum(List<PostingDraft> legs) {
     return legs.stream().map(PostingDraft::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+  }
+
+  private static BigDecimal baseSum(List<PostingDraft> legs) {
+    return legs.stream().map(PostingDraft::baseAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 }

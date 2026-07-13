@@ -20,19 +20,30 @@ import java.math.BigDecimal;
 public record PostingDraft(
     long accountId, BigDecimal amount, BigDecimal baseAmount, String reconciliation, String note) {
 
+  /** The default reconciliation state a freshly-drafted leg carries. */
+  private static final String UNRECONCILED = "unreconciled";
+
   /** A single-currency leg: native amount only, default reconciliation, no note. */
   public static PostingDraft of(long accountId, BigDecimal amount) {
-    return new PostingDraft(accountId, amount, null, "unreconciled", null);
+    return new PostingDraft(accountId, amount, null, UNRECONCILED, null);
   }
 
   /** A single-currency leg carrying a posting-level note (a split line — register §3.7). */
   public static PostingDraft of(long accountId, BigDecimal amount, String note) {
-    return new PostingDraft(accountId, amount, null, "unreconciled", note);
+    return new PostingDraft(accountId, amount, null, UNRECONCILED, note);
   }
 
   /** A cross-currency leg carrying its frozen base-currency amount. */
   public static PostingDraft ofCrossCurrency(
       long accountId, BigDecimal amount, BigDecimal baseAmount) {
-    return new PostingDraft(accountId, amount, baseAmount, "unreconciled", null);
+    return new PostingDraft(accountId, amount, baseAmount, UNRECONCILED, null);
+  }
+
+  /**
+   * A cross-currency leg carrying its frozen base amount and a posting-level note (a split line).
+   */
+  public static PostingDraft ofCrossCurrency(
+      long accountId, BigDecimal amount, BigDecimal baseAmount, String note) {
+    return new PostingDraft(accountId, amount, baseAmount, UNRECONCILED, note);
   }
 }

@@ -58,13 +58,17 @@ class RegisterSplitScreenIntegrationTest {
   }
 
   private long openAccount(String name, String openingBalance) {
+    return openAccount(name, EUR, openingBalance);
+  }
+
+  private long openAccount(String name, String currencyCode, String openingBalance) {
     Account account =
         accountService.openAccount(
             new AccountDraft(
                 name,
                 "asset",
                 null,
-                EUR,
+                currencyCode,
                 LocalDate.parse(OPEN_DAY),
                 new BigDecimal(openingBalance)));
     return account.accountId();
@@ -96,8 +100,11 @@ class RegisterSplitScreenIntegrationTest {
         // The reference total is a visible, editable field (not hidden — a fixed UI issue).
         .andExpect(content().string(containsString("id=\"split-total\"")))
         .andExpect(content().string(containsString("data-split-total-input")))
-        // It opens balanced against the seed magnitude.
-        .andExpect(content().string(containsString("remaining 0,00")));
+        // It opens balanced against the seed magnitude: the ✓ check is shown (no display:none),
+        // and there are no hidden cross-currency readouts on a single-currency split.
+        .andExpect(content().string(containsString("data-split-remaining-value")))
+        .andExpect(content().string(containsString("data-split-remaining-check")))
+        .andExpect(content().string(not(containsString("display:none"))));
   }
 
   @Test
@@ -298,6 +305,95 @@ class RegisterSplitScreenIntegrationTest {
         .andExpect(content().string(containsString("name=\"transactionId\"")))
         .andExpect(content().string(containsString("Food")))
         .andExpect(content().string(containsString("Deposit")));
+  }
+
+  // ── cross-currency splits (register §3.8a/§3.10, plan stage 7d.2) ──────────────
+
+  @Test
+  void currencyEndpointRevealsHeaderTotalsWhenSpendingCurrencyDiverges() throws Exception {
+    long chfCard = openAccount("Cash CHF", "CHF", "500");
+    long food = insertCategory("Food", "expense");
+
+    // Selecting USD spending against a CHF card (base EUR) is three currencies: the funding total
+    // and a base total appear, both labelled, and the base is pre-filled from the carry-forward
+    // rate (none stored → blank, but the field is present).
+    mockMvc
+        .perform(
+            post("/register/split/currency")
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(chfCard))
+                .param("spendingCurrencyCode", "USD")
+                .param("total", "90")
+                .param("categoryText", "Food")
+                .param("lineCategoryId", String.valueOf(food))
+                .param("lineCategoryType", "expense")
+                .param("lineAmount", "90")
+                .param("viewAccountId", String.valueOf(chfCard)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"fundingTotal\"")))
+        .andExpect(content().string(containsString("Off account (CHF)")))
+        .andExpect(content().string(containsString("name=\"baseTotal\"")))
+        .andExpect(content().string(containsString("Base (EUR)")));
+  }
+
+  @Test
+  void crossCurrencySplitCommitsBalancedInBaseAndReopensForEdit() throws Exception {
+    long chfCard = openAccount("Cash CHF", "CHF", "500");
+    long food = insertCategory("Food", "expense");
+    long drinks = insertCategory("Drinks", "expense");
+
+    // CHF card, USD receipt (90), EUR base (95): two lines 60 + 30 USD. The funding leg is pinned
+    // to the header totals (−100 CHF / −95 EUR) and the base amounts sum to zero exactly.
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(chfCard))
+                .param("spendingCurrencyCode", "USD")
+                .param("total", "90")
+                .param("fundingTotal", "100")
+                .param("baseTotal", "95")
+                .param("lineCategoryId", String.valueOf(food), String.valueOf(drinks))
+                .param("lineAmount", "60", "30")
+                .param("viewAccountId", String.valueOf(chfCard)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"register-rows\"")))
+        // Cash CHF drops by the CHF amount off the card (500 − 100 = 400,00).
+        .andExpect(content().string(containsString("400,00")));
+
+    long txnId = latestTransactionId();
+    assertThat(spendTransactionCount()).isEqualTo(1L);
+    assertThat(legCount(txnId)).isEqualTo(3L);
+    // Native legs do not sum to zero (three currencies) — the base amounts do (data-model §6.4).
+    assertThat(baseAmountSum(txnId)).isEqualByComparingTo("0");
+    assertThat(fundingNative(txnId, chfCard)).isEqualByComparingTo("-100");
+
+    // It re-opens into the split panel in edit mode with its spending currency and lines intact.
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(chfCard)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(containsString("Edit split")))
+        .andExpect(content().string(containsString("Off account (CHF)")))
+        .andExpect(content().string(containsString("Food")))
+        .andExpect(content().string(containsString("Drinks")));
+  }
+
+  private BigDecimal baseAmountSum(long transactionId) {
+    return jdbcClient
+        .sql("select coalesce(sum(base_amount), 0) from posting where transaction_id = :id")
+        .param("id", transactionId)
+        .query(BigDecimal.class)
+        .single();
+  }
+
+  private BigDecimal fundingNative(long transactionId, long accountId) {
+    return jdbcClient
+        .sql("select amount from posting where transaction_id = :id and account_id = :account")
+        .param("id", transactionId)
+        .param("account", accountId)
+        .query(BigDecimal.class)
+        .single();
   }
 
   private long latestTransactionId() {

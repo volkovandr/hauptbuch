@@ -11,19 +11,23 @@
   first htmx partial-swap and first <dialog>.
 
   Contract — a screen includes:
-      <div th:replace="~{fragments/currency-picker :: picker('currencyCode', 'currencyCode', null)}"></div>
+      <div th:replace="~{fragments/currency-picker :: picker('currencyCode', 'currencyCode', null, false)}"></div>
       <div th:replace="~{fragments/currency-picker :: dialogMount('currencyCode')}"></div>
-  fieldId / fieldName name the <select>; selected pre-selects a value (null = first option).
+  fieldId / fieldName name the <select>; selected pre-selects a value (null = first option). `oob` is
+  true only when the picker is returned as a side-channel (the add-currency `created` response); a
+  screen or panel that includes it as ordinary primary content passes false, so htmx never treats a
+  nested picker as an out-of-band swap (which it would otherwise drop when its target was just
+  replaced — the nested-OOB bug fixed at 7d.2).
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
   <body>
     <!-- The picker itself: a labelled <select> plus the add button. Wrapped in a stable, per-field
          id so the create response can hx-swap-oob it wholesale (new currency pre-selected). -->
     <div
-      th:fragment="picker(fieldId, fieldName, selected)"
+      th:fragment="picker(fieldId, fieldName, selected, oob)"
       th:id="'currency-picker-' + ${fieldId}"
       class="currency-picker"
-      hx-swap-oob="true"
+      th:attr="hx-swap-oob=${oob} ? 'true'"
     >
       <select th:id="${fieldId}" th:name="${fieldName}" class="input" required>
         <option
@@ -66,7 +70,7 @@
          pre-selected) and the dialog vanishes, in one request. -->
     <th:block th:fragment="created(fieldId, fieldName, selected)">
       <div
-        th:replace="~{fragments/currency-picker :: picker(${fieldId}, ${fieldName}, ${selected})}"
+        th:replace="~{fragments/currency-picker :: picker(${fieldId}, ${fieldName}, ${selected}, true)}"
       ></div>
     </th:block>
 

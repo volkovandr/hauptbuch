@@ -1,29 +1,73 @@
 package volkovandr.hauptbuch.operations;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
- * Unit tier (plan §1.5): the split panel's readout math — remaining, the pay/receive direction, and
- * the "the rest" defaulting on add-line. Mirrors the commit-side sign rule (2026-07-09) but
- * leniently, so an incomplete line contributes nothing while the user is mid-entry.
+ * Unit tier (plan §1.5): the split panel's readout math — remaining, the pay/receive direction, the
+ * "the rest" defaulting on add-line, and (plan stage 7d.2) the cross-currency per-line derived
+ * equivalents and the per-currency remainings that converge together. Mirrors the commit-side math
+ * (2026-07-09/2026-07-13) but leniently, so an incomplete line contributes nothing mid-entry.
  */
+@ExtendWith(MockitoExtension.class)
 class SplitPanelAssemblerTest {
 
-  private final SplitPanelAssembler assembler = new SplitPanelAssembler();
+  private static final String EUR = "EUR";
+  private static final String USD = "USD";
+  private static final String CHF = "CHF";
+  private static final long CASH_ID = 1L;
+
+  @Mock private AccountService accountService;
+  @Mock private SettingsService settingsService;
+
+  private SplitPanelAssembler assembler;
+
+  @BeforeEach
+  void setUp() {
+    assembler = new SplitPanelAssembler(accountService, settingsService);
+    lenient().when(accountService.findById(CASH_ID)).thenReturn(Optional.of(account(CASH_ID, EUR)));
+    lenient().when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
+  }
+
+  private static Account account(long id, String currency) {
+    return new Account(id, "n", "asset", null, currency, null, null, null, null, false);
+  }
 
   private static SplitForm form(String total, List<String> types, List<String> amounts) {
+    return crossForm(total, null, null, null, types, amounts);
+  }
+
+  private static SplitForm crossForm(
+      String total,
+      String spendingCurrency,
+      String fundingTotal,
+      String baseTotal,
+      List<String> types,
+      List<String> amounts) {
     List<String> blanks = amounts.stream().map(a -> "").toList();
     return new SplitForm(
         null,
         LocalDate.of(2026, 2, 1),
-        1L,
+        CASH_ID,
         null,
         null,
         total,
+        spendingCurrency,
+        fundingTotal,
+        baseTotal,
         blanks,
         blanks,
         types,
@@ -45,6 +89,7 @@ class SplitPanelAssemblerTest {
     assertThat(panel.remaining()).isEqualTo("0,00");
     assertThat(panel.balanced()).isTrue();
     assertThat(panel.direction()).isEqualTo("pay");
+    assertThat(panel.currency().crossCurrency()).isFalse();
   }
 
   @Test
@@ -91,5 +136,54 @@ class SplitPanelAssemblerTest {
 
     assertThat(shrunk.lineAmount()).containsExactly("3");
     assertThat(shrunk.lineCategoryType()).containsExactly("income");
+  }
+
+  // ── cross-currency readouts (register §3.8a, plan stage 7d.2) ─────────────────
+
+  @Test
+  void crossCurrencyDerivesPerLineEquivalentsAndRemainingInEveryCurrency() {
+    // CHF card, USD spending (90 total), EUR base (95). Two expense lines 60 + 30 USD.
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(account(CASH_ID, CHF)));
+
+    SplitPanel panel =
+        assembler.panel(
+            crossForm("90", USD, "100", "95", List.of("expense", "expense"), List.of("60", "30")),
+            null);
+
+    SplitCurrency currency = panel.currency();
+    assertThat(currency.crossCurrency()).isTrue();
+    assertThat(currency.fundingCurrencyCode()).isEqualTo(CHF);
+    assertThat(currency.spendingCurrencyCode()).isEqualTo(USD);
+    assertThat(currency.baseCurrencyCode()).isEqualTo(EUR);
+    assertThat(currency.neitherIsBase()).isTrue();
+
+    // The spending lines are subdivided; each shows its funding (CHF, rate 100/90) and base (EUR,
+    // rate 95/90) equivalents read-only.
+    assertThat(panel.lines().get(0).accountAmount()).isEqualTo("66,67");
+    assertThat(panel.lines().get(0).baseAmount()).isEqualTo("63,33");
+    assertThat(panel.lines().get(1).accountAmount()).isEqualTo("33,33");
+    assertThat(panel.lines().get(1).baseAmount()).isEqualTo("31,67");
+
+    // All three remainings reach zero together (the lines sum to the spending total).
+    assertThat(panel.remaining()).isEqualTo("0,00");
+    assertThat(currency.remainingFunding()).isEqualTo("0,00");
+    assertThat(currency.remainingBase()).isEqualTo("0,00");
+    // The direction cue reads in the funding currency (the amount off the card).
+    assertThat(panel.netDisplay()).isEqualTo("100,00");
+    assertThat(panel.direction()).isEqualTo("pay");
+  }
+
+  @Test
+  void crossCurrencyRemainingsStayProportionalWhileUnbalanced() {
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(account(CASH_ID, CHF)));
+
+    // Only 60 of the 90 USD allocated → 30 USD remains, and the funding/base remainings mirror it.
+    SplitPanel panel =
+        assembler.panel(crossForm("90", USD, "100", "95", List.of("expense"), List.of("60")), null);
+
+    assertThat(panel.remaining()).isEqualTo("30,00");
+    assertThat(panel.currency().remainingFunding()).isEqualTo("33,33"); // 100 − 60×100/90
+    assertThat(panel.currency().remainingBase()).isEqualTo("31,67"); // 95 − 60×95/90
+    assertThat(panel.balanced()).isFalse();
   }
 }

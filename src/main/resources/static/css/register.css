@@ -343,6 +343,20 @@ th.register__spine {
   flex: 0 0 0;
 }
 
+/* A cross-currency line's derived funding/base equivalents (register §3.8a) — read-only, compact,
+   sitting beside the spending amount so the conversion is visible without extra fields. */
+.split-line__derived {
+  flex: 0 0 auto;
+  align-self: end;
+  padding-bottom: 0.35rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.split-status__remaining {
+  white-space: nowrap;
+}
+
 /* The live readout row: the `remaining` figure (accented when balanced) and the pay/receive cue. */
 .split-status {
   display: flex;

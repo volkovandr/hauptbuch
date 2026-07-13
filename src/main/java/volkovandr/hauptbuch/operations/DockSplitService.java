@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.operations;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -11,6 +12,7 @@ import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.Posting;
 import volkovandr.hauptbuch.ledger.PostingDraft;
+import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.ledger.Transaction;
 import volkovandr.hauptbuch.ledger.TransactionDraft;
 import volkovandr.hauptbuch.shared.MoneyFormat;
@@ -56,22 +58,31 @@ public class DockSplitService {
 
   private static final String NOT_A_SPLIT =
       "This transaction cannot be edited as a split — the split panel edits one funding leg "
-          + "with two or more category lines in a single currency.";
+          + "with two or more category lines.";
+
+  /** Base amounts are frozen to the minor unit; two places covers EUR/CHF/USD. */
+  private static final int BASE_FRACTION_DIGITS = 2;
+
+  /** Intermediate scale for the proportional base allocation before rounding to the minor unit. */
+  private static final int ALLOCATION_SCALE = 10;
 
   private final AccountService accountService;
   private final PayeeService payeeService;
   private final CurrencyLeafService currencyLeafService;
   private final LedgerService ledgerService;
+  private final SettingsService settingsService;
 
   DockSplitService(
       AccountService accountService,
       PayeeService payeeService,
       CurrencyLeafService currencyLeafService,
-      LedgerService ledgerService) {
+      LedgerService ledgerService,
+      SettingsService settingsService) {
     this.accountService = accountService;
     this.payeeService = payeeService;
     this.currencyLeafService = currencyLeafService;
     this.ledgerService = ledgerService;
+    this.settingsService = settingsService;
   }
 
   /**
@@ -95,6 +106,29 @@ public class DockSplitService {
             .orElseThrow(
                 () -> new IllegalArgumentException("No account with id " + entry.accountId()));
 
+    String spending = blankToNull(entry.spendingCurrencyCode());
+    boolean crossCurrency = spending != null && !spending.equals(fundingAccount.currencyCode());
+    List<PostingDraft> legs =
+        crossCurrency
+            ? crossCurrencyLegs(entry, fundingAccount, spending)
+            : sameCurrencyLegs(entry, fundingAccount);
+
+    Long payeeId = payeeService.resolvePayee(entry.payeeId(), entry.payeeText());
+    TransactionDraft draft =
+        TransactionDraft.confirmed(entry.date(), payeeId, blankToNull(entry.note()), legs);
+    if (entry.transactionId() == null) {
+      return ledgerService.recordTransaction(draft);
+    }
+    ledgerService.editTransaction(entry.transactionId(), draft);
+    return entry.transactionId();
+  }
+
+  /**
+   * The single-currency split (register §3.10, plan stage 7c.2): every line routes to the funding
+   * account's own currency leaf, its signed contribution feeds the funding sum, and each category
+   * leg is the negated contribution — the whole set summing to zero natively by construction.
+   */
+  private List<PostingDraft> sameCurrencyLegs(SplitEntry entry, Account fundingAccount) {
     List<PostingDraft> categoryLegs = new ArrayList<>();
     BigDecimal fundingAmount = BigDecimal.ZERO;
     for (SplitLineDraft line : entry.lines()) {
@@ -109,16 +143,146 @@ public class DockSplitService {
     List<PostingDraft> legs = new ArrayList<>();
     legs.add(PostingDraft.of(fundingAccount.accountId(), fundingAmount));
     legs.addAll(categoryLegs);
-
-    Long payeeId = payeeService.resolvePayee(entry.payeeId(), entry.payeeText());
-    TransactionDraft draft =
-        TransactionDraft.confirmed(entry.date(), payeeId, blankToNull(entry.note()), legs);
-    if (entry.transactionId() == null) {
-      return ledgerService.recordTransaction(draft);
-    }
-    ledgerService.editTransaction(entry.transactionId(), draft);
-    return entry.transactionId();
+    return legs;
   }
+
+  /**
+   * The cross-currency split (register §3.8a/§3.10, plan stage 7d.2, owner-decided 2026-07-13). A
+   * single receipt is one merchant billing one spending currency, paid from one account at one
+   * rate, so the currencies are fixed once at the header and the ledger balances in <em>base</em>:
+   *
+   * <ul>
+   *   <li>the <strong>funding leg is pinned to the header totals</strong> — native {@code
+   *       ±fundingTotal} (funding currency), base {@code ±baseTotal} — signed by the lines' net
+   *       direction (a pure-expense split is an outflow);
+   *   <li>each <strong>category leg</strong> is in the spending currency: native the line's negated
+   *       contribution (unchanged from the single-currency rule), base the line's derived share of
+   *       the base total, allocated proportionally by spending magnitude;
+   *   <li>the <strong>last line absorbs the rounding residual</strong> so the category legs' base
+   *       amounts sum to exactly {@code ∓baseTotal} and {@code Σ base_amount = 0} holds exactly
+   *       (data-model §6.4 — the engine books no residual and re-validates the base sum).
+   * </ul>
+   */
+  private List<PostingDraft> crossCurrencyLegs(
+      SplitEntry entry, Account fundingAccount, String spendingCurrency) {
+    String baseCurrency =
+        settingsService
+            .baseCurrency()
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "Base currency is not set; a cross-currency split needs it to balance "
+                            + "(data-model §3.8)"));
+
+    List<ResolvedLine> resolved = new ArrayList<>();
+    BigDecimal netSpending = BigDecimal.ZERO;
+    BigDecimal spendingMagnitude = BigDecimal.ZERO;
+    for (SplitLineDraft line : entry.lines()) {
+      Account leaf = currencyLeafService.resolveCurrencyLeaf(line.categoryId(), spendingCurrency);
+      BigDecimal contribution = signedContribution(line.amount(), leaf.type());
+      netSpending = netSpending.add(contribution);
+      spendingMagnitude = spendingMagnitude.add(contribution.abs());
+      resolved.add(new ResolvedLine(leaf, contribution, blankToNull(line.note())));
+    }
+
+    // The funding side (register §3.8, mixed-split convention): outflow when the lines net to a
+    // debit of the categories, else inflow; an exactly-zero net books on the debit side.
+    int fundingSign = netSpending.signum() < 0 ? -1 : 1;
+    BigDecimal fundingMagnitude =
+        requiredMagnitude(entry.fundingTotal(), fundingAccount.currencyCode());
+    BigDecimal baseMagnitude =
+        baseTotalMagnitude(
+            entry, fundingAccount, spendingCurrency, baseCurrency, spendingMagnitude);
+    BigDecimal fundingNative = signed(fundingMagnitude, fundingSign);
+    BigDecimal fundingBase = signed(baseMagnitude, fundingSign);
+
+    List<PostingDraft> legs = new ArrayList<>();
+    legs.add(PostingDraft.ofCrossCurrency(fundingAccount.accountId(), fundingNative, fundingBase));
+    legs.addAll(
+        categoryLegsInBase(resolved, spendingMagnitude, baseMagnitude, fundingBase.negate()));
+    return legs;
+  }
+
+  /**
+   * Build the spending-currency category legs, freezing each one's base amount as its share of the
+   * base total (proportional to its spending magnitude) with the last line absorbing the residual
+   * so the legs' base amounts sum to exactly {@code targetBaseSum} ({@code = −fundingBase}).
+   */
+  private List<PostingDraft> categoryLegsInBase(
+      List<ResolvedLine> resolved,
+      BigDecimal spendingMagnitude,
+      BigDecimal baseMagnitude,
+      BigDecimal targetBaseSum) {
+    List<PostingDraft> legs = new ArrayList<>();
+    BigDecimal allocated = BigDecimal.ZERO;
+    for (int i = 0; i < resolved.size(); i++) {
+      ResolvedLine line = resolved.get(i);
+      BigDecimal categoryNative = line.contribution().negate();
+      BigDecimal categoryBase;
+      if (i == resolved.size() - 1) {
+        categoryBase = targetBaseSum.subtract(allocated); // the last line closes the base gap
+      } else {
+        BigDecimal share =
+            proportionalBase(line.contribution().abs(), spendingMagnitude, baseMagnitude);
+        categoryBase = signed(share, categoryNative.signum());
+        allocated = allocated.add(categoryBase);
+      }
+      legs.add(
+          PostingDraft.ofCrossCurrency(
+              line.leaf().accountId(), categoryNative, categoryBase, line.note()));
+    }
+    return legs;
+  }
+
+  /** A line's proportional share of the base total, rounded to the minor unit (magnitude only). */
+  private static BigDecimal proportionalBase(
+      BigDecimal lineMagnitude, BigDecimal spendingMagnitude, BigDecimal baseMagnitude) {
+    if (spendingMagnitude.signum() == 0) {
+      return BigDecimal.ZERO;
+    }
+    return lineMagnitude
+        .divide(spendingMagnitude, ALLOCATION_SCALE, RoundingMode.HALF_UP)
+        .multiply(baseMagnitude)
+        .setScale(BASE_FRACTION_DIGITS, RoundingMode.HALF_UP);
+  }
+
+  /**
+   * The base-currency total magnitude (the funding leg's frozen base), following the header's field
+   * layout (register §3.8a): when the funding account is already the base currency it is the
+   * funding total; when the spending currency is base the lines are already in base, so it is their
+   * summed magnitude; otherwise neither leg is base and it is the explicit base-total field.
+   */
+  private static BigDecimal baseTotalMagnitude(
+      SplitEntry entry,
+      Account fundingAccount,
+      String spendingCurrency,
+      String baseCurrency,
+      BigDecimal spendingMagnitude) {
+    if (fundingAccount.currencyCode().equals(baseCurrency)) {
+      return requiredMagnitude(entry.fundingTotal(), baseCurrency);
+    }
+    if (spendingCurrency.equals(baseCurrency)) {
+      return spendingMagnitude;
+    }
+    return requiredMagnitude(entry.baseTotal(), baseCurrency);
+  }
+
+  private static BigDecimal signed(BigDecimal magnitude, int sign) {
+    return sign < 0 ? magnitude.negate() : magnitude;
+  }
+
+  /**
+   * A required sign-free magnitude for a header total field; rejects blank with a clear message.
+   */
+  private static BigDecimal requiredMagnitude(String text, String currencyCode) {
+    if (text == null || text.isBlank()) {
+      throw new IllegalArgumentException("A " + currencyCode + " total is required");
+    }
+    return MoneyFormat.parse(text).abs();
+  }
+
+  /** A resolved split line: its spending-currency leaf, signed contribution, and note. */
+  private record ResolvedLine(Account leaf, BigDecimal contribution, String note) {}
 
   /**
    * A split line's signed contribution to the funding sum (register §3.8, the mixed-split rule):
@@ -162,11 +326,13 @@ public class DockSplitService {
    * Reconstruct a live split transaction into a {@link SplitForm} for the panel's edit mode
    * (register §3.1) — the split-shaped sibling of {@link DockEditService#load}. The shape the panel
    * edits is one funding own-account leg (asset/liability) plus two or more category legs
-   * (income/expense) in a single currency; anything else (a transfer, an opening balance, a
-   * cross-currency conversion, or a simple one-category transaction — which the dock edits) is
-   * refused so the caller can fall back. Each line's typed amount is reconstructed from its leg so
-   * a re-save reproduces the same postings; the {@code view*} filter fields are left null (the
-   * panel renders them from the active-filter view model, not the transaction).
+   * (income/expense); a same-currency split has all legs in one currency, a cross-currency one
+   * (register §3.8a/§3.10) has the category legs in a single spending currency with frozen base
+   * amounts. Anything else (a transfer, an opening balance, or a simple one-category transaction —
+   * which the dock edits) is refused so the caller can fall back. Each line's typed amount is
+   * reconstructed from its leg so a re-save reproduces the same postings; the {@code view*} filter
+   * fields are left null (the panel renders them from the active-filter view model, not the
+   * transaction).
    *
    * @throws IllegalArgumentException if there is no live transaction with that id, or it is not the
    *     split shape the panel edits
@@ -187,6 +353,7 @@ public class DockSplitService {
     List<String> categoryType = new ArrayList<>();
     List<String> amount = new ArrayList<>();
     List<String> note = new ArrayList<>();
+    BigDecimal spendingTotal = BigDecimal.ZERO;
     for (LegAccount leg : split.categoryLegs()) {
       Account semantic = semanticCategory(leg.account());
       categoryText.add(semantic.name());
@@ -194,7 +361,26 @@ public class DockSplitService {
       categoryType.add(leg.account().type());
       amount.add(amountText(leg.posting().amount(), leg.account().type()));
       note.add(leg.posting().note() == null ? "" : leg.posting().note());
+      spendingTotal = spendingTotal.add(leg.posting().amount().abs());
     }
+
+    boolean crossCurrency = split.funding().posting().baseAmount() != null;
+    String spendingCurrency =
+        crossCurrency ? split.categoryLegs().get(0).account().currencyCode() : null;
+    String fundingTotal =
+        crossCurrency
+            ? MoneyFormat.number(split.funding().posting().amount().abs(), FRACTION_DIGITS)
+            : "";
+    String baseTotal =
+        crossCurrency
+            ? MoneyFormat.number(split.funding().posting().baseAmount().abs(), FRACTION_DIGITS)
+            : "";
+    // The reference total is the spending-currency sum when cross-currency (the lines are in the
+    // spending currency), else the funding magnitude (single-currency splits balance natively).
+    String total =
+        crossCurrency
+            ? MoneyFormat.number(spendingTotal, FRACTION_DIGITS)
+            : MoneyFormat.number(split.funding().posting().amount().abs(), FRACTION_DIGITS);
 
     String payeeText =
         txn.payeeId() == null ? null : payeeService.entryValueFor(txn.payeeId()).orElse(null);
@@ -204,7 +390,10 @@ public class DockSplitService {
         split.funding().account().accountId(),
         payeeText,
         txn.note(),
-        MoneyFormat.number(split.funding().posting().amount().abs(), FRACTION_DIGITS),
+        total,
+        spendingCurrency,
+        fundingTotal,
+        baseTotal,
         categoryText,
         categoryId,
         categoryType,
@@ -218,14 +407,13 @@ public class DockSplitService {
 
   /**
    * Split a transaction's postings into the panel-editable shape — one funding own-account leg plus
-   * two or more category legs, single currency — refusing anything else with {@link #NOT_A_SPLIT}.
+   * two or more category legs — refusing anything else with {@link #NOT_A_SPLIT}. A cross-currency
+   * split (frozen base amounts, one spending currency) is accepted: the panel edits it via the
+   * header currency fields (register §3.8a).
    */
   private SplitLegs classifySplit(List<Posting> postings) {
     List<LegAccount> legs =
         postings.stream().map(p -> new LegAccount(p, requireAccount(p.accountId()))).toList();
-    if (legs.stream().anyMatch(l -> l.posting().baseAmount() != null)) {
-      throw new IllegalArgumentException(NOT_A_SPLIT); // cross-currency is not a dock/panel edit
-    }
     List<LegAccount> fundingLegs = legsOfType(legs, OWN_TYPES);
     List<LegAccount> categoryLegs = legsOfType(legs, CATEGORY_TYPES);
     if (fundingLegs.size() != 1

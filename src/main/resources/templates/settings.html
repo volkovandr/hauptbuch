@@ -49,7 +49,7 @@
           <!-- Shared currency picker (plan stage 6d): the seeded currencies plus "Add currency…",
                so a user whose currency isn't seeded can add it right here on first run. -->
           <div
-            th:replace="~{fragments/currency-picker :: picker('baseCurrency', 'baseCurrency', null)}"
+            th:replace="~{fragments/currency-picker :: picker('baseCurrency', 'baseCurrency', null, false)}"
           ></div>
         </div>
         <p class="actions">
