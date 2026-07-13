@@ -284,4 +284,39 @@ class AccountServiceTest {
 
     verify(accountRepository).updateParent(NEW_ID, PARENT_ID);
   }
+
+  // ── transfer counterpart resolution (register §3.5, plan stage 7d.3) ──────────
+
+  @Test
+  void findsAnOpenOwnAccountByNameCaseInsensitively() {
+    when(accountRepository.findLiveByTypes(any()))
+        .thenReturn(List.of(account(1L, "Cash", ASSET, 210), account(2L, "Visa", "liability", 30)));
+
+    assertThat(accountService.findOwnAccountByName("visa").orElseThrow().accountId()).isEqualTo(2L);
+  }
+
+  @Test
+  void doesNotResolveNameWithNoOpenOwnAccount() {
+    when(accountRepository.findLiveByTypes(any()))
+        .thenReturn(List.of(account(1L, "Cash", ASSET, 210)));
+
+    assertThat(accountService.findOwnAccountByName("Giro")).isEmpty();
+  }
+
+  @Test
+  void refusesToGuessAnAmbiguousName() {
+    // Two open own accounts share a name — resolving it would guess, so it is refused (empty).
+    when(accountRepository.findLiveByTypes(any()))
+        .thenReturn(List.of(account(1L, "Wallet", ASSET, 210), account(2L, "Wallet", ASSET, 30)));
+
+    assertThat(accountService.findOwnAccountByName("Wallet")).isEmpty();
+  }
+
+  @Test
+  void doesNotResolveClosedOwnAccount() {
+    Account closed = new Account(3L, "Old", ASSET, null, EUR, 140, OPENED, OPENED, null, false);
+    when(accountRepository.findLiveByTypes(any())).thenReturn(List.of(closed));
+
+    assertThat(accountService.findOwnAccountByName("Old")).isEmpty();
+  }
 }

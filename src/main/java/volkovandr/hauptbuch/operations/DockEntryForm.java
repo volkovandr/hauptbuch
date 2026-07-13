@@ -23,6 +23,8 @@ import java.util.List;
  *     (§3.8a)
  * @param baseAmount the frozen base-currency magnitude; present only when neither leg is base
  * @param note transaction note; nullable
+ * @param transferDirection {@code TO}/{@code FROM} when the counterpart resolver matched a transfer
+ *     target (register §3.8, plan stage 7d.3); {@code null}/blank for a category counterpart
  * @param viewAccountId the active filter's viewed accounts; empty for the default set
  * @param viewFromDate the active filter's lower date bound; nullable
  * @param viewToDate the active filter's upper date bound; nullable
@@ -39,6 +41,7 @@ public record DockEntryForm(
     String categoryAmount,
     String baseAmount,
     String note,
+    String transferDirection,
     List<Long> viewAccountId,
     LocalDate viewFromDate,
     LocalDate viewToDate,

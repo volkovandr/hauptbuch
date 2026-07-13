@@ -188,6 +188,23 @@ public class AccountService {
   }
 
   /**
+   * Resolve an open own account (asset/liability) by its display name, for the register's transfer
+   * counterpart (register §3.5, plan stage 7d.3) — the {@code To → <name>} / {@code From ← <name>}
+   * target the Category field carries. Case-insensitive; empty when no open own account matches (or
+   * more than one does — an ambiguous name is refused rather than guessed). Filters over {@link
+   * #findLiveByTypes} rather than adding a repository query: the option set is small and already
+   * fetched the same way the register lists it.
+   */
+  public Optional<Account> findOwnAccountByName(String name) {
+    List<Account> matches =
+        findLiveByTypes(MANAGEABLE_TYPES).stream()
+            .filter(a -> a.closedAt() == null)
+            .filter(a -> a.name().equalsIgnoreCase(name))
+            .toList();
+    return matches.size() == 1 ? Optional.of(matches.get(0)) : Optional.empty();
+  }
+
+  /**
    * The live accounts of the given types, each annotated with its true hierarchy depth and listed
    * depth-first (every node immediately followed by all of its descendants) — what a screen needs
    * to indent a multi-level tree correctly, unlike the flat {@link #findLiveByTypes}.

@@ -29,7 +29,6 @@ public class RegisterRepository {
   private static final String PAYEE_ID = "payeeId";
   private static final String BASE_CURRENCY = "baseCurrency";
   private static final String TRANSACTION_IDS = "transactionIds";
-  private static final String VIEWED_ACCOUNT_IDS = "viewedAccountIds";
 
   private final JdbcClient jdbcClient;
 
@@ -124,20 +123,20 @@ public class RegisterRepository {
   }
 
   /**
-   * The counterpart legs of a set of transactions: every live leg whose account is <em>not</em> one
-   * of the viewed accounts. These feed the Category cell (register §2.6) — an income/expense leg
-   * shows as its category name, another own account as {@code ⇄ Account}. The viewed legs are the
-   * rows themselves and so are excluded here.
+   * Every live leg of a set of transactions, biggest-magnitude first within each transaction. These
+   * feed the Category cell (register §2.6): the renderer keeps, per row, the legs <em>other
+   * than</em> the row's own account — an income/expense leg shows as its category name, another own
+   * account as a direction-arrowed transfer target (plan stage 7d.3). Fetching all legs (rather
+   * than pre-excluding the viewed accounts) is what lets a transfer between two viewed accounts
+   * show the other account in each row's cell; the per-row exclusion is done in the renderer.
    *
    * <p>A leg on one of {@code CurrencyLeafService}'s auto-managed per-currency leaves (data-model
    * §6.5) rolls up to its semantic parent's id/name/type — the currency leaf itself is never shown
    * (the leg's own {@link RegisterRow} already displays the posting's actual currency, §2.9).
    *
    * @param transactionIds the transactions on screen (typically the ids of {@link #findRows})
-   * @param viewedAccountIds the accounts whose legs are the register rows, hence not counterparts
    */
-  public List<RegisterCounterpartLeg> findCounterpartLegs(
-      List<Long> transactionIds, List<Long> viewedAccountIds) {
+  public List<RegisterCounterpartLeg> findTransactionLegs(List<Long> transactionIds) {
     if (transactionIds.isEmpty()) {
       return List.of();
     }
@@ -153,11 +152,9 @@ public class RegisterRepository {
             join account a on p.account_id = a.account_id
             left join account parent on a.currency_leaf and a.parent_id = parent.account_id
             where p.transaction_id in (:transactionIds)
-              and p.account_id not in (:viewedAccountIds)
             order by p.transaction_id, abs(p.amount) desc, coalesce(parent.name, a.name)
             """)
         .param(TRANSACTION_IDS, transactionIds)
-        .param(VIEWED_ACCOUNT_IDS, viewedAccountIds)
         .query(RegisterCounterpartLeg.class)
         .list();
   }

@@ -73,8 +73,11 @@ class DockAmountFieldsService {
 
   /**
    * The amount-field layout for a submitted dock form (register §3.5/§3.8a): the funding account's
-   * currency against the (possibly overridden) category-currency selection, with any already-typed
-   * category/base amount preserved for redisplay.
+   * currency against the counterpart currency, with any already-typed category/base amount
+   * preserved for redisplay. The counterpart currency is the category-currency selection for a
+   * category entry, or — for a transfer (register §3.8, plan stage 7d.3) — the resolved counterpart
+   * account's own currency (fixed by the account, not the selector), so a cross-currency transfer
+   * reveals the same counterpart-amount field a cross-currency category entry does.
    */
   CrossCurrencyFields forForm(DockEntryForm form) {
     if (form.accountId() == null) {
@@ -87,12 +90,29 @@ class DockAmountFieldsService {
                 crossCurrencyFieldsService.resolve(
                     new CrossCurrencyFieldsQuery(
                         a.currencyCode(),
-                        form.categoryCurrencyCode(),
+                        counterpartCurrency(form),
                         form.date(),
                         form.amount(),
                         form.categoryAmount(),
                         form.baseAmount())))
         .orElseGet(() -> CrossCurrencyFields.singleCurrency(""));
+  }
+
+  /**
+   * The counterpart leg's currency for the field layout: a transfer's counterpart account fixes it
+   * (register §3.8, plan stage 7d.3), so it is looked up from the resolved account id; otherwise it
+   * is the category-currency selector's value (null/blank = the funding account's, no override).
+   */
+  private String counterpartCurrency(DockEntryForm form) {
+    if (form.transferDirection() != null
+        && !form.transferDirection().isBlank()
+        && form.categoryId() != null) {
+      return accountService
+          .findById(form.categoryId())
+          .map(Account::currencyCode)
+          .orElse(form.categoryCurrencyCode());
+    }
+    return form.categoryCurrencyCode();
   }
 
   /**

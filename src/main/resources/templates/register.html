@@ -145,7 +145,11 @@
                 class="cat-chip"
                 th:classappend="${chip.transfer()} ? 'cat-chip--transfer'"
               >
-                <span th:if="${chip.transfer()}" aria-hidden="true">⇄ </span
+                <span
+                  th:if="${chip.transfer()}"
+                  aria-hidden="true"
+                  th:text="${chip.inbound()} ? '← ' : '→ '"
+                  >→ </span
                 ><span th:text="${chip.label()}">Food</span>
               </span>
               <span

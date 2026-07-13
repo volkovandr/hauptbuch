@@ -99,7 +99,8 @@ class RegisterEntryController {
       return dockError(filter, form, "An account is required", model);
     }
     if (form.categoryId() == null) {
-      return dockError(filter, form, "A category is required (pick or create one)", model);
+      return dockError(
+          filter, form, "A category or transfer target is required (pick or create one)", model);
     }
     try {
       dockCommitService.commit(
@@ -114,7 +115,8 @@ class RegisterEntryController {
               form.amount(),
               form.categoryAmount(),
               form.baseAmount(),
-              form.note()));
+              form.note(),
+              form.transferDirection()));
     } catch (IllegalArgumentException | IllegalStateException e) {
       return dockError(filter, form, e.getMessage(), model);
     }

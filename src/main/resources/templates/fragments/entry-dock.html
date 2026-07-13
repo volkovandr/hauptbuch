@@ -168,10 +168,17 @@
             hx-target="#entry-category-resolved"
             hx-swap="innerHTML"
           />
+          <!-- Categories plus the transfer targets (register §3.5, plan stage 7d.3): picking a
+               `To → <account>` / `From ← <account>` routes the counter-leg to a real account. The
+               server resolver (/categories/resolve) tells the two apart by the arrow prefix. -->
           <datalist id="entry-category-options">
             <option
               th:each="c : ${register.categories()}"
               th:value="${c.name()}"
+            ></option>
+            <option
+              th:each="t : ${register.transferTargets()}"
+              th:value="${t}"
             ></option>
           </datalist>
         </div>
@@ -202,6 +209,23 @@
           id="entry-currency-amount"
           th:replace="~{fragments/entry-dock :: extraAmountFields(fields=${amountFields})}"
         ></div>
+
+        <!-- Transfer reveal (register §3.8a, plan stage 7d.3): a transfer's counterpart currency is
+             fixed by the resolved account, not the currency selector, so its cross-currency reveal
+             can't ride the selector's change. The /categories/resolve response raises an
+             `HX-Trigger-After-Swap: counterpart-resolved` header — after-swap so the resolved
+             categoryId + transferDirection inputs are in the form before this listener re-fetches
+             the amount-field layout (which derives the counterpart currency from the resolved
+             account) and swaps in the counterpart-amount field. Standard htmx event wiring — no
+             bespoke JS (CLAUDE.md §1.6). -->
+        <span
+          hidden
+          hx-post="/register/currency-fields"
+          hx-trigger="counterpart-resolved from:body"
+          hx-include="closest form"
+          hx-target="#entry-currency-amount"
+          hx-swap="outerHTML"
+        ></span>
 
         <!-- 6 · Note -->
         <div class="field">
@@ -371,7 +395,7 @@
          carries the resolved income/expense type — the split line needs it to sign its share in the
          live remaining/direction readout. The dock resolves without those, so they default. -->
     <th:block
-      th:fragment="categoryResolved(categoryId, categoryName, error, fieldName, typeFieldName, categoryType)"
+      th:fragment="categoryResolved(categoryId, categoryName, error, fieldName, typeFieldName, categoryType, transferDirection)"
     >
       <input type="hidden" th:name="${fieldName}" th:value="${categoryId}" />
       <input
@@ -379,6 +403,15 @@
         type="hidden"
         th:name="${typeFieldName}"
         th:value="${categoryType}"
+      />
+      <!-- A transfer target (register §3.8, plan stage 7d.3): the direction the commit signs the
+           funding leg by. Absent for a category (the whole slot is re-rendered each resolve, so
+           switching back to a category clears any prior transfer marker). -->
+      <input
+        th:if="${transferDirection != null}"
+        type="hidden"
+        name="transferDirection"
+        th:value="${transferDirection}"
       />
       <span th:if="${categoryName}" class="entry-dock__resolved muted" th:text="${categoryName}"
         >Food</span

@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.ledger;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
@@ -68,7 +69,25 @@ public class RegisterService {
     List<RegisterAccountOption> accountOptions = accountOptions(ownAccounts, viewed);
     List<RegisterPayeeOption> payeeOptions = payeeOptions(filter.payeeId());
     List<RegisterCategoryOption> categoryOptions = categoryOptions();
-    return new RegisterView(rows, accountOptions, payeeOptions, categoryOptions, filter);
+    List<String> transferTargets = transferTargets(ownAccounts);
+    return new RegisterView(
+        rows, accountOptions, payeeOptions, categoryOptions, transferTargets, filter);
+  }
+
+  /**
+   * The transfer targets the Category datalist offers alongside categories (register §3.5, plan
+   * stage 7d.3): {@code To → <account>} and {@code From ← <account>} for every open own account, so
+   * picking one routes the counter-leg to that real account instead of a category. Self-transfer is
+   * refused at commit, so an account's own two options are offered even in its own register view.
+   */
+  private List<String> transferTargets(List<Account> ownAccounts) {
+    return ownAccounts.stream()
+        .flatMap(
+            a ->
+                Stream.of(
+                    TransferTarget.option(TransferTarget.Direction.TO, a.name()),
+                    TransferTarget.option(TransferTarget.Direction.FROM, a.name())))
+        .toList();
   }
 
   /**
@@ -92,7 +111,7 @@ public class RegisterService {
     List<RegisterRow> rows =
         registerRepository.findRows(
             viewed, filter.fromDate(), filter.toDate(), filter.payeeId(), baseCurrency);
-    return rowRenderer.render(rows, viewed);
+    return rowRenderer.render(rows);
   }
 
   private List<RegisterAccountOption> accountOptions(List<Account> ownAccounts, List<Long> viewed) {
