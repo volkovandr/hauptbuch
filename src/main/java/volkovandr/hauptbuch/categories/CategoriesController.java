@@ -131,6 +131,7 @@ class CategoriesController {
       @RequestParam(defaultValue = "0") int index,
       @RequestParam(defaultValue = RESOLVED_ID) String fieldName,
       @RequestParam(required = false) String typeFieldName,
+      @RequestParam(required = false) String directionFieldName,
       Model model,
       HttpServletResponse response) {
     String text = index >= 0 && index < categoryText.size() ? categoryText.get(index) : "";
@@ -142,10 +143,11 @@ class CategoriesController {
     }
     model.addAttribute("fieldName", fieldName);
     model.addAttribute("typeFieldName", typeFieldName);
+    model.addAttribute("directionFieldName", directionFieldName);
     return "fragments/entry-dock :: categoryResolved(categoryId=${categoryId},"
         + " categoryName=${categoryName}, error=${error}, fieldName=${fieldName},"
         + " typeFieldName=${typeFieldName}, categoryType=${categoryType},"
-        + " transferDirection=${transferDirection})";
+        + " transferDirection=${transferDirection}, directionFieldName=${directionFieldName})";
   }
 
   /** Resolve a plain category name or {@code Parent - Child} to its (existing or new) leaf id. */

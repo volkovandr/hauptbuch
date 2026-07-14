@@ -49,6 +49,7 @@ class DockSplitServiceTest {
   private static final long FOOD_LEAF_ID = 11L;
   private static final long DEPOSIT_ID = 20L;
   private static final long DEPOSIT_LEAF_ID = 21L;
+  private static final long SAVINGS_ID = 30L;
 
   @Mock private AccountService accountService;
   @Mock private PayeeService payeeService;
@@ -85,7 +86,11 @@ class DockSplitServiceTest {
   }
 
   private static SplitLineDraft line(long categoryId, String amount) {
-    return new SplitLineDraft(categoryId, amount, null);
+    return new SplitLineDraft(categoryId, amount, null, null);
+  }
+
+  private static SplitLineDraft transferLine(long accountId, String amount, String direction) {
+    return new SplitLineDraft(accountId, amount, null, direction);
   }
 
   /** A same-currency split entry (the 7c.2 shape) — the 7d.2 header currency fields left blank. */
@@ -94,34 +99,8 @@ class DockSplitServiceTest {
     return new SplitEntry(txnId, date, accountId, null, null, note, null, null, null, lines);
   }
 
-  // ── signed contribution (register §3.8, mixed-split rule) ──────────────────────
-
-  @Test
-  void expenseLineContributesNegatively() {
-    assertThat(DockSplitService.signedContribution("20", EXPENSE)).isEqualByComparingTo("-20");
-  }
-
-  @Test
-  void incomeLineContributesPositively() {
-    assertThat(DockSplitService.signedContribution("3", INCOME)).isEqualByComparingTo("3");
-  }
-
-  @Test
-  void stornoOnExpenseLineCountsPositively() {
-    // A negative amount on an expense line reverses the spend — it counts as an inflow (§3.8).
-    assertThat(DockSplitService.signedContribution("-5", EXPENSE)).isEqualByComparingTo("5");
-  }
-
-  @Test
-  void stornoOnIncomeLineCountsNegatively() {
-    assertThat(DockSplitService.signedContribution("−3", INCOME)).isEqualByComparingTo("-3");
-  }
-
-  @Test
-  void rejectsBlankLineAmount() {
-    assertThatExceptionOfType(IllegalArgumentException.class)
-        .isThrownBy(() -> DockSplitService.signedContribution("  ", EXPENSE));
-  }
+  // The signed-contribution / transfer-contribution sign math lives in SplitLineAmounts (extracted
+  // from this service); its unit tests are in SplitLineAmountsTest.
 
   // ── commit orchestration ───────────────────────────────────────────────────────
 
@@ -220,7 +199,7 @@ class DockSplitServiceTest {
             LocalDate.of(2026, 2, 1),
             CASH_ID,
             null,
-            List.of(new SplitLineDraft(FOOD_ID, "20", "organic aisle"))));
+            List.of(new SplitLineDraft(FOOD_ID, "20", "organic aisle", null))));
 
     ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
     verify(ledgerService).recordTransaction(draft.capture());
@@ -268,6 +247,133 @@ class DockSplitServiceTest {
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockSplitService.commit(entry))
         .withMessageContaining("No account");
+  }
+
+  // ── split transfers (register §3.8, plan stage 7d.3) ───────────────────────────
+
+  @Test
+  void splitWithaToTransferLineRoutesTheCounterLegToTheRealAccount() {
+    // Cash pays €20 Food and moves €50 to Savings: Cash −70, Food +20, Savings +50. Sum = 0. The
+    // transfer leg hits the real own account, signed by direction (TO = outflow), not a leaf.
+    cashFunds();
+    foodLeaf();
+    when(accountService.findById(SAVINGS_ID))
+        .thenReturn(java.util.Optional.of(account(SAVINGS_ID, "asset", EUR)));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(3L);
+
+    dockSplitService.commit(
+        entry(
+            null,
+            LocalDate.of(2026, 2, 1),
+            CASH_ID,
+            null,
+            List.of(line(FOOD_ID, "20"), transferLine(SAVINGS_ID, "50", "TO"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(legs).hasSize(3);
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("-70");
+    assertThat(leg(legs, FOOD_LEAF_ID)).isEqualByComparingTo("20");
+    assertThat(leg(legs, SAVINGS_ID)).isEqualByComparingTo("50");
+    assertThat(sum(legs)).isEqualByComparingTo("0");
+    // A transfer leg is a real own account, never routed through the currency-leaf resolver.
+    verify(currencyLeafService, never()).resolveCurrencyLeaf(eq(SAVINGS_ID), any());
+  }
+
+  @Test
+  void splitWithaFromTransferLineCreditsTheCounterAccount() {
+    // Cash pays €20 Food but pulls €50 in from Savings: Cash +30, Food +20, Savings −50. Sum = 0.
+    cashFunds();
+    foodLeaf();
+    when(accountService.findById(SAVINGS_ID))
+        .thenReturn(java.util.Optional.of(account(SAVINGS_ID, "asset", EUR)));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(4L);
+
+    dockSplitService.commit(
+        entry(
+            null,
+            LocalDate.of(2026, 2, 1),
+            CASH_ID,
+            null,
+            List.of(line(FOOD_ID, "20"), transferLine(SAVINGS_ID, "50", "FROM"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("30");
+    assertThat(leg(legs, FOOD_LEAF_ID)).isEqualByComparingTo("20");
+    assertThat(leg(legs, SAVINGS_ID)).isEqualByComparingTo("-50");
+    assertThat(sum(legs)).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void splitTransferToTheFundingAccountItselfIsRejected() {
+    cashFunds();
+    SplitEntry entry =
+        entry(
+            null,
+            LocalDate.of(2026, 2, 1),
+            CASH_ID,
+            null,
+            List.of(transferLine(CASH_ID, "50", "TO")));
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> dockSplitService.commit(entry))
+        .withMessageContaining("two different accounts");
+  }
+
+  @Test
+  void splitTransferToaDifferentlyDenominatedAccountIsRejected() {
+    // A same-currency (EUR) split cannot absorb a CHF transfer leg: that is a third currency the
+    // header's single shared rate can't express (register §3.8a) — refused with a clear message.
+    cashFunds();
+    foodLeaf();
+    when(accountService.findById(SAVINGS_ID))
+        .thenReturn(java.util.Optional.of(account(SAVINGS_ID, "asset", CHF)));
+    SplitEntry entry =
+        entry(
+            null,
+            LocalDate.of(2026, 2, 1),
+            CASH_ID,
+            null,
+            List.of(line(FOOD_ID, "20"), transferLine(SAVINGS_ID, "50", "TO")));
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> dockSplitService.commit(entry))
+        .withMessageContaining("EUR account");
+  }
+
+  @Test
+  void crossCurrencySplitWithaTransferLineFreezesItsBaseLikeaCategoryLeg() {
+    // CHF card, USD receipt (90), EUR base (95). Line 1: Food 60 USD. Line 2: transfer 30 USD to a
+    // USD wallet. The transfer leg is in the spending currency with a derived base, exactly like a
+    // category leg; the funding leg stays pinned to the header totals and Σ base_amount = 0.
+    when(accountService.findById(CARD_ID))
+        .thenReturn(java.util.Optional.of(account(CARD_ID, "asset", CHF)));
+    when(accountService.findById(SAVINGS_ID))
+        .thenReturn(java.util.Optional.of(account(SAVINGS_ID, "asset", USD)));
+    when(settingsService.baseCurrency()).thenReturn(java.util.Optional.of(EUR));
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, USD))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, USD));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(11L);
+
+    dockSplitService.commit(
+        crossEntry(
+            USD, "100", "95", List.of(line(FOOD_ID, "60"), transferLine(SAVINGS_ID, "30", "TO"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(legs).hasSize(3);
+    assertThat(leg(legs, CARD_ID)).isEqualByComparingTo("-100");
+    assertThat(base(legs, CARD_ID)).isEqualByComparingTo("-95");
+    assertThat(leg(legs, FOOD_LEAF_ID)).isEqualByComparingTo("60");
+    assertThat(base(legs, FOOD_LEAF_ID)).isEqualByComparingTo("63.33");
+    assertThat(leg(legs, SAVINGS_ID)).isEqualByComparingTo("30");
+    assertThat(base(legs, SAVINGS_ID)).isEqualByComparingTo("31.67");
+    assertThat(baseSum(legs)).isEqualByComparingTo("0");
   }
 
   // ── cross-currency split (register §3.8a, plan stage 7d.2, owner-decided 2026-07-13) ───────────

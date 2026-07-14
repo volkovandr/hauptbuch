@@ -28,6 +28,10 @@ Visual inspiration mock-ups: `docs/pic/register-*.png`.
   never retrofitted. All key handling stays in the sanctioned `keyboard.js` leaf.
 - **Filters yes, sorting deferred** — date-range / account / payee filters are in 7a; column
   re-sorting and the §2.7 balance-hide rule go to the backlog (plan §14) until missed.
+- **Edit for cross-currency & transfer shapes carved into 7f, deferred past 7e (owner-confirmed,
+  2026-07-14)** — entry (7d) creates cross-currency single-line, transfers, and split-with-transfer,
+  but re-editing those shapes is refused for now; it lands after tags so the round-trip is built once
+  against the final leg/tag shape. See §7f.
 - **7c in two increments, split-edit bundled (owner-confirmed, 2026-07-08)** — edit/void shipped
   first (7c.1); the split panel (7c.2) delivers new-split entry *and* editing an existing split back
   into the panel together. The one open question — the sign of a mixed income+expense split line —
@@ -199,11 +203,19 @@ commits with `Σ base_amount = 0` and frozen `base_amount`, and re-opens for edi
 
 ### 7d.3 — Transfers, single + split *(was «c»)*
 
-**Progress (2026-07-13):** **single-line** transfers are done and owner-confirmed — same- and
+**Progress (2026-07-14):** **single-line** transfers are done and owner-confirmed — same- and
 cross-currency, `To →`/`From ←` routing the counter-leg to a real account, the counterpart-currency
 reveal, and the register Category cell showing the other account with a `→`/`←` direction arrow
 (this replaced the old `⇄` and fixed the empty-cell bug for a transfer between two viewed accounts).
-**Split transfers remain** — the stage stays open until they land.
+**Split transfers are now implemented (ready to confirm):** a split line may be a `To →`/`From ←`
+transfer to a real own account (signed by direction, not a category type), same- and cross-currency,
+resolved through the shared `/categories/resolve`; the split-line sign math was extracted into
+`SplitLineAmounts`. A transfer leg must be denominated in the split's spending currency — a third
+currency would break the header's single shared rate (register §3.8a) and is refused with a clear
+message. A split that *contains* a transfer leg is not yet re-editable in the panel (two-plus
+own-account legs fall outside the panel's classify shape); it falls back to the "can't edit"
+message. Re-editing that shape — together with cross-currency single-line and single-line
+transfers, the other shapes the dock still refuses — is deferred to **7f** (below).
 
 **Goal:** selecting **`To → <account>`** / **`From ← <account>`** in the Category field routes the
 counter-leg to a **real account** instead of a category — making transfers enterable at last. Enabled
@@ -238,6 +250,33 @@ split), book balanced, and render as two native-thread rows; `check` green.
 
 **Done when:** tags are enterable as chips, inherited into splits per the rules, persisted
 per-posting, and visible in the register.
+
+## 7f — Edit for cross-currency & transfer transactions *(deferred past 7e)*
+
+**Goal:** extend edit mode to the transaction shapes the dock/panel still refuse to re-open, so
+every transaction the entry surface can *create* is also *editable*. Deferred deliberately until
+after tags (7e): the edit round-trip is then built once, against the final leg/tag shape, rather
+than reworked when 7e changes what a posting carries.
+
+Not yet round-trippable — each falls back to a "cannot be edited yet" message today:
+
+- **Cross-currency single-line** — `DockEditService` refuses any leg carrying a frozen
+  `base_amount` (register §3.8a); the shape must re-open preserving that frozen base.
+- **Transfer, single-line** — two own-account legs fall outside the dock's one-funding-one-category
+  shape (`To →`/`From ←` routing, §7d.3).
+- **Split containing a transfer leg** — two-plus own-account legs fall outside the split panel's
+  `classifySplit` shape.
+
+Already editable, out of scope here: simple single-currency single-category (7c), and same- and
+cross-currency **category-only** splits (7d.2).
+
+- **TDD:** classification/reconstruction of each shape in the unit tier (the sign-free amount and
+  frozen-base round-trip, mirroring `DockEditService`/`DockSplitService.load`); pick→edit→re-save
+  in MockMvc acceptance.
+
+**Done when:** each shape above re-opens into the dock/panel prefilled, re-saves via
+`editTransaction` reproducing balanced legs (frozen `base_amount` preserved where cross-currency),
+renders correctly in the register, and `check` green.
 
 ---
 

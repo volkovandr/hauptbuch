@@ -53,9 +53,6 @@ public class DockSplitService {
   /** German entry is to the minor unit; two places covers EUR/CHF. */
   private static final int FRACTION_DIGITS = 2;
 
-  /** The Unicode minus sign, accepted as a storno marker alongside the ASCII hyphen-minus. */
-  private static final char UNICODE_MINUS = '−';
-
   private static final String NOT_A_SPLIT =
       "This transaction cannot be edited as a split — the split panel edits one funding leg "
           + "with two or more category lines.";
@@ -125,25 +122,69 @@ public class DockSplitService {
 
   /**
    * The single-currency split (register §3.10, plan stage 7c.2): every line routes to the funding
-   * account's own currency leaf, its signed contribution feeds the funding sum, and each category
-   * leg is the negated contribution — the whole set summing to zero natively by construction.
+   * account's own currency leaf (or, for a transfer line, the named real own account — register
+   * §3.8, plan stage 7d.3), its signed contribution feeds the funding sum, and each counter-leg is
+   * the negated contribution — the whole set summing to zero natively by construction.
    */
   private List<PostingDraft> sameCurrencyLegs(SplitEntry entry, Account fundingAccount) {
-    List<PostingDraft> categoryLegs = new ArrayList<>();
+    List<PostingDraft> counterLegs = new ArrayList<>();
     BigDecimal fundingAmount = BigDecimal.ZERO;
     for (SplitLineDraft line : entry.lines()) {
-      Account leaf =
-          currencyLeafService.resolveCurrencyLeaf(line.categoryId(), fundingAccount.currencyCode());
-      BigDecimal contribution = signedContribution(line.amount(), leaf.type());
-      fundingAmount = fundingAmount.add(contribution);
-      categoryLegs.add(
-          PostingDraft.of(leaf.accountId(), contribution.negate(), blankToNull(line.note())));
+      ResolvedLine resolved = resolveLine(line, fundingAccount, fundingAccount.currencyCode());
+      fundingAmount = fundingAmount.add(resolved.contribution());
+      counterLegs.add(
+          PostingDraft.of(
+              resolved.leaf().accountId(), resolved.contribution().negate(), resolved.note()));
     }
 
     List<PostingDraft> legs = new ArrayList<>();
     legs.add(PostingDraft.of(fundingAccount.accountId(), fundingAmount));
-    legs.addAll(categoryLegs);
+    legs.addAll(counterLegs);
     return legs;
+  }
+
+  /**
+   * Resolve one split line into its counter-leg account and signed contribution (register §3.8): a
+   * <em>transfer</em> to a real own account when {@link SplitLineDraft#transferDirection()} is set
+   * — its currency fixed by the account, its sign from {@code TO}/{@code FROM} ({@code TO} = an
+   * outflow, like an expense; {@code FROM} = an inflow, like income) — otherwise the picked
+   * category's per-currency leaf routed to {@code lineCurrency}, signed by the leaf's type. A
+   * transfer's account must be denominated in {@code lineCurrency}: the split's shared rate fixes
+   * at most two currencies at the header (register §3.8a), so a third-currency transfer leg cannot
+   * be expressed and is refused. A storno (a leading {@code −}) flows through either path.
+   */
+  private ResolvedLine resolveLine(
+      SplitLineDraft line, Account fundingAccount, String lineCurrency) {
+    String direction = blankToNull(line.transferDirection());
+    if (direction != null) {
+      Account other =
+          accountService
+              .findById(line.categoryId())
+              .orElseThrow(
+                  () -> new IllegalArgumentException("No account with id " + line.categoryId()));
+      if (other.accountId().equals(fundingAccount.accountId())) {
+        throw new IllegalArgumentException("A transfer needs two different accounts");
+      }
+      if (!other.currencyCode().equals(lineCurrency)) {
+        throw new IllegalArgumentException(
+            "A transfer line must target a "
+                + lineCurrency
+                + " account ("
+                + other.name()
+                + " is "
+                + other.currencyCode()
+                + "); a receipt mixing more currencies is two transactions");
+      }
+      return new ResolvedLine(
+          other,
+          SplitLineAmounts.transferContribution(line.amount(), direction),
+          blankToNull(line.note()));
+    }
+    Account leaf = currencyLeafService.resolveCurrencyLeaf(line.categoryId(), lineCurrency);
+    return new ResolvedLine(
+        leaf,
+        SplitLineAmounts.signedContribution(line.amount(), leaf.type()),
+        blankToNull(line.note()));
   }
 
   /**
@@ -178,11 +219,10 @@ public class DockSplitService {
     BigDecimal netSpending = BigDecimal.ZERO;
     BigDecimal spendingMagnitude = BigDecimal.ZERO;
     for (SplitLineDraft line : entry.lines()) {
-      Account leaf = currencyLeafService.resolveCurrencyLeaf(line.categoryId(), spendingCurrency);
-      BigDecimal contribution = signedContribution(line.amount(), leaf.type());
-      netSpending = netSpending.add(contribution);
-      spendingMagnitude = spendingMagnitude.add(contribution.abs());
-      resolved.add(new ResolvedLine(leaf, contribution, blankToNull(line.note())));
+      ResolvedLine resolvedLine = resolveLine(line, fundingAccount, spendingCurrency);
+      netSpending = netSpending.add(resolvedLine.contribution());
+      spendingMagnitude = spendingMagnitude.add(resolvedLine.contribution().abs());
+      resolved.add(resolvedLine);
     }
 
     // The funding side (register §3.8, mixed-split convention): outflow when the lines net to a
@@ -281,42 +321,11 @@ public class DockSplitService {
     return MoneyFormat.parse(text).abs();
   }
 
-  /** A resolved split line: its spending-currency leaf, signed contribution, and note. */
+  /**
+   * A resolved split line: its counter-leg account (a category currency leaf, or — for a transfer
+   * line — the real own account), its signed contribution, and note.
+   */
   private record ResolvedLine(Account leaf, BigDecimal contribution, String note) {}
-
-  /**
-   * A split line's signed contribution to the funding sum (register §3.8, the mixed-split rule):
-   * the typed amount kept with its own sign, then made positive for an income category and negative
-   * for an expense one. A storno (a leading {@code −}) therefore flips: negative on income counts
-   * negatively, negative on expense counts positively.
-   *
-   * @param amountText the typed amount, German-formatted, optionally a leading {@code −} storno
-   * @param categoryType the resolved leaf's type ({@code income}/{@code expense})
-   */
-  static BigDecimal signedContribution(String amountText, String categoryType) {
-    BigDecimal value = parseSignedAmount(amountText);
-    return INCOME.equals(categoryType) ? value : value.negate();
-  }
-
-  /**
-   * Parse a line amount keeping its sign: a bare magnitude is positive; a leading {@code −} (ASCII
-   * or Unicode) makes it negative (a storno); a leading {@code +} is accepted and redundant. Unlike
-   * the simple dock's sign resolution, there is no direction <em>override</em> here — the category
-   * type decides direction, and the sign is only the storno.
-   */
-  static BigDecimal parseSignedAmount(String amountText) {
-    if (amountText == null || amountText.isBlank()) {
-      throw new IllegalArgumentException("A line amount is required");
-    }
-    String trimmed = amountText.strip();
-    char first = trimmed.charAt(0);
-    boolean negative = first == '-' || first == UNICODE_MINUS;
-    boolean signed = negative || first == '+';
-    String magnitudeText = signed ? trimmed.substring(1).strip() : trimmed;
-
-    BigDecimal magnitude = MoneyFormat.parse(magnitudeText).abs();
-    return negative ? magnitude.negate() : magnitude;
-  }
 
   private static String blankToNull(String value) {
     return value == null || value.isBlank() ? null : value;
@@ -351,6 +360,7 @@ public class DockSplitService {
     List<String> categoryText = new ArrayList<>();
     List<String> categoryId = new ArrayList<>();
     List<String> categoryType = new ArrayList<>();
+    List<String> transferDirection = new ArrayList<>();
     List<String> amount = new ArrayList<>();
     List<String> note = new ArrayList<>();
     BigDecimal spendingTotal = BigDecimal.ZERO;
@@ -359,7 +369,10 @@ public class DockSplitService {
       categoryText.add(semantic.name());
       categoryId.add(String.valueOf(semantic.accountId()));
       categoryType.add(leg.account().type());
-      amount.add(amountText(leg.posting().amount(), leg.account().type()));
+      // The panel only classifies category-leg splits (a split with a transfer leg has two or more
+      // own-account legs and is refused above), so every reloaded line is an ordinary category.
+      transferDirection.add("");
+      amount.add(SplitLineAmounts.amountText(leg.posting().amount(), leg.account().type()));
       note.add(leg.posting().note() == null ? "" : leg.posting().note());
       spendingTotal = spendingTotal.add(leg.posting().amount().abs());
     }
@@ -397,6 +410,7 @@ public class DockSplitService {
         categoryText,
         categoryId,
         categoryType,
+        transferDirection,
         amount,
         note,
         null,
@@ -422,18 +436,6 @@ public class DockSplitService {
       throw new IllegalArgumentException(NOT_A_SPLIT);
     }
     return new SplitLegs(fundingLegs.get(0), categoryLegs);
-  }
-
-  /**
-   * The magnitude the user would type for a category leg (register §3.8, the mixed-split rule),
-   * inverting {@link #signedContribution}: an income leg's typed value is {@code −amount}, an
-   * expense leg's is {@code +amount}; a negative result is a storno and carries a leading {@code
-   * −}.
-   */
-  static String amountText(BigDecimal legAmount, String categoryType) {
-    BigDecimal typed = INCOME.equals(categoryType) ? legAmount.negate() : legAmount;
-    String magnitude = MoneyFormat.number(typed.abs(), FRACTION_DIGITS);
-    return typed.signum() < 0 ? "-" + magnitude : magnitude;
   }
 
   private static List<LegAccount> legsOfType(List<LegAccount> legs, List<String> types) {

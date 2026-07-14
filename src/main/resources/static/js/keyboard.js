@@ -219,6 +219,14 @@
         if (baseCell) baseCell.textContent = magnitude ? formatGerman(magnitude * rateBase) : "";
       }
       if (!amountEl || !amountEl.value.trim()) return;
+      // A transfer line (register §3.8, plan stage 7d.3) has no category type — its direction signs
+      // it: FROM is an inflow (+, like income), TO an outflow (−, like expense).
+      const dirEl = line.querySelector('input[name="lineTransferDirection"]');
+      const dir = dirEl ? dirEl.value : "";
+      if (dir) {
+        net += dir === "FROM" ? parseGerman(amountEl.value) : -parseGerman(amountEl.value);
+        return;
+      }
       const type = typeEl ? typeEl.value : "";
       if (!type) return;
       net += type === "income" ? parseGerman(amountEl.value) : -parseGerman(amountEl.value);

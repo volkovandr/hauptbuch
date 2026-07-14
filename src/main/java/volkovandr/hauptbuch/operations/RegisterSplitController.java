@@ -66,8 +66,12 @@ class RegisterSplitController {
       @ModelAttribute DockEntryForm form,
       @RequestParam(required = false) String categoryText,
       Model model) {
+    // A transfer line carries a direction, not a category type: the dock's committed line may be a
+    // transfer to a real own account (register §3.8, plan stage 7d.3), so seed the direction and
+    // leave the type blank in that case.
+    String direction = SplitFormBinder.blankToNull(form.transferDirection());
     String type =
-        form.categoryId() == null
+        direction != null || form.categoryId() == null
             ? ""
             : accountService.findById(form.categoryId()).map(Account::type).orElse("");
     String categoryId = form.categoryId() == null ? "" : String.valueOf(form.categoryId());
@@ -87,6 +91,7 @@ class RegisterSplitController {
             List.of(categoryText == null ? "" : categoryText),
             List.of(categoryId),
             List.of(type),
+            List.of(direction == null ? "" : direction),
             List.of(seed.lineAmount()),
             List.of(""),
             form.viewAccountId(),

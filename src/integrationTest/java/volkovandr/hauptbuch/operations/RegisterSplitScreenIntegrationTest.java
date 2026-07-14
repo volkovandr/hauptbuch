@@ -379,6 +379,117 @@ class RegisterSplitScreenIntegrationTest {
         .andExpect(content().string(containsString("Drinks")));
   }
 
+  // ── split transfers (register §3.5/§3.8, plan stage 7d.3) ──────────────────────
+
+  @Test
+  void resolvingaSplitLineTransferTargetReturnsTheAccountIdAndDirection() throws Exception {
+    openAccount("Cash", "500");
+    long savings = openAccount("Savings", "0");
+
+    mockMvc
+        .perform(
+            post("/categories/resolve")
+                .param("categoryText", "To → Savings")
+                .param("fieldName", "lineCategoryId")
+                .param("typeFieldName", "lineCategoryType")
+                .param("directionFieldName", "lineTransferDirection"))
+        .andExpect(status().isOk())
+        // The line's hidden id carries the real account; the per-line direction input marks it a
+        // transfer so the arrays stay aligned across a re-resolve.
+        .andExpect(content().string(containsString("name=\"lineCategoryId\"")))
+        .andExpect(content().string(containsString("value=\"" + savings + "\"")))
+        .andExpect(content().string(containsString("name=\"lineTransferDirection\"")))
+        .andExpect(content().string(containsString("value=\"TO\"")));
+  }
+
+  @Test
+  void sameCurrencySplitWithaTransferLineBooksAllLegsBalanced() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long savings = openAccount("Savings", "0");
+    long food = insertCategory("Food", "expense");
+
+    // Split off Cash: Food €20 + move €30 to Savings. Cash −50 (500 → 450), Food +20, Savings +30.
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("lineCategoryId", String.valueOf(food), String.valueOf(savings))
+                .param("lineCategoryType", "expense", "")
+                .param("lineTransferDirection", "", "TO")
+                .param("lineAmount", "20", "30")
+                .param("viewAccountId", String.valueOf(cash), String.valueOf(savings)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"register-rows\"")))
+        // Cash's thread (500 → 450) and the transfer into Savings (0 → 30) both render.
+        .andExpect(content().string(containsString("450,00")))
+        .andExpect(content().string(containsString("30,00")));
+
+    long txnId = latestTransactionId();
+    assertThat(spendTransactionCount()).isEqualTo(1L);
+    assertThat(legCount(txnId)).isEqualTo(3L);
+    assertThat(legSum(txnId)).isEqualByComparingTo("0"); // single currency: natives sum to zero
+  }
+
+  @Test
+  void crossCurrencySplitWithaTransferLineBalancesInBase() throws Exception {
+    long chfCard = openAccount("Cash CHF", "CHF", "500");
+    long usdWallet = openAccount("USD Wallet", "USD", "0");
+    long food = insertCategory("Food", "expense");
+
+    // CHF card, USD receipt (90), EUR base (95): Food 60 USD + move 30 USD to the USD wallet. The
+    // transfer leg is in the spending currency with a derived base, like a category leg; only base
+    // sums to zero.
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(chfCard))
+                .param("spendingCurrencyCode", "USD")
+                .param("total", "90")
+                .param("fundingTotal", "100")
+                .param("baseTotal", "95")
+                .param("lineCategoryId", String.valueOf(food), String.valueOf(usdWallet))
+                .param("lineCategoryType", "expense", "")
+                .param("lineTransferDirection", "", "TO")
+                .param("lineAmount", "60", "30")
+                .param("viewAccountId", String.valueOf(chfCard), String.valueOf(usdWallet)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"register-rows\"")));
+
+    long txnId = latestTransactionId();
+    assertThat(spendTransactionCount()).isEqualTo(1L);
+    assertThat(legCount(txnId)).isEqualTo(3L);
+    assertThat(baseAmountSum(txnId)).isEqualByComparingTo("0");
+    assertThat(fundingNative(txnId, chfCard)).isEqualByComparingTo("-100");
+    assertThat(fundingNative(txnId, usdWallet)).isEqualByComparingTo("30");
+  }
+
+  @Test
+  void splitTransferToaDifferentlyDenominatedAccountReRendersWithanError() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long chfWallet = openAccount("CHF Wallet", "CHF", "0");
+    long food = insertCategory("Food", "expense");
+
+    // A same-currency (EUR) split cannot absorb a CHF transfer leg — a third currency the header's
+    // single shared rate can't express. The panel re-renders carrying the explanation, no commit.
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("lineCategoryId", String.valueOf(food), String.valueOf(chfWallet))
+                .param("lineCategoryType", "expense", "")
+                .param("lineTransferDirection", "", "TO")
+                .param("lineAmount", "20", "30")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(containsString("EUR account")));
+
+    assertThat(spendTransactionCount()).isEqualTo(0L);
+  }
+
   private BigDecimal baseAmountSum(long transactionId) {
     return jdbcClient
         .sql("select coalesce(sum(base_amount), 0) from posting where transaction_id = :id")

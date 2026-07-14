@@ -38,6 +38,10 @@ import java.util.List;
  * @param lineCategoryType each line's resolved category type ({@code income}/{@code expense},
  *     {@code ""} until resolved) — drives the live direction/remaining readout; the commit
  *     re-resolves authoritatively
+ * @param lineTransferDirection each line's transfer direction ({@code TO}/{@code FROM}, {@code ""}
+ *     for an ordinary category line) — set when the line resolved to a {@code To →}/{@code From ←}
+ *     transfer target (register §3.8, plan stage 7d.3); index-aligned like the others, so every
+ *     line emits it (blank for a category) to keep the arrays aligned
  * @param lineAmount each line's typed amount (a bare magnitude, optionally a leading {@code −}
  *     storno)
  * @param lineNote each line's posting-level note; nullable per line
@@ -59,6 +63,7 @@ public record SplitForm(
     List<String> categoryText,
     List<String> lineCategoryId,
     List<String> lineCategoryType,
+    List<String> lineTransferDirection,
     List<String> lineAmount,
     List<String> lineNote,
     List<Long> viewAccountId,
@@ -71,6 +76,8 @@ public record SplitForm(
     categoryText = categoryText == null ? null : List.copyOf(categoryText);
     lineCategoryId = lineCategoryId == null ? null : List.copyOf(lineCategoryId);
     lineCategoryType = lineCategoryType == null ? null : List.copyOf(lineCategoryType);
+    lineTransferDirection =
+        lineTransferDirection == null ? null : List.copyOf(lineTransferDirection);
     lineAmount = lineAmount == null ? null : List.copyOf(lineAmount);
     lineNote = lineNote == null ? null : List.copyOf(lineNote);
     viewAccountId = viewAccountId == null ? null : List.copyOf(viewAccountId);

@@ -55,7 +55,8 @@ class SplitPanelAssembler {
     for (int i = 0; i < count; i++) {
       String amount = at(form.lineAmount(), i);
       String type = at(form.lineCategoryType(), i);
-      net = net.add(lenientContribution(amount, type));
+      String direction = at(form.lineTransferDirection(), i);
+      net = net.add(SplitLineAmounts.lenientContribution(amount, type, direction));
       BigDecimal magnitude = lenientParse(amount).abs();
       lines.add(
           new SplitLineView(
@@ -63,6 +64,7 @@ class SplitPanelAssembler {
               at(form.categoryText(), i),
               at(form.lineCategoryId(), i),
               type,
+              direction,
               amount,
               at(form.lineNote(), i),
               ctx.derived(magnitude, ctx.rateSpendingToFunding()),
@@ -173,6 +175,7 @@ class SplitPanelAssembler {
         appended(form.categoryText(), ""),
         appended(form.lineCategoryId(), ""),
         appended(form.lineCategoryType(), ""),
+        appended(form.lineTransferDirection(), ""),
         appended(form.lineAmount(), rest),
         appended(form.lineNote(), ""));
   }
@@ -184,20 +187,9 @@ class SplitPanelAssembler {
         removed(form.categoryText(), index),
         removed(form.lineCategoryId(), index),
         removed(form.lineCategoryType(), index),
+        removed(form.lineTransferDirection(), index),
         removed(form.lineAmount(), index),
         removed(form.lineNote(), index));
-  }
-
-  /** The signed contribution, or zero for an incomplete line (blank amount or unresolved type). */
-  private static BigDecimal lenientContribution(String amount, String type) {
-    if (amount == null || amount.isBlank() || type == null || type.isBlank()) {
-      return BigDecimal.ZERO;
-    }
-    try {
-      return DockSplitService.signedContribution(amount, type);
-    } catch (IllegalArgumentException e) {
-      return BigDecimal.ZERO; // mid-entry unparseable text contributes nothing to the readout
-    }
   }
 
   private static BigDecimal lenientParse(String text) {
@@ -225,6 +217,7 @@ class SplitPanelAssembler {
             size(form.categoryText()),
             size(form.lineCategoryId()),
             size(form.lineCategoryType()),
+            size(form.lineTransferDirection()),
             size(form.lineAmount()),
             size(form.lineNote()))
         .stream()
@@ -266,6 +259,7 @@ class SplitPanelAssembler {
       List<String> categoryText,
       List<String> lineCategoryId,
       List<String> lineCategoryType,
+      List<String> lineTransferDirection,
       List<String> lineAmount,
       List<String> lineNote) {
     return new SplitForm(
@@ -281,6 +275,7 @@ class SplitPanelAssembler {
         categoryText,
         lineCategoryId,
         lineCategoryType,
+        lineTransferDirection,
         lineAmount,
         lineNote,
         form.viewAccountId(),

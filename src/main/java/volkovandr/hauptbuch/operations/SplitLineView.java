@@ -22,6 +22,10 @@ package volkovandr.hauptbuch.operations;
  * @param categoryId the resolved category id; {@code ""} until resolved
  * @param categoryType the resolved category type ({@code income}/{@code expense}); {@code ""} until
  *     resolved
+ * @param transferDirection the line's transfer direction ({@code TO}/{@code FROM}) when it resolved
+ *     to a {@code To →}/{@code From ←} transfer target (register §3.8, plan stage 7d.3), else
+ *     {@code ""} — the keyboard.js leaf reads it (via {@code lineTransferDirection}) to sign a
+ *     transfer line in the live readout, which has no category type
  * @param amount the typed amount to prefill (a bare magnitude, optionally a leading {@code −}
  *     storno), in the spending currency
  * @param note the line's posting-level note; {@code ""} if none
@@ -36,6 +40,7 @@ public record SplitLineView(
     String categoryText,
     String categoryId,
     String categoryType,
+    String transferDirection,
     String amount,
     String note,
     String accountAmount,
