@@ -93,6 +93,9 @@ public class DockCommitService {
                 PostingDraft.of(other.accountId(), fundingAmount.negate()))
             : crossCurrencyLegs(entry, fundingAccount, other, fundingAmount);
 
+    // A transaction-level tag lands on every leg (data-model §10.2, owner decision 2026-07-14).
+    legs = tagged(legs, entry.tagIds());
+
     TransactionDraft draft = TransactionDraft.confirmed(entry.date(), payeeId, entry.note(), legs);
 
     if (entry.transactionId() == null) {
@@ -201,6 +204,20 @@ public class DockCommitService {
 
   private static String blankToNull(String value) {
     return value == null || value.isBlank() ? null : value;
+  }
+
+  /**
+   * Attach the transaction's tags to every leg (data-model §10.2 — a transaction-level tag expands
+   * to one {@code posting_tag} per leg; owner decision 2026-07-14). The ids are de-duplicated so a
+   * doubly-picked chip can never violate the {@code posting_tag} unique constraint. Untagged legs
+   * are returned unchanged (the ≥95% path).
+   */
+  private static List<PostingDraft> tagged(List<PostingDraft> legs, List<Long> tagIds) {
+    List<Long> distinct = tagIds.stream().distinct().toList();
+    if (distinct.isEmpty()) {
+      return legs;
+    }
+    return legs.stream().map(leg -> leg.withTags(distinct)).toList();
   }
 
   /**

@@ -37,66 +37,57 @@ public class TagService {
   }
 
   /**
-   * Resolve the dock's committed chips to the tag ids a posting is tagged with (register §3.6).
-   * Each chip is a {@code Parent:Child} path: every segment is reused if a live tag of that name
+   * Resolve one committed chip (register §3.6) to the tag it names and a canonical display label.
+   * The chip is a {@code Parent:Child} path: every segment is reused if a live tag of that name
    * (case-insensitive) already exists under the running parent, else inserted — so re-typing {@code
-   * Car:Passat} lands the same {@code Passat} under the same {@code Car}, and a genuinely new leaf
-   * creates just the missing levels. Only the <strong>deepest</strong> segment's id is returned per
-   * chip: tagging {@code Car:Passat} attaches {@code Passat} alone (the rollup query later walks
-   * the subtree to fold it into a {@code Car} report — data-model §10.3), while tagging bare {@code
-   * Car} attaches {@code Car} directly.
+   * car:passat} lands the same {@code Passat} under the same {@code Car} (shown canonically as
+   * {@code Car:Passat}), while a genuinely new leaf creates just the missing levels. The
+   * <strong>deepest</strong> segment's id is the one a posting is tagged with: {@code Car:Passat}
+   * attaches {@code Passat} alone (the rollup later walks the subtree to fold it into a {@code Car}
+   * report — data-model §10.3), while bare {@code Car} attaches {@code Car}.
    *
-   * <p>Blank chips (and blank path segments, e.g. a stray {@code Car:}) are tolerated and dropped;
-   * duplicate ids are collapsed so a posting never carries the same tag twice (also the {@code
-   * posting_tag} unique constraint). Order is preserved.
+   * <p>Blank path segments (a stray {@code Car:}) and surrounding whitespace are tolerated; a chip
+   * with no non-blank segment resolves to empty (the dock never commits one).
    *
-   * @param chips the chip texts the dock committed, in entry order; null/empty yields no tags
-   * @return the distinct deepest-segment tag ids, in first-seen order
+   * @param chip the typed chip, a {@code Parent:Child} path
+   * @return the resolved leaf tag id and its canonical label, or empty for a blank chip
    */
   @Transactional
-  public List<Long> resolveChips(List<String> chips) {
-    if (chips == null || chips.isEmpty()) {
-      return List.of();
-    }
-    List<Long> ids = new ArrayList<>();
-    for (String chip : chips) {
-      Long id = resolveChip(chip);
-      if (id != null && !ids.contains(id)) {
-        ids.add(id);
-      }
-    }
-    return List.copyOf(ids);
-  }
-
-  /**
-   * Resolve one {@code Parent:Child} chip to its deepest segment's tag id, reusing or creating each
-   * level from the top down. Returns {@code null} for a chip with no non-blank segment.
-   */
-  private Long resolveChip(String chip) {
+  public Optional<ResolvedChip> resolveChip(String chip) {
     if (chip == null || chip.isBlank()) {
-      return null;
+      return Optional.empty();
     }
     Long parentId = null;
     Long deepest = null;
+    List<String> canonicalPath = new ArrayList<>();
     for (String rawSegment : chip.split(HIERARCHY_SEPARATOR)) {
       String name = rawSegment.strip();
       if (name.isEmpty()) {
         continue;
       }
       Optional<Tag> existing = tagRepository.findByNameAndParent(name, parentId);
-      long resolved = existing.map(Tag::tagId).orElseGet(insertUnder(name, parentId));
-      deepest = resolved;
-      parentId = resolved;
+      if (existing.isPresent()) {
+        deepest = existing.get().tagId();
+        // Reuse the stored spelling so `car` displays as the canonical `Car`.
+        canonicalPath.add(existing.get().name());
+      } else {
+        deepest = tagRepository.insert(name, parentId);
+        canonicalPath.add(name);
+      }
+      parentId = deepest;
     }
-    return deepest;
+    if (deepest == null) {
+      return Optional.empty();
+    }
+    return Optional.of(new ResolvedChip(deepest, String.join(HIERARCHY_SEPARATOR, canonicalPath)));
   }
 
   /**
-   * A supplier that inserts {@code name} under {@code parentId} — extracted so {@link #resolveChip}
-   * can use {@code Optional.orElseGet} without capturing the loop-mutated {@code parentId}
-   * (effectively-final rule).
+   * A resolved chip: the leaf tag id a posting is tagged with, and the canonical {@code
+   * Parent:Child} label to show on the pill (register §3.6).
+   *
+   * @param tagId the deepest-segment tag id
+   * @param label the canonical hierarchy label, segments joined by {@code :}
    */
-  private java.util.function.Supplier<Long> insertUnder(String name, Long parentId) {
-    return () -> tagRepository.insert(name, parentId);
-  }
+  public record ResolvedChip(long tagId, String label) {}
 }

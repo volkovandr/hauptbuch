@@ -121,6 +121,14 @@ th.register__spine {
   font-size: 0.85rem;
 }
 
+/* Tag chips in the Category cell (register §3.6): a quiet ledger-green "#label", set apart from the
+   counterpart category by the hash and a lighter weight. */
+.tag-chip {
+  margin-left: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--green-ink);
+}
+
 /* pending_review rows: muted and dashed, no balance (§2.10) — they do not move the confirmed
    balance, so they must not read as if they had. */
 .register__row--pending {
@@ -273,6 +281,62 @@ th.register__spine {
 
 .field--amount .input {
   text-align: right;
+}
+
+/* Tags chip field (register §3.6, plan stage 7e). The field flexes wider so several pills sit on
+   the line before the input; committed tags are quiet ledger-green pills with a keyboard-first
+   remove affordance, and the input shares the wrapper's border rather than carrying its own. */
+.entry-dock .field--tags {
+  flex: 1 1 15rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.3rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.25rem;
+  background: var(--paper);
+}
+
+/* display:contents so the pills join the .chips flex row directly (the list is just a swap slot). */
+.chips__list {
+  display: contents;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.05rem 0.15rem 0.05rem 0.45rem;
+  font-size: 0.78rem;
+  color: var(--green-ink);
+  background: var(--green-wash);
+  border-radius: 0.8rem;
+}
+
+.chip__remove {
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 0.2rem;
+  font-size: 0.95rem;
+}
+
+.chip__remove:hover {
+  color: var(--oxblood);
+}
+
+.chips__input {
+  flex: 1 1 6rem;
+  min-width: 4rem;
+  border: 0;
+  padding: 0.1rem 0.2rem;
+  background: transparent;
 }
 
 /* The status line under the fields: the ghost suggestion (§3.9) and resolved-category note. Quiet,

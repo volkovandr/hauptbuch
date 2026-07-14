@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.operations;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * A single-category transaction as entered in the register's entry dock (register §3, plan stage
@@ -49,6 +50,10 @@ import java.time.LocalDate;
  * @param note free-text transaction note; nullable
  * @param transferDirection {@code TO}/{@code FROM} when the counterpart is a transfer account
  *     (register §3.8); {@code null} for a category counterpart
+ * @param tagIds the resolved tag ids the committed chips carry (register §3.6, plan stage 7e). A
+ *     transaction-level tag lands on <em>every</em> leg (data-model §10.2), so {@link
+ *     DockCommitService} attaches these to both the funding and the counterpart leg; never null,
+ *     defaults empty
  */
 public record DockEntry(
     Long transactionId,
@@ -62,4 +67,11 @@ public record DockEntry(
     String categoryAmount,
     String baseAmount,
     String note,
-    String transferDirection) {}
+    String transferDirection,
+    List<Long> tagIds) {
+
+  /** Defensively copy the tag ids (null-safe) so the entry cannot be mutated after. */
+  public DockEntry {
+    tagIds = tagIds == null ? List.of() : List.copyOf(tagIds);
+  }
+}

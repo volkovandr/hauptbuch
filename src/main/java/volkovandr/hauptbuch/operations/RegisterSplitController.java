@@ -222,7 +222,9 @@ class RegisterSplitController {
             amounts.isEmpty() ? null : SplitFormBinder.blankToNull(amounts.get(0)),
             SplitFormBinder.parseLong(ids.isEmpty() ? null : ids.get(0)),
             texts.isEmpty() ? null : SplitFormBinder.blankToNull(texts.get(0)),
-            form.note());
+            form.note(),
+            // Split-line tags arrive in 7e.3; a cancelled split carries none back to the dock yet.
+            List.of());
     model.addAttribute(REGISTER, registerService.view(SplitFormBinder.filterFrom(form)));
     model.addAttribute("edit", prefill);
     model.addAttribute("currencies", dockAmountFieldsService.currencies());

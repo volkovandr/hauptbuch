@@ -25,6 +25,7 @@ import volkovandr.hauptbuch.ledger.RegisterView.RegisterAccountOption;
 import volkovandr.hauptbuch.ledger.RegisterView.RegisterCategoryOption;
 import volkovandr.hauptbuch.ledger.repository.PayeeRepository;
 import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
+import volkovandr.hauptbuch.ledger.repository.TagReadRepository;
 
 /**
  * Unit tier (plan §1.5): {@link RegisterService}'s orchestration with its collaborators mocked —
@@ -45,6 +46,7 @@ class RegisterServiceTest {
   @Mock private AccountService accountService;
   @Mock private SettingsService settingsService;
   @Mock private RegisterRowRenderer rowRenderer;
+  @Mock private TagReadRepository tagReadRepository;
 
   private RegisterService registerService;
 
@@ -52,7 +54,13 @@ class RegisterServiceTest {
   void setUp() {
     registerService =
         new RegisterService(
-            registerRepository, payeeRepository, accountService, settingsService, rowRenderer);
+            registerRepository,
+            payeeRepository,
+            accountService,
+            settingsService,
+            rowRenderer,
+            tagReadRepository);
+    lenient().when(tagReadRepository.liveTagLabels()).thenReturn(List.of());
     lenient().when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
     lenient().when(payeeRepository.findFilterOptions()).thenReturn(List.of());
     lenient()

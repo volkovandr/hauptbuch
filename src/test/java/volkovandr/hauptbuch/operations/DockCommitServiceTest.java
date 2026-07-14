@@ -71,7 +71,19 @@ class DockCommitServiceTest {
 
   private static DockEntry simpleEntry(String amount) {
     return new DockEntry(
-        null, DATE, CASH_ID, 42L, null, CATEGORY_ID, null, amount, null, null, "lunch", null);
+        null,
+        DATE,
+        CASH_ID,
+        42L,
+        null,
+        CATEGORY_ID,
+        null,
+        amount,
+        null,
+        null,
+        "lunch",
+        null,
+        List.of());
   }
 
   // ── sign resolution (register §3.8) ─────────────────────────────────────────
@@ -141,6 +153,41 @@ class DockCommitServiceTest {
   }
 
   @Test
+  void attachesTagsToEveryLegOfSimpleTransaction() {
+    Account cash = account(CASH_ID, "asset", EUR);
+    Account leaf = account(LEAF_ID, EXPENSE, EUR);
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(cash));
+    when(currencyLeafService.resolveCurrencyLeaf(CATEGORY_ID, EUR)).thenReturn(leaf);
+    when(payeeService.resolvePayee(42L, null)).thenReturn(42L);
+    when(ledgerService.recordTransaction(any())).thenReturn(99L);
+
+    // A doubly-picked chip (5 twice) must de-dupe so the posting_tag unique constraint can't fire.
+    DockEntry entry =
+        new DockEntry(
+            null,
+            DATE,
+            CASH_ID,
+            42L,
+            null,
+            CATEGORY_ID,
+            null,
+            "20",
+            null,
+            null,
+            "lunch",
+            null,
+            List.of(5L, 6L, 5L));
+    dockCommitService.commit(entry);
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    // A transaction-level tag lands on every leg (data-model §10.2, owner decision 2026-07-14).
+    assertThat(tagIds(legs, CASH_ID)).containsExactly(5L, 6L);
+    assertThat(tagIds(legs, LEAF_ID)).containsExactly(5L, 6L);
+  }
+
+  @Test
   void commitRoutesTheCategoryToTheFundingAccountsCurrencyWhenNoOverride() {
     // The paying account is CHF, so the category leaf must be resolved in CHF (§6.5) — the dock
     // never
@@ -165,7 +212,8 @@ class DockCommitServiceTest {
             null,
             null,
             null,
-            null);
+            null,
+            List.of());
     dockCommitService.commit(entry);
 
     verify(currencyLeafService).resolveCurrencyLeaf(CATEGORY_ID, CHF);
@@ -195,7 +243,19 @@ class DockCommitServiceTest {
 
     DockEntry entry =
         new DockEntry(
-            null, DATE, CASH_ID, null, null, CATEGORY_ID, CHF, "9,10", "10", null, null, null);
+            null,
+            DATE,
+            CASH_ID,
+            null,
+            null,
+            CATEGORY_ID,
+            CHF,
+            "9,10",
+            "10",
+            null,
+            null,
+            null,
+            List.of());
     dockCommitService.commit(entry);
 
     verify(currencyLeafService).resolveCurrencyLeaf(CATEGORY_ID, CHF);
@@ -215,7 +275,19 @@ class DockCommitServiceTest {
 
     DockEntry entry =
         new DockEntry(
-            null, DATE, CASH_ID, null, null, CATEGORY_ID, CHF, "9,10", "10", null, null, null);
+            null,
+            DATE,
+            CASH_ID,
+            null,
+            null,
+            CATEGORY_ID,
+            CHF,
+            "9,10",
+            "10",
+            null,
+            null,
+            null,
+            List.of());
     dockCommitService.commit(entry);
 
     ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
@@ -244,7 +316,19 @@ class DockCommitServiceTest {
 
     DockEntry entry =
         new DockEntry(
-            null, DATE, CASH_ID, null, null, CATEGORY_ID, USD, "9", "10", "8,50", null, null);
+            null,
+            DATE,
+            CASH_ID,
+            null,
+            null,
+            CATEGORY_ID,
+            USD,
+            "9",
+            "10",
+            "8,50",
+            null,
+            null,
+            List.of());
     dockCommitService.commit(entry);
 
     ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
@@ -267,7 +351,19 @@ class DockCommitServiceTest {
 
     DockEntry entry =
         new DockEntry(
-            null, DATE, CASH_ID, null, null, CATEGORY_ID, CHF, "9,10", null, null, null, null);
+            null,
+            DATE,
+            CASH_ID,
+            null,
+            null,
+            CATEGORY_ID,
+            CHF,
+            "9,10",
+            null,
+            null,
+            null,
+            null,
+            List.of());
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockCommitService.commit(entry))
         .withMessageContaining("CHF");
@@ -284,7 +380,19 @@ class DockCommitServiceTest {
 
     DockEntry entry =
         new DockEntry(
-            null, DATE, CASH_ID, null, null, CATEGORY_ID, USD, "9", "10", null, null, null);
+            null,
+            DATE,
+            CASH_ID,
+            null,
+            null,
+            CATEGORY_ID,
+            USD,
+            "9",
+            "10",
+            null,
+            null,
+            null,
+            List.of());
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockCommitService.commit(entry))
         .withMessageContaining(EUR);
@@ -301,7 +409,19 @@ class DockCommitServiceTest {
 
     DockEntry entry =
         new DockEntry(
-            null, DATE, CASH_ID, null, null, CATEGORY_ID, CHF, "9,10", "10", null, null, null);
+            null,
+            DATE,
+            CASH_ID,
+            null,
+            null,
+            CATEGORY_ID,
+            CHF,
+            "9,10",
+            "10",
+            null,
+            null,
+            null,
+            List.of());
     assertThatExceptionOfType(IllegalStateException.class)
         .isThrownBy(() -> dockCommitService.commit(entry));
   }
@@ -322,7 +442,8 @@ class DockCommitServiceTest {
         counterpartAmount,
         baseAmount,
         null,
-        direction);
+        direction,
+        List.of());
   }
 
   @Test
@@ -398,7 +519,8 @@ class DockCommitServiceTest {
     when(payeeService.resolvePayee(null, null)).thenReturn(null);
 
     DockEntry entry =
-        new DockEntry(null, DATE, CASH_ID, null, null, CASH_ID, null, "20", null, null, null, TO);
+        new DockEntry(
+            null, DATE, CASH_ID, null, null, CASH_ID, null, "20", null, null, null, TO, List.of());
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockCommitService.commit(entry))
         .withMessageContaining("two different accounts");
@@ -430,7 +552,19 @@ class DockCommitServiceTest {
     // not.
     DockEntry entry =
         new DockEntry(
-            55L, DATE, CASH_ID, null, null, CATEGORY_ID, null, "30", null, null, null, null);
+            55L,
+            DATE,
+            CASH_ID,
+            null,
+            null,
+            CATEGORY_ID,
+            null,
+            "30",
+            null,
+            null,
+            null,
+            null,
+            List.of());
     long txnId = dockCommitService.commit(entry);
 
     assertThat(txnId).isEqualTo(55L);
@@ -457,5 +591,9 @@ class DockCommitServiceTest {
         .findFirst()
         .orElseThrow()
         .baseAmount();
+  }
+
+  private static List<Long> tagIds(List<PostingDraft> legs, long accountId) {
+    return legs.stream().filter(l -> l.accountId() == accountId).findFirst().orElseThrow().tagIds();
   }
 }

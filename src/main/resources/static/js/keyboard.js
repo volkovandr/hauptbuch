@@ -101,6 +101,13 @@
       return;
     }
 
+    // Tag chip field (register §3.6): Enter commits the typed chip, Backspace on the empty input
+    // removes the last pill. Handled before the "not typing" early return, since it fires while the
+    // cursor is in the tag input. A no-op anywhere else.
+    if (event.target.matches && event.target.matches("[data-tag-input]")) {
+      onTagKeydown(event);
+    }
+
     // List navigation and single-key shortcuts only apply when not typing into a field.
     const tag = (event.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea" || tag === "select") return;
@@ -293,6 +300,47 @@
     }
   }
 
+  // ── Tag chip field (register §3.6) ───────────────────────────────────────────
+  // Keyboard-first JIRA-style chips. Typing then Enter commits a chip: rather than submit the form,
+  // fire the `tag-commit` event htmx listens for (hx-post /categories/tags/resolve), which resolves
+  // or creates the tag and appends its pill. Backspace on the empty input removes the last pill.
+  // Resolution/create is server-side (CLAUDE.md §1.6); this leaf only supplies the affordances.
+  function onTagKeydown(event) {
+    const input = event.target;
+    if (event.key === "Enter") {
+      // Commit the chip instead of submitting the transaction; only when something was typed.
+      event.preventDefault();
+      if (input.value.trim()) input.dispatchEvent(new CustomEvent("tag-commit"));
+    } else if (event.key === "Backspace" && input.value === "") {
+      const list = document.querySelector("#entry-tag-chips");
+      const chips = list ? list.querySelectorAll("[data-tag-chip]") : [];
+      const last = chips[chips.length - 1];
+      if (last) {
+        event.preventDefault();
+        last.remove();
+      }
+    }
+  }
+
+  // Remove a committed chip when its × is clicked (its hidden tagId leaves the form with it).
+  function onTagRemoveClick(event) {
+    const button = event.target.closest && event.target.closest("[data-tag-remove]");
+    if (!button) return;
+    const chip = button.closest("[data-tag-chip]");
+    if (chip) chip.remove();
+  }
+
+  // After a chip's pill is appended, clear the input and keep focus so the next tag can be typed
+  // straight away (register §3.6). Keyed on the resolve path so other swaps never touch the input.
+  function clearTagInputAfterSwap(path) {
+    if (path !== "/categories/tags/resolve") return;
+    const input = document.querySelector("[data-tag-input]");
+    if (input) {
+      input.value = "";
+      input.focus();
+    }
+  }
+
   // ── Select-all on first focus of a numeric field (register UX) ───────────────
   // When focus first lands on a `.num` field that holds a value — via Tab or a click — select its
   // whole contents so typing replaces it (the common case). A further click in an already-focused
@@ -327,6 +375,7 @@
   }
 
   document.addEventListener("keydown", onKeydown);
+  document.addEventListener("click", onTagRemoveClick);
   document.addEventListener("mousedown", onMouseDownSelect);
   document.addEventListener("focusin", onFocusInSelect);
   document.addEventListener("mouseup", onMouseUpSelect);
@@ -352,6 +401,8 @@
       syncEditingRow();
       updateSplitReadout();
       const config = event.detail && event.detail.requestConfig;
-      focusAfterSplitSwap(config ? config.path : null);
+      const path = config ? config.path : null;
+      focusAfterSplitSwap(path);
+      clearTagInputAfterSwap(path);
     });
 })();

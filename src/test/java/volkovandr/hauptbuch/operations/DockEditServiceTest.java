@@ -19,6 +19,7 @@ import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.Posting;
 import volkovandr.hauptbuch.ledger.Transaction;
+import volkovandr.hauptbuch.ledger.TransactionTag;
 
 /**
  * Unit tier (plan §1.5): the edit-mode loader's real logic — reconstructing the sign-free amount
@@ -107,6 +108,26 @@ class DockEditServiceTest {
     assertThat(model.amount()).isEqualTo("20,00");
     assertThat(model.payeeText()).isEqualTo("Rewe - Dortmund - Germany");
     assertThat(model.note()).isEqualTo("lunch");
+  }
+
+  @Test
+  void prefillsTheTransactionTagsAsChips() {
+    when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
+    when(ledgerService.findPostings(TXN_ID))
+        .thenReturn(List.of(posting(CASH_ID, "-20"), posting(FOOD_ID, "20")));
+    when(accountService.findById(CASH_ID))
+        .thenReturn(Optional.of(account(CASH_ID, "Cash", "asset", null, EUR)));
+    when(accountService.findById(FOOD_ID))
+        .thenReturn(Optional.of(account(FOOD_ID, "Food", EXPENSE, null, EUR)));
+    when(ledgerService.tagsForTransaction(TXN_ID))
+        .thenReturn(List.of(new TransactionTag(3L, "Car:Passat"), new TransactionTag(5L, "Trip")));
+
+    DockEditModel model = service().load(TXN_ID);
+
+    // The dock re-renders these as pills so a re-save preserves them (register §3.6).
+    assertThat(model.tags())
+        .extracting(TransactionTag::label)
+        .containsExactly("Car:Passat", "Trip");
   }
 
   @Test

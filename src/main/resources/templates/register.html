@@ -158,6 +158,14 @@
                 th:text="'· +' + ${r.category().overflow()}"
                 >· +2</span
               >
+              <!-- Tag chips (register §3.6, plan stage 7e): the leg's own tags, canonical
+                   Parent:Child labels, after the counterpart summary. -->
+              <span
+                th:each="tag : ${r.tags()}"
+                class="tag-chip"
+                th:text="'#' + ${tag}"
+                >#Trip:Prague</span
+              >
             </td>
             <td
               class="register__amount num"

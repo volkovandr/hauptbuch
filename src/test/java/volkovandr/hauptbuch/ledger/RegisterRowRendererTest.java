@@ -2,11 +2,13 @@ package volkovandr.hauptbuch.ledger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.ledger.RegisterRowView.CategoryChip;
 import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
+import volkovandr.hauptbuch.ledger.repository.TagReadRepository;
 
 /**
  * Unit tier (plan §1.5): {@link RegisterRowRenderer}'s presentation logic with the repository
@@ -34,12 +37,14 @@ class RegisterRowRendererTest {
   private static final long GIRO = 11L;
 
   @Mock private RegisterRepository registerRepository;
+  @Mock private TagReadRepository tagReadRepository;
 
   private RegisterRowRenderer renderer;
 
   @BeforeEach
   void setUp() {
-    renderer = new RegisterRowRenderer(registerRepository);
+    renderer = new RegisterRowRenderer(registerRepository, tagReadRepository);
+    lenient().when(tagReadRepository.labelsByPosting(anyList())).thenReturn(Map.of());
   }
 
   private RegisterRow row(
@@ -203,5 +208,17 @@ class RegisterRowRendererTest {
     // Cash: 1st light, 2nd dark. Giro: 1st light. Zebra is per-thread, so the middle (Giro) row
     // being light does not shift Cash's alternation.
     assertThat(views).extracting(RegisterRowView::zebraDark).containsExactly(false, false, true);
+  }
+
+  @Test
+  void rendersThePostingsOwnTagsAsChips() {
+    stubLegs(leg(1L, "Food", EXPENSE, "20"));
+    // The tag read is keyed by the row's own posting id (register §3.6).
+    when(tagReadRepository.labelsByPosting(anyList()))
+        .thenReturn(Map.of(100L, List.of("Car:Passat", "Trip")));
+
+    RegisterRowView view = renderOne(row(100L, 1L, CASH, EUR, "-20"));
+
+    assertThat(view.tags()).containsExactly("Car:Passat", "Trip");
   }
 }

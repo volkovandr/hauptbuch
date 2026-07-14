@@ -82,7 +82,8 @@ public class DockEditService {
         amountText(legs.fundingLeg().amount(), legs.categoryLeaf().type()),
         semantic.accountId(),
         semantic.name(),
-        txn.note());
+        txn.note(),
+        ledgerService.tagsForTransaction(transactionId));
   }
 
   /**

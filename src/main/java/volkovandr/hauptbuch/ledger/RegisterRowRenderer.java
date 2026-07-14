@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.ledger.RegisterRowView.CategoryChip;
 import volkovandr.hauptbuch.ledger.RegisterRowView.RegisterCategoryCell;
 import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
+import volkovandr.hauptbuch.ledger.repository.TagReadRepository;
 import volkovandr.hauptbuch.shared.MoneyFactory;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 
@@ -35,9 +36,11 @@ class RegisterRowRenderer {
   private static final int MAX_CATEGORY_CHIPS = 3;
 
   private final RegisterRepository registerRepository;
+  private final TagReadRepository tagReadRepository;
 
-  RegisterRowRenderer(RegisterRepository registerRepository) {
+  RegisterRowRenderer(RegisterRepository registerRepository, TagReadRepository tagReadRepository) {
     this.registerRepository = registerRepository;
+    this.tagReadRepository = tagReadRepository;
   }
 
   /**
@@ -48,6 +51,9 @@ class RegisterRowRenderer {
    */
   List<RegisterRowView> render(List<RegisterRow> rows) {
     Map<Long, List<RegisterCounterpartLeg>> legsByTxn = legsByTransaction(rows);
+    // The tags of the rows' own postings (register §3.6) — one lookup for the whole page.
+    Map<Long, List<String>> tagsByPosting =
+        tagReadRepository.labelsByPosting(rows.stream().map(RegisterRow::postingId).toList());
 
     Map<Long, Integer> threadCount = new HashMap<>();
     List<RegisterRowView> views = new ArrayList<>(rows.size());
@@ -58,13 +64,23 @@ class RegisterRowRenderer {
       boolean pending = "pending_review".equals(row.lifecycle());
       RegisterCategoryCell cell =
           cellFor(row, legsByTxn.getOrDefault(row.transactionId(), List.of()));
-      views.add(toView(row, cell, index % 2 == 0, pending));
+      views.add(
+          toView(
+              row,
+              cell,
+              index % 2 == 0,
+              pending,
+              tagsByPosting.getOrDefault(row.postingId(), List.of())));
     }
     return views;
   }
 
   private RegisterRowView toView(
-      RegisterRow row, RegisterCategoryCell cell, boolean zebraDark, boolean pending) {
+      RegisterRow row,
+      RegisterCategoryCell cell,
+      boolean zebraDark,
+      boolean pending,
+      List<String> tags) {
     String amount =
         MoneyFormat.display(MoneyFactory.of(row.amount(), row.currencyCode()), base(row));
     String balance =
@@ -86,7 +102,8 @@ class RegisterRowRenderer {
         balance,
         !pending && row.runningBalance().signum() < 0,
         pending,
-        row.reconciliation());
+        row.reconciliation(),
+        tags);
   }
 
   /**

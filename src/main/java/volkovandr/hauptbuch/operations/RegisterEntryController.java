@@ -116,7 +116,8 @@ class RegisterEntryController {
               form.categoryAmount(),
               form.baseAmount(),
               form.note(),
-              form.transferDirection()));
+              form.transferDirection(),
+              form.tagId()));
     } catch (IllegalArgumentException | IllegalStateException e) {
       return dockError(filter, form, e.getMessage(), model);
     }
