@@ -11,6 +11,7 @@ import volkovandr.hauptbuch.ledger.RegisterView.RegisterCategoryOption;
 import volkovandr.hauptbuch.ledger.RegisterView.RegisterPayeeOption;
 import volkovandr.hauptbuch.ledger.repository.PayeeRepository;
 import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
+import volkovandr.hauptbuch.ledger.repository.TagReadRepository;
 
 /**
  * The read-side of the transaction register (plan stage 7a): resolves the viewed accounts and
@@ -36,18 +37,21 @@ public class RegisterService {
   private final AccountService accountService;
   private final SettingsService settingsService;
   private final RegisterRowRenderer rowRenderer;
+  private final TagReadRepository tagReadRepository;
 
   RegisterService(
       RegisterRepository registerRepository,
       PayeeRepository payeeRepository,
       AccountService accountService,
       SettingsService settingsService,
-      RegisterRowRenderer rowRenderer) {
+      RegisterRowRenderer rowRenderer,
+      TagReadRepository tagReadRepository) {
     this.registerRepository = registerRepository;
     this.payeeRepository = payeeRepository;
     this.accountService = accountService;
     this.settingsService = settingsService;
     this.rowRenderer = rowRenderer;
+    this.tagReadRepository = tagReadRepository;
   }
 
   /**
@@ -70,8 +74,9 @@ public class RegisterService {
     List<RegisterPayeeOption> payeeOptions = payeeOptions(filter.payeeId());
     List<RegisterCategoryOption> categoryOptions = categoryOptions();
     List<String> transferTargets = transferTargets(ownAccounts);
+    List<String> tagOptions = tagReadRepository.liveTagLabels();
     return new RegisterView(
-        rows, accountOptions, payeeOptions, categoryOptions, transferTargets, filter);
+        rows, accountOptions, payeeOptions, categoryOptions, transferTargets, tagOptions, filter);
   }
 
   /**

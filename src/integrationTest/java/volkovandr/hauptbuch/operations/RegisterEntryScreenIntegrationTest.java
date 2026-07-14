@@ -79,6 +79,15 @@ class RegisterEntryScreenIntegrationTest {
     return accountService.insertLeaf(name, "expense", null, EUR).accountId();
   }
 
+  private long insertTag(String name, Long parentId) {
+    return jdbcClient
+        .sql("insert into tag (name, parent_id) values (:n, :p) returning tag_id")
+        .param("n", name)
+        .param("p", parentId)
+        .query(Long.class)
+        .single();
+  }
+
   @Test
   void registerRendersTheEntryDockWithItsPickers() throws Exception {
     openAccount("Cash", "100");
@@ -123,6 +132,64 @@ class RegisterEntryScreenIntegrationTest {
         .andExpect(content().string(containsString("480,00")))
         // The dock is reset via its out-of-band swap.
         .andExpect(content().string(containsString("hx-swap-oob=\"true\"")));
+  }
+
+  @Test
+  void resolveTagReturnsPillCarryingTheHiddenTagId() throws Exception {
+    long car = insertTag("Car", null);
+    long passat = insertTag("Passat", car);
+
+    mockMvc
+        .perform(post("/categories/tags/resolve").param("tagText", "car:passat"))
+        .andExpect(status().isOk())
+        // The pill shows the canonical label and carries the hidden id the commit submits.
+        .andExpect(content().string(containsString("Car:Passat")))
+        .andExpect(content().string(containsString("name=\"tagId\"")))
+        .andExpect(content().string(containsString("value=\"" + passat + "\"")))
+        .andExpect(content().string(containsString("data-tag-chip")));
+  }
+
+  @Test
+  void committingWithTagsPersistsThemOnEveryLegAndPrefillsThemOnEdit() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food");
+    long car = insertTag("Car", null);
+    long passat = insertTag("Passat", car);
+    long trip = insertTag("Trip", null);
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(food))
+                .param("tagId", String.valueOf(passat))
+                .param("tagId", String.valueOf(trip))
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        // The repainted Cash row shows the leg's tag chips (register §3.6).
+        .andExpect(content().string(containsString("#Car:Passat")))
+        .andExpect(content().string(containsString("#Trip")));
+
+    // A transaction-level tag lands on every leg (data-model §10.2): 2 legs × 2 tags = 4 rows.
+    Long tagRows = jdbcClient.sql("select count(*) from posting_tag").query(Long.class).single();
+    assertThat(tagRows).isEqualTo(4L);
+
+    long txnId =
+        jdbcClient
+            .sql("select transaction_id from transaction where date = :d order by transaction_id")
+            .param("d", LocalDate.parse("2026-02-01"))
+            .query(Long.class)
+            .single();
+
+    // Editing pre-fills the tags as pills (canonical labels), so a re-save preserves them.
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Edit transaction")))
+        .andExpect(content().string(containsString("Car:Passat")))
+        .andExpect(content().string(containsString("Trip")));
   }
 
   @Test

@@ -227,13 +227,53 @@
           hx-swap="outerHTML"
         ></span>
 
-        <!-- 6 · Note -->
+        <!-- 6 · Tags (register §3.6, plan stage 7e) — keyboard-first JIRA-style chips. Each
+             committed chip is a removable pill carrying a hidden tagId the commit submits; typing
+             then Enter commits a chip via /categories/tags/resolve (which creates/reuses the tag
+             and returns the pill, appended to the list). `:` nests (Car:Passat); Backspace on the
+             empty input removes the last pill. All the keyboard affordances live in the keyboard.js
+             leaf (CLAUDE.md §1.6); resolution/create is server-side, like every other picker. Edit
+             mode pre-fills the loaded transaction's tags as pills so a re-save preserves them. -->
+        <div class="field field--tags" data-tag-field>
+          <label class="field__label" for="entry-tags">Tags</label>
+          <div class="chips">
+            <span id="entry-tag-chips" class="chips__list">
+              <th:block th:if="${edit != null}">
+                <th:block th:each="t : ${edit.tags()}">
+                  <th:block
+                    th:replace="~{fragments/entry-dock :: tagChip(tagId=${t.tagId()}, tagLabel=${t.label()}, fieldName='tagId')}"
+                  ></th:block>
+                </th:block>
+              </th:block>
+            </span>
+            <input
+              id="entry-tags"
+              name="tagText"
+              class="input chips__input"
+              list="entry-tag-options"
+              autocomplete="off"
+              placeholder="Car:Passat"
+              data-tag-input
+              hx-post="/categories/tags/resolve"
+              hx-trigger="tag-commit"
+              hx-include="this"
+              hx-target="#entry-tag-chips"
+              hx-swap="beforeend"
+            />
+            <!-- Existing tags as pick-ahead suggestions (populated in the register view). -->
+            <datalist id="entry-tag-options">
+              <option th:each="tl : ${register.tagOptions()}" th:value="${tl}"></option>
+            </datalist>
+          </div>
+        </div>
+
+        <!-- 7 · Note -->
         <div class="field">
           <label class="field__label" for="entry-note">Note</label>
           <input id="entry-note" name="note" class="input" autocomplete="off" th:value="${edit != null} ? ${edit.note()}" />
         </div>
 
-        <!-- 7 · Actions. New mode: Add. Edit mode: Save · Void · Cancel (§3.1). Void hx-posts to
+        <!-- 8 · Actions. New mode: Add. Edit mode: Save · Void · Cancel (§3.1). Void hx-posts to
              /register/void (the whole form rides along); Cancel reloads a fresh new-mode dock. -->
         <p class="actions" th:if="${!isEdit}">
           <button type="submit" class="btn">Add</button>
@@ -422,6 +462,28 @@
         >Food</span
       >
       <span th:if="${error}" class="entry-dock__resolved warning" th:text="${error}"></span>
+    </th:block>
+
+    <!-- POST /categories/tags/resolve response (register §3.6, plan stage 7e): one removable chip
+         pill carrying the hidden tag id the dock submits. Appended (hx-swap="beforeend") to
+         #entry-tag-chips; the keyboard.js leaf clears + refocuses the input after the swap so the
+         next chip can be typed. Also rendered inline for each of an edited transaction's tags
+         (edit-mode pre-fill). A blank chip yields an empty fragment (no pill). `fieldName` names
+         the hidden id input (tagId for the dock; a split line passes its own — plan stage 7e.3). -->
+    <th:block th:fragment="tagChip(tagId, tagLabel, fieldName)">
+      <span th:if="${tagId != null}" class="chip" data-tag-chip>
+        <span class="chip__label" th:text="${tagLabel}">Car:Passat</span>
+        <button
+          type="button"
+          class="chip__remove"
+          data-tag-remove
+          aria-label="Remove tag"
+          title="Remove tag"
+        >
+          ×
+        </button>
+        <input type="hidden" th:name="${fieldName}" th:value="${tagId}" />
+      </span>
     </th:block>
 
     <!-- GET /register/ghost response: the suggested category note (§3.9). Swapped into #entry-ghost;

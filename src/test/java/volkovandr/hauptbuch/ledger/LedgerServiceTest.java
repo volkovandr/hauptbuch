@@ -20,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.ledger.repository.TagReadRepository;
 import volkovandr.hauptbuch.ledger.repository.TransactionRepository;
 
 /**
@@ -45,12 +46,15 @@ class LedgerServiceTest {
   @Mock private SettingsService settingsService;
   @Mock private AccountService accountService;
   @Mock private TransactionRepository transactionRepository;
+  @Mock private TagReadRepository tagReadRepository;
 
   private LedgerService ledgerService;
 
   @BeforeEach
   void setUp() {
-    ledgerService = new LedgerService(settingsService, accountService, transactionRepository);
+    ledgerService =
+        new LedgerService(
+            settingsService, accountService, transactionRepository, tagReadRepository);
   }
 
   private void stubBaseCurrency(String code) {

@@ -23,6 +23,8 @@ import java.util.List;
  * @param negativeBalance whether the balance is negative (rendered red — "in the red")
  * @param pending whether the row is {@code pending_review} (muted, no balance — register §2.10)
  * @param reconciliation the reconciliation state, for the trailing status glyph
+ * @param tags the canonical {@code Parent:Child} labels of this leg's tags, rendered as chips in
+ *     the Category cell (register §3.6, plan stage 7e); empty when the leg is untagged
  */
 public record RegisterRowView(
     long postingId,
@@ -38,7 +40,13 @@ public record RegisterRowView(
     String balanceDisplay,
     boolean negativeBalance,
     boolean pending,
-    String reconciliation) {
+    String reconciliation,
+    List<String> tags) {
+
+  /** Defensively copy the tags to an immutable list (null-safe). */
+  public RegisterRowView {
+    tags = tags == null ? List.of() : List.copyOf(tags);
+  }
 
   /**
    * The Category cell's content (register §2.6): the chips shown, biggest-magnitude first, plus a

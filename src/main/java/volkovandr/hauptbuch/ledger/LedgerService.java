@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.ledger.repository.TagReadRepository;
 import volkovandr.hauptbuch.ledger.repository.TransactionRepository;
 
 /**
@@ -43,14 +44,17 @@ public class LedgerService {
   private final SettingsService settingsService;
   private final AccountService accountService;
   private final TransactionRepository transactionRepository;
+  private final TagReadRepository tagReadRepository;
 
   LedgerService(
       SettingsService settingsService,
       AccountService accountService,
-      TransactionRepository transactionRepository) {
+      TransactionRepository transactionRepository,
+      TagReadRepository tagReadRepository) {
     this.settingsService = settingsService;
     this.accountService = accountService;
     this.transactionRepository = transactionRepository;
+    this.tagReadRepository = tagReadRepository;
   }
 
   /**
@@ -97,6 +101,16 @@ public class LedgerService {
    */
   public List<Posting> findPostings(long transactionId) {
     return transactionRepository.findPostings(transactionId);
+  }
+
+  /**
+   * The distinct tags a transaction's postings carry, with canonical labels (register §3.6) — the
+   * other half of the dock's edit-mode load, so the chip field can re-render the pills the user
+   * entered. Exposed for {@code operations}' {@code DockEditService}, which cannot reach {@code
+   * ledger}'s repositories directly.
+   */
+  public List<TransactionTag> tagsForTransaction(long transactionId) {
+    return tagReadRepository.tagsForTransaction(transactionId);
   }
 
   /** Reversibly soft-delete a transaction and (by the join) its postings (data-model §3.5). */

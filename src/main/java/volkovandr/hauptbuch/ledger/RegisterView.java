@@ -13,6 +13,8 @@ import java.util.List;
  * @param transferTargets the {@code To → <account>} / {@code From ← <account>} values the Category
  *     datalist also offers, routing the counter-leg to a real account (register §3.5, plan stage
  *     7d.3)
+ * @param tagOptions the canonical {@code Parent:Child} labels of every live tag, the dock's tag
+ *     chip datalist suggestions (register §3.6, plan stage 7e)
  * @param filter the currently-applied filter (selected accounts, date range, payee), for redisplay
  */
 public record RegisterView(
@@ -21,6 +23,7 @@ public record RegisterView(
     List<RegisterPayeeOption> payees,
     List<RegisterCategoryOption> categories,
     List<String> transferTargets,
+    List<String> tagOptions,
     RegisterFilter filter) {
 
   /** Defensively copy the row and option lists to immutable lists. */
@@ -30,6 +33,7 @@ public record RegisterView(
     payees = List.copyOf(payees);
     categories = List.copyOf(categories);
     transferTargets = List.copyOf(transferTargets);
+    tagOptions = List.copyOf(tagOptions);
   }
 
   /**

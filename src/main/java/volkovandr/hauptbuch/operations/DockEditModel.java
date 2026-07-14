@@ -1,6 +1,8 @@
 package volkovandr.hauptbuch.operations;
 
 import java.time.LocalDate;
+import java.util.List;
+import volkovandr.hauptbuch.ledger.TransactionTag;
 
 /**
  * A transaction pre-filled back into the entry dock (register §3.1) — the dock's own fields,
@@ -27,6 +29,8 @@ import java.time.LocalDate;
  *     re-saving routes back through {@code resolveCurrencyLeaf} correctly — data-model §6.5)
  * @param categoryName the semantic category name, to pre-fill the category input text
  * @param note the transaction note; {@code null} if none
+ * @param tags the transaction's tags (id + canonical label), pre-filled as chip pills so a re-save
+ *     preserves them (register §3.6, plan stage 7e); empty when untagged
  */
 public record DockEditModel(
     Long transactionId,
@@ -36,4 +40,11 @@ public record DockEditModel(
     String amount,
     Long categoryId,
     String categoryName,
-    String note) {}
+    String note,
+    List<TransactionTag> tags) {
+
+  /** Defensively copy the tags to an immutable list (null-safe). */
+  public DockEditModel {
+    tags = tags == null ? List.of() : List.copyOf(tags);
+  }
+}

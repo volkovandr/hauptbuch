@@ -37,6 +37,9 @@ class CategoriesController {
   /** Model keys for the {@code categoryResolved} fragment, shared by both resolve branches. */
   private static final String RESOLVED_ID = "categoryId";
 
+  /** Model key + default hidden-input name for the resolved tag chip (register §3.6). */
+  private static final String RESOLVED_TAG_ID = "tagId";
+
   private static final String RESOLVED_NAME = "categoryName";
   private static final String RESOLVED_TYPE = "categoryType";
   private static final String RESOLVED_DIRECTION = "transferDirection";
@@ -61,10 +64,13 @@ class CategoriesController {
 
   private final CategoryService categoryService;
   private final AccountService accountService;
+  private final TagService tagService;
 
-  CategoriesController(CategoryService categoryService, AccountService accountService) {
+  CategoriesController(
+      CategoryService categoryService, AccountService accountService, TagService tagService) {
     this.categoryService = categoryService;
     this.accountService = accountService;
+    this.tagService = tagService;
   }
 
   /** The category list plus the create-category form. */
@@ -197,6 +203,30 @@ class CategoriesController {
     model.addAttribute(RESOLVED_DIRECTION, transfer.direction().name());
     model.addAttribute(RESOLVED_ERROR, null);
     response.setHeader(TRIGGER_AFTER_SWAP, COUNTERPART_RESOLVED);
+  }
+
+  /**
+   * Resolve a committed tag chip (register §3.6, plan stage 7e) to the tag it names, creating the
+   * tag (and any missing parent levels) if new, and return the {@code tagChip} fragment — a
+   * removable pill carrying the hidden tag id the dock submits, which the chip field appends to its
+   * pill list. A blank chip yields an empty fragment (nothing to add).
+   *
+   * <p>Lives here, not in the dock's {@code operations} controller: creating a tag is this module's
+   * logic, and {@code operations → categories} would close a module cycle (the same reason category
+   * create-new lives here). {@code fieldName} names the hidden id input ({@code tagId} for the
+   * dock; a split line will pass its own — plan stage 7e.3), so the one endpoint serves both.
+   */
+  @PostMapping("/categories/tags/resolve")
+  String resolveTag(
+      @RequestParam String tagText,
+      @RequestParam(defaultValue = RESOLVED_TAG_ID) String fieldName,
+      Model model) {
+    Optional<TagService.ResolvedChip> chip = tagService.resolveChip(tagText);
+    model.addAttribute(RESOLVED_TAG_ID, chip.map(TagService.ResolvedChip::tagId).orElse(null));
+    model.addAttribute("tagLabel", chip.map(TagService.ResolvedChip::label).orElse(null));
+    model.addAttribute("fieldName", fieldName);
+    return "fragments/entry-dock :: tagChip(tagId=${tagId}, tagLabel=${tagLabel},"
+        + " fieldName=${fieldName})";
   }
 
   /** The edit page for one category: rename only — type, currency, and parent are fixed. */
