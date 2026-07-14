@@ -50,12 +50,14 @@ class SplitPanelAssemblerTest {
     return crossForm(total, null, null, null, types, amounts);
   }
 
-  private static SplitForm crossForm(
+  /** A form with explicit per-line transfer directions (blank for a category line). */
+  private static SplitForm form(
       String total,
       String spendingCurrency,
       String fundingTotal,
       String baseTotal,
       List<String> types,
+      List<String> directions,
       List<String> amounts) {
     List<String> blanks = amounts.stream().map(a -> "").toList();
     return new SplitForm(
@@ -71,12 +73,24 @@ class SplitPanelAssemblerTest {
         blanks,
         blanks,
         types,
+        directions,
         amounts,
         blanks,
         null,
         null,
         null,
         null);
+  }
+
+  private static SplitForm crossForm(
+      String total,
+      String spendingCurrency,
+      String fundingTotal,
+      String baseTotal,
+      List<String> types,
+      List<String> amounts) {
+    List<String> blanks = amounts.stream().map(a -> "").toList();
+    return form(total, spendingCurrency, fundingTotal, baseTotal, types, blanks, amounts);
   }
 
   @Test
@@ -108,6 +122,39 @@ class SplitPanelAssemblerTest {
 
     assertThat(panel.direction()).isEqualTo("none");
     assertThat(panel.balanced()).isTrue();
+  }
+
+  @Test
+  void transferLinesSignTheReadoutByDirection() {
+    // Food 20 (expense) + a To-transfer 50 to another account: both are outflows, net −70. The
+    // transfer line has no category type — its direction signs it (register §3.8, plan stage 7d.3).
+    SplitPanel panel =
+        assembler.panel(
+            form(
+                "70,00",
+                null,
+                null,
+                null,
+                List.of("expense", ""),
+                List.of("", "TO"),
+                List.of("20", "50")),
+            null);
+
+    assertThat(panel.netDisplay()).isEqualTo("70,00");
+    assertThat(panel.direction()).isEqualTo("pay");
+    assertThat(panel.balanced()).isTrue();
+    assertThat(panel.lines().get(1).transferDirection()).isEqualTo("TO");
+  }
+
+  @Test
+  void fromTransferLineReadsAsAnInflow() {
+    // A single From-transfer of 50 pulls funds in → net +50, direction receive.
+    SplitPanel panel =
+        assembler.panel(
+            form("0,00", null, null, null, List.of(""), List.of("FROM"), List.of("50")), null);
+
+    assertThat(panel.direction()).isEqualTo("receive");
+    assertThat(panel.netDisplay()).isEqualTo("50,00");
   }
 
   @Test

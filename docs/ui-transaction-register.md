@@ -417,7 +417,9 @@ The decision that fixes Money's most annoying entry pattern:
   posting-level **sum-to-zero invariant holds automatically**; a `remaining 0,00 ✓` readout confirms
   it.
 - **Each line carries** category + optional tags (§3.6) + optional beneficiary (`→ Person`) +
-  optional note (§3.7).
+  optional note (§3.7). A line may instead be a **transfer** to another own account (`To →`/`From ←`,
+  §3.5/§3.8), signed by its direction; its account must be in the split's spending currency (the
+  header's single shared rate spans at most two currencies, §3.8a).
 - **Cross-currency splits carry their currencies at the header, not per line** (§3.8a): the funding
   account and the one spending-currency selector fix both currencies and the shared rate once; each
   line is a single spending-currency amount with its account-currency and base equivalents derived and

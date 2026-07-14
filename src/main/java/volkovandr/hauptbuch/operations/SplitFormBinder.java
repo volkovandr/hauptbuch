@@ -45,6 +45,7 @@ final class SplitFormBinder {
         orEmpty(p.get("categoryText")),
         orEmpty(p.get("lineCategoryId")),
         orEmpty(p.get("lineCategoryType")),
+        orEmpty(p.get("lineTransferDirection")),
         orEmpty(p.get("lineAmount")),
         orEmpty(p.get("lineNote")),
         longValues(p.get("viewAccountId")),
@@ -68,6 +69,7 @@ final class SplitFormBinder {
         form.categoryText(),
         form.lineCategoryId(),
         form.lineCategoryType(),
+        form.lineTransferDirection(),
         form.lineAmount(),
         form.lineNote(),
         form.viewAccountId(),
@@ -80,7 +82,7 @@ final class SplitFormBinder {
   static String openingTotal(String amount, String type) {
     BigDecimal net;
     try {
-      net = DockSplitService.signedContribution(amount, type);
+      net = SplitLineAmounts.signedContribution(amount, type);
     } catch (IllegalArgumentException e) {
       net = BigDecimal.ZERO;
     }
@@ -104,7 +106,10 @@ final class SplitFormBinder {
       }
       lines.add(
           new SplitLineDraft(
-              Long.parseLong(idText.strip()), amount, blankToNull(at(form.lineNote(), i))));
+              Long.parseLong(idText.strip()),
+              amount,
+              blankToNull(at(form.lineNote(), i)),
+              blankToNull(at(form.lineTransferDirection(), i))));
     }
     return lines;
   }
