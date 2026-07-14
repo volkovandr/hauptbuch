@@ -88,6 +88,30 @@ class LedgerServiceTest {
   }
 
   @Test
+  void attachesEachLegsTagsToItsInsertedPosting() {
+    stubBaseCurrency(EUR);
+    stubAccount(CASH_EUR, EUR);
+    stubAccount(FOOD_EUR, EUR);
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+    when(transactionRepository.insertTransaction(any())).thenReturn(500L);
+    // Distinct ids per leg so the tag→posting mapping is verifiable (data-model §10.2).
+    when(transactionRepository.insertPosting(any())).thenReturn(600L, 601L);
+
+    ledgerService.recordTransaction(
+        TransactionDraft.confirmed(
+            LocalDate.of(2026, 6, 1),
+            null,
+            "coffee",
+            List.of(
+                PostingDraft.of(CASH_EUR, new BigDecimal(MINUS_5)),
+                PostingDraft.of(FOOD_EUR, new BigDecimal("5.00")).withTags(List.of(77L, 78L)))));
+
+    // The funding leg carries no tags; the category leg's two tags land on its posting.
+    verify(transactionRepository).insertPostingTags(600L, List.of());
+    verify(transactionRepository).insertPostingTags(601L, List.of(77L, 78L));
+  }
+
+  @Test
   void rejectsUnbalancedSingleCurrencyTransactionBeforeAnyInsert() {
     stubBaseCurrency(EUR);
     stubAccount(CASH_EUR, EUR);

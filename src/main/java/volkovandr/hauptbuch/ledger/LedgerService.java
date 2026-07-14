@@ -224,9 +224,10 @@ public class LedgerService {
   }
 
   private void insertLegs(long transactionId, List<PostingDraft> legs) {
-    legs.stream()
-        .map(leg -> toPosting(transactionId, leg))
-        .forEach(transactionRepository::insertPosting);
+    for (PostingDraft leg : legs) {
+      long postingId = transactionRepository.insertPosting(toPosting(transactionId, leg));
+      transactionRepository.insertPostingTags(postingId, leg.tagIds());
+    }
   }
 
   private static Posting toPosting(long transactionId, PostingDraft leg) {

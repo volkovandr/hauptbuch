@@ -76,6 +76,40 @@ public class TransactionRepository {
     return requireKey(keyHolder);
   }
 
+  /**
+   * Attach tags to a leg — one {@code posting_tag} row per id (data-model §10.2). The ids are
+   * opaque here: {@code operations} resolved the dock's chips to tag ids through {@code categories}
+   * before recording, and the {@code posting_tag} linkage lives with the posting in {@code ledger}.
+   * A no-op for an untagged leg (the overwhelming majority).
+   */
+  public void insertPostingTags(long postingId, List<Long> tagIds) {
+    for (Long tagId : tagIds) {
+      jdbcClient
+          .sql(
+              """
+              insert into posting_tag (posting_id, tag_id)
+              values (:postingId, :tagId)
+              """)
+          .param("postingId", postingId)
+          .param("tagId", tagId)
+          .update();
+    }
+  }
+
+  /** The tag ids attached to a leg, in {@code posting_tag} id order (data-model §10.2). */
+  public List<Long> findTagIdsByPosting(long postingId) {
+    return jdbcClient
+        .sql(
+            """
+            select tag_id from posting_tag
+            where posting_id = :postingId
+            order by posting_tag_id
+            """)
+        .param("postingId", postingId)
+        .query(Long.class)
+        .list();
+  }
+
   /** Find a transaction by id (live or soft-deleted). */
   public Optional<Transaction> findById(long transactionId) {
     return jdbcClient
@@ -120,8 +154,22 @@ public class TransactionRepository {
         .update();
   }
 
-  /** Hard-delete the postings of a transaction (used when re-threading on edit). */
+  /**
+   * Hard-delete the postings of a transaction (used when re-threading on edit). Their {@code
+   * posting_tag} rows go first — the linkage FKs the posting, so the tags of the old legs must be
+   * cleared before the legs themselves (data-model §10.1).
+   */
   public void deletePostings(long transactionId) {
+    jdbcClient
+        .sql(
+            """
+            delete from posting_tag
+            where posting_id in (
+              select posting_id from posting where transaction_id = :transactionId
+            )
+            """)
+        .param(TRANSACTION_ID, transactionId)
+        .update();
     jdbcClient
         .sql("delete from posting where transaction_id = :transactionId")
         .param(TRANSACTION_ID, transactionId)

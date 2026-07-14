@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
@@ -143,6 +144,58 @@ class RepositoryRoundTripIntegrationTest {
     // The transaction row survives (edit re-threads it); only its legs are gone.
     assertThat(transactionRepository.findPostings(txnId)).isEmpty();
     assertThat(transactionRepository.findById(txnId)).isPresent();
+  }
+
+  @Test
+  void postingTagsRoundTripAndAreClearedWhenTheLegsAreDeleted() {
+    long cash = insertCashAccount(EUR);
+    long txnId =
+        transactionRepository.insertTransaction(
+            new Transaction(
+                null, LocalDate.of(2026, 6, 1), null, null, CONFIRMED, null, null, null));
+    long postingId =
+        transactionRepository.insertPosting(
+            new Posting(null, txnId, cash, new BigDecimal("-5.0000"), null, UNRECONCILED, null));
+    // A tag is categories' entity; seed one directly here so this ledger test stays module-local.
+    long carTagId = insertTag("Car");
+    long fuelTagId = insertTag("Fuel");
+
+    transactionRepository.insertPostingTags(postingId, List.of(carTagId, fuelTagId));
+
+    assertThat(transactionRepository.findTagIdsByPosting(postingId))
+        .containsExactly(carTagId, fuelTagId);
+
+    // Re-threading on edit deletes the legs; their posting_tag rows must go first (FK), so the
+    // delete succeeds and leaves no dangling links.
+    transactionRepository.deletePostings(txnId);
+    assertThat(transactionRepository.findTagIdsByPosting(postingId)).isEmpty();
+  }
+
+  @Test
+  void postingTagRejectsTheSameTagTwiceOnOnePosting() {
+    long cash = insertCashAccount(EUR);
+    long txnId =
+        transactionRepository.insertTransaction(
+            new Transaction(
+                null, LocalDate.of(2026, 6, 1), null, null, CONFIRMED, null, null, null));
+    long postingId =
+        transactionRepository.insertPosting(
+            new Posting(null, txnId, cash, new BigDecimal("-5.0000"), null, UNRECONCILED, null));
+    long tagId = insertTag("Car");
+    transactionRepository.insertPostingTags(postingId, List.of(tagId));
+
+    // The unique(posting_id, tag_id) guarantees a tag applies to a posting at most once (§10.1).
+    assertThatExceptionOfType(DataIntegrityViolationException.class)
+        .isThrownBy(() -> transactionRepository.insertPostingTags(postingId, List.of(tagId)));
+  }
+
+  /** Seed a top-level tag row directly (categories' entity), returning its id. */
+  private long insertTag(String name) {
+    return jdbcClient
+        .sql("insert into tag (name) values (:name) returning tag_id")
+        .param("name", name)
+        .query(Long.class)
+        .single();
   }
 
   @Test
