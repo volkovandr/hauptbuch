@@ -316,6 +316,23 @@ text** (no gazetteer). The pre-filled mini-form is the safety net for any mis-cl
 
   (Tags live on postings in the model, so a transaction-level tag simply expands to one assignment
   per leg — data-model §10.2.)
+- **The funding leg carries the transaction-level (dock) tags only — never the per-line ones.**
+  This is not a new concept: the dock's Tag field is transaction-level and already tags *every* leg
+  (funding included) in the simple single-line case; a split just keeps that. So a split resolves to:
+  - **funding leg** = the dock (transaction-level) tags;
+  - **split line _i_** = the dock tags **+** that line's own chips.
+
+  Rejected alternatives: *no tags on the funding leg* (drops the dock tags too — inconsistent with
+  single-line, where the funding leg does carry them); *the funding leg gets the distinct union of
+  all line tags* (dead data — tag reports filter to flow legs, so the union is never summed; it
+  makes the shared leg falsely claim every line's slice; and it destroys the edit round-trip, below).
+- **Edit round-trip falls out cleanly:** on reopen, the funding leg's tag set *is* the dock field,
+  and each line's chips *are* that line's tags — no reverse-engineering of which tags were
+  transaction-wide. Line chips pre-fill with the inherited dock tags (visible and removable per line),
+  so a tag can be dropped from one line without affecting the others.
+- **Edge case (intended):** if only per-line tags are set and the dock field is left empty, the
+  funding leg carries no tags — the user made no transaction-wide statement. This is correct, and
+  distinct from the rejected "no funding-leg tags" option, which would strip dock tags that *were* set.
 
 ### 3.7 Notes — transaction **and** split level
 

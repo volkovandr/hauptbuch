@@ -1,8 +1,10 @@
 package volkovandr.hauptbuch.ledger;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
@@ -111,6 +113,26 @@ public class LedgerService {
    */
   public List<TransactionTag> tagsForTransaction(long transactionId) {
     return tagReadRepository.tagsForTransaction(transactionId);
+  }
+
+  /**
+   * The tag ids a single leg carries, in entry order (data-model §10.2) — the split panel's
+   * edit-mode load (register §3.10, plan stage 7e.3), which reconstructs the funding leg's and each
+   * category line's own tags separately (unlike {@link #tagsForTransaction}, which collapses the
+   * whole transaction's tags to one set). Exposed for {@code operations}' split load, which cannot
+   * reach {@code ledger}'s repositories directly.
+   */
+  public List<Long> tagIdsForPosting(long postingId) {
+    return transactionRepository.findTagIdsByPosting(postingId);
+  }
+
+  /**
+   * The canonical {@code Parent:Child} label of each given tag id, keyed by id (register §3.6, plan
+   * stage 7e.3) — so the split panel can re-render its chip pills from the ids the form carries on
+   * each round-trip. Exposed for {@code operations}' {@code SplitPanelAssembler}.
+   */
+  public Map<Long, String> labelsForTagIds(Collection<Long> tagIds) {
+    return tagReadRepository.labelsForTagIds(tagIds);
   }
 
   /** Reversibly soft-delete a transaction and (by the join) its postings (data-model §3.5). */

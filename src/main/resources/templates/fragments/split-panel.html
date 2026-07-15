@@ -173,6 +173,38 @@
           <label class="field__label" for="split-note">Note</label>
           <input id="split-note" name="note" class="input" autocomplete="off" th:value="${panel.note()}" />
         </div>
+
+        <!-- Transaction-level tags (register §3.6, plan stage 7e.3) — the split's header chip field,
+             mirroring the dock's. These land on the FUNDING leg (data-model §10.2) and seed every
+             line's inherited chips; each committed pill carries a hidden `tagId` the commit submits.
+             The chips render from panel.tags() on each round-trip (the form carries only the ids). -->
+        <div class="field field--tags" data-tag-field>
+          <label class="field__label" for="split-tags">Tags</label>
+          <div class="chips">
+            <span id="split-tag-chips" class="chips__list" data-tag-chips>
+              <th:block th:each="t : ${panel.tags()}">
+                <th:block
+                  th:replace="~{fragments/entry-dock :: tagChip(tagId=${t.tagId()}, tagLabel=${t.label()}, fieldName='tagId')}"
+                ></th:block>
+              </th:block>
+            </span>
+            <input
+              id="split-tags"
+              name="tagText"
+              class="input chips__input"
+              list="split-tag-options"
+              autocomplete="off"
+              placeholder="Trip:Prague"
+              data-tag-input
+              hx-post="/categories/tags/resolve"
+              hx-trigger="tag-commit"
+              hx-include="closest form"
+              hx-vals='{"index": 0}'
+              hx-target="#split-tag-chips"
+              hx-swap="beforeend"
+            />
+          </div>
+        </div>
       </div>
 
       <!-- The split lines. Each carries category + amount + optional note (register §3.10, §3.7).
@@ -234,6 +266,41 @@
               th:value="${line.note()}"
             />
           </div>
+          <!-- Per-line tags (register §3.6, plan stage 7e.3): the line's own chips, pre-filled with
+               the inherited transaction-level tags (visible + removable here), plus any this line
+               adds. Each pill carries a hidden `lineTag{index}` id the commit submits; the resolve
+               call names THIS line's target + field so the shared endpoint serves every line. -->
+          <div class="field field--tags" data-tag-field>
+            <label class="field__label" th:for="'split-line-' + ${line.index()} + '-tags'">Tags</label>
+            <div class="chips">
+              <span
+                th:id="'split-line-' + ${line.index()} + '-tag-chips'"
+                class="chips__list"
+                data-tag-chips
+              >
+                <th:block th:each="t : ${line.tags()}">
+                  <th:block
+                    th:replace="~{fragments/entry-dock :: tagChip(tagId=${t.tagId()}, tagLabel=${t.label()}, fieldName='lineTag' + ${line.index()})}"
+                  ></th:block>
+                </th:block>
+              </span>
+              <input
+                th:id="'split-line-' + ${line.index()} + '-tags'"
+                name="tagText"
+                class="input chips__input"
+                list="split-tag-options"
+                autocomplete="off"
+                placeholder="Fuel"
+                data-tag-input
+                hx-post="/categories/tags/resolve"
+                hx-trigger="tag-commit"
+                hx-include="closest form"
+                hx-swap="beforeend"
+                th:attr="hx-target='#split-line-' + ${line.index()} + '-tag-chips',
+                         hx-vals=|{&quot;fieldName&quot;:&quot;lineTag${line.index()}&quot;,&quot;index&quot;:${line.index() + 1}}|"
+              />
+            </div>
+          </div>
           <button
             type="button"
             class="btn btn--ghost split-line__remove"
@@ -266,6 +333,12 @@
       <datalist id="split-category-options">
         <option th:each="c : ${register.categories()}" th:value="${c.name()}"></option>
         <option th:each="t : ${register.transferTargets()}" th:value="${t}"></option>
+      </datalist>
+
+      <!-- Existing tags as pick-ahead suggestions, shared by the header and every line's tag input
+           (register §3.6, plan stage 7e.3) — populated from the register view like the dock's. -->
+      <datalist id="split-tag-options">
+        <option th:each="tl : ${register.tagOptions()}" th:value="${tl}"></option>
       </datalist>
 
       <p class="actions">

@@ -10,10 +10,8 @@ import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
-import volkovandr.hauptbuch.ledger.Posting;
 import volkovandr.hauptbuch.ledger.PostingDraft;
 import volkovandr.hauptbuch.ledger.SettingsService;
-import volkovandr.hauptbuch.ledger.Transaction;
 import volkovandr.hauptbuch.ledger.TransactionDraft;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 
@@ -42,20 +40,6 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
  */
 @Service
 public class DockSplitService {
-
-  private static final String INCOME = "income";
-  private static final String EXPENSE = "expense";
-  private static final String ASSET = "asset";
-  private static final String LIABILITY = "liability";
-  private static final List<String> OWN_TYPES = List.of(ASSET, LIABILITY);
-  private static final List<String> CATEGORY_TYPES = List.of(INCOME, EXPENSE);
-
-  /** German entry is to the minor unit; two places covers EUR/CHF. */
-  private static final int FRACTION_DIGITS = 2;
-
-  private static final String NOT_A_SPLIT =
-      "This transaction cannot be edited as a split — the split panel edits one funding leg "
-          + "with two or more category lines.";
 
   /** Base amounts are frozen to the minor unit; two places covers EUR/CHF/USD. */
   private static final int BASE_FRACTION_DIGITS = 2;
@@ -133,12 +117,14 @@ public class DockSplitService {
       ResolvedLine resolved = resolveLine(line, fundingAccount, fundingAccount.currencyCode());
       fundingAmount = fundingAmount.add(resolved.contribution());
       counterLegs.add(
-          PostingDraft.of(
-              resolved.leaf().accountId(), resolved.contribution().negate(), resolved.note()));
+          tagged(
+              PostingDraft.of(
+                  resolved.leaf().accountId(), resolved.contribution().negate(), resolved.note()),
+              resolved.tagIds()));
     }
 
     List<PostingDraft> legs = new ArrayList<>();
-    legs.add(PostingDraft.of(fundingAccount.accountId(), fundingAmount));
+    legs.add(tagged(PostingDraft.of(fundingAccount.accountId(), fundingAmount), entry.tagIds()));
     legs.addAll(counterLegs);
     return legs;
   }
@@ -178,13 +164,15 @@ public class DockSplitService {
       return new ResolvedLine(
           other,
           SplitLineAmounts.transferContribution(line.amount(), direction),
-          blankToNull(line.note()));
+          blankToNull(line.note()),
+          line.tagIds());
     }
     Account leaf = currencyLeafService.resolveCurrencyLeaf(line.categoryId(), lineCurrency);
     return new ResolvedLine(
         leaf,
         SplitLineAmounts.signedContribution(line.amount(), leaf.type()),
-        blankToNull(line.note()));
+        blankToNull(line.note()),
+        line.tagIds());
   }
 
   /**
@@ -237,7 +225,10 @@ public class DockSplitService {
     BigDecimal fundingBase = signed(baseMagnitude, fundingSign);
 
     List<PostingDraft> legs = new ArrayList<>();
-    legs.add(PostingDraft.ofCrossCurrency(fundingAccount.accountId(), fundingNative, fundingBase));
+    legs.add(
+        tagged(
+            PostingDraft.ofCrossCurrency(fundingAccount.accountId(), fundingNative, fundingBase),
+            entry.tagIds()));
     legs.addAll(
         categoryLegsInBase(resolved, spendingMagnitude, baseMagnitude, fundingBase.negate()));
     return legs;
@@ -268,10 +259,23 @@ public class DockSplitService {
         allocated = allocated.add(categoryBase);
       }
       legs.add(
-          PostingDraft.ofCrossCurrency(
-              line.leaf().accountId(), categoryNative, categoryBase, line.note()));
+          tagged(
+              PostingDraft.ofCrossCurrency(
+                  line.leaf().accountId(), categoryNative, categoryBase, line.note()),
+              line.tagIds()));
     }
     return legs;
+  }
+
+  /**
+   * Attach a leg's tags (data-model §10.2, owner decision 2026-07-14) — the funding leg carries the
+   * transaction-level tags, each category leg its own line's chips. The ids are de-duplicated so a
+   * doubly-picked chip can never violate the {@code posting_tag} unique constraint; an untagged leg
+   * (the common case) is returned unchanged.
+   */
+  private static PostingDraft tagged(PostingDraft leg, List<Long> tagIds) {
+    List<Long> distinct = tagIds.stream().distinct().toList();
+    return distinct.isEmpty() ? leg : leg.withTags(distinct);
   }
 
   /** A line's proportional share of the base total, rounded to the minor unit (magnitude only). */
@@ -323,148 +327,12 @@ public class DockSplitService {
 
   /**
    * A resolved split line: its counter-leg account (a category currency leaf, or — for a transfer
-   * line — the real own account), its signed contribution, and note.
+   * line — the real own account), its signed contribution, note, and the line's own tag ids.
    */
-  private record ResolvedLine(Account leaf, BigDecimal contribution, String note) {}
+  private record ResolvedLine(
+      Account leaf, BigDecimal contribution, String note, List<Long> tagIds) {}
 
   private static String blankToNull(String value) {
     return value == null || value.isBlank() ? null : value;
   }
-
-  /**
-   * Reconstruct a live split transaction into a {@link SplitForm} for the panel's edit mode
-   * (register §3.1) — the split-shaped sibling of {@link DockEditService#load}. The shape the panel
-   * edits is one funding own-account leg (asset/liability) plus two or more category legs
-   * (income/expense); a same-currency split has all legs in one currency, a cross-currency one
-   * (register §3.8a/§3.10) has the category legs in a single spending currency with frozen base
-   * amounts. Anything else (a transfer, an opening balance, or a simple one-category transaction —
-   * which the dock edits) is refused so the caller can fall back. Each line's typed amount is
-   * reconstructed from its leg so a re-save reproduces the same postings; the {@code view*} filter
-   * fields are left null (the panel renders them from the active-filter view model, not the
-   * transaction).
-   *
-   * @throws IllegalArgumentException if there is no live transaction with that id, or it is not the
-   *     split shape the panel edits
-   */
-  public SplitForm load(long transactionId) {
-    final Transaction txn =
-        ledgerService
-            .findTransaction(transactionId)
-            .orElseThrow(
-                () ->
-                    new IllegalArgumentException(
-                        "No live transaction with id " + transactionId + " to edit"));
-
-    SplitLegs split = classifySplit(ledgerService.findPostings(transactionId));
-
-    List<String> categoryText = new ArrayList<>();
-    List<String> categoryId = new ArrayList<>();
-    List<String> categoryType = new ArrayList<>();
-    List<String> transferDirection = new ArrayList<>();
-    List<String> amount = new ArrayList<>();
-    List<String> note = new ArrayList<>();
-    BigDecimal spendingTotal = BigDecimal.ZERO;
-    for (LegAccount leg : split.categoryLegs()) {
-      Account semantic = semanticCategory(leg.account());
-      categoryText.add(semantic.name());
-      categoryId.add(String.valueOf(semantic.accountId()));
-      categoryType.add(leg.account().type());
-      // The panel only classifies category-leg splits (a split with a transfer leg has two or more
-      // own-account legs and is refused above), so every reloaded line is an ordinary category.
-      transferDirection.add("");
-      amount.add(SplitLineAmounts.amountText(leg.posting().amount(), leg.account().type()));
-      note.add(leg.posting().note() == null ? "" : leg.posting().note());
-      spendingTotal = spendingTotal.add(leg.posting().amount().abs());
-    }
-
-    boolean crossCurrency = split.funding().posting().baseAmount() != null;
-    String spendingCurrency =
-        crossCurrency ? split.categoryLegs().get(0).account().currencyCode() : null;
-    String fundingTotal =
-        crossCurrency
-            ? MoneyFormat.number(split.funding().posting().amount().abs(), FRACTION_DIGITS)
-            : "";
-    String baseTotal =
-        crossCurrency
-            ? MoneyFormat.number(split.funding().posting().baseAmount().abs(), FRACTION_DIGITS)
-            : "";
-    // The reference total is the spending-currency sum when cross-currency (the lines are in the
-    // spending currency), else the funding magnitude (single-currency splits balance natively).
-    String total =
-        crossCurrency
-            ? MoneyFormat.number(spendingTotal, FRACTION_DIGITS)
-            : MoneyFormat.number(split.funding().posting().amount().abs(), FRACTION_DIGITS);
-
-    String payeeText =
-        txn.payeeId() == null ? null : payeeService.entryValueFor(txn.payeeId()).orElse(null);
-    return new SplitForm(
-        txn.transactionId(),
-        txn.date(),
-        split.funding().account().accountId(),
-        payeeText,
-        txn.note(),
-        total,
-        spendingCurrency,
-        fundingTotal,
-        baseTotal,
-        categoryText,
-        categoryId,
-        categoryType,
-        transferDirection,
-        amount,
-        note,
-        null,
-        null,
-        null,
-        null);
-  }
-
-  /**
-   * Split a transaction's postings into the panel-editable shape — one funding own-account leg plus
-   * two or more category legs — refusing anything else with {@link #NOT_A_SPLIT}. A cross-currency
-   * split (frozen base amounts, one spending currency) is accepted: the panel edits it via the
-   * header currency fields (register §3.8a).
-   */
-  private SplitLegs classifySplit(List<Posting> postings) {
-    List<LegAccount> legs =
-        postings.stream().map(p -> new LegAccount(p, requireAccount(p.accountId()))).toList();
-    List<LegAccount> fundingLegs = legsOfType(legs, OWN_TYPES);
-    List<LegAccount> categoryLegs = legsOfType(legs, CATEGORY_TYPES);
-    if (fundingLegs.size() != 1
-        || categoryLegs.size() < 2
-        || fundingLegs.size() + categoryLegs.size() != legs.size()) {
-      throw new IllegalArgumentException(NOT_A_SPLIT);
-    }
-    return new SplitLegs(fundingLegs.get(0), categoryLegs);
-  }
-
-  private static List<LegAccount> legsOfType(List<LegAccount> legs, List<String> types) {
-    return legs.stream().filter(l -> types.contains(l.account().type())).toList();
-  }
-
-  /**
-   * The <em>semantic</em> category the user picked: the parent when the leg hits an auto-managed
-   * currency leaf (data-model §6.5), otherwise the leaf itself — so a re-save routes back through
-   * {@code resolveCurrencyLeaf} to the same leaf. Mirrors {@link DockEditService}'s reconstruction
-   * for the simple dock.
-   */
-  private Account semanticCategory(Account leaf) {
-    if (!leaf.currencyLeaf() || leaf.parentId() == null) {
-      return leaf;
-    }
-    return accountService.findById(leaf.parentId()).orElse(leaf);
-  }
-
-  private Account requireAccount(Long accountId) {
-    return accountService
-        .findById(accountId)
-        .orElseThrow(
-            () -> new IllegalStateException("Posting references missing account " + accountId));
-  }
-
-  /** A posting paired with its (already-resolved) account. */
-  private record LegAccount(Posting posting, Account account) {}
-
-  /** The classified legs of a split: its single funding leg and its category legs. */
-  private record SplitLegs(LegAccount funding, List<LegAccount> categoryLegs) {}
 }

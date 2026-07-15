@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
@@ -40,35 +41,40 @@ class SplitPanelAssembler {
 
   private final AccountService accountService;
   private final SettingsService settingsService;
+  private final SplitTagPills tagPills;
 
-  SplitPanelAssembler(AccountService accountService, SettingsService settingsService) {
+  SplitPanelAssembler(
+      AccountService accountService, SettingsService settingsService, SplitTagPills tagPills) {
     this.accountService = accountService;
     this.settingsService = settingsService;
+    this.tagPills = tagPills;
   }
 
   /** Build the panel view model for the current form state, optionally carrying a message. */
   SplitPanel panel(SplitForm form, String error) {
     CurrencyContext ctx = resolveCurrencyContext(form);
-    int count = lineCount(form);
+    int count = SplitLineArrays.lineCount(form);
+    Map<Long, String> labels = tagPills.labelsFor(form);
     List<SplitLineView> lines = new ArrayList<>();
     BigDecimal net = BigDecimal.ZERO;
     for (int i = 0; i < count; i++) {
-      String amount = at(form.lineAmount(), i);
-      String type = at(form.lineCategoryType(), i);
-      String direction = at(form.lineTransferDirection(), i);
+      String amount = SplitLineArrays.at(form.lineAmount(), i);
+      String type = SplitLineArrays.at(form.lineCategoryType(), i);
+      String direction = SplitLineArrays.at(form.lineTransferDirection(), i);
       net = net.add(SplitLineAmounts.lenientContribution(amount, type, direction));
       BigDecimal magnitude = lenientParse(amount).abs();
       lines.add(
           new SplitLineView(
               i,
-              at(form.categoryText(), i),
-              at(form.lineCategoryId(), i),
+              SplitLineArrays.at(form.categoryText(), i),
+              SplitLineArrays.at(form.lineCategoryId(), i),
               type,
               direction,
               amount,
-              at(form.lineNote(), i),
+              SplitLineArrays.at(form.lineNote(), i),
               ctx.derived(magnitude, ctx.rateSpendingToFunding()),
-              ctx.derived(magnitude, ctx.rateSpendingToBase())));
+              ctx.derived(magnitude, ctx.rateSpendingToBase()),
+              tagPills.pills(SplitLineArrays.tagsAt(form.lineTagIds(), i), labels)));
     }
 
     BigDecimal total = lenientParse(form.total());
@@ -87,6 +93,7 @@ class SplitPanelAssembler {
         remaining.signum() == 0,
         MoneyFormat.number(ctx.fundingNet(netMagnitude), FRACTION_DIGITS),
         direction(net),
+        tagPills.pills(form.tagId(), labels),
         error);
   }
 
@@ -170,26 +177,28 @@ class SplitPanelAssembler {
     SplitPanel current = panel(form, null);
     BigDecimal remaining = lenientParse(current.remaining());
     String rest = remaining.signum() > 0 ? current.remaining() : "";
-    return withLines(
+    return SplitLineArrays.withLines(
         form,
-        appended(form.categoryText(), ""),
-        appended(form.lineCategoryId(), ""),
-        appended(form.lineCategoryType(), ""),
-        appended(form.lineTransferDirection(), ""),
-        appended(form.lineAmount(), rest),
-        appended(form.lineNote(), ""));
+        SplitLineArrays.appended(form.categoryText(), ""),
+        SplitLineArrays.appended(form.lineCategoryId(), ""),
+        SplitLineArrays.appended(form.lineCategoryType(), ""),
+        SplitLineArrays.appended(form.lineTransferDirection(), ""),
+        SplitLineArrays.appended(form.lineAmount(), rest),
+        SplitLineArrays.appended(form.lineNote(), ""),
+        SplitLineArrays.appendedTags(form.lineTagIds(), SplitLineArrays.inheritedTags(form)));
   }
 
   /** Remove the line at {@code index} across every aligned array. Returns a new form. */
   SplitForm removeLine(SplitForm form, int index) {
-    return withLines(
+    return SplitLineArrays.withLines(
         form,
-        removed(form.categoryText(), index),
-        removed(form.lineCategoryId(), index),
-        removed(form.lineCategoryType(), index),
-        removed(form.lineTransferDirection(), index),
-        removed(form.lineAmount(), index),
-        removed(form.lineNote(), index));
+        SplitLineArrays.removed(form.categoryText(), index),
+        SplitLineArrays.removed(form.lineCategoryId(), index),
+        SplitLineArrays.removed(form.lineCategoryType(), index),
+        SplitLineArrays.removed(form.lineTransferDirection(), index),
+        SplitLineArrays.removed(form.lineAmount(), index),
+        SplitLineArrays.removed(form.lineNote(), index),
+        SplitLineArrays.removedTags(form.lineTagIds(), index));
   }
 
   private static BigDecimal lenientParse(String text) {
@@ -211,77 +220,8 @@ class SplitPanelAssembler {
     return sign > 0 ? "receive" : "none";
   }
 
-  /** The line count is the longest aligned array (a partially-bound form is padded with blanks). */
-  private static int lineCount(SplitForm form) {
-    return List.of(
-            size(form.categoryText()),
-            size(form.lineCategoryId()),
-            size(form.lineCategoryType()),
-            size(form.lineTransferDirection()),
-            size(form.lineAmount()),
-            size(form.lineNote()))
-        .stream()
-        .max(Integer::compare)
-        .orElse(0);
-  }
-
-  private static int size(List<String> list) {
-    return list == null ? 0 : list.size();
-  }
-
-  private static String at(List<String> list, int index) {
-    if (list == null || index >= list.size() || list.get(index) == null) {
-      return "";
-    }
-    return list.get(index);
-  }
-
-  private static List<String> appended(List<String> list, String value) {
-    List<String> copy = new ArrayList<>(list == null ? List.of() : list);
-    copy.add(value);
-    return copy;
-  }
-
-  private static List<String> removed(List<String> list, int index) {
-    List<String> copy = new ArrayList<>(list == null ? List.of() : list);
-    if (index >= 0 && index < copy.size()) {
-      copy.remove(index);
-    }
-    return copy;
-  }
-
   private static String blankToNull(String value) {
     return value == null || value.isBlank() ? null : value;
-  }
-
-  private SplitForm withLines(
-      SplitForm form,
-      List<String> categoryText,
-      List<String> lineCategoryId,
-      List<String> lineCategoryType,
-      List<String> lineTransferDirection,
-      List<String> lineAmount,
-      List<String> lineNote) {
-    return new SplitForm(
-        form.transactionId(),
-        form.date(),
-        form.accountId(),
-        form.payeeText(),
-        form.note(),
-        form.total(),
-        form.spendingCurrencyCode(),
-        form.fundingTotal(),
-        form.baseTotal(),
-        categoryText,
-        lineCategoryId,
-        lineCategoryType,
-        lineTransferDirection,
-        lineAmount,
-        lineNote,
-        form.viewAccountId(),
-        form.viewFromDate(),
-        form.viewToDate(),
-        form.viewPayeeId());
   }
 
   /**

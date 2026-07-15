@@ -45,6 +45,11 @@ import java.util.List;
  * @param lineAmount each line's typed amount (a bare magnitude, optionally a leading {@code −}
  *     storno)
  * @param lineNote each line's posting-level note; nullable per line
+ * @param tagId the transaction-level (header) tag ids — the split's own chip field, one hidden
+ *     input per pill (register §3.6, plan stage 7e.3). Land on the funding leg (data-model §10.2)
+ * @param lineTagIds each line's own tag ids, index-aligned with the line arrays — the per-line
+ *     chips (register §3.6, plan stage 7e.3). Bound from the raw {@code lineTag{i}} params (a list
+ *     of lists, one inner list per line), which is why they are not one flat array like the others
  * @param viewAccountId the active filter's viewed accounts; empty for the default set
  * @param viewFromDate the active filter's lower date bound; nullable
  * @param viewToDate the active filter's upper date bound; nullable
@@ -66,6 +71,8 @@ public record SplitForm(
     List<String> lineTransferDirection,
     List<String> lineAmount,
     List<String> lineNote,
+    List<Long> tagId,
+    List<List<Long>> lineTagIds,
     List<Long> viewAccountId,
     LocalDate viewFromDate,
     LocalDate viewToDate,
@@ -80,6 +87,16 @@ public record SplitForm(
         lineTransferDirection == null ? null : List.copyOf(lineTransferDirection);
     lineAmount = lineAmount == null ? null : List.copyOf(lineAmount);
     lineNote = lineNote == null ? null : List.copyOf(lineNote);
+    tagId = tagId == null ? null : List.copyOf(tagId);
+    lineTagIds =
+        lineTagIds == null
+            ? null
+            : List.copyOf(lineTagIds.stream().map(SplitForm::copyOf).toList());
     viewAccountId = viewAccountId == null ? null : List.copyOf(viewAccountId);
+  }
+
+  /** Null-safe immutable copy of one line's tag-id list (an unresolved line may bind a null). */
+  private static List<Long> copyOf(List<Long> ids) {
+    return ids == null ? List.of() : List.copyOf(ids);
   }
 }

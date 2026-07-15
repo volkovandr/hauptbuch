@@ -1,5 +1,7 @@
 package volkovandr.hauptbuch.operations;
 
+import java.util.List;
+
 /**
  * One line of a split transaction as submitted from the split panel (register §3.10, plan stage
  * 7c.2) — the raw fields before {@link DockSplitService} routes the category to its per-currency
@@ -28,6 +30,17 @@ package volkovandr.hauptbuch.operations;
  * @param note free-text posting-level note for this line (register §3.7); nullable
  * @param transferDirection {@code TO}/{@code FROM} when this line is a transfer to a real own
  *     account (register §3.8); null/blank for an ordinary category line
+ * @param tagIds this line's own tags (register §3.6, plan stage 7e.3) — the chips on the line,
+ *     already carrying any transaction-level tags inherited (and visibly removable) per §3.6, so
+ *     {@link DockSplitService} attaches exactly these to the line's category leg. The funding leg
+ *     instead carries the transaction-level tags (data-model §10.2, owner decision 2026-07-14).
+ *     Never null; defaults empty
  */
 public record SplitLineDraft(
-    long categoryId, String amount, String note, String transferDirection) {}
+    long categoryId, String amount, String note, String transferDirection, List<Long> tagIds) {
+
+  /** Defensively copy the tag ids (null-safe) so the draft cannot be mutated after. */
+  public SplitLineDraft {
+    tagIds = tagIds == null ? List.of() : List.copyOf(tagIds);
+  }
+}

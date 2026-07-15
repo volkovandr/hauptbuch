@@ -32,6 +32,20 @@ final class SplitFormBinder {
    * not @ModelAttribute).
    */
   static SplitForm bind(MultiValueMap<String, String> p) {
+    List<String> categoryText = orEmpty(p.get("categoryText"));
+    List<String> lineCategoryId = orEmpty(p.get("lineCategoryId"));
+    List<String> lineCategoryType = orEmpty(p.get("lineCategoryType"));
+    List<String> lineTransferDirection = orEmpty(p.get("lineTransferDirection"));
+    List<String> lineAmount = orEmpty(p.get("lineAmount"));
+    List<String> lineNote = orEmpty(p.get("lineNote"));
+    int lineCount =
+        maxSize(
+            categoryText,
+            lineCategoryId,
+            lineCategoryType,
+            lineTransferDirection,
+            lineAmount,
+            lineNote);
     return new SplitForm(
         parseLong(p.getFirst("transactionId")),
         parseDate(p.getFirst("date")),
@@ -42,16 +56,42 @@ final class SplitFormBinder {
         p.getFirst("spendingCurrencyCode"),
         p.getFirst("fundingTotal"),
         p.getFirst("baseTotal"),
-        orEmpty(p.get("categoryText")),
-        orEmpty(p.get("lineCategoryId")),
-        orEmpty(p.get("lineCategoryType")),
-        orEmpty(p.get("lineTransferDirection")),
-        orEmpty(p.get("lineAmount")),
-        orEmpty(p.get("lineNote")),
+        categoryText,
+        lineCategoryId,
+        lineCategoryType,
+        lineTransferDirection,
+        lineAmount,
+        lineNote,
+        longValues(p.get("tagId")),
+        lineTagsOf(p, lineCount),
         longValues(p.get("viewAccountId")),
         parseDate(p.getFirst("viewFromDate")),
         parseDate(p.getFirst("viewToDate")),
         parseLong(p.getFirst("viewPayeeId")));
+  }
+
+  /**
+   * The per-line tag-id lists, one inner list per line (register §3.6, plan stage 7e.3). Each
+   * line's committed chips submit hidden inputs named {@code lineTag{i}} (i the line index), so a
+   * line's tags are read by index — like {@code /categories/resolve} names its per-line target —
+   * rather than as one flat aligned array (which could not express a variable number of tags per
+   * line).
+   */
+  private static List<List<Long>> lineTagsOf(MultiValueMap<String, String> p, int lineCount) {
+    List<List<Long>> perLine = new ArrayList<>();
+    for (int i = 0; i < lineCount; i++) {
+      perLine.add(longValues(p.get("lineTag" + i)));
+    }
+    return perLine;
+  }
+
+  @SafeVarargs
+  private static int maxSize(List<String>... lists) {
+    int max = 0;
+    for (List<String> list : lists) {
+      max = Math.max(max, size(list));
+    }
+    return max;
   }
 
   /** Rebuild the form with a pre-filled base total (the rate-derived header confirmation value). */
@@ -72,6 +112,8 @@ final class SplitFormBinder {
         form.lineTransferDirection(),
         form.lineAmount(),
         form.lineNote(),
+        form.tagId(),
+        form.lineTagIds(),
         form.viewAccountId(),
         form.viewFromDate(),
         form.viewToDate(),
@@ -109,9 +151,21 @@ final class SplitFormBinder {
               Long.parseLong(idText.strip()),
               amount,
               blankToNull(at(form.lineNote(), i)),
-              blankToNull(at(form.lineTransferDirection(), i))));
+              blankToNull(at(form.lineTransferDirection(), i)),
+              tagsAt(form.lineTagIds(), i)));
     }
     return lines;
+  }
+
+  /**
+   * The tag-id list for line {@code index}, index-aligned with the other line arrays; empty if
+   * none.
+   */
+  private static List<Long> tagsAt(List<List<Long>> perLine, int index) {
+    if (perLine == null || index >= perLine.size() || perLine.get(index) == null) {
+      return List.of();
+    }
+    return perLine.get(index);
   }
 
   /** The active-filter view the panel carries, so a commit repaints the current register view. */

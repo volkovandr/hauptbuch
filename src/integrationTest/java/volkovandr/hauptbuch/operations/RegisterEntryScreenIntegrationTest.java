@@ -150,6 +150,31 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
+  void resolveTagPicksTheIndexedValueWhenHtmxSendsEveryTagInput() throws Exception {
+    // Regression (2026-07-15): the split panel has one tagText input per line plus the header, and
+    // htmx serializes the whole form, so a chip commit sends every tagText value at once — here the
+    // empty header (index 0) and empty first line (index 1) precede the typed second line (index
+    // 2).
+    // `index` selects the committed one, so the endpoint resolves "Trips:France-2026", not a
+    // comma-joined string (which used to conjure bogus parent tags like ",,Trips").
+    long trips = insertTag("Trips", null);
+    long france = insertTag("France-2026", trips);
+
+    mockMvc
+        .perform(
+            post("/categories/tags/resolve")
+                .param("tagText", "", "", "Trips:France-2026")
+                .param("index", "2"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Trips:France-2026")))
+        .andExpect(content().string(containsString("value=\"" + france + "\"")));
+
+    // No comma-prefixed junk tag was created — only the two seeded rows exist.
+    Long tagCount = jdbcClient.sql("select count(*) from tag").query(Long.class).single();
+    assertThat(tagCount).isEqualTo(2L);
+  }
+
+  @Test
   void committingWithTagsPersistsThemOnEveryLegAndPrefillsThemOnEdit() throws Exception {
     long cash = openAccount("Cash", "500");
     long food = insertCategory("Food");

@@ -157,4 +157,23 @@ class TagReadSqlLogicTest {
   void returnsNoLabelsForAnEmptyPostingList() {
     assertThat(tagReadRepository.labelsByPosting(List.of())).isEmpty();
   }
+
+  @Test
+  void labelsTheGivenTagIdsIncludingDeletedOnesAndOmitsUnknownIds() {
+    long car = insertTag("Car", null);
+    long passat = insertTag("Passat", car);
+    long trip = insertTag("Trip", null);
+    softDeleteTag(trip);
+
+    // A since-deleted tag still labels (it may already be attached); an unknown id is simply
+    // absent.
+    Map<Long, String> labels = tagReadRepository.labelsForTagIds(List.of(passat, trip, 9999L));
+
+    assertThat(labels).containsOnly(Map.entry(passat, "Car:Passat"), Map.entry(trip, "Trip"));
+  }
+
+  @Test
+  void returnsNoLabelsForAnEmptyIdList() {
+    assertThat(tagReadRepository.labelsForTagIds(List.of())).isEmpty();
+  }
 }

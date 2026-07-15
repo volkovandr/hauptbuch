@@ -304,7 +304,56 @@ class RegisterSplitScreenIntegrationTest {
         .andExpect(content().string(containsString("Edit split")))
         .andExpect(content().string(containsString("name=\"transactionId\"")))
         .andExpect(content().string(containsString("Food")))
-        .andExpect(content().string(containsString("Deposit")));
+        .andExpect(content().string(containsString("Deposit")))
+        // The Currency picker renders its options (regression 2026-07-15: the edit branch did not
+        // add `currencies`, leaving the picker empty so Save failed "currency required").
+        .andExpect(content().string(containsString("id=\"split-spending-currency\"")))
+        .andExpect(content().string(containsString("value=\"EUR\"")));
+  }
+
+  @Test
+  void splitPersistsHeaderTagsOnFundingLegAndLineTagsOnEachCategoryLegThenReloadsThem()
+      throws Exception {
+    // Header (transaction-level) tag Trip lands on the funding leg; the Food line adds Fuel to the
+    // inherited Trip, the Deposit line carries only the inherited Trip (register §3.6, plan stage
+    // 7e.3, owner decision 2026-07-14).
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food", "expense");
+    long deposit = insertCategory("Deposit", "income");
+    long trip = insertTag("Trip");
+    long fuel = insertTag("Fuel");
+
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("lineCategoryId", String.valueOf(food), String.valueOf(deposit))
+                .param("lineAmount", "20", "3")
+                .param("lineNote", "", "")
+                .param("tagId", String.valueOf(trip))
+                .param("lineTag0", String.valueOf(trip), String.valueOf(fuel))
+                .param("lineTag1", String.valueOf(trip))
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk());
+
+    long txnId = latestTransactionId();
+    // The funding (asset) leg carries only the transaction-level tag; each category leg its own
+    // set.
+    assertThat(tagIdsByType(txnId, "asset")).containsExactly(trip);
+    assertThat(tagIdsByType(txnId, "expense")).containsExactlyInAnyOrder(trip, fuel);
+    assertThat(tagIdsByType(txnId, "income")).containsExactly(trip);
+
+    // Reopening the split renders the chips back: the header pill and both lines' pills.
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(containsString("name=\"tagId\"")))
+        .andExpect(content().string(containsString("name=\"lineTag0\"")))
+        .andExpect(content().string(containsString("name=\"lineTag1\"")))
+        .andExpect(content().string(containsString("Trip")))
+        .andExpect(content().string(containsString("Fuel")));
   }
 
   // ── cross-currency splits (register §3.8a/§3.10, plan stage 7d.2) ──────────────
@@ -537,5 +586,33 @@ class RegisterSplitScreenIntegrationTest {
         .param("id", transactionId)
         .query(BigDecimal.class)
         .single();
+  }
+
+  private long insertTag(String name) {
+    return jdbcClient
+        .sql("insert into tag (name) values (:n) returning tag_id")
+        .param("n", name)
+        .query(Long.class)
+        .single();
+  }
+
+  /**
+   * The tag ids attached to the leg of the given account type, ascending — a split has one each.
+   */
+  private java.util.List<Long> tagIdsByType(long transactionId, String type) {
+    return jdbcClient
+        .sql(
+            """
+            select pt.tag_id
+            from posting_tag pt
+            join posting p on p.posting_id = pt.posting_id
+            join account a on a.account_id = p.account_id
+            where p.transaction_id = :id and a.type = :type
+            order by pt.tag_id
+            """)
+        .param("id", transactionId)
+        .param("type", type)
+        .query(Long.class)
+        .list();
   }
 }

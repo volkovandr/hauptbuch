@@ -58,7 +58,7 @@ class RegisterEntryController {
 
   private final DockCommitService dockCommitService;
   private final DockEditService dockEditService;
-  private final DockSplitService dockSplitService;
+  private final SplitEditService splitEditService;
   private final SplitPanelAssembler splitPanelAssembler;
   private final RegisterService registerService;
   private final PayeeService payeeService;
@@ -68,7 +68,7 @@ class RegisterEntryController {
   RegisterEntryController(
       DockCommitService dockCommitService,
       DockEditService dockEditService,
-      DockSplitService dockSplitService,
+      SplitEditService splitEditService,
       SplitPanelAssembler splitPanelAssembler,
       RegisterService registerService,
       PayeeService payeeService,
@@ -76,7 +76,7 @@ class RegisterEntryController {
       GhostSuggestionRepository ghostSuggestionRepository) {
     this.dockCommitService = dockCommitService;
     this.dockEditService = dockEditService;
-    this.dockSplitService = dockSplitService;
+    this.splitEditService = splitEditService;
     this.splitPanelAssembler = splitPanelAssembler;
     this.registerService = registerService;
     this.payeeService = payeeService;
@@ -149,7 +149,10 @@ class RegisterEntryController {
       // §3.10). Try that before giving up.
       try {
         model.addAttribute(
-            "panel", splitPanelAssembler.panel(dockSplitService.load(transactionId), null));
+            "panel", splitPanelAssembler.panel(splitEditService.load(transactionId), null));
+        // The split panel's Currency picker renders its options from `currencies` (like the dock's
+        // edit branch above) — without it the picker is empty and Save fails "currency required".
+        model.addAttribute(CURRENCIES, dockAmountFieldsService.currencies());
         return SPLIT_PANEL;
       } catch (IllegalArgumentException notSplit) {
         // Neither shape (a transfer, opening balance, or cross-currency): stay in new mode carrying

@@ -1,11 +1,14 @@
 package volkovandr.hauptbuch.operations;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,7 +17,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.SettingsService;
+import volkovandr.hauptbuch.ledger.TransactionTag;
 
 /**
  * Unit tier (plan §1.5): the split panel's readout math — remaining, the pay/receive direction, the
@@ -32,14 +37,17 @@ class SplitPanelAssemblerTest {
 
   @Mock private AccountService accountService;
   @Mock private SettingsService settingsService;
+  @Mock private LedgerService ledgerService;
 
   private SplitPanelAssembler assembler;
 
   @BeforeEach
   void setUp() {
-    assembler = new SplitPanelAssembler(accountService, settingsService);
+    assembler =
+        new SplitPanelAssembler(accountService, settingsService, new SplitTagPills(ledgerService));
     lenient().when(accountService.findById(CASH_ID)).thenReturn(Optional.of(account(CASH_ID, EUR)));
     lenient().when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
+    lenient().when(ledgerService.labelsForTagIds(any())).thenReturn(Map.of());
   }
 
   private static Account account(long id, String currency) {
@@ -76,6 +84,36 @@ class SplitPanelAssemblerTest {
         directions,
         amounts,
         blanks,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  /** A single-currency form with explicit header + per-line tag ids, for the inheritance tests. */
+  private static SplitForm taggedForm(
+      List<Long> headerTags, List<List<Long>> lineTags, List<String> types, List<String> amounts) {
+    List<String> blanks = amounts.stream().map(a -> "").toList();
+    return new SplitForm(
+        null,
+        LocalDate.of(2026, 2, 1),
+        CASH_ID,
+        null,
+        null,
+        "0,00",
+        null,
+        null,
+        null,
+        blanks,
+        blanks,
+        types,
+        blanks,
+        amounts,
+        blanks,
+        headerTags,
+        lineTags,
         null,
         null,
         null,
@@ -232,5 +270,60 @@ class SplitPanelAssemblerTest {
     assertThat(panel.currency().remainingFunding()).isEqualTo("33,33"); // 100 − 60×100/90
     assertThat(panel.currency().remainingBase()).isEqualTo("31,67"); // 95 − 60×95/90
     assertThat(panel.balanced()).isFalse();
+  }
+
+  // ── tag inheritance + chip rendering (register §3.6, plan stage 7e.3) ─────────
+
+  @Test
+  void addLineInheritsTheHeaderTagsWhenTransactionLevelTagsAreSet() {
+    // Header (transaction-level) tags are set → every line inherits them, so a new line seeds them.
+    SplitForm grown =
+        assembler.addLine(
+            taggedForm(
+                List.of(7L, 8L), List.of(List.of(7L, 8L)), List.of("expense"), List.of("5")));
+
+    assertThat(grown.lineTagIds()).containsExactly(List.of(7L, 8L), List.of(7L, 8L));
+  }
+
+  @Test
+  void addLineInheritsThePreviousLineTagsWhenNoHeaderTags() {
+    // No header tags → a new line inherits the previous line's own tags (the same-tag run case).
+    SplitForm grown =
+        assembler.addLine(
+            taggedForm(List.of(), List.of(List.of(9L)), List.of("expense"), List.of("5")));
+
+    assertThat(grown.lineTagIds()).containsExactly(List.of(9L), List.of(9L));
+  }
+
+  @Test
+  void removeLineDropsThatLinesTagsToo() {
+    SplitForm shrunk =
+        assembler.removeLine(
+            taggedForm(
+                List.of(),
+                List.of(List.of(7L), List.of(8L)),
+                List.of("expense", "income"),
+                List.of("20", "3")),
+            0);
+
+    assertThat(shrunk.lineTagIds()).containsExactly(List.of(8L));
+  }
+
+  @Test
+  void rendersChipPillsFromTheFormsTagIds() {
+    when(ledgerService.labelsForTagIds(any())).thenReturn(Map.of(7L, "Trip:Prague", 9L, "Fuel"));
+
+    SplitPanel panel =
+        assembler.panel(
+            taggedForm(List.of(7L), List.of(List.of(7L, 9L)), List.of("expense"), List.of("20")),
+            null);
+
+    // The header pills are the funding leg's tags; the line pills are that line's own chips.
+    assertThat(panel.tags())
+        .extracting(TransactionTag::tagId, TransactionTag::label)
+        .containsExactly(tuple(7L, "Trip:Prague"));
+    assertThat(panel.lines().get(0).tags())
+        .extracting(TransactionTag::tagId, TransactionTag::label)
+        .containsExactly(tuple(7L, "Trip:Prague"), tuple(9L, "Fuel"));
   }
 }
