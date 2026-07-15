@@ -39,6 +39,7 @@ class RegisterSplitController {
 
   private final DockSplitService dockSplitService;
   private final SplitPanelAssembler assembler;
+  private final SplitTagPills tagPills;
   private final RegisterService registerService;
   private final AccountService accountService;
   private final DockAmountFieldsService dockAmountFieldsService;
@@ -46,11 +47,13 @@ class RegisterSplitController {
   RegisterSplitController(
       DockSplitService dockSplitService,
       SplitPanelAssembler assembler,
+      SplitTagPills tagPills,
       RegisterService registerService,
       AccountService accountService,
       DockAmountFieldsService dockAmountFieldsService) {
     this.dockSplitService = dockSplitService;
     this.assembler = assembler;
+    this.tagPills = tagPills;
     this.registerService = registerService;
     this.accountService = accountService;
     this.dockAmountFieldsService = dockAmountFieldsService;
@@ -77,6 +80,12 @@ class RegisterSplitController {
     String categoryId = form.categoryId() == null ? "" : String.valueOf(form.categoryId());
     SplitSeed seed = seedFromDock(form);
 
+    // The dock's transaction-level tags become the split's header tags; the one seeded line
+    // inherits
+    // them (register §3.6 — txn-level tags set before splitting land on every line, plan stage
+    // 7e.3).
+    List<Long> headerTags = form.tagId() == null ? List.of() : form.tagId();
+
     SplitForm seedForm =
         new SplitForm(
             form.transactionId(),
@@ -94,6 +103,8 @@ class RegisterSplitController {
             List.of(direction == null ? "" : direction),
             List.of(seed.lineAmount()),
             List.of(""),
+            headerTags,
+            List.of(headerTags),
             form.viewAccountId(),
             form.viewFromDate(),
             form.viewToDate(),
@@ -189,6 +200,7 @@ class RegisterSplitController {
               SplitFormBinder.blankToNull(form.spendingCurrencyCode()),
               form.fundingTotal(),
               form.baseTotal(),
+              form.tagId() == null ? List.of() : form.tagId(),
               SplitFormBinder.linesOf(form)));
     } catch (IllegalArgumentException e) {
       return renderPanel(form, e.getMessage(), PANEL_OOB, model);
@@ -223,8 +235,11 @@ class RegisterSplitController {
             SplitFormBinder.parseLong(ids.isEmpty() ? null : ids.get(0)),
             texts.isEmpty() ? null : SplitFormBinder.blankToNull(texts.get(0)),
             form.note(),
-            // Split-line tags arrive in 7e.3; a cancelled split carries none back to the dock yet.
-            List.of());
+            // The split's transaction-level tags return to the dock's chip field so cancelling does
+            // not lose them (register §3.6/§3.9, plan stage 7e.3); the per-line tags are dropped
+            // with
+            // the lines the dock cannot represent.
+            tagPills.resolvePills(form.tagId()));
     model.addAttribute(REGISTER, registerService.view(SplitFormBinder.filterFrom(form)));
     model.addAttribute("edit", prefill);
     model.addAttribute("currencies", dockAmountFieldsService.currencies());

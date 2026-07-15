@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.operations;
 
 import java.time.LocalDate;
 import java.util.List;
+import volkovandr.hauptbuch.ledger.TransactionTag;
 
 /**
  * The split panel's view model (register §3.10, plan stage 7c.2) — everything the panel fragment
@@ -34,6 +35,9 @@ import java.util.List;
  * @param netDisplay {@code |Σ|}, German-formatted — the amount that will hit the funding account
  *     (in the funding currency when cross-currency)
  * @param direction {@code pay} / {@code receive} / {@code none} (the derived funding side)
+ * @param tags the transaction-level (header) tag chips to render (id + canonical label), in entry
+ *     order (register §3.6, plan stage 7e.3) — each a removable pill carrying its hidden {@code
+ *     tagId}; these land on the funding leg (data-model §10.2); empty when untagged
  * @param error a validation message to show, or {@code null}
  */
 public record SplitPanel(
@@ -49,10 +53,12 @@ public record SplitPanel(
     boolean balanced,
     String netDisplay,
     String direction,
+    List<TransactionTag> tags,
     String error) {
 
-  /** Defensively copy the lines so the panel cannot be mutated after the fact. */
+  /** Defensively copy the lines and tags so the panel cannot be mutated after the fact. */
   public SplitPanel {
     lines = lines == null ? List.of() : List.copyOf(lines);
+    tags = tags == null ? List.of() : List.copyOf(tags);
   }
 }

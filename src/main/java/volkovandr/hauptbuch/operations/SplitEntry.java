@@ -39,6 +39,10 @@ import java.util.List;
  *     magnitude); required only when cross-currency
  * @param baseTotal the base-currency total (the frozen funding-leg base magnitude); required only
  *     when cross-currency and neither leg is the book's base currency
+ * @param tagIds the transaction-level tags (register §3.6, plan stage 7e.3) — the split's header
+ *     chip field. These land on the <em>funding</em> leg (data-model §10.2, owner decision
+ *     2026-07-14); each category line's own tags live on {@link SplitLineDraft#tagIds()}. Never
+ *     null; defaults empty
  * @param lines the split lines; each becomes one category leg, its amount in the spending currency
  */
 public record SplitEntry(
@@ -51,10 +55,12 @@ public record SplitEntry(
     String spendingCurrencyCode,
     String fundingTotal,
     String baseTotal,
+    List<Long> tagIds,
     List<SplitLineDraft> lines) {
 
-  /** Defensively copy the lines so the entry cannot be mutated after the fact. */
+  /** Defensively copy the tag ids and lines so the entry cannot be mutated after the fact. */
   public SplitEntry {
+    tagIds = tagIds == null ? List.of() : List.copyOf(tagIds);
     lines = lines == null ? List.of() : List.copyOf(lines);
   }
 }

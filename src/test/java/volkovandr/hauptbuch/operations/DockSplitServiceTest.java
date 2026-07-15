@@ -86,17 +86,39 @@ class DockSplitServiceTest {
   }
 
   private static SplitLineDraft line(long categoryId, String amount) {
-    return new SplitLineDraft(categoryId, amount, null, null);
+    return new SplitLineDraft(categoryId, amount, null, null, List.of());
+  }
+
+  private static SplitLineDraft line(long categoryId, String amount, List<Long> tagIds) {
+    return new SplitLineDraft(categoryId, amount, null, null, tagIds);
   }
 
   private static SplitLineDraft transferLine(long accountId, String amount, String direction) {
-    return new SplitLineDraft(accountId, amount, null, direction);
+    return new SplitLineDraft(accountId, amount, null, direction, List.of());
   }
 
   /** A same-currency split entry (the 7c.2 shape) — the 7d.2 header currency fields left blank. */
   private static SplitEntry entry(
       Long txnId, LocalDate date, long accountId, String note, List<SplitLineDraft> lines) {
-    return new SplitEntry(txnId, date, accountId, null, null, note, null, null, null, lines);
+    return new SplitEntry(
+        txnId, date, accountId, null, null, note, null, null, null, List.of(), lines);
+  }
+
+  /** A same-currency split entry carrying transaction-level (funding-leg) tags. */
+  private static SplitEntry taggedEntry(
+      long accountId, List<Long> tagIds, List<SplitLineDraft> lines) {
+    return new SplitEntry(
+        null,
+        LocalDate.of(2026, 2, 1),
+        accountId,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        tagIds,
+        lines);
   }
 
   // The signed-contribution / transfer-contribution sign math lives in SplitLineAmounts (extracted
@@ -133,6 +155,32 @@ class DockSplitServiceTest {
     assertThat(leg(legs, DEPOSIT_LEAF_ID)).isEqualByComparingTo("-3");
     assertThat(sum(legs)).isEqualByComparingTo("0");
     assertThat(draft.getValue().note()).isEqualTo("groceries");
+  }
+
+  @Test
+  void fundingLegCarriesTransactionLevelTagsAndEachLineCarriesItsOwn() {
+    // The funding leg gets the header (transaction-level) tags; each category leg gets only its own
+    // line's chips (register §3.6, plan stage 7e.3, owner decision 2026-07-14). A doubly-picked
+    // chip
+    // de-dupes so the posting_tag unique constraint can never fire.
+    cashFunds();
+    foodLeaf();
+    depositLeaf();
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(1L);
+
+    dockSplitService.commit(
+        taggedEntry(
+            CASH_ID,
+            List.of(7L, 8L, 7L),
+            List.of(line(FOOD_ID, "20", List.of(9L)), line(DEPOSIT_ID, "3", List.of()))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(tagIds(legs, CASH_ID)).containsExactly(7L, 8L);
+    assertThat(tagIds(legs, FOOD_LEAF_ID)).containsExactly(9L);
+    assertThat(tagIds(legs, DEPOSIT_LEAF_ID)).isEmpty();
   }
 
   @Test
@@ -199,7 +247,7 @@ class DockSplitServiceTest {
             LocalDate.of(2026, 2, 1),
             CASH_ID,
             null,
-            List.of(new SplitLineDraft(FOOD_ID, "20", "organic aisle", null))));
+            List.of(new SplitLineDraft(FOOD_ID, "20", "organic aisle", null, List.of()))));
 
     ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
     verify(ledgerService).recordTransaction(draft.capture());
@@ -390,6 +438,7 @@ class DockSplitServiceTest {
         spendingCurrency,
         fundingTotal,
         baseTotal,
+        List.of(),
         lines);
   }
 
@@ -492,6 +541,10 @@ class DockSplitServiceTest {
 
   private static BigDecimal leg(List<PostingDraft> legs, long accountId) {
     return legs.stream().filter(l -> l.accountId() == accountId).findFirst().orElseThrow().amount();
+  }
+
+  private static List<Long> tagIds(List<PostingDraft> legs, long accountId) {
+    return legs.stream().filter(l -> l.accountId() == accountId).findFirst().orElseThrow().tagIds();
   }
 
   private static BigDecimal base(List<PostingDraft> legs, long accountId) {

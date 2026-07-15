@@ -232,7 +232,7 @@ for **single-line and split in one package** (the routing is the same act in bot
 **Done when:** a same-currency and a cross-currency transfer both enter from the dock (single and
 split), book balanced, and render as two native-thread rows; `check` green.
 
-## 7e — Tags
+## 7e — Tags ✅ **complete**
 
 **Goal:** the tag dimension, end to end for entry (reporting rollups stay backlog).
 

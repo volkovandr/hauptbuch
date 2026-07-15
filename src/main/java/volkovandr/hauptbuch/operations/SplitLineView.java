@@ -1,5 +1,8 @@
 package volkovandr.hauptbuch.operations;
 
+import java.util.List;
+import volkovandr.hauptbuch.ledger.TransactionTag;
+
 /**
  * One rendered line of the split panel (register §3.10, plan stage 7c.2) — the values the panel
  * fragment prints back into the line's inputs so a re-render (add/remove line, or an error
@@ -34,6 +37,10 @@ package volkovandr.hauptbuch.operations;
  * @param baseAmount the derived base-currency equivalent, read-only (the last line absorbs the
  *     rounding residual so the column sums to the base total exactly); {@code ""} when single-
  *     currency
+ * @param tags the line's own tag chips to render (id + canonical label), in entry order (register
+ *     §3.6, plan stage 7e.3) — the transaction-level tags inherited into the line plus any the line
+ *     adds, each a removable pill carrying its hidden {@code lineTag{index}} id; empty when
+ *     untagged
  */
 public record SplitLineView(
     int index,
@@ -44,4 +51,11 @@ public record SplitLineView(
     String amount,
     String note,
     String accountAmount,
-    String baseAmount) {}
+    String baseAmount,
+    List<TransactionTag> tags) {
+
+  /** Defensively copy the tags to an immutable list (null-safe). */
+  public SplitLineView {
+    tags = tags == null ? List.of() : List.copyOf(tags);
+  }
+}

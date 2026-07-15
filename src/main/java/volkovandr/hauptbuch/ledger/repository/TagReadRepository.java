@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.ledger.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -100,6 +101,28 @@ public class TagReadRepository {
             Collectors.groupingBy(
                 PostingLabel::postingId,
                 Collectors.mapping(PostingLabel::label, Collectors.toList())));
+  }
+
+  /**
+   * The canonical label of each of the given tag ids, keyed by id — the split panel's chip pills
+   * mid-entry (register §3.6, plan stage 7e.3), where the form carries only the resolved ids and
+   * the panel re-renders the pills on each round-trip (add/remove line, currency change). Ids not
+   * found are simply absent from the map. Soft-deleted tags are included (like {@link
+   * #tagsForTransaction}) so an already-attached-but-since-deleted tag still renders its pill.
+   */
+  public Map<Long, String> labelsForTagIds(Collection<Long> tagIds) {
+    if (tagIds.isEmpty()) {
+      return Map.of();
+    }
+    record IdLabel(long tagId, String label) {}
+
+    return jdbcClient
+        .sql(LABELLED + "select tag_id, label from labelled where tag_id in (:tagIds)")
+        .param("tagIds", tagIds)
+        .query(IdLabel.class)
+        .list()
+        .stream()
+        .collect(Collectors.toMap(IdLabel::tagId, IdLabel::label));
   }
 
   /**

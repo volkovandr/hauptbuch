@@ -312,7 +312,10 @@
       event.preventDefault();
       if (input.value.trim()) input.dispatchEvent(new CustomEvent("tag-commit"));
     } else if (event.key === "Backspace" && input.value === "") {
-      const list = document.querySelector("#entry-tag-chips");
+      // Find the chip list this input owns — the dock has one, the split panel has one per line plus
+      // the header (register §3.6, plan stage 7e.3), so resolve it relative to the input, not by id.
+      const field = input.closest("[data-tag-field]");
+      const list = field ? field.querySelector("[data-tag-chips]") : null;
       const chips = list ? list.querySelectorAll("[data-tag-chip]") : [];
       const last = chips[chips.length - 1];
       if (last) {
@@ -332,9 +335,16 @@
 
   // After a chip's pill is appended, clear the input and keep focus so the next tag can be typed
   // straight away (register §3.6). Keyed on the resolve path so other swaps never touch the input.
-  function clearTagInputAfterSwap(path) {
+  // Clears the input that TRIGGERED the resolve (the split panel has several — the header and one
+  // per line, plan stage 7e.3), falling back to the first if the triggering element is unavailable.
+  function clearTagInputAfterSwap(event, path) {
     if (path !== "/categories/tags/resolve") return;
-    const input = document.querySelector("[data-tag-input]");
+    const config = event.detail && event.detail.requestConfig;
+    const trigger = config && config.elt;
+    const input =
+      trigger && trigger.matches && trigger.matches("[data-tag-input]")
+        ? trigger
+        : document.querySelector("[data-tag-input]");
     if (input) {
       input.value = "";
       input.focus();
@@ -403,6 +413,6 @@
       const config = event.detail && event.detail.requestConfig;
       const path = config ? config.path : null;
       focusAfterSplitSwap(path);
-      clearTagInputAfterSwap(path);
+      clearTagInputAfterSwap(event, path);
     });
 })();

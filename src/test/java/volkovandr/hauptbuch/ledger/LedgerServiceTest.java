@@ -326,4 +326,22 @@ class LedgerServiceTest {
                             PostingDraft.of(CASH_EUR, new BigDecimal("-9.00")),
                             PostingDraft.of(FOOD_EUR, new BigDecimal("9.00"))))));
   }
+
+  // ── tag reads (register §3.6, plan stage 7e.3) ───────────────────────────────
+  // Thin delegations to the tag repositories; the SQL itself is exercised in the sqlLogic tier.
+
+  @Test
+  void tagIdsForPostingDelegatesToTheTransactionRepository() {
+    when(transactionRepository.findTagIdsByPosting(7L)).thenReturn(List.of(5L, 6L));
+
+    assertThat(ledgerService.tagIdsForPosting(7L)).containsExactly(5L, 6L);
+  }
+
+  @Test
+  void labelsForTagIdsDelegatesToTheTagReadRepository() {
+    when(tagReadRepository.labelsForTagIds(List.of(5L))).thenReturn(java.util.Map.of(5L, "Car"));
+
+    assertThat(ledgerService.labelsForTagIds(List.of(5L)))
+        .containsExactly(java.util.Map.entry(5L, "Car"));
+  }
 }

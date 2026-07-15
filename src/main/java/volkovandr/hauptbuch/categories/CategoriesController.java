@@ -214,14 +214,24 @@ class CategoriesController {
    * <p>Lives here, not in the dock's {@code operations} controller: creating a tag is this module's
    * logic, and {@code operations → categories} would close a module cycle (the same reason category
    * create-new lives here). {@code fieldName} names the hidden id input ({@code tagId} for the
-   * dock; a split line will pass its own — plan stage 7e.3), so the one endpoint serves both.
+   * dock; a split line passes its own — plan stage 7e.3), so the one endpoint serves both.
+   *
+   * <p>{@code tagText} binds as a <em>list</em> selected by {@code index}, exactly as {@link
+   * #resolveCategory} handles the same htmx behaviour: htmx serializes the whole enclosing form on
+   * a chip commit, so the split panel — which has one tag input per line plus the header, all named
+   * {@code tagText} — sends every {@code tagText} value at once (otherwise Spring collapses them
+   * into one comma-joined string, which conjured tags like {@code ",Trips"}). The tag inputs render
+   * in DOM order — the header first, then the lines — so {@code index} is the header's {@code 0} or
+   * a line's {@code index + 1}. The dock posts a single value at the default index {@code 0}.
    */
   @PostMapping("/categories/tags/resolve")
   String resolveTag(
-      @RequestParam String tagText,
+      @RequestParam List<String> tagText,
+      @RequestParam(defaultValue = "0") int index,
       @RequestParam(defaultValue = RESOLVED_TAG_ID) String fieldName,
       Model model) {
-    Optional<TagService.ResolvedChip> chip = tagService.resolveChip(tagText);
+    String text = index >= 0 && index < tagText.size() ? tagText.get(index) : "";
+    Optional<TagService.ResolvedChip> chip = tagService.resolveChip(text);
     model.addAttribute(RESOLVED_TAG_ID, chip.map(TagService.ResolvedChip::tagId).orElse(null));
     model.addAttribute("tagLabel", chip.map(TagService.ResolvedChip::label).orElse(null));
     model.addAttribute("fieldName", fieldName);

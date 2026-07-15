@@ -237,7 +237,7 @@
         <div class="field field--tags" data-tag-field>
           <label class="field__label" for="entry-tags">Tags</label>
           <div class="chips">
-            <span id="entry-tag-chips" class="chips__list">
+            <span id="entry-tag-chips" class="chips__list" data-tag-chips>
               <th:block th:if="${edit != null}">
                 <th:block th:each="t : ${edit.tags()}">
                   <th:block
