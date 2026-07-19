@@ -20,15 +20,9 @@
   th:replace="~{layout :: page(~{:: content})}"
 >
   <main class="content" th:fragment="content">
-<!--    <div class="leaf-head">-->
-<!--      <p class="eyebrow">Categories</p>-->
-<!--      <h1>Categories</h1>-->
-<!--      <p class="lede">The taxonomy income and expense postings are filed against.</p>-->
-<!--    </div>-->
 
     <section class="panel">
-      <p class="eyebrow">Categories</p>
-      <h2>Income</h2>
+      <p class="eyebrow">Income</p>
       <p class="muted" th:if="${#lists.isEmpty(incomeCategories)}">No income categories yet.</p>
       <ul class="acct-list" th:unless="${#lists.isEmpty(incomeCategories)}">
         <li
@@ -46,7 +40,7 @@
         </li>
       </ul>
 
-      <h2>Expense</h2>
+      <p class="eyebrow">Expenses</p>
       <p class="muted" th:if="${#lists.isEmpty(expenseCategories)}">No expense categories yet.</p>
       <ul class="acct-list" th:unless="${#lists.isEmpty(expenseCategories)}">
         <li
@@ -66,8 +60,8 @@
     </section>
 
     <section class="panel">
-      <p class="eyebrow">New</p>
-      <h2>Create a category</h2>
+      <p class="eyebrow">Create a category</p>
+<!--      <h2>Create a category</h2>-->
       <form method="post" th:action="@{/categories}" class="form">
         <div class="field">
           <label class="field__label" for="name">Name</label>
