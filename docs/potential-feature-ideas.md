@@ -69,6 +69,22 @@ from the button, and the type (expense or income) from the parent category as we
 * When editing a simple transaction it is impossible to turn it into a split transaction, although logically it should be possible. The user should not have an impression that simple
   transactions and split transactions are two different world.
 
+## Per-person debts (deferred from stage 8)
+
+Stage 8 ships single- and multi-person attribution, the register display, the People page, per-currency
+settle-up, and merge. These were consciously left out:
+
+* **Split-method calculator (equal / shares / exact)** — FR-DEBT-02's parenthetical. Multi-person
+  attribution already works via **manual** split amounts (`for Max` / `by Max` lines with "the rest"
+  defaulting); this would add a "split N ways" helper that *fills* the per-line amounts (equal, by
+  shares like `2:1:1`, or exact) with remainder-penny distribution. Pure convenience over an existing
+  capability — may never be built.
+* **Per-group "simplify debts" suggestions** — FR-DEBT-10. Net across people to minimise the number of
+  settle-up transactions.
+* **Groups / trips** — FR-DEBT-07. Optional grouping of shared expenses, integrated with tags.
+* **Debts over MCP** — expose the people/debts read + settle operations through the MCP server (with
+  the rest of the MCP surface, a later stage).
+
 ## General UX improvements
 
 * In the various pages instead of "Back to..." links we should have a "Cancel" button. This makes the UX more consistent.

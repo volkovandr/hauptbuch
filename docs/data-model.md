@@ -625,7 +625,21 @@ Falls entirely out of the account model — no separate debt machinery (requirem
   accepted losing a *categorized* breakdown of what's been fronted ("seeing I paid for Max at a
   restaurant is enough").
 - **Auto-provisioning is a code path, not schema.** First time a line is marked as Max's,
-  an `operations`/`debts` domain op ensures `Max-EUR` exists and links it via `account_owner`.
+  a `debts` domain op ensures the person row and the needed per-currency leaf exist and links the leaf
+  via `account_owner`. Entry rides the **transfer** path — a person leg is a transfer to/from that
+  leaf — typed `for <person>` (`→ Person`, you funded) / `by <person>` (`Person →`, they funded) in
+  the register (§3.5, §3.8 of the register doc).
+- **No parent account; leaves grouped by `account_owner`.** The per-currency accounts are standalone
+  `asset` **leaves** (not children of a `Max` parent), so nothing ever rolls up across currencies.
+  Grouping "these leaves are Max's" is the `account_owner → person` link, never a naming convention;
+  leaf names are cosmetic (`personal.<CUR>`, duplicates allowed) and every display resolves the
+  person's name via that link. **Rename** updates `person.name` only — ids never move. **Duplicate
+  person names are allowed**, disambiguated in pickers (as payees are).
+- **Lifecycle.** A person is created explicitly or inline (first `for`/`by` reference), renamed, and
+  **soft-deleted only when every leaf balance is zero** — a soft-deleted person is hidden from pickers
+  but keeps all history and is **revived by confirmation** when the name is re-entered. A **non-zero**
+  person is removed only by **merge**: reassigning their postings, per currency, onto another person
+  (the `operations` reassignment path).
 - **Per-person view: show currencies side by side, never net across them.** Max's state is a small
   set of signed per-currency balances ("you owe €10; Max owes you 10 CHF"). A base-currency total
   alongside (`Σ balance_base`) is a *supplementary* gloss; the per-currency figures are the truth

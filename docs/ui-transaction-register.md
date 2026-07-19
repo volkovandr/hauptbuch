@@ -138,17 +138,22 @@ This is the one genuinely subtle presentation rule. Each transaction is shown th
 **arrow** are decided by two *independent* questions.
 
 **Which column does each leg occupy?**
-- **Primary leg → the Account column.** The primary leg is a leg that moves **one of your own
-  accounts** (asset/liability: Cash, Giro, Visa, …). If more than one such leg is in view (a transfer
-  between two viewed accounts), the transaction yields **one row per such leg** (§2.4).
+- **Primary leg → the Account column.** The primary leg moves **one of your own accounts**
+  (asset/liability: Cash, Giro, Visa, **and a person's debt account** — data-model §7). If more than
+  one such leg is in view (a transfer between two viewed accounts, or a person leg alongside a cash
+  leg), the transaction yields **one row per such leg** (§2.4); each row's *own* leg is its Account.
+  Where a single leg must be named the funding/edit anchor (the dock on reopen, the Category summary),
+  it is the **most-negative own leg** — the largest outflow — which generalises the transfer sign rule
+  to any number of own legs (tie among equal magnitudes → the credit leg wins).
 - **Counterpart legs → the Category column.** Income/expense legs show as the category name (biggest
   wins, with an overflow hint like `Food · +2`); another of your real accounts shows as a
   **direction-arrowed transfer** — `→ Account` when funds went **to** it (its leg is a debit),
   `← Account` when they came **from** it (its leg is a credit); a person's debt leg shows as an
   **arrow chip** (below). Each row of a transfer shows the *other* leg, so a transfer between two
   viewed accounts reads `→ Visa` on the Cash row and `← Cash` on the Visa row.
-- **When no own-account leg exists** — a pure expense or income that a *person* funded — the
-  **person's debt leg becomes the primary** and occupies the **Account** column.
+- **When no *real* own-account leg is in view** — a pure expense or income that a *person* funded (no
+  Cash/Giro/Visa leg, only the person's leg and a category) — the **person's debt leg is the primary**
+  (it is the most-negative own leg by default) and occupies the **Account** column.
 
 **Which way does the arrow point?** Independent of the column, set by the flow alone:
 - **`Max →`** = funds came **from** Max (Max is the source); **you owe Max** more.
@@ -175,12 +180,11 @@ Max's signed per-currency debt account (data-model §7). The arrows are pure dis
 the **net** standing with Max is still the **sign of Max's running balance** (positive = Max owes you;
 negative = you owe Max).
 
-> **Consequence / open intersection (Q-UI-1, narrowed).** Of the patterns above, only the third —
-> *Max pays for a pure expense of yours* — has **no bank/cash leg**, so under the default *bank + cash*
-> filter it does not appear in the register; it surfaces when the person's account is in the filter or
-> in a per-person view. The cash-loan patterns move your Cash and therefore appear normally. Whether
-> the expense-funded-by-a-person case should *also* be surfaced in the default register is the open
-> part.
+> **Resolution (Q-UI-1) — surfaced.** The third pattern — *Max pays for a pure expense of yours* —
+> has **no bank/cash leg**, but a person's debt leg is an ordinary `asset` account, so it **is** in
+> the default viewed set (§2.3): the transaction **does** appear in the default register, with the
+> person on the **Account** side and its own running balance shown (a real balance, like a credit
+> card's). Person accounts are not special-cased out of the register — they are assets like any other.
 
 ### 2.7 Per-account running balance
 
@@ -304,6 +308,16 @@ text** (no gazetteer). The pre-filled mini-form is the safety net for any mis-cl
   `Uncategorized` sibling. No new machinery.
 - **The category type drives entry direction** (§3.8): choosing an expense vs income (vs `→ Person` /
   `Person →`) counterpart sets the sign of the funding leg, so the amount stays sign-free.
+- **Person attribution (`for` / `by`).** Typing `for <person>` books the person as the counterpart
+  **you funded** (`→ Person`), `by <person>` the person who **funded it** (`Person →`) — the reserved
+  `for`/`by` keywords parallel the `to`/`from` transfer keywords and dodge the person-vs-account name
+  clash. A person leg **is** a transfer to/from that person's per-currency leaf (data-model §7), so it
+  rides the transfer commit path; the currency selector applies as above (funding-account currency by
+  default, override → cross-currency, e.g. settling a EUR debt with USD cash). An unknown name
+  **creates** the person, with a confirm when the name would instead **revive** a soft-deleted one
+  (data-model §7). The **Account** field also accepts a person — surfaced by typing, not listed by
+  default — as the *funding* leg for the "they paid a pure expense of mine" case (§2.6, the resolved
+  Q-UI-1). Both the Account and Category picker labels carry a tooltip listing these shortcuts.
 
 ### 3.6 Tags — chip field with split inheritance
 
@@ -350,8 +364,8 @@ leg (and therefore both signed legs):
 |--------------------|---------------------|---------|
 | **Expense** category | outflow (−) | `Food` → `Cash −` |
 | **Income** category | inflow (+) | `Salary` → `Giro +` |
-| **`→ Person`** (you funded it) | outflow (−) | `→ Max` → `Cash −`, `Max +` |
-| **`Person →`** (they funded it) | inflow (+) | `Max →` → `Cash +`, `Max −` |
+| **`→ Person`** — typed `for Max` (you funded it) | outflow (−) | `→ Max` → `Cash −`, `Max +` |
+| **`Person →`** — typed `by Max` (they funded it) | inflow (+) | `Max →` → `Cash +`, `Max −` |
 | **Transfer** to another own account | outflow from the entry account | `⇄ Visa` → entry account `−`, `Visa +` |
 
 The sign **resolves the moment the counterpart is known**. Thanks to the payee→category ghost

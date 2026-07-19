@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.19
-**Date:** 2026-07-11
+**Status:** Draft v0.20
+**Date:** 2026-07-19
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md` (the five authoritative design docs)
@@ -23,6 +23,13 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.20 (2026-07-19):** **Stage 8 made concrete**, split into **8a–8f**. **Q-UI-1 resolved
+  (surfaced)** — a person's debt account is an ordinary `asset`, already in the default register set,
+  so a person-funded pure expense appears with the person on the Account side. Person **entry rides
+  the transfer path** (`for`/`by` keyword sigil, mirroring `to`/`from`); person data shape is
+  standalone per-currency leaves with **no parent account**, grouped by `account_owner`. The
+  equal/shares/exact split calculator, per-group "simplify debts", groups/trips, and debts-over-MCP
+  are **deferred** to `potential-feature-ideas.md`.
 - **v0.19 (2026-07-11):** **FX gain/loss auto-booking retired** (data-model §6.3); **stage 7d
   re-scoped** into 7d.0–7d.3 with a category-currency selector and per-currency amounts balanced in
   base. 7d.0 additionally **un-seeds `FX gain/loss`** — with no code path resolving it by name it is
@@ -237,11 +244,59 @@ never retrofitted):
   splits containing a transfer leg (same/cross-currency). Every shape the entry surface creates is
   now editable. Detail in the stage-7 plan.
 
-### Stage 8 — People & per-person debts (rough)
-The `debts` module: `person` + `account_owner`; auto-provisioned signed per-person/per-currency
-`asset` accounts (data-model §7). Register extension for the `→ Max` / `Max →` arrow-chip display and
-entry (register §2.6, §3.3, §3.8), including the Account-vs-Category column rule. Resolves or carries
-Q-UI-1 (whether person-funded pure-expense rows surface in the default register).
+### Stage 8 — People & per-person debts
+The `debts` module (data-model §7, §3.3) and its two surfaces: the register (entry + display) and a
+new **People page**. The load-bearing decision: **a person leg is just a transfer to/from that
+person's account**, so entry and display ride the existing transfer + split machinery — the only
+net-new engine step is **auto-provisioning** the person's account on first reference. Cross-cutting
+decisions, settled before slicing:
+
+- **Data shape.** A person is a `person` row plus one standalone per-currency `asset` **leaf** each
+  (**no parent account**), linked by one `account_owner` row per leaf (§3.3 as sketched). Grouping is
+  by the `account_owner → person` link, never by name, so nothing ever rolls up across currencies.
+  Leaf names are cosmetic (`personal.<CUR>`); every display resolves the person's name via that link.
+  **Rename touches `person.name` only**; ids never move. **Duplicate person names are allowed**,
+  disambiguated in pickers (as payees already are).
+- **Entry = transfer.** In the **Category** field, `for <person>` books `→ Person` (you funded — the
+  person owes you), `by <person>` books `Person →` (they funded — you owe them); the reserved
+  `for`/`by` keywords sit beside the existing `to`/`from` transfer keywords and dodge the
+  person-vs-account name collision. The category-currency selector applies (defaults to the funding
+  account's currency; an override makes it cross-currency — e.g. settle a EUR debt with USD cash). In
+  the **Account** field a person, surfaced by typing (not listed by default), is the **funding** leg
+  for the "they paid a pure expense of mine" case (register §2.6 pattern 3); direction is implied by
+  the counterpart. Both picker labels gain a **tooltip** documenting the shortcuts.
+- **Display.** Person legs are ordinary `asset` legs → **two-row symmetry** (register §2.4); the
+  funding/edit-anchor leg of a multi-own-leg transaction is the **most-negative own leg**
+  (generalises the shipped transfer sign rule to any number of legs); arrow-chips render per register
+  §2.6. **Q-UI-1 is resolved — surfaced:** person accounts are `asset`, hence already in the default
+  viewed set, so a person-funded pure expense appears with the person on the Account side (its running
+  balance is a real balance, exactly like a credit card's).
+- **Auto-provisioning** at commit: ensure the person, ensure a `personal.<CUR>` leaf, link via
+  `account_owner`. Reviving a soft-deleted person (a name that matches **only** a soft-deleted row) is
+  a **confirmed** action, never silent.
+
+Six ordered sub-stages, each green and demoable (7-series cadence):
+
+- **8a — `debts` foundation + minimal People page.** V7 migration (`person`, `account_owner`),
+  records, repositories including the **per-person per-currency signed-balance** query
+  (`sqlLogicTest`), the **provisioning** op (ensure person + leaf + link, with revival), `PersonService`
+  (create / rename / soft-delete with a **zero-balance guard**), and a bare People page (list, create,
+  rename, soft-delete — names only). `ApplicationModules.verify()` green.
+- **8b — Person entry.** `for`/`by` in the counterpart picker with inline create + confirmed revival,
+  the currency selector, auto-provision at commit, and the Account-field funding-leg case — riding
+  the transfer path for **single-line and split**, same- and cross-currency. Label tooltips.
+- **8c — Register display.** Two-row symmetry with person legs, arrow-chip rendering (Account/Category
+  per §2.6), the most-negative-own-leg funding rule, Q-UI-1 surfacing.
+- **8d — People balances.** Net-balance column, expand → per-currency signed balances, and a "view in
+  register (pre-filtered to this person)" link, on the existing People page.
+- **8e — Settle-up button.** A per-person×currency launcher: pick account + date + amount(s) (one or
+  two fields by currency match, §3.8a), direction auto-detected from the balance sign, committed
+  through the existing path — a pre-scoped transaction, not new engine.
+- **8f — Merge.** Reassign-based person merge (`PostingReassignmentRepository`) — the way to remove a
+  **non-zero** person by folding their postings, per currency, into another person.
+
+Deferred to `potential-feature-ideas.md`: the equal/shares/exact split calculator, per-group
+"simplify debts", groups/trips, and MCP exposure of debts.
 
 ### Stage 9 — Receipts backend (rough)
 Ratify the provisional `receipt` / `receipt_line` schema (receipt doc §9) **into the data-model
