@@ -18,15 +18,9 @@
   th:replace="~{layout :: page(~{:: content})}"
 >
   <main class="content" th:fragment="content">
-<!--    <div class="leaf-head">-->
-<!--      <p class="eyebrow">Accounts</p>-->
-<!--      <h1>Accounts</h1>-->
-<!--      <p class="lede">The real-world accounts the book keeps — cash, giro, cards, loans.</p>-->
-<!--    </div>-->
 
     <section class="panel">
-      <p class="eyebrow">Accounts</p>
-      <h2>Assets</h2>
+      <p class="eyebrow">Assets</p>
       <p class="muted" th:if="${#lists.isEmpty(assets)}">No asset accounts yet.</p>
       <ul class="acct-list" th:unless="${#lists.isEmpty(assets)}">
         <li
@@ -46,7 +40,7 @@
         </li>
       </ul>
 
-      <h2>Liabilities</h2>
+      <p class="eyebrow">Liabilities</p>
       <p class="muted" th:if="${#lists.isEmpty(liabilities)}">No liability accounts yet.</p>
       <ul class="acct-list" th:unless="${#lists.isEmpty(liabilities)}">
         <li
@@ -68,8 +62,7 @@
     </section>
 
     <section class="panel">
-      <p class="eyebrow">New</p>
-<!--      <h2>Open an account</h2>-->
+      <p class="eyebrow">Open an account</p>
       <form method="post" th:action="@{/accounts}" class="form">
         <div class="field">
           <label class="field__label" for="name">Name</label>

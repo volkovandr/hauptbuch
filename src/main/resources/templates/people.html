@@ -17,7 +17,6 @@
   <main class="content" th:fragment="content">
     <section class="panel">
       <p class="eyebrow">People</p>
-      <h2>People</h2>
       <p class="muted" th:if="${#lists.isEmpty(people)}">No people yet.</p>
       <ul class="acct-list" th:unless="${#lists.isEmpty(people)}">
         <li th:each="p : ${people}" class="acct">
@@ -32,8 +31,7 @@
     </section>
 
     <section class="panel">
-      <p class="eyebrow">New</p>
-      <h2>Add a person</h2>
+      <p class="eyebrow">Add a person</p>
       <form method="post" th:action="@{/people}" class="form">
         <div class="field">
           <label class="field__label" for="name">Name</label>
