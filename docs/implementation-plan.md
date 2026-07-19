@@ -27,10 +27,9 @@ it shipped. "Stage N complete" needs no recap here.
   re-scoped** into 7d.0–7d.3 with a category-currency selector and per-currency amounts balanced in
   base. 7d.0 additionally **un-seeds `FX gain/loss`** — with no code path resolving it by name it is
   no longer a system leaf (dropped from the V2 seed and `createCurrency`), just a lazy user category.
-  Detail in `implementation-plan-stage-7.md`.
-- **v0.15 (2026-07-05):** Stage 7 made concrete, split into **7a–7e** in the sub-plan
-  `implementation-plan-stage-7.md` (tags last; cross-currency after edit/splits; keyboard-first
-  piecewise; sorting deferred to §14). Payee gains city/country + a seeded `country` table at 7b.
+- **v0.15 (2026-07-05):** Stage 7 made concrete, split into **7a–7e** (tags last; cross-currency
+  after edit/splits; keyboard-first piecewise; sorting deferred to §14). Payee gains city/country +
+  a seeded `country` table at 7b.
 - **v0.11 (2026-07-04):** Inserted **6c — Category deletion**; the former 6c (currency-list editor)
   renumbered to **6d**.
 - **v0.8 (2026-07-01):** Stage 6 split into **6a/6b/6c** (later renumbered by v0.11).
@@ -211,10 +210,9 @@ is addable from any picker, provisioned with its backing leaf and pre-selected.
 
 ### Stage 7 — Transaction register & entry dock ✅ **complete**
 The two central surfaces from `ui-transaction-register.md`: the newest-at-bottom register and the
-persistent bottom entry/edit dock. **Detailed in the dedicated sub-plan
-`implementation-plan-stage-7.md`** (the >30-line rule); UI inspiration mock-ups in
-`docs/pic/register-*.png`. Six ordered sub-stages, each green and demoable; keyboard-first as each
-piece lands (Q-UI-2 decided piecewise, never retrofitted):
+persistent bottom entry/edit dock. UI inspiration mock-ups in `docs/pic/register-*.png`. Six ordered
+sub-stages, each green and demoable; keyboard-first as each piece lands (Q-UI-2 decided piecewise,
+never retrofitted):
 
 - **7a — Register, read-only.** ✅ **complete.** The list over a register query + the stage-3
   running-balance SQL rebound to a real repository; date/account/payee filters (column re-sorting
@@ -311,8 +309,8 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
   asserts the rendered `hx-*` wiring, the swap responses, and the resulting balances against real
   Postgres, without the browser-binary/WSL setup cost. Revisit only if a defect surfaces that a
   server-side acceptance test structurally cannot catch (e.g. a real client-JS interaction in one of
-  the sanctioned JS leaves). Supersedes the "Playwright arrives at 7b" line in the stage-7 sub-plan
-  and the Should-level UI-testing rows in `tech-stack.md`/§15.
+  the sanctioned JS leaves). Supersedes the earlier "Playwright arrives at 7b" plan and the
+  Should-level UI-testing rows in `tech-stack.md`/§15.
 
 ---
 
