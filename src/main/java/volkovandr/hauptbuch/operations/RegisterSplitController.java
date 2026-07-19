@@ -234,6 +234,10 @@ class RegisterSplitController {
             amounts.isEmpty() ? null : SplitFormBinder.blankToNull(amounts.get(0)),
             SplitFormBinder.parseLong(ids.isEmpty() ? null : ids.get(0)),
             texts.isEmpty() ? null : SplitFormBinder.blankToNull(texts.get(0)),
+            null, // categoryCurrencyCode (splits don't have cross-currency in the dock's edit mode)
+            null, // categoryAmount
+            null, // baseAmount
+            null, // transferDirection
             form.note(),
             // The split's transaction-level tags return to the dock's chip field so cancelling does
             // not lose them (register §3.6/§3.9, plan stage 7e.3); the per-line tags are dropped

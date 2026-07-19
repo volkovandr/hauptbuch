@@ -131,8 +131,8 @@ class RegisterEntryController {
    * Load a live transaction into the dock's edit mode (register §3.1). The row's edit affordance
    * hx-gets this, carrying the active filter as {@code view*} params (so the dock keeps repainting
    * the current view), and swaps the returned dock fragment over {@code #entry-dock}. A transaction
-   * the dock can't edit yet (a transfer, an opening balance, cross-currency) re-renders the dock in
-   * new mode carrying an explanatory message rather than loading a half-usable form.
+   * the dock can't edit (an opening balance) re-renders the dock in new mode carrying an
+   * explanatory message rather than loading a half-usable form.
    */
   @GetMapping("/register/edit/{transactionId}")
   String edit(@PathVariable long transactionId, @ModelAttribute DockEntryForm form, Model model) {
@@ -141,7 +141,7 @@ class RegisterEntryController {
     try {
       DockEditModel edit = dockEditService.load(transactionId);
       model.addAttribute("edit", edit);
-      addCurrencyAttributes(model, dockAmountFieldsService.forAccount(edit.accountId()));
+      addCurrencyAttributes(model, dockAmountFieldsService.forEdit(edit));
       return DOCK_FRAGMENT
           + " :: dock(register=${register}, oob=false, edit=${edit}, amountFields=${amountFields})";
     } catch (IllegalArgumentException notSimple) {
@@ -155,7 +155,7 @@ class RegisterEntryController {
         model.addAttribute(CURRENCIES, dockAmountFieldsService.currencies());
         return SPLIT_PANEL;
       } catch (IllegalArgumentException notSplit) {
-        // Neither shape (a transfer, opening balance, or cross-currency): stay in new mode carrying
+        // Neither the dock's nor the panel's shape (an opening balance): stay in new mode carrying
         // the simple-dock explanation. Not an OOB swap — the edit affordance targets #entry-dock.
         model.addAttribute("entryError", notSimple.getMessage());
         addCurrencyAttributes(model, dockAmountFieldsService.fresh(register));

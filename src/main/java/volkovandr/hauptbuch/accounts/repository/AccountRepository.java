@@ -103,10 +103,18 @@ public class AccountRepository {
         .optional();
   }
 
-  /** The account ids that are some other account's parent — i.e. the non-leaf accounts. */
+  /**
+   * The account ids that are some other <em>live</em> account's parent — i.e. the non-leaf
+   * accounts. A parent whose children are all soft-deleted is effectively a leaf again and is
+   * excluded, matching {@link #findChildrenOf} (which also filters {@code deleted_at is null}): the
+   * leaves-only check and the currency-leaf routing must agree on what counts as a leaf, or a
+   * posting the routing files at such an account is rejected by the engine (data-model §5).
+   */
   public List<Long> findParentAccountIds() {
     return jdbcClient
-        .sql("select distinct parent_id from account where parent_id is not null")
+        .sql(
+            "select distinct parent_id from account "
+                + "where parent_id is not null and deleted_at is null")
         .query(Long.class)
         .list();
   }
