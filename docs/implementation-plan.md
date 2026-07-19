@@ -1,7 +1,7 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.20
+**Status:** Draft v0.21
 **Date:** 2026-07-19
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
@@ -48,7 +48,7 @@ it shipped. "Stage N complete" needs no recap here.
 - **v0.1 (2026-06-25):** Initial plan — staged increments + backlog; module-first from day one;
   three-tier test strategy; the stage-3 service framed as invariant-upholding domain ops, not CRUD.
 - **Stages marked complete** (routine, no recap): 1 (v0.3), 2 (v0.4), 3 (v0.5), 4 (v0.6), 5 (v0.7),
-  6a (v0.9), 6b (v0.10), 6c (v0.12), 6d (v0.14), 7a (v0.16), 7b (v0.17), 7c (v0.18).
+  6a (v0.9), 6b (v0.10), 6c (v0.12), 6d (v0.14), 7a (v0.16), 7b (v0.17), 7c (v0.18), 8a (v0.21).
 
 ---
 
@@ -277,11 +277,11 @@ decisions, settled before slicing:
 
 Six ordered sub-stages, each green and demoable (7-series cadence):
 
-- **8a — `debts` foundation + minimal People page.** V7 migration (`person`, `account_owner`),
-  records, repositories including the **per-person per-currency signed-balance** query
-  (`sqlLogicTest`), the **provisioning** op (ensure person + leaf + link, with revival), `PersonService`
-  (create / rename / soft-delete with a **zero-balance guard**), and a bare People page (list, create,
-  rename, soft-delete — names only). `ApplicationModules.verify()` green.
+- **8a — `debts` foundation + minimal People page.** ✅ **complete.** V7 migration (`person`,
+  `account_owner`), records, repositories including the **per-person per-currency signed-balance**
+  query (`sqlLogicTest`), the **provisioning** op (ensure person + leaf + link, with revival),
+  `PersonService` (create / rename / soft-delete with a **zero-balance guard**), and a bare People
+  page (list, create, rename, soft-delete — names only). `ApplicationModules.verify()` green.
 - **8b — Person entry.** `for`/`by` in the counterpart picker with inline create + confirmed revival,
   the currency selector, auto-provision at commit, and the Account-field funding-leg case — riding
   the transfer path for **single-line and split**, same- and cross-currency. Label tooltips.
