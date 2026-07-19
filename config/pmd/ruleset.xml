@@ -88,8 +88,6 @@
   <rule ref="category/java/multithreading.xml">
     <!-- Spring singleton beans are the threading model; avoid false positives -->
     <exclude name="UseConcurrentHashMap"/>
-    <!-- Requires explicit package/class list to be useful; omit until needed -->
-    <exclude name="LoosePackageCoupling"/>
   </rule>
 
   <!-- ── Performance ──────────────────────────────────────────────────── -->
