@@ -22,6 +22,7 @@ public record NavItem(String label, String path, boolean current) {
           new NavItem("Register", "/register", false),
           new NavItem("Accounts", "/accounts", false),
           new NavItem("Categories", "/categories", false),
+          new NavItem("People", "/people", false),
           new NavItem("Receipts", "/receipts", false),
           new NavItem("Reports", "/reports", false),
           new NavItem("Settings", "/settings", false));

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<!--
+  Person edit page (plan stage 8a): rename and soft-delete only.
+
+  Soft-delete is refused server-side while any of the person's per-currency accounts carries a
+  non-zero balance — a non-zero person is removed only by merge (stage 8f), not deletion.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <div class="leaf-head">
+      <p class="eyebrow">People</p>
+      <h1 th:text="${person.name()}">Max</h1>
+    </div>
+
+    <section class="panel">
+      <p class="eyebrow">Settings</p>
+      <h2>Name</h2>
+      <form method="post" th:action="@{/people/{id}(id=${person.personId()})}" class="form">
+        <div class="field">
+          <label class="field__label" for="name">Name</label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            class="input"
+            th:value="${person.name()}"
+            required
+            autocomplete="off"
+          />
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Save</button>
+          <a th:href="@{/people}">Back to people</a>
+        </p>
+      </form>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Danger</p>
+      <h2>Remove this person</h2>
+      <p class="muted">
+        Only possible while every one of their per-currency balances is zero. A person who is owed
+        or owes money is removed by merging them into someone else instead.
+      </p>
+      <p class="warning">
+        Reversible: this hides the person from pickers but keeps their history — it does not erase
+        them.
+      </p>
+      <form
+        method="post"
+        th:action="@{/people/{id}/delete(id=${person.personId()})}"
+        class="form"
+      >
+        <p class="actions">
+          <button type="submit" class="btn btn--danger">Remove person</button>
+        </p>
+      </form>
+    </section>
+  </main>
+</html>

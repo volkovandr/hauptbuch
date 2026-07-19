@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!--
+  People screen (plan stage 8a): the roster of persons the debts module tracks, and the
+  create-person form.
+
+    • A person is a bare name here; their per-currency accounts are auto-provisioned on first
+      reference from the register (stage 8b), not created on this screen.
+    • Balances, per-currency breakdown, and the "view in register" link arrive in stage 8d.
+
+  Standard server-rendered form POSTs with redirect-after-post; no bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel">
+      <p class="eyebrow">People</p>
+      <h2>People</h2>
+      <p class="muted" th:if="${#lists.isEmpty(people)}">No people yet.</p>
+      <ul class="acct-list" th:unless="${#lists.isEmpty(people)}">
+        <li th:each="p : ${people}" class="acct">
+          <a
+            class="acct__name"
+            th:href="@{/people/{id}(id=${p.personId()})}"
+            th:text="${p.name()}"
+            >Max</a
+          >
+        </li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">New</p>
+      <h2>Add a person</h2>
+      <form method="post" th:action="@{/people}" class="form">
+        <div class="field">
+          <label class="field__label" for="name">Name</label>
+          <input id="name" name="name" type="text" class="input" required autocomplete="off" />
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Add person</button>
+        </p>
+      </form>
+    </section>
+  </main>
+</html>
