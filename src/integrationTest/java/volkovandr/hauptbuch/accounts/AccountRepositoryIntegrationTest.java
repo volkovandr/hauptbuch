@@ -80,6 +80,23 @@ class AccountRepositoryIntegrationTest {
   }
 
   @Test
+  void parentWhoseOnlyChildrenAreSoftDeletedIsNotaParent() {
+    // A parent whose currency leaves have all been soft-deleted is effectively a leaf again — it
+    // must be postable (leaves-only, data-model §5). findParentAccountIds counts LIVE children
+    // only,
+    // matching findChildrenOf; otherwise the ledger rejects a posting the currency-leaf routing
+    // deliberately files there (the split-Save 500).
+    long parent = accountRepository.insert(draft("Food", EXPENSE, null));
+    long child = accountRepository.insert(currencyLeafDraft(EUR, parent));
+    jdbcClient
+        .sql("update account set deleted_at = now() where account_id = :id")
+        .param("id", child)
+        .update();
+
+    assertThat(accountRepository.findParentAccountIds()).doesNotContain(parent);
+  }
+
+  @Test
   void insertedAccountRoundTripsWithHueAndOpenedDate() {
     long id = accountRepository.insert(draft(GIRO, ASSET, 210));
 

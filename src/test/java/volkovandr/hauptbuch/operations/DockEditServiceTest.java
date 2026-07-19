@@ -2,7 +2,6 @@ package volkovandr.hauptbuch.operations;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -33,6 +32,7 @@ class DockEditServiceTest {
   private static final String EUR = "EUR";
   private static final String EXPENSE = "expense";
   private static final String INCOME = "income";
+  private static final String ASSET = "asset";
   private static final long TXN_ID = 100L;
   private static final long CASH_ID = 1L;
   private static final long FOOD_ID = 2L;
@@ -111,6 +111,81 @@ class DockEditServiceTest {
   }
 
   @Test
+  void loadsSimpleIncomeIntoTheDock() {
+    // Income debits the own account (Cash +2500) and credits the category (Salary -2500): the
+    // funding leg is the own-account leg regardless of its sign, so the dock pre-fills Cash as the
+    // account and Salary as the category — never the other way round.
+    long salaryId = 4L;
+    when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
+    when(ledgerService.findPostings(TXN_ID))
+        .thenReturn(List.of(posting(CASH_ID, "2500"), posting(salaryId, "-2500")));
+    when(accountService.findById(CASH_ID))
+        .thenReturn(Optional.of(account(CASH_ID, "Cash", ASSET, null, EUR)));
+    when(accountService.findById(salaryId))
+        .thenReturn(Optional.of(account(salaryId, "Salary", INCOME, null, EUR)));
+
+    DockEditModel model = service().load(TXN_ID);
+
+    assertThat(model.accountId()).isEqualTo(CASH_ID);
+    assertThat(model.categoryId()).isEqualTo(salaryId);
+    assertThat(model.categoryName()).isEqualTo("Salary");
+    assertThat(model.amount()).isEqualTo("2.500,00"); // an inflow is income's default: bare
+    assertThat(model.transferDirection()).isNull();
+  }
+
+  @Test
+  void loadsExpenseRefundIntoTheDock() {
+    // A refund inflows the own account (Cash +20, Food -20) — the same shape as income, but the
+    // non-default direction for an expense, so the amount keeps its explicit + (register §3.8).
+    when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
+    when(ledgerService.findPostings(TXN_ID))
+        .thenReturn(List.of(posting(CASH_ID, "20"), posting(FOOD_ID, "-20")));
+    when(accountService.findById(CASH_ID))
+        .thenReturn(Optional.of(account(CASH_ID, "Cash", ASSET, null, EUR)));
+    when(accountService.findById(FOOD_ID))
+        .thenReturn(Optional.of(account(FOOD_ID, "Food", EXPENSE, null, EUR)));
+
+    DockEditModel model = service().load(TXN_ID);
+
+    assertThat(model.accountId()).isEqualTo(CASH_ID);
+    assertThat(model.categoryId()).isEqualTo(FOOD_ID);
+    assertThat(model.amount()).isEqualTo("+20,00");
+  }
+
+  @Test
+  void loadsCrossCurrencyIncomeIntoTheDock() {
+    // The cross-currency counterpart is still the category leg when the own leg is the debit one.
+    long salaryChf = 5L;
+    Posting cashLeg = posting(CASH_ID, "2500"); // EUR inflow
+    Posting salaryLeg =
+        new Posting(
+            2L,
+            TXN_ID,
+            salaryChf,
+            new BigDecimal("-2400"),
+            new BigDecimal("-2500"),
+            "unreconciled",
+            null);
+    when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
+    when(ledgerService.findPostings(TXN_ID)).thenReturn(List.of(cashLeg, salaryLeg));
+    when(accountService.findById(CASH_ID))
+        .thenReturn(Optional.of(account(CASH_ID, "Cash", ASSET, null, EUR)));
+    when(accountService.findById(salaryChf))
+        .thenReturn(Optional.of(currencyLeaf(salaryChf, "CHF", INCOME, 4L)));
+    when(accountService.findById(4L))
+        .thenReturn(Optional.of(account(4L, "Salary", INCOME, null, EUR)));
+
+    DockEditModel model = service().load(TXN_ID);
+
+    assertThat(model.accountId()).isEqualTo(CASH_ID);
+    assertThat(model.categoryId()).isEqualTo(4L);
+    assertThat(model.categoryCurrencyCode()).isEqualTo("CHF");
+    assertThat(model.amount()).isEqualTo("2.500,00");
+    assertThat(model.categoryAmount()).isEqualTo("2.400,00");
+    assertThat(model.baseAmount()).isEqualTo("2.500,00");
+  }
+
+  @Test
   void prefillsTheTransactionTagsAsChips() {
     when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
     when(ledgerService.findPostings(TXN_ID))
@@ -170,23 +245,28 @@ class DockEditServiceTest {
   }
 
   @Test
-  void refusesTransferWithTwoOwnAccountLegs() {
+  void acceptsTransferWithTwoOwnAccountLegs() {
+    // Transfers (7f) are now accepted — two own-account legs with no category.
     when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
     when(ledgerService.findPostings(TXN_ID))
         .thenReturn(List.of(posting(CASH_ID, "-20"), posting(10L, "20")));
     when(accountService.findById(CASH_ID))
         .thenReturn(Optional.of(account(CASH_ID, "Cash", "asset", null, EUR)));
-    lenient()
-        .when(accountService.findById(10L))
+    when(accountService.findById(10L))
         .thenReturn(Optional.of(account(10L, "Visa", "liability", null, EUR)));
 
-    assertThatExceptionOfType(IllegalArgumentException.class)
-        .isThrownBy(() -> service().load(TXN_ID))
-        .withMessageContaining("cannot be edited");
+    DockEditModel model = service().load(TXN_ID);
+
+    assertThat(model.transactionId()).isEqualTo(TXN_ID);
+    assertThat(model.accountId()).isEqualTo(CASH_ID); // funding account
+    assertThat(model.categoryId()).isEqualTo(10L); // transfer target
+    assertThat(model.transferDirection()).isEqualTo("TO");
+    assertThat(model.categoryAmount()).isNull(); // single-currency, no categoryAmount
   }
 
   @Test
-  void refusesCrossCurrencyLegCarryingBaseAmount() {
+  void acceptsCrossCurrencyLegCarryingBaseAmount() {
+    // Cross-currency categories (7f) are now accepted — a category leg with frozen baseAmount.
     Posting crossLeg =
         new Posting(
             1L, TXN_ID, FOOD_ID, new BigDecimal("20"), new BigDecimal("18"), "unreconciled", null);
@@ -194,13 +274,16 @@ class DockEditServiceTest {
     when(ledgerService.findPostings(TXN_ID)).thenReturn(List.of(posting(CASH_ID, "-20"), crossLeg));
     when(accountService.findById(CASH_ID))
         .thenReturn(Optional.of(account(CASH_ID, "Cash", "asset", null, EUR)));
-    lenient()
-        .when(accountService.findById(FOOD_ID))
+    when(accountService.findById(FOOD_ID))
         .thenReturn(Optional.of(account(FOOD_ID, "Food", EXPENSE, null, "CHF")));
 
-    assertThatExceptionOfType(IllegalArgumentException.class)
-        .isThrownBy(() -> service().load(TXN_ID))
-        .withMessageContaining("cannot be edited");
+    DockEditModel model = service().load(TXN_ID);
+
+    assertThat(model.transactionId()).isEqualTo(TXN_ID);
+    assertThat(model.accountId()).isEqualTo(CASH_ID);
+    assertThat(model.categoryId()).isEqualTo(FOOD_ID);
+    assertThat(model.categoryAmount()).isEqualTo("20,00");
+    assertThat(model.baseAmount()).isEqualTo("18,00");
   }
 
   @Test
@@ -210,5 +293,100 @@ class DockEditServiceTest {
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> service().load(TXN_ID))
         .withMessageContaining("No live transaction");
+  }
+
+  // ── 7f: cross-currency single-line, transfers, and splits with transfers ─────
+
+  @Test
+  void loadsCrossCurrencySingleLineExpense() {
+    // Cross-currency expense: €20 out of Cash (EUR) → Food (CHF) at a rate.
+    // The counterpart leg carries a frozen baseAmount to balance in base currency.
+    long foodChf = 3L;
+    Posting cashLeg = posting(CASH_ID, "-20"); // EUR outflow
+    Posting foodLeg =
+        new Posting(
+            2L,
+            TXN_ID,
+            foodChf,
+            new BigDecimal("18"),
+            new BigDecimal("-20"),
+            "unreconciled",
+            null); // CHF inflow with frozen base
+    when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
+    when(ledgerService.findPostings(TXN_ID)).thenReturn(List.of(cashLeg, foodLeg));
+    when(accountService.findById(CASH_ID))
+        .thenReturn(Optional.of(account(CASH_ID, "Cash", "asset", null, EUR)));
+    when(accountService.findById(foodChf))
+        .thenReturn(Optional.of(currencyLeaf(foodChf, "CHF", "expense", FOOD_ID)));
+    when(accountService.findById(FOOD_ID))
+        .thenReturn(Optional.of(account(FOOD_ID, "Food", "expense", null, EUR)));
+
+    DockEditModel model = service().load(TXN_ID);
+
+    assertThat(model.transactionId()).isEqualTo(TXN_ID);
+    assertThat(model.accountId()).isEqualTo(CASH_ID);
+    assertThat(model.categoryId()).isEqualTo(FOOD_ID); // semantic parent
+    assertThat(model.categoryName()).isEqualTo("Food");
+    assertThat(model.categoryCurrencyCode()).isEqualTo("CHF"); // overridden currency
+    assertThat(model.amount()).isEqualTo("20,00"); // funding leg magnitude
+    assertThat(model.categoryAmount()).isEqualTo("18,00"); // counterpart leg magnitude
+    assertThat(model.baseAmount()).isEqualTo("20,00"); // frozen base (funding leg is base)
+  }
+
+  @Test
+  void loadsSameCurrencyTransferSingleLine() {
+    // Same-currency transfer: €100 from Cash (EUR) to Visa (EUR).
+    // Both legs are own accounts; no category.
+    long visaId = 11L;
+    when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
+    when(ledgerService.findPostings(TXN_ID))
+        .thenReturn(List.of(posting(CASH_ID, "-100"), posting(visaId, "100")));
+    when(accountService.findById(CASH_ID))
+        .thenReturn(Optional.of(account(CASH_ID, "Cash", "asset", null, EUR)));
+    when(accountService.findById(visaId))
+        .thenReturn(Optional.of(account(visaId, "Visa", "liability", null, EUR)));
+
+    DockEditModel model = service().load(TXN_ID);
+
+    assertThat(model.transactionId()).isEqualTo(TXN_ID);
+    assertThat(model.accountId()).isEqualTo(CASH_ID); // funding account
+    assertThat(model.categoryId()).isEqualTo(visaId); // transfer target (not category)
+    assertThat(model.categoryName()).isEqualTo("Visa");
+    assertThat(model.amount()).isEqualTo("100,00");
+    assertThat(model.transferDirection()).isEqualTo("TO"); // Cash is the funding source
+  }
+
+  @Test
+  void loadsCrossCurrencyTransferSingleLine() {
+    // Cross-currency transfer: €100 from Cash (EUR) to Visa (CHF) at a rate.
+    long visaChf = 12L;
+    Posting cashLeg = posting(CASH_ID, "-100"); // EUR outflow
+    Posting visaLeg =
+        new Posting(
+            2L,
+            TXN_ID,
+            visaChf,
+            new BigDecimal("90"),
+            new BigDecimal("-100"),
+            "unreconciled",
+            null); // CHF inflow with frozen base
+    when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
+    when(ledgerService.findPostings(TXN_ID)).thenReturn(List.of(cashLeg, visaLeg));
+    when(accountService.findById(CASH_ID))
+        .thenReturn(Optional.of(account(CASH_ID, "Cash", "asset", null, EUR)));
+    when(accountService.findById(visaChf))
+        .thenReturn(Optional.of(account(visaChf, "Visa", "liability", null, "CHF")));
+
+    DockEditModel model = service().load(TXN_ID);
+
+    assertThat(model.transactionId()).isEqualTo(TXN_ID);
+    assertThat(model.accountId()).isEqualTo(CASH_ID);
+    assertThat(model.categoryId()).isEqualTo(visaChf); // actual account (not a currency leaf)
+    assertThat(model.categoryName()).isEqualTo("Visa");
+    assertThat(model.categoryCurrencyCode()).isEqualTo("CHF"); // transfer target currency
+    assertThat(model.amount()).isEqualTo("100,00");
+    assertThat(model.categoryAmount()).isEqualTo("90,00");
+    assertThat(model.baseAmount()).isEqualTo("100,00");
+    assertThat(model.transferDirection()).isEqualTo("TO");
   }
 }

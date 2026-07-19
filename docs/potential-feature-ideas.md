@@ -60,6 +60,14 @@ from the button, and the type (expense or income) from the parent category as we
   in the backend and no error on the frontend. This is actually an issue.
 * When anything is wrong and I press Add it displays the error message, but the table gets emtptied and the form is cleared. I would prefer to fix whatever was wrong and press Add again.
   And why the whole table get cleared? That is actually a bug.
+* When editing the transfer transaction the account is always pre-selected to the source account, event if I pressed Edit on the destination account. This is fine, but it feels more consistent
+  to pre-fill the edit form with the account of the line I pressed Edit on.
+* There is an annoying problem that on small screen the register table consumes the whole space. One should scroll down to see the Add/Edit dock. And in case
+  of a split transaction, when the dock increases its size, one needs to scroll down again and again for each new line. This is very annoying.
+  we should either make sure the dock is always visible (automatic scroll?) or to move the dock to the top of the page.
+* The "tags" entry block has rounded corders, while all other edit blocks have square corners. It also is slightly smaller than the other blocks. We should make them all consistent.
+* When editing a simple transaction it is impossible to turn it into a split transaction, although logically it should be possible. The user should not have an impression that simple
+  transactions and split transactions are two different world.
 
 ## General UX improvements
 

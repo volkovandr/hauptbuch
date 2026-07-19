@@ -539,6 +539,161 @@ class RegisterSplitScreenIntegrationTest {
     assertThat(spendTransactionCount()).isEqualTo(0L);
   }
 
+  // ── editing splits that contain a transfer leg (plan stage 7f) ─────────────────
+
+  @Test
+  void sameCurrencySplitWithaTransferLineReloadsIntoThePanelAndReSaves() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long savings = openAccount("Savings", "0");
+    long food = insertCategory("Food", "expense");
+
+    // Split off Cash: Food €20 + move €30 to Savings (Cash −50, Food +20, Savings +30).
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("lineCategoryId", String.valueOf(food), String.valueOf(savings))
+                .param("lineCategoryType", "expense", "")
+                .param("lineTransferDirection", "", "TO")
+                .param("lineAmount", "20", "30")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk());
+    long txnId = latestTransactionId();
+
+    // It reopens into the split panel with the transfer line reconstructed: the direction-prefixed
+    // Category text, the TO hidden direction, and the bare €30 magnitude, next to the Food line.
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(containsString("name=\"transactionId\"")))
+        .andExpect(content().string(containsString("To → Savings")))
+        .andExpect(content().string(containsString("value=\"TO\"")))
+        .andExpect(content().string(containsString("Food")));
+
+    // Re-saving the reconstructed shape re-threads the same transaction: still three balanced legs,
+    // the transfer still +30 into Savings, the funding still −50 on Cash.
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("transactionId", String.valueOf(txnId))
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("lineCategoryId", String.valueOf(food), String.valueOf(savings))
+                .param("lineCategoryType", "expense", "")
+                .param("lineTransferDirection", "", "TO")
+                .param("lineAmount", "20", "30")
+                .param("total", "50")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk());
+
+    assertThat(spendTransactionCount()).isEqualTo(1L);
+    assertThat(latestTransactionId()).isEqualTo(txnId); // re-threaded in place, not a new row
+    assertThat(legCount(txnId)).isEqualTo(3L);
+    assertThat(legSum(txnId)).isEqualByComparingTo("0");
+    assertThat(fundingNative(txnId, savings)).isEqualByComparingTo("30");
+    assertThat(fundingNative(txnId, cash)).isEqualByComparingTo("-50");
+  }
+
+  @Test
+  void crossCurrencySplitWithaTransferLineReloadsIntoThePanelAndReSaves() throws Exception {
+    long chfCard = openAccount("Cash CHF", "CHF", "500");
+    long usdWallet = openAccount("USD Wallet", "USD", "0");
+    long food = insertCategory("Food", "expense");
+
+    // CHF card, USD receipt (90), EUR base (95): Food 60 USD + move 30 USD to the USD wallet.
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(chfCard))
+                .param("spendingCurrencyCode", "USD")
+                .param("total", "90")
+                .param("fundingTotal", "100")
+                .param("baseTotal", "95")
+                .param("lineCategoryId", String.valueOf(food), String.valueOf(usdWallet))
+                .param("lineCategoryType", "expense", "")
+                .param("lineTransferDirection", "", "TO")
+                .param("lineAmount", "60", "30")
+                .param("viewAccountId", String.valueOf(chfCard), String.valueOf(usdWallet)))
+        .andExpect(status().isOk());
+    long txnId = latestTransactionId();
+
+    // It reopens with the spending currency, header totals, and the USD-wallet transfer line
+    // intact.
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(chfCard)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(containsString("id=\"split-spending-currency\"")))
+        .andExpect(content().string(containsString("To → USD Wallet")))
+        .andExpect(content().string(containsString("value=\"TO\"")))
+        .andExpect(content().string(containsString("value=\"100,00\""))) // funding total (CHF)
+        .andExpect(content().string(containsString("value=\"95,00\""))); // base total (EUR)
+
+    // Re-saving the reconstructed shape re-threads the same transaction, still balanced in base.
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("transactionId", String.valueOf(txnId))
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(chfCard))
+                .param("spendingCurrencyCode", "USD")
+                .param("total", "90")
+                .param("fundingTotal", "100")
+                .param("baseTotal", "95")
+                .param("lineCategoryId", String.valueOf(food), String.valueOf(usdWallet))
+                .param("lineCategoryType", "expense", "")
+                .param("lineTransferDirection", "", "TO")
+                .param("lineAmount", "60", "30")
+                .param("viewAccountId", String.valueOf(chfCard)))
+        .andExpect(status().isOk());
+
+    assertThat(spendTransactionCount()).isEqualTo(1L);
+    assertThat(latestTransactionId()).isEqualTo(txnId);
+    assertThat(legCount(txnId)).isEqualTo(3L);
+    assertThat(baseAmountSum(txnId)).isEqualByComparingTo("0");
+    assertThat(fundingNative(txnId, chfCard)).isEqualByComparingTo("-100");
+    assertThat(fundingNative(txnId, usdWallet)).isEqualByComparingTo("30");
+  }
+
+  @Test
+  void mixedCrossCurrencySplitReloadsWithNetTotalNotSumOfMagnitudes() throws Exception {
+    // Regression (ui-issue-list): a mixed income/expense cross-currency split used to reload with
+    // the total set to the sum of the legs' magnitudes (here 3.000,00) instead of their net that
+    // hits the account (2.000,00), so the panel reopened with a phantom 1.000,00 remaining.
+    long bank = openAccount("Bank", "0"); // EUR = base
+    long salary = insertCategory("Salary", "income");
+    long taxes = insertCategory("Taxes", "expense");
+
+    // EUR account (base), CHF receipt: +2500 Salary, −500 Taxes → 2000 CHF net (1800 EUR).
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(bank))
+                .param("spendingCurrencyCode", "CHF")
+                .param("total", "2000")
+                .param("fundingTotal", "1800")
+                .param("lineCategoryId", String.valueOf(salary), String.valueOf(taxes))
+                .param("lineCategoryType", "income", "expense")
+                .param("lineAmount", "2500", "500")
+                .param("viewAccountId", String.valueOf(bank)))
+        .andExpect(status().isOk());
+    long txnId = latestTransactionId();
+
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(bank)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        // The reference total is the 2.000,00 net, so the panel reopens balanced …
+        .andExpect(content().string(containsString("value=\"2.000,00\"")))
+        .andExpect(content().string(containsString("is-balanced")))
+        // … not the 3.000,00 gross that produced the phantom remaining.
+        .andExpect(content().string(not(containsString("3.000,00"))));
+  }
+
   private BigDecimal baseAmountSum(long transactionId) {
     return jdbcClient
         .sql("select coalesce(sum(base_amount), 0) from posting where transaction_id = :id")

@@ -116,8 +116,37 @@ class DockAmountFieldsService {
   }
 
   /**
-   * The single-currency amount-field state for a known funding account (edit mode, register §3.1) —
-   * cross-currency transactions are not yet dock-editable, so this is always single-currency.
+   * The amount-field layout for a transaction re-opened in edit mode (register §3.1/§3.8a, plan
+   * stage 7f): the funding account's currency against the counterpart leg's, revealing the same
+   * category/base amount fields the entry made. The amounts come from the loaded legs, so a
+   * cross-currency transaction re-opens showing what was actually booked — in particular the
+   * <em>frozen</em> base amount is redisplayed, never re-derived from today's rate feed (data-model
+   * §6.4). A single-currency transaction carries no override and collapses to {@link
+   * CrossCurrencyFields#singleCurrency}, the ≥95% path.
+   */
+  CrossCurrencyFields forEdit(DockEditModel edit) {
+    if (edit.accountId() == null) {
+      return CrossCurrencyFields.singleCurrency("");
+    }
+    return accountService
+        .findById(edit.accountId())
+        .map(
+            a ->
+                crossCurrencyFieldsService.resolve(
+                    new CrossCurrencyFieldsQuery(
+                        a.currencyCode(),
+                        edit.categoryCurrencyCode(),
+                        edit.date(),
+                        edit.amount(),
+                        edit.categoryAmount(),
+                        edit.baseAmount())))
+        .orElseGet(() -> CrossCurrencyFields.singleCurrency(""));
+  }
+
+  /**
+   * The single-currency amount-field state for a known funding account: the split panel's Cancel
+   * back into the dock, which drops the lines the dock cannot represent and so never carries an
+   * override (register §3.9).
    */
   CrossCurrencyFields forAccount(Long accountId) {
     if (accountId == null) {

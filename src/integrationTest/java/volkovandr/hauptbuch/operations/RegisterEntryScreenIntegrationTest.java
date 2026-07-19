@@ -343,6 +343,78 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
+  void editingCrossCurrencyTransactionPrefillsTheOverriddenCurrencyAndBothAmounts()
+      throws Exception {
+    // A EUR account paying a CHF-priced item (the §3.8a two-sided override). Re-opening it in the
+    // dock must show it as it was entered — the CHF override selected and the CHF price filled —
+    // rather than silently collapsing to a plain EUR transaction that a blind Save would persist.
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food");
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "9,10")
+                .param("categoryId", String.valueOf(food))
+                .param("categoryCurrencyCode", "CHF")
+                .param("categoryAmount", "10")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk());
+    long txnId = latestTransactionId();
+
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        // The CHF leg's own amount field is revealed and carries the price actually paid...
+        .andExpect(content().string(containsString("name=\"categoryAmount\"")))
+        .andExpect(content().string(containsString("Amount (CHF)")))
+        .andExpect(content().string(containsString("value=\"10,00\"")))
+        // ...beside the funding leg's EUR amount, and the semantic category (never the CHF leaf).
+        .andExpect(content().string(containsString("value=\"9,10\"")))
+        .andExpect(content().string(containsString("Food")))
+        // The funding account (EUR) is the book's base, so no third base field (§3.8a).
+        .andExpect(content().string(not(containsString("name=\"baseAmount\""))));
+  }
+
+  @Test
+  void editingCrossCurrencyTransactionRedisplaysTheFrozenBaseRatherThanRederivingIt()
+      throws Exception {
+    // Neither leg is base, so the dock shows the third base field. It must redisplay the base
+    // amount frozen at entry (data-model §6.4 — a frozen base is never recomputed), even though a
+    // rate now exists that would derive a different number.
+    long chfCard = openAccount("Cash CHF", "CHF", "500");
+    long shopping = insertCategory("Shopping");
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(chfCard))
+                .param("amount", "10")
+                .param("categoryId", String.valueOf(shopping))
+                .param("categoryCurrencyCode", "USD")
+                .param("categoryAmount", "11")
+                .param("baseAmount", "9,50")
+                .param("viewAccountId", String.valueOf(chfCard)))
+        .andExpect(status().isOk());
+    long txnId = latestTransactionId();
+
+    // A later rate that would pre-fill 8,00 if the dock re-derived instead of reading the leg.
+    jdbcClient
+        .sql(
+            "insert into exchange_rate (currency_code, date, rate, source)"
+                + " values ('CHF', '2026-01-01', 0.80, 'manual')")
+        .update();
+
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(chfCard)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"baseAmount\"")))
+        .andExpect(content().string(containsString("value=\"9,50\"")))
+        .andExpect(content().string(not(containsString("value=\"8,00\""))));
+  }
+
+  @Test
   void resolvedCurrencyLeafNeverAppearsInTheCategoryPickerAfterwards() throws Exception {
     // Plan stage 7d.1 follow-up bug: overriding the currency created a "Food EUR"-style leaf that
     // then leaked into the category picker as a second, confusing option alongside plain "Food".
@@ -532,6 +604,39 @@ class RegisterEntryScreenIntegrationTest {
         .andExpect(content().string(containsString("→ ")))
         .andExpect(content().string(containsString("← ")));
     assertThat(spendTransactionCount()).isEqualTo(1L);
+  }
+
+  @Test
+  void editingSameCurrencyTransferPrefillsDirectionSoResavingKeepsIt() throws Exception {
+    // Regression (ui-issue-list): editing a same-currency transfer used to drop the direction —
+    // the dock re-rendered the counterpart account id as if it were a bare category (no transfer
+    // marker), so a plain Save signed the funding leg the wrong way and flipped Cash/Visa. The edit
+    // dock must pre-fill both the direction-prefixed "To → Visa" category text and the hidden
+    // transferDirection marker the commit reads, so re-saving reproduces the same legs.
+    long cash = openAccount("Cash", "500");
+    long visa = openAccount("Visa", "0");
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(visa))
+                .param("transferDirection", "TO")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk());
+    long txnId = latestTransactionId();
+
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        // The Category input shows the direction-prefixed transfer target, not the bare account
+        // name.
+        .andExpect(content().string(containsString("To → Visa")))
+        // ...and the hidden marker rides along so a plain Save keeps the direction, rather than
+        // re-committing the account id as a category (which flipped the sign).
+        .andExpect(content().string(containsString("name=\"transferDirection\"")))
+        .andExpect(content().string(containsString("value=\"TO\"")));
   }
 
   @Test

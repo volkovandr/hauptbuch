@@ -162,7 +162,7 @@
             list="entry-category-options"
             autocomplete="off"
             placeholder="Food  ·  or  Food - Milk"
-            th:value="${edit != null} ? ${edit.categoryName()}"
+            th:value="${edit != null} ? ${edit.categoryEntryText()}"
             hx-post="/categories/resolve"
             hx-trigger="change"
             hx-target="#entry-category-resolved"
@@ -321,6 +321,17 @@
              mode it starts pre-filled with the loaded transaction's category id. -->
         <span id="entry-category-resolved">
           <input type="hidden" name="categoryId" th:value="${edit != null and edit.categoryId() != null} ? ${edit.categoryId()} : ''" />
+          <!-- The transfer marker (register §3.8, plan stage 7f): when the edited transaction is a
+               transfer, the direction the commit signs the funding leg by must be pre-filled here
+               too — otherwise a plain Save submits the counterpart account id as if it were a
+               category, and the sign flips. Re-picking the category re-renders this whole slot (the
+               /categories/resolve response), so switching to a category clears the marker. -->
+          <input
+            th:if="${edit != null and edit.transferDirection() != null}"
+            type="hidden"
+            name="transferDirection"
+            th:value="${edit.transferDirection()}"
+          />
         </span>
         <!-- The ghost suggestion note (§3.9), filled by /register/ghost. -->
         <span id="entry-ghost" class="entry-dock__ghost muted"></span>
