@@ -305,5 +305,19 @@ The docs are a navigation aid, not a worklog. Resist the urge to add prose.
 - **`ui-receipt-processing.md`** — receipt lifecycle, the four-step workflow, the `receipt` schema sketch.
 - **`implementation-plan.md`** — the staged build sequence and the backlog. *Start here for what's next.*
 - **`potential-feature-ideas.md`** — ideas that came up during implementation/testing, not yet planned.
-- **`ui-issue-list.md`** — a living list of UI issues discovered during testing and use. Check it
-  periodically to see if any can be fixed in the current cycle; remove them when fixed.
+
+UI issues discovered during testing/use are tracked as one file per issue under
+`.scratch/<feature-slug>/issues/` (see `docs/agents/issue-tracker.md`) — mark them
+`Status: resolved` when fixed rather than deleting them.
+
+---
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as markdown files under `.scratch/<feature-slug>/` in this repo. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context — one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
