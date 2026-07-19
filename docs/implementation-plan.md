@@ -209,11 +209,11 @@ is addable from any picker, provisioned with its backing leaf and pre-selected.
 > **From here, plan is rough by intent.** Stage 6 puts a usable UI in front of the owner; expect the
 > ordering and detail below to be revised once that feedback arrives.
 
-### Stage 7 — Transaction register & entry dock
+### Stage 7 — Transaction register & entry dock ✅ **complete**
 The two central surfaces from `ui-transaction-register.md`: the newest-at-bottom register and the
 persistent bottom entry/edit dock. **Detailed in the dedicated sub-plan
 `implementation-plan-stage-7.md`** (the >30-line rule); UI inspiration mock-ups in
-`docs/pic/register-*.png`. Five ordered sub-stages, each green and demoable; keyboard-first as each
+`docs/pic/register-*.png`. Six ordered sub-stages, each green and demoable; keyboard-first as each
 piece lands (Q-UI-2 decided piecewise, never retrofitted):
 
 - **7a — Register, read-only.** ✅ **complete.** The list over a register query + the stage-3
@@ -228,11 +228,16 @@ piece lands (Q-UI-2 decided piecewise, never retrofitted):
 - **7c — Edit mode, splits, void.** ✅ **complete.** Edit-in-place with account/date re-threading,
   `voidTransaction` from the dock, the inline split panel with "the rest" defaulting, notes at both
   levels.
-- **7d — Cross-currency entry.** Re-scoped into four packages (2026-07-11): **7d.0** retire FX
-  auto-booking (engine) ✅; **7d.1** category-currency selector + cross-currency single-line entry ✅;
-  **7d.2** cross-currency in splits ✅; **7d.3** transfers (single + split). Detail in the stage-7 plan.
-- **7e — Tags.** `tag`/`posting_tag` migration (data-model §10, owned by `categories`), the
-  keyboard-first chip field, split inheritance, register display.
+- **7d — Cross-currency entry.** ✅ **complete.** Re-scoped into four packages (2026-07-11):
+  **7d.0** retire FX auto-booking (engine); **7d.1** category-currency selector + cross-currency
+  single-line entry; **7d.2** cross-currency in splits; **7d.3** transfers (single + split). Detail
+  in the stage-7 plan.
+- **7e — Tags.** ✅ **complete.** `tag`/`posting_tag` migration (data-model §10, owned by
+  `categories`), the keyboard-first chip field, split inheritance, register display.
+- **7f — Edit for cross-currency & transfer shapes.** ✅ **complete.** Carved out past 7e
+  (owner-confirmed 2026-07-14): re-editing cross-currency single-line, single-line transfers, and
+  splits containing a transfer leg (same/cross-currency). Every shape the entry surface creates is
+  now editable. Detail in the stage-7 plan.
 
 ### Stage 8 — People & per-person debts (rough)
 The `debts` module: `person` + `account_owner`; auto-provisioned signed per-person/per-currency

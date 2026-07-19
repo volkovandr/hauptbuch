@@ -251,7 +251,7 @@ split), book balanced, and render as two native-thread rows; `check` green.
 **Done when:** tags are enterable as chips, inherited into splits per the rules, persisted
 per-posting, and visible in the register.
 
-## 7f — Edit for cross-currency & transfer transactions *(deferred past 7e)*
+## 7f — Edit for cross-currency & transfer transactions ✅ **complete**
 
 **Goal:** extend edit mode to the transaction shapes the dock/panel still refuse to re-open, so
 every transaction the entry surface can *create* is also *editable*. Deferred deliberately until
