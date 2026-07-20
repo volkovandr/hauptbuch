@@ -23,6 +23,13 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.23 (2026-07-20):** **8b.2 complete.** Owner testing surfaced that a person funding a *whole*
+  split (`Account: by Max`, then Split) is unsupported — the split panel's Account is a real-account
+  `<select>`, not the dock's person datalist — and silently misbooked. Blocked with a message for
+  now and **deferred to issue 07** (`.scratch/transaction-register-ui/`); the full fix is the 8b.1
+  Account-field conversion applied to the split panel. Also hardened the engine: a cross-currency
+  transaction whose legs all carry `base_amount = 0` is now rejected (base sum zero is necessary but
+  not sufficient).
 - **v0.22 (2026-07-20):** The **sigil-vs-category-type check leaves 8b.1** (owner call). Implementing
   it uncovered that the dock and the split panel already disagree on what an explicit `+`/`−` means
   (absolute vs flip), with §3.8's prose and §3.5's table documenting one each; it needs its own
@@ -359,7 +366,7 @@ Six ordered sub-stages, each green and demoable (7-series cadence):
   than resetting them. A **person** funding leg is never sticky — it falls back to the last real
   account — since an unnoticed sticky person would silently book a debt and possibly provision a leaf.
   A fresh page load keeps today's fallback (today's date, first account).
-- **8b.2 — Person entry, splits.** The same `for`/`by` capability per split line — multi-person
+- **8b.2 — Person entry, splits.** ✅ **complete.** The same `for`/`by` capability per split line — multi-person
   attribution ("€31,50: €21,50 my food, €10 for Max", register §2.6). Threads person fields through
   `SplitForm`/`SplitFormBinder`, `SplitLineDraft`, `DockSplitService`, `SplitLineAmounts`,
   `SplitPanelAssembler`, `SplitLineView`, `SplitEditService` and `split-panel.html` the way
