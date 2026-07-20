@@ -108,6 +108,29 @@ class RegisterSplitScreenIntegrationTest {
   }
 
   @Test
+  void openRefusesaPersonFundedDockEntryInsteadOfDroppingThePerson() throws Exception {
+    // A person funding a whole split is not supported yet (issue 07): pressing Split on a `by Max`
+    // entry must refuse cleanly — re-render the dock with a message — not open the panel with a
+    // substituted real account, which silently misbooks.
+    long food = insertCategory("Food", "expense");
+
+    mockMvc
+        .perform(
+            post(OPEN_PATH)
+                .param("date", SPEND_DAY)
+                .param("fundingPersonName", "Max")
+                .param("fundingPersonDirection", "BY")
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(food))
+                .param("categoryText", "Food"))
+        .andExpect(status().isOk())
+        // The dock comes back (not the split panel) carrying the refusal. (The apostrophe in
+        // "isn't" is HTML-escaped in the rendered text, so match on the unambiguous tail.)
+        .andExpect(content().string(not(containsString("data-split-panel"))))
+        .andExpect(content().string(containsString("supported yet")));
+  }
+
+  @Test
   void commaAmountOnOneLineDoesNotSpawnExtraLines() throws Exception {
     // Regression (fixed UI issue): Spring's list binding split a single "20,50" into ["20","50"],
     // conjuring phantom lines. Reading the raw params keeps the one line intact; add-line then

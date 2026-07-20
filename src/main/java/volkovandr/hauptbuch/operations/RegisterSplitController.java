@@ -12,6 +12,7 @@ import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.RegisterFilter;
 import volkovandr.hauptbuch.ledger.RegisterService;
 import volkovandr.hauptbuch.ledger.RegisterView;
+import volkovandr.hauptbuch.ledger.UnbalancedTransactionException;
 
 /**
  * The split panel's htmx endpoints (register §3.10, plan stage 7c.2) — the multi-line sibling of
@@ -30,6 +31,7 @@ import volkovandr.hauptbuch.ledger.RegisterView;
 class RegisterSplitController {
 
   private static final String REGISTER = "register";
+  private static final String CURRENCIES = "currencies";
   private static final String PANEL =
       "fragments/split-panel :: panel(register=${register}," + " panel=${panel}, oob=%s)";
   private static final String PANEL_DIRECT = String.format(PANEL, "false");
@@ -72,6 +74,17 @@ class RegisterSplitController {
       @ModelAttribute DockEntryForm form,
       @RequestParam(required = false) String categoryText,
       Model model) {
+    // A person funding the whole split is not supported yet (issue 07): the panel's Account is a
+    // real-account <select>, so opening a split from a `by`/`for` dock entry would silently drop
+    // the
+    // person and misbook. Refuse cleanly here rather than substitute a phantom account.
+    if (form.hasFundingPerson()) {
+      return dockRefusal(
+          form,
+          "Splitting a person-funded entry isn't supported yet — enter each line as its own "
+              + "transaction, or fund the split from a real account.",
+          model);
+    }
     // A transfer line carries a direction, not a category type: the dock's committed line may be a
     // transfer to a real own account (register §3.8, plan stage 7d.3), so seed the direction and
     // leave the type blank in that case.
@@ -211,12 +224,15 @@ class RegisterSplitController {
               form.baseTotal(),
               form.tagId() == null ? List.of() : form.tagId(),
               SplitFormBinder.linesOf(form)));
-    } catch (IllegalArgumentException e) {
+    } catch (IllegalArgumentException | UnbalancedTransactionException e) {
+      // UnbalancedTransactionException is the engine's balance-invariant signal (e.g. a phantom
+      // all-zero-base cross-currency split): show it in the panel rather than let it 500 into an
+      // empty swap, which reads as a commit that silently did nothing.
       return renderPanel(form, e.getMessage(), PANEL_OOB, model);
     }
     RegisterView register = registerService.view(filter);
     model.addAttribute(REGISTER, register);
-    model.addAttribute("currencies", dockAmountFieldsService.currencies());
+    model.addAttribute(CURRENCIES, dockAmountFieldsService.currencies());
     model.addAttribute("amountFields", dockAmountFieldsService.fresh(register));
     return COMMITTED;
   }
@@ -256,10 +272,34 @@ class RegisterSplitController {
             tagPills.resolvePills(form.tagId()));
     model.addAttribute(REGISTER, registerService.view(SplitFormBinder.filterFrom(form)));
     model.addAttribute("edit", prefill);
-    model.addAttribute("currencies", dockAmountFieldsService.currencies());
+    model.addAttribute(CURRENCIES, dockAmountFieldsService.currencies());
     model.addAttribute("amountFields", dockAmountFieldsService.forAccount(form.accountId()));
     return "fragments/entry-dock :: dock(register=${register}, oob=false, edit=${edit},"
         + " amountFields=${amountFields})";
+  }
+
+  /**
+   * Refuse to open the split, re-rendering the dock (over {@code #entry-dock}, the Split button's
+   * target) in new mode carrying {@code message} — used when the dock is person-funded, which the
+   * split panel cannot yet represent (issue 07). The register stays put; the user re-enters the
+   * lines separately or funds from a real account.
+   */
+  private String dockRefusal(DockEntryForm form, String message, Model model) {
+    RegisterView register = registerService.view(filterFrom(form));
+    model.addAttribute(REGISTER, register);
+    model.addAttribute("entryError", message);
+    model.addAttribute(CURRENCIES, dockAmountFieldsService.currencies());
+    model.addAttribute("amountFields", dockAmountFieldsService.fresh(register));
+    return "fragments/entry-dock :: dock(register=${register}, oob=false, edit=null,"
+        + " amountFields=${amountFields})";
+  }
+
+  private static RegisterFilter filterFrom(DockEntryForm form) {
+    return new RegisterFilter(
+        form.viewAccountId() == null ? List.of() : form.viewAccountId(),
+        form.viewFromDate(),
+        form.viewToDate(),
+        form.viewPayeeId());
   }
 
   /**
@@ -268,7 +308,7 @@ class RegisterSplitController {
   private String renderPanel(SplitForm form, String error, String template, Model model) {
     model.addAttribute(REGISTER, registerService.view(SplitFormBinder.filterFrom(form)));
     model.addAttribute("panel", assembler.panel(form, error));
-    model.addAttribute("currencies", dockAmountFieldsService.currencies());
+    model.addAttribute(CURRENCIES, dockAmountFieldsService.currencies());
     return template;
   }
 }
