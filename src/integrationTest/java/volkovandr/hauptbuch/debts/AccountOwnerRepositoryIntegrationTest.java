@@ -68,4 +68,28 @@ class AccountOwnerRepositoryIntegrationTest {
   void findPersonNamesByAccountIdsShortCircuitsOnEmptyInput() {
     assertThat(accountOwnerRepository.findPersonNamesByAccountIds(List.of())).isEmpty();
   }
+
+  @Test
+  void findLiveAccountLinksReturnsEachLivePersonsLeafKeyedToThem() {
+    long maxEur = provisionLeaf("Max", EUR);
+    long maxChf = provisionLeaf("Max", "CHF");
+    long personId = ((PersonMatch.Live) personService.matchExact("Max")).person().personId();
+
+    assertThat(accountOwnerRepository.findLiveAccountLinks())
+        .filteredOn(link -> link.personId() == personId)
+        .extracting(AccountOwner::accountId)
+        .containsExactlyInAnyOrder(maxEur, maxChf);
+  }
+
+  @Test
+  void findLiveAccountLinksExcludesSoftDeletedPersonsLeaves() {
+    long aliceEur = provisionLeaf("Alice", EUR);
+    // A freshly provisioned leaf is zero-balance, so the soft-delete guard permits it.
+    long aliceId = ((PersonMatch.Live) personService.matchExact("Alice")).person().personId();
+    personService.softDeleteIfZeroBalance(aliceId);
+
+    assertThat(accountOwnerRepository.findLiveAccountLinks())
+        .extracting(AccountOwner::accountId)
+        .doesNotContain(aliceEur);
+  }
 }

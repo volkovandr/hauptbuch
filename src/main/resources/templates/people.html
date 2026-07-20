@@ -1,11 +1,16 @@
 <!DOCTYPE html>
 <!--
-  People screen (plan stage 8a): the roster of persons the debts module tracks, and the
-  create-person form.
+  People screen (plan stage 8d): the roster of persons the debts module tracks, each with their
+  per-currency debt balances and a supplementary base-currency total, and the create-person form.
 
-    • A person is a bare name here; their per-currency accounts are auto-provisioned on first
-      reference from the register (stage 8b), not created on this screen.
-    • Balances, per-currency breakdown, and the "view in register" link arrive in stage 8d.
+    • A person's position is a small set of signed per-currency balances (sign = direction:
+      positive means they owe you, negative means you owe them) — currencies are never netted
+      against each other (data-model §7). The base total beside them is a mark-to-market gloss.
+    • Each person is a native <details>: collapsed shows the signed figures and base gloss; expanded
+      shows the directional wording, a link into the register pre-filtered to their leaves, and the
+      edit page (rename / soft-delete). No bespoke JS — <details> is server-rendered HTML.
+    • The list view is served by operations' PeopleOverviewController (the base total needs ledger's
+      rates); the create form and edit page below POST to debts' own PersonController.
 
   Standard server-rendered form POSTs with redirect-after-post; no bespoke JS.
 -->
@@ -17,15 +22,49 @@
   <main class="content" th:fragment="content">
     <section class="panel">
       <p class="eyebrow">People</p>
-      <p class="muted" th:if="${#lists.isEmpty(people)}">No people yet.</p>
-      <ul class="acct-list" th:unless="${#lists.isEmpty(people)}">
-        <li th:each="p : ${people}" class="acct">
-          <a
-            class="acct__name"
-            th:href="@{/people/{id}(id=${p.personId()})}"
-            th:text="${p.name()}"
-            >Max</a
-          >
+      <p class="muted" th:if="${#lists.isEmpty(overview.people())}">No people yet.</p>
+      <ul class="people-list" th:unless="${#lists.isEmpty(overview.people())}">
+        <li th:each="p : ${overview.people()}" th:with="settled=${#lists.isEmpty(p.lines())}">
+          <details class="person">
+            <summary class="person__summary">
+              <span class="person__name" th:text="${p.name()}">Max</span>
+              <span class="person__net num">
+                <span th:if="${settled}" class="muted">Settled</span>
+                <th:block th:unless="${settled}">
+                  <span
+                    th:each="line, it : ${p.lines()}"
+                    class="person__figure"
+                    th:classappend="${line.negative()} ? 'num--credit'"
+                  >
+                    <span th:unless="${it.first}" class="person__sep">·</span>
+                    <span th:text="${line.amount()}">&minus;10,00</span>
+                  </span>
+                  <span
+                    th:if="${p.baseTotalShown()}"
+                    class="person__base muted"
+                    th:classappend="${p.baseTotalNegative()} ? 'num--credit'"
+                    >(&asymp; <span th:text="${p.baseTotal()}">&minus;5,50</span> base)</span
+                  >
+                </th:block>
+              </span>
+            </summary>
+            <div class="person__detail">
+              <ul class="person__breakdown" th:unless="${settled}">
+                <li th:each="line : ${p.lines()}" th:text="${line.direction()}">
+                  You owe 10,00
+                </li>
+              </ul>
+              <p class="muted" th:if="${settled}">Nothing outstanding.</p>
+              <p class="person__links">
+                <a
+                  th:unless="${#lists.isEmpty(p.accountIds())}"
+                  th:href="@{/register(accountId=${p.accountIds()})}"
+                  >View in register</a
+                >
+                <a th:href="@{/people/{id}(id=${p.personId()})}">Edit</a>
+              </p>
+            </div>
+          </details>
         </li>
       </ul>
     </section>

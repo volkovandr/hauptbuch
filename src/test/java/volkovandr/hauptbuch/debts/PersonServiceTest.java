@@ -300,4 +300,54 @@ class PersonServiceTest {
     assertThat(service.personNamesForAccounts(List.of())).isEmpty();
     verify(accountOwnerRepository, never()).findPersonNamesByAccountIds(any());
   }
+
+  @Test
+  void balanceSummariesGroupsNonZeroBalancesAndLeavesByLivePerson() {
+    when(personRepository.findAllLive())
+        .thenReturn(List.of(new Person(1L, "Alice", null), new Person(2L, "Bob", null)));
+    when(accountOwnerRepository.findAllPersonCurrencyBalances())
+        .thenReturn(
+            List.of(
+                // Alice: CHF then EUR (the query orders by currency), both non-zero.
+                new AccountOwnerRepository.PersonCurrencyBalance(1L, "CHF", new BigDecimal("5.00")),
+                new AccountOwnerRepository.PersonCurrencyBalance(
+                    1L, "EUR", new BigDecimal("-10.00")),
+                // Bob: a currency that nets to zero — filtered out, so Bob is settled.
+                new AccountOwnerRepository.PersonCurrencyBalance(2L, "EUR", BigDecimal.ZERO)));
+    when(accountOwnerRepository.findLiveAccountLinks())
+        .thenReturn(
+            List.of(
+                new AccountOwner(10L, 100L, 1L),
+                new AccountOwner(11L, 101L, 1L),
+                new AccountOwner(12L, 102L, 2L)));
+
+    List<PersonBalanceSummary> result = service.balanceSummaries();
+
+    assertThat(result).hasSize(2);
+    PersonBalanceSummary alice = result.get(0);
+    assertThat(alice.name()).isEqualTo("Alice");
+    assertThat(alice.balances())
+        .containsExactly(
+            new CurrencyBalance("CHF", new BigDecimal("5.00")),
+            new CurrencyBalance("EUR", new BigDecimal("-10.00")));
+    assertThat(alice.accountIds()).containsExactly(100L, 101L);
+
+    PersonBalanceSummary bob = result.get(1);
+    assertThat(bob.name()).isEqualTo("Bob");
+    assertThat(bob.balances()).isEmpty();
+    assertThat(bob.accountIds()).containsExactly(102L);
+  }
+
+  @Test
+  void balanceSummariesHandlesPersonWithNoLeavesOrBalances() {
+    when(personRepository.findAllLive()).thenReturn(List.of(new Person(1L, "Newcomer", null)));
+    when(accountOwnerRepository.findAllPersonCurrencyBalances()).thenReturn(List.of());
+    when(accountOwnerRepository.findLiveAccountLinks()).thenReturn(List.of());
+
+    List<PersonBalanceSummary> result = service.balanceSummaries();
+
+    assertThat(result).hasSize(1);
+    assertThat(result.get(0).balances()).isEmpty();
+    assertThat(result.get(0).accountIds()).isEmpty();
+  }
 }

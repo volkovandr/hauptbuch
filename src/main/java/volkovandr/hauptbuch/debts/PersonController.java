@@ -9,20 +9,20 @@ import org.springframework.web.bind.annotation.RequestParam;
 import volkovandr.hauptbuch.web.NavItem;
 
 /**
- * The people screen (plan stage 8a): the roster of live persons the {@code debts} module tracks —
- * list, create, rename, soft-delete, names only. Per-person balances, entry (the {@code for}/{@code
- * by} counterpart shortcuts), and merge ride later sub-stages (8b–8f); this screen only manages the
- * roster.
+ * The person-lifecycle endpoints (plan stage 8a): create, rename, and soft-delete a person, plus
+ * the per-person edit page — the pure-{@code debts} operations behind the People screen. The list
+ * <em>view</em> itself (GET {@code /people}, with balances) moved to {@code operations}' {@code
+ * PeopleOverviewController} at stage 8d, because its base-currency total needs {@code ledger}'s
+ * rates and {@code debts} may not reach {@code ledger}.
  *
- * <p>Lives in the {@code debts} module, not {@code web}: feature screens' controllers belong to
- * their feature module (CLAUDE.md §3). Standard server-rendered forms, redirect after POST; no
+ * <p>Lives in the {@code debts} module: these operations need only {@code debts} itself, so the
+ * feature module owns them (CLAUDE.md §3). Standard server-rendered forms, redirect after POST; no
  * bespoke JS.
  */
 @Controller
 class PersonController {
 
   private static final String BASE_PATH = "/people";
-  private static final String LIST_VIEW = "people";
   private static final String EDIT_VIEW = "person-edit";
   private static final String REDIRECT_TO_LIST = "redirect:" + BASE_PATH;
 
@@ -30,15 +30,6 @@ class PersonController {
 
   PersonController(PersonService personService) {
     this.personService = personService;
-  }
-
-  /** The people list plus the create-person form. */
-  @GetMapping(BASE_PATH)
-  String people(Model model) {
-    model.addAttribute("people", personService.findAllLive());
-    model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
-    model.addAttribute("title", "People · Hauptbuch");
-    return LIST_VIEW;
   }
 
   /** Create a new person. */
