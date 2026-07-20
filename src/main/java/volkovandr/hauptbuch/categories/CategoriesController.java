@@ -12,8 +12,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
 import volkovandr.hauptbuch.accounts.AccountService;
-import volkovandr.hauptbuch.debts.PersonMatch;
-import volkovandr.hauptbuch.debts.PersonService;
+import volkovandr.hauptbuch.debts.PersonResolution;
+import volkovandr.hauptbuch.debts.PersonResolutionService;
 import volkovandr.hauptbuch.debts.PersonTarget;
 import volkovandr.hauptbuch.ledger.TransferTarget;
 import volkovandr.hauptbuch.web.NavItem;
@@ -56,11 +56,6 @@ class CategoriesController {
   private static final String RESOLVED_PERSON_PENDING = "personPending";
   private static final String RESOLVED_PERSON_PENDING_NAME = "personPendingName";
 
-  /** Revival decision values the pending Restore/Create-new buttons re-post (plan stage 8b). */
-  private static final String DECISION_REVIVE = "REVIVE";
-
-  private static final String DECISION_NEW = "NEW";
-
   /**
    * htmx response header the transfer branch raises so the dock recomputes its amount fields
    * (register §3.8a, plan stage 7d.3): a transfer's counterpart currency is fixed by the resolved
@@ -81,17 +76,17 @@ class CategoriesController {
   private final CategoryService categoryService;
   private final AccountService accountService;
   private final TagService tagService;
-  private final PersonService personService;
+  private final PersonResolutionService personResolutionService;
 
   CategoriesController(
       CategoryService categoryService,
       AccountService accountService,
       TagService tagService,
-      PersonService personService) {
+      PersonResolutionService personResolutionService) {
     this.categoryService = categoryService;
     this.accountService = accountService;
     this.tagService = tagService;
-    this.personService = personService;
+    this.personResolutionService = personResolutionService;
   }
 
   /** The category list plus the create-category form. */
@@ -246,67 +241,43 @@ class CategoriesController {
   }
 
   /**
-   * Resolve a person target (register §3.5, plan stage 8b, data-model §7): a name matching exactly
-   * one live person, or no person at all, is ready to commit straight away — {@code personName}/
-   * {@code personDirection} fill the hidden fields {@link operations.DockCommitService} reads to
-   * auto-provision at commit. A name matching <em>only</em> a soft-deleted person is never resolved
-   * silently: absent a {@code personDecision}, the fragment renders a Restore/Create-new choice
-   * instead of the ready-to-commit fields; once decided, {@code personRevive} carries the choice
-   * through. An ambiguous name (more than one live person, data-model §7) is refused — the caller
-   * cannot pick for the user.
+   * Resolve a person target (register §3.5, plan stage 8b, data-model §7) into the Category field's
+   * hidden inputs. The rule itself lives in {@code debts}' {@link PersonResolutionService} — the
+   * Account field's own picker resolves the identical sigil (plan stage 8b.1), and a three-way
+   * revival choice implemented twice is a choice that drifts. This method only maps the returned
+   * {@link PersonResolution} onto this fragment's model attributes.
    */
   private void resolvePerson(PersonTarget.Parsed parsed, String personDecision, Model model) {
-    PersonMatch match = personService.matchExact(parsed.personName());
     model.addAttribute(RESOLVED_ID, "");
     model.addAttribute(RESOLVED_TYPE, "");
 
-    if (match instanceof PersonMatch.Ambiguous) {
-      model.addAttribute(RESOLVED_NAME, null);
-      model.addAttribute(
-          RESOLVED_ERROR,
-          "More than one person named '"
-              + parsed.personName()
-              + "' — rename one via the People page to disambiguate");
-      clearPersonAttributes(model);
-      return;
+    switch (personResolutionService.resolve(parsed, personDecision)) {
+      case PersonResolution.Refused refused -> {
+        model.addAttribute(RESOLVED_NAME, null);
+        model.addAttribute(RESOLVED_ERROR, refused.message());
+        clearPersonAttributes(model);
+      }
+      case PersonResolution.Pending pending -> {
+        model.addAttribute(RESOLVED_NAME, null);
+        model.addAttribute(RESOLVED_ERROR, null);
+        model.addAttribute(RESOLVED_PERSON_NAME, null);
+        model.addAttribute(RESOLVED_PERSON_DIRECTION, null);
+        model.addAttribute(RESOLVED_PERSON_REVIVE, null);
+        model.addAttribute(RESOLVED_PERSON_PENDING, Boolean.TRUE);
+        model.addAttribute(RESOLVED_PERSON_PENDING_NAME, pending.personName());
+      }
+      case PersonResolution.Resolved resolved -> {
+        model.addAttribute(RESOLVED_NAME, resolved.statusText());
+        model.addAttribute(RESOLVED_ERROR, null);
+        model.addAttribute(RESOLVED_PERSON_NAME, resolved.personName());
+        model.addAttribute(RESOLVED_PERSON_DIRECTION, resolved.direction());
+        model.addAttribute(
+            RESOLVED_PERSON_REVIVE,
+            resolved.revive() == null ? null : String.valueOf(resolved.revive()));
+        model.addAttribute(RESOLVED_PERSON_PENDING, null);
+        model.addAttribute(RESOLVED_PERSON_PENDING_NAME, null);
+      }
     }
-
-    boolean decided = DECISION_REVIVE.equals(personDecision) || DECISION_NEW.equals(personDecision);
-    if (match instanceof PersonMatch.DeletedOnly && !decided) {
-      model.addAttribute(RESOLVED_NAME, null);
-      model.addAttribute(RESOLVED_ERROR, null);
-      model.addAttribute(RESOLVED_PERSON_NAME, null);
-      model.addAttribute(RESOLVED_PERSON_DIRECTION, null);
-      model.addAttribute(RESOLVED_PERSON_REVIVE, null);
-      model.addAttribute(RESOLVED_PERSON_PENDING, Boolean.TRUE);
-      model.addAttribute(RESOLVED_PERSON_PENDING_NAME, parsed.personName());
-      return;
-    }
-
-    boolean revive =
-        match instanceof PersonMatch.DeletedOnly && DECISION_REVIVE.equals(personDecision);
-    model.addAttribute(RESOLVED_NAME, personStatusText(parsed, match, revive));
-    model.addAttribute(RESOLVED_ERROR, null);
-    model.addAttribute(RESOLVED_PERSON_NAME, parsed.personName());
-    model.addAttribute(RESOLVED_PERSON_DIRECTION, parsed.direction().name());
-    model.addAttribute(
-        RESOLVED_PERSON_REVIVE,
-        match instanceof PersonMatch.DeletedOnly ? String.valueOf(revive) : null);
-    model.addAttribute(RESOLVED_PERSON_PENDING, null);
-    model.addAttribute(RESOLVED_PERSON_PENDING_NAME, null);
-  }
-
-  /** The resolved status caption shown beside a resolved person target. */
-  private static String personStatusText(
-      PersonTarget.Parsed parsed, PersonMatch match, boolean revive) {
-    String base = PersonTarget.option(parsed.direction(), parsed.personName());
-    if (match instanceof PersonMatch.NotFound) {
-      return base + " (new person)";
-    }
-    if (match instanceof PersonMatch.DeletedOnly) {
-      return base + (revive ? " (restoring)" : " (new person)");
-    }
-    return base;
   }
 
   /** Blank every person-target model attribute — the transfer and plain-category branches. */

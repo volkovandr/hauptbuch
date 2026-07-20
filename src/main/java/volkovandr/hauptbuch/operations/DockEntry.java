@@ -38,6 +38,12 @@ import java.util.List;
  * personRevive} carries the dock's Restore/Create-new decision when the name matched only a
  * soft-deleted person; irrelevant otherwise.
  *
+ * <p>A person may equally be the <em>funding</em> leg ({@code fundingPersonName}, register §3.3,
+ * plan stage 8b.1) — "Max paid for a pure expense of mine". With no real account in the transaction
+ * at all, {@code categoryCurrencyCode} becomes the <em>transaction currency</em>: it sets every
+ * leg, the transaction is single-currency, and it is the only currency source there is, which is
+ * what lets a brand-new person be provisioned from the Account field (register §3.5).
+ *
  * <p>{@code transactionId} distinguishes the dock's two modes (register §3.1): {@code null} is a
  * <em>new</em> entry that {@link DockCommitService} records; a non-null id is an <em>edit</em> that
  * re-threads that existing transaction in place ({@code editTransaction}). Editing the account or
@@ -46,7 +52,13 @@ import java.util.List;
  *
  * @param transactionId the transaction being edited, or {@code null} for a new entry
  * @param date booking date
- * @param accountId the funding (own) account the money moves through
+ * @param accountId the funding (own) account the money moves through; {@code null} when {@code
+ *     fundingPersonName} names a person instead, whose leaf is provisioned at commit
+ * @param fundingPersonName the <em>funding</em> person's name when the Account field named a person
+ *     rather than an account (register §3.3, plan stage 8b.1) — "Max paid for a pure expense of
+ *     mine"; {@code null} otherwise
+ * @param fundingPersonDirection {@code FOR}/{@code BY} alongside {@code fundingPersonName}
+ * @param fundingPersonRevive the Restore/Create-new decision for {@code fundingPersonName}
  * @param payeeId a picked existing payee, or null
  * @param payeeText create-new payee text when no existing payee was picked; null/blank otherwise
  * @param categoryId the semantically-picked category (a leaf or a subdivided parent)
@@ -72,7 +84,10 @@ import java.util.List;
 public record DockEntry(
     Long transactionId,
     LocalDate date,
-    long accountId,
+    Long accountId,
+    String fundingPersonName,
+    String fundingPersonDirection,
+    String fundingPersonRevive,
     Long payeeId,
     String payeeText,
     long categoryId,

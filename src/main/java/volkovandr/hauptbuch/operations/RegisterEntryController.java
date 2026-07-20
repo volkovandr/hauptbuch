@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.operations;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Controller;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import volkovandr.hauptbuch.debts.PersonResolutionService;
 import volkovandr.hauptbuch.ledger.CrossCurrencyFields;
 import volkovandr.hauptbuch.ledger.Payee;
 import volkovandr.hauptbuch.ledger.PayeeService;
@@ -51,7 +53,21 @@ class RegisterEntryController {
 
   /** Repaint the rows (primary) and reset the dock to new mode (out-of-band) in one response. */
   private static final String COMMITTED =
-      DOCK_FRAGMENT + " :: committed(register=${register}, amountFields=${amountFields})";
+      DOCK_FRAGMENT
+          + " :: committed(register=${register}, amountFields=${amountFields},"
+          + " sticky=${sticky})";
+
+  private static final String STICKY = "sticky";
+
+  /**
+   * htmx response header the Account resolver raises once its hidden inputs are in the DOM, so the
+   * dock recomputes its amount fields and currency default against the newly-resolved funding leg
+   * (register §3.8a). After-swap, not plain HX-Trigger, for the reason {@code CategoriesController}
+   * documents: firing before the swap would serialise the form without the just-resolved id.
+   */
+  private static final String TRIGGER_AFTER_SWAP = "HX-Trigger-After-Swap";
+
+  private static final String ACCOUNT_RESOLVED = "account-resolved";
 
   private static final String SPLIT_PANEL =
       "fragments/split-panel :: panel(register=${register}, panel=${panel}, oob=false)";
@@ -64,6 +80,7 @@ class RegisterEntryController {
   private final PayeeService payeeService;
   private final DockAmountFieldsService dockAmountFieldsService;
   private final GhostSuggestionRepository ghostSuggestionRepository;
+  private final DockAccountResolutionService dockAccountResolutionService;
 
   RegisterEntryController(
       DockCommitService dockCommitService,
@@ -73,7 +90,8 @@ class RegisterEntryController {
       RegisterService registerService,
       PayeeService payeeService,
       DockAmountFieldsService dockAmountFieldsService,
-      GhostSuggestionRepository ghostSuggestionRepository) {
+      GhostSuggestionRepository ghostSuggestionRepository,
+      DockAccountResolutionService dockAccountResolutionService) {
     this.dockCommitService = dockCommitService;
     this.dockEditService = dockEditService;
     this.splitEditService = splitEditService;
@@ -82,6 +100,7 @@ class RegisterEntryController {
     this.payeeService = payeeService;
     this.dockAmountFieldsService = dockAmountFieldsService;
     this.ghostSuggestionRepository = ghostSuggestionRepository;
+    this.dockAccountResolutionService = dockAccountResolutionService;
   }
 
   /**
@@ -95,9 +114,8 @@ class RegisterEntryController {
   @PostMapping("/register/entry")
   String commit(@ModelAttribute DockEntryForm form, Model model) {
     RegisterFilter filter = filterFrom(form);
-    Long fundingAccountId = form.effectiveAccountId();
-    if (fundingAccountId == null) {
-      return dockError(filter, form, "An account is required", model);
+    if (form.accountId() == null && !form.hasFundingPerson()) {
+      return dockError(filter, form, "An account or person is required", model);
     }
     boolean hasPerson =
         blankToNull(form.personName()) != null && blankToNull(form.personDirection()) != null;
@@ -113,7 +131,10 @@ class RegisterEntryController {
           new DockEntry(
               form.transactionId(),
               form.date(),
-              fundingAccountId,
+              form.accountId(),
+              form.fundingPersonName(),
+              form.fundingPersonDirection(),
+              form.fundingPersonRevive(),
               null,
               blankToNull(form.payeeText()),
               form.categoryId() == null ? 0L : form.categoryId(),
@@ -132,7 +153,15 @@ class RegisterEntryController {
     }
     RegisterView register = registerService.view(filter);
     model.addAttribute(REGISTER, register);
-    addCurrencyAttributes(model, dockAmountFieldsService.fresh(register));
+    // Sticky defaults (register §3.3, plan stage 8b.1): echo the date and funding account back
+    // rather than resetting them. Null for a person funding leg — see stickyAfterCommit.
+    DockEditModel sticky = dockEditService.stickyAfterCommit(form.accountId(), form.date());
+    model.addAttribute(STICKY, sticky);
+    addCurrencyAttributes(
+        model,
+        sticky == null
+            ? dockAmountFieldsService.fresh(register)
+            : dockAmountFieldsService.forAccount(sticky.accountId()));
     return COMMITTED;
   }
 
@@ -193,6 +222,9 @@ class RegisterEntryController {
     }
     RegisterView register = registerService.view(filter);
     model.addAttribute(REGISTER, register);
+    // A void resets to a bare dock: the voided transaction's account is not something to carry
+    // forward the way a successful entry's is.
+    model.addAttribute(STICKY, null);
     addCurrencyAttributes(model, dockAmountFieldsService.fresh(register));
     return COMMITTED;
   }
@@ -225,6 +257,56 @@ class RegisterEntryController {
     return DOCK_FRAGMENT
         + " :: currencyFieldsResponse(fields=${amountFields},"
         + " fundingAmountText=${fundingAmountText})";
+  }
+
+  /**
+   * Resolve the dock's Account field (register §3.3, plan stage 8b.1) — a typed datalist, not a
+   * {@code <select>}, so what it holds is text until the server says otherwise. Two shapes resolve:
+   * an own account by its {@code Name (CUR)} label (the {@code (CUR)} suffix is optional, and
+   * disambiguates same-named accounts), or a {@code for <person>} / {@code by <person>} sigil
+   * making that person the <em>funding</em> leg — including a brand-new person, whose leaf is
+   * provisioned at commit once the transaction currency is known.
+   *
+   * <p>Returns the {@code accountResolved} fragment: the hidden {@code accountId} the commit reads,
+   * <em>or</em> the funding person's name/direction, plus a status. Unresolvable text carries the
+   * error and clears both, so a stale id can never ride along under changed text (register §3.3) —
+   * the commit then fails validation rather than booking against the wrong account.
+   *
+   * <p>Lives here rather than beside the Category field's resolver: this is {@code operations},
+   * which may reach both {@code accounts} (the account lookup) and {@code debts} (the person one).
+   * The person half delegates to {@code debts}' {@link PersonResolutionService} — the same rule,
+   * and the same three-way revival choice, that {@code categories} renders for the counterpart.
+   */
+  @PostMapping("/register/account/resolve")
+  String resolveAccount(
+      @RequestParam(required = false) String accountText,
+      @RequestParam(required = false) String personDecision,
+      Model model,
+      HttpServletResponse response) {
+    DockAccountResolution resolution =
+        dockAccountResolutionService.resolve(accountText, personDecision);
+
+    model.addAttribute("accountId", resolution.accountId());
+    model.addAttribute("fundingPersonName", resolution.personName());
+    model.addAttribute("fundingPersonDirection", resolution.personDirection());
+    model.addAttribute("fundingPersonRevive", resolution.personRevive());
+    model.addAttribute("accountName", resolution.statusText());
+    model.addAttribute("error", resolution.error());
+    model.addAttribute("personPending", resolution.pending() ? Boolean.TRUE : null);
+    model.addAttribute("personPendingName", resolution.pendingName());
+
+    // Resolving changes the funding leg, so the amount-field layout and the currency default must
+    // recompute — the same after-swap chain the transfer counterpart uses (see
+    // CategoriesController).
+    if (resolution.accountId() != null || resolution.personName() != null) {
+      response.setHeader(TRIGGER_AFTER_SWAP, ACCOUNT_RESOLVED);
+    }
+    return DOCK_FRAGMENT
+        + " :: accountResolved(accountId=${accountId}, fundingPersonName=${fundingPersonName},"
+        + " fundingPersonDirection=${fundingPersonDirection},"
+        + " fundingPersonRevive=${fundingPersonRevive}, accountName=${accountName},"
+        + " error=${error}, personPending=${personPending},"
+        + " personPendingName=${personPendingName})";
   }
 
   /**

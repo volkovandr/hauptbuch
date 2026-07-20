@@ -12,11 +12,14 @@ import java.util.List;
  *
  * @param transactionId the transaction being edited; {@code null} for a new entry (register §3.1)
  * @param date booking date
- * @param accountId the funding account
- * @param personAccountId the person sub-field's resolved override (register §3.3, plan stage 8b) —
- *     an already-established person's per-currency debt leaf, picked by typing rather than listed;
- *     when present it is the <em>effective</em> funding account ({@link #effectiveAccountId()}),
- *     overriding {@code accountId}
+ * @param accountId the funding account the Account field resolved to; {@code null} when the field
+ *     instead named a person (below), whose leaf does not exist until commit
+ * @param fundingPersonName the <em>funding</em> person's name when the Account field's {@code
+ *     for}/{@code by} resolver matched a person (register §3.3, plan stage 8b.1) — "Max paid for a
+ *     pure expense of mine"; {@code null}/blank for an ordinary account
+ * @param fundingPersonDirection {@code FOR}/{@code BY} alongside {@code fundingPersonName}
+ * @param fundingPersonRevive the revival decision for {@code fundingPersonName}, exactly as {@code
+ *     personRevive} carries it for the counterpart
  * @param payeeText the payee text (a picked datalist value or a create-new string); nullable
  * @param amount the funding leg's sign-free magnitude with an optional leading {@code +}/{@code −}
  *     (§3.8)
@@ -47,7 +50,9 @@ public record DockEntryForm(
     Long transactionId,
     LocalDate date,
     Long accountId,
-    Long personAccountId,
+    String fundingPersonName,
+    String fundingPersonDirection,
+    String fundingPersonRevive,
     String payeeText,
     String amount,
     Long categoryId,
@@ -72,10 +77,15 @@ public record DockEntryForm(
   }
 
   /**
-   * The funding account actually used to commit (register §3.3, plan stage 8b): the person
-   * sub-field's resolved override when present, otherwise the plain Account picker's choice.
+   * Whether the Account field named a person rather than an account (register §3.3, plan stage
+   * 8b.1) — the funding leg is then a debt leaf provisioned at commit, so there is no {@code
+   * accountId} to read.
    */
-  public Long effectiveAccountId() {
-    return personAccountId != null ? personAccountId : accountId;
+  public boolean hasFundingPerson() {
+    return isPresent(fundingPersonName) && isPresent(fundingPersonDirection);
+  }
+
+  private static boolean isPresent(String value) {
+    return value != null && !value.isBlank();
   }
 }

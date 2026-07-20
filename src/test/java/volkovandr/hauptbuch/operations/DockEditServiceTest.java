@@ -131,11 +131,14 @@ class DockEditServiceTest {
     DockEditModel model = service().load(TXN_ID);
 
     assertThat(model.accountId()).isEqualTo(maxLeafId);
-    assertThat(model.fundingPersonLabel()).isEqualTo("Max (EUR)");
+    // The person funding leg pre-fills the Account field as a re-resolvable sigil, never the
+    // cosmetic personal.<CUR> leaf name (register §3.3, plan stage 8b.1). The leg is a credit
+    // (Max paid), so the sigil is `by`.
+    assertThat(model.accountEntryText()).isEqualTo("by Max");
   }
 
   @Test
-  void loadsAnOrdinaryExpenseWithNoFundingPersonLabel() {
+  void loadsAnOrdinaryExpenseShowingTheAccountNameAndCurrency() {
     when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
     when(ledgerService.findPostings(TXN_ID))
         .thenReturn(List.of(posting(CASH_ID, "-20"), posting(FOOD_ID, "20")));
@@ -146,7 +149,7 @@ class DockEditServiceTest {
 
     DockEditModel model = service().load(TXN_ID);
 
-    assertThat(model.fundingPersonLabel()).isNull();
+    assertThat(model.accountEntryText()).isEqualTo("Cash (EUR)");
   }
 
   @Test
@@ -427,5 +430,57 @@ class DockEditServiceTest {
     assertThat(model.categoryAmount()).isEqualTo("90,00");
     assertThat(model.baseAmount()).isEqualTo("100,00");
     assertThat(model.transferDirection()).isEqualTo("TO");
+  }
+
+  // ── sticky entry defaults (register §3.3, plan stage 8b.1) ───────────────────
+
+  @Test
+  void stickyAfterCommitEchoesTheDateAndAccountAndNothingElse() {
+    // Only the two fields that are usually unchanged carry over; payee/amount/category/note must
+    // come back blank, or the next entry silently inherits the last one's money.
+    when(accountService.findById(CASH_ID))
+        .thenReturn(Optional.of(account(CASH_ID, "Cash", ASSET, null, EUR)));
+
+    DockEditModel sticky = service().stickyAfterCommit(CASH_ID, LocalDate.of(2026, 2, 1));
+
+    assertThat(sticky.transactionId()).isNull(); // a pre-filled NEW dock, not edit mode
+    assertThat(sticky.date()).isEqualTo(LocalDate.of(2026, 2, 1));
+    assertThat(sticky.accountId()).isEqualTo(CASH_ID);
+    assertThat(sticky.accountEntryText()).isEqualTo("Cash (EUR)");
+    assertThat(sticky.payeeText()).isNull();
+    assertThat(sticky.amount()).isNull();
+    assertThat(sticky.categoryId()).isNull();
+    assertThat(sticky.note()).isNull();
+    assertThat(sticky.tags()).isEmpty();
+  }
+
+  @Test
+  void personFundingLegIsNeverSticky() {
+    // An unnoticed sticky person would silently book a debt against the next transaction, and
+    // possibly provision a leaf for it (plan stage 8b.1) — so it falls back to the fresh default.
+    long maxLeaf = 77L;
+    when(accountService.findById(maxLeaf))
+        .thenReturn(
+            Optional.of(
+                new Account(
+                    maxLeaf,
+                    "personal.EUR",
+                    ASSET,
+                    null,
+                    EUR,
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    true)));
+
+    assertThat(service().stickyAfterCommit(maxLeaf, LocalDate.of(2026, 2, 1))).isNull();
+  }
+
+  @Test
+  void stickyIsAbsentWithoutAnAccountOrDate() {
+    assertThat(service().stickyAfterCommit(null, LocalDate.of(2026, 2, 1))).isNull();
+    assertThat(service().stickyAfterCommit(CASH_ID, null)).isNull();
   }
 }

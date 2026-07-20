@@ -34,8 +34,11 @@ class RegisterSplitController {
       "fragments/split-panel :: panel(register=${register}," + " panel=${panel}, oob=%s)";
   private static final String PANEL_DIRECT = String.format(PANEL, "false");
   private static final String PANEL_OOB = String.format(PANEL, "true");
+  // sticky=null: the split panel resets to a bare dock, never a pre-filled one (plan stage 8b.1
+  // scopes sticky defaults to the simple dock; the panel's own reset is 8b.2's if it wants one).
   private static final String COMMITTED =
-      "fragments/entry-dock :: committed(register=${register}, amountFields=${amountFields})";
+      "fragments/entry-dock :: committed(register=${register}, amountFields=${amountFields},"
+          + " sticky=null)";
 
   private final DockSplitService dockSplitService;
   private final SplitPanelAssembler assembler;

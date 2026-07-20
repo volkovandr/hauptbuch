@@ -1,11 +1,13 @@
 package volkovandr.hauptbuch.operations;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.debts.PersonService;
+import volkovandr.hauptbuch.debts.PersonTarget;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.Posting;
@@ -95,17 +97,11 @@ public class DockEditService {
       categoryCurrencyCode = legs.counterpartCurrency();
     }
 
-    String fundingPersonLabel =
-        personService
-            .personNameForAccount(legs.fundingAccount().accountId())
-            .map(name -> name + " (" + legs.fundingAccount().currencyCode() + ")")
-            .orElse(null);
-
     return new DockEditModel(
         txn.transactionId(),
         txn.date(),
         legs.fundingAccount().accountId(),
-        fundingPersonLabel,
+        accountEntryText(legs),
         payeeText,
         amountText(legs.fundingLeg().amount(), counterpartTypeForAmountText),
         legs.counterpartId(),
@@ -116,6 +112,72 @@ public class DockEditService {
         legs.transferDirection(),
         txn.note(),
         ledgerService.tagsForTransaction(transactionId));
+  }
+
+  /**
+   * The pre-filled <em>new</em> dock a successful commit resets to (register §3.3, plan stage
+   * 8b.1): the date and funding account just used echo back, so entering several transactions on
+   * the same account and day needs no re-typing. Everything else — payee, amount, category, note,
+   * tags — is deliberately left blank; only the two fields that are usually unchanged stick.
+   *
+   * <p>A <em>person</em> funding leg is never sticky: an unnoticed sticky person would silently
+   * book a debt, and possibly provision a leaf, against the next transaction the user enters. Such
+   * a commit returns {@code null} here and the caller falls back to the ordinary fresh default.
+   *
+   * @param accountId the funding account just committed, or {@code null} when it was a person
+   * @param date the date just committed
+   * @return the pre-filled dock model, or {@code null} to fall back to a bare reset
+   */
+  public DockEditModel stickyAfterCommit(Long accountId, LocalDate date) {
+    if (accountId == null || date == null) {
+      return null;
+    }
+    return accountService
+        .findById(accountId)
+        .filter(a -> !a.personLeaf())
+        .map(
+            a ->
+                new DockEditModel(
+                    null,
+                    date,
+                    a.accountId(),
+                    a.name() + " (" + a.currencyCode() + ")",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    List.of()))
+        .orElse(null);
+  }
+
+  /**
+   * The value the dock's Account input shows for a re-opened transaction (register §3.3, plan stage
+   * 8b.1). An ordinary funding account shows {@code Name (CUR)}; a person's debt leaf shows the
+   * {@code for}/{@code by} sigil instead, never the cosmetic {@code personal.<CUR>} leaf name —
+   * both forms re-resolve through {@code /register/account/resolve}, so an untouched edit
+   * round-trips to the same funding leg.
+   *
+   * <p>The sigil follows the leg's own sign, the same rule the register displays by (§3.5): the
+   * person's leg on the <em>debit</em> side (positive) is {@code for} — they owe you — and on the
+   * <em>credit</em> side (negative) is {@code by}.
+   */
+  private String accountEntryText(EditableLegs legs) {
+    return personService
+        .personNameForAccount(legs.fundingAccount().accountId())
+        .map(
+            name ->
+                PersonTarget.option(
+                    legs.fundingLeg().amount().signum() < 0
+                        ? PersonTarget.Direction.BY
+                        : PersonTarget.Direction.FOR,
+                    name))
+        .orElseGet(
+            () -> legs.fundingAccount().name() + " (" + legs.fundingAccount().currencyCode() + ")");
   }
 
   /**

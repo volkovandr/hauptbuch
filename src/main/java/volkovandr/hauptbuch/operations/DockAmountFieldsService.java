@@ -25,14 +25,17 @@ class DockAmountFieldsService {
   private final AccountService accountService;
   private final CurrencyService currencyService;
   private final CrossCurrencyFieldsService crossCurrencyFieldsService;
+  private final TransactionCurrencyResolver transactionCurrencyResolver;
 
   DockAmountFieldsService(
       AccountService accountService,
       CurrencyService currencyService,
-      CrossCurrencyFieldsService crossCurrencyFieldsService) {
+      CrossCurrencyFieldsService crossCurrencyFieldsService,
+      TransactionCurrencyResolver transactionCurrencyResolver) {
     this.accountService = accountService;
     this.currencyService = currencyService;
     this.crossCurrencyFieldsService = crossCurrencyFieldsService;
+    this.transactionCurrencyResolver = transactionCurrencyResolver;
   }
 
   /** Every currency the book knows, for the category-currency picker's options. */
@@ -80,7 +83,15 @@ class DockAmountFieldsService {
    * reveals the same counterpart-amount field a cross-currency category entry does.
    */
   CrossCurrencyFields forForm(DockEntryForm form) {
-    Long fundingAccountId = form.effectiveAccountId();
+    if (form.hasFundingPerson()) {
+      // No real account in the transaction, so the selector is the transaction currency and sets
+      // every leg — single-currency by construction, never the cross-currency branch (§3.5).
+      String currency =
+          transactionCurrencyResolver.forFundingPerson(
+              form.fundingPersonName(), form.categoryCurrencyCode());
+      return CrossCurrencyFields.singleCurrency(currency == null ? "" : currency);
+    }
+    Long fundingAccountId = form.accountId();
     if (fundingAccountId == null) {
       return CrossCurrencyFields.singleCurrency("");
     }

@@ -34,6 +34,11 @@ it shipped. "Stage N complete" needs no recap here.
   longer begin `to `/`from `/`for `/`by `. Split-panel person support becomes **8b.2**; the
   htmx commit-error 500 (register blanks on any error) is **out of scope for stage 8** — a global
   error-handling gap, scheduled between stages 8 and 9.
+- **v0.22 (2026-07-20):** The **sigil-vs-category-type check leaves 8b.1** (owner call). Implementing
+  it uncovered that the dock and the split panel already disagree on what an explicit `+`/`−` means
+  (absolute vs flip), with §3.8's prose and §3.5's table documenting one each; it needs its own
+  thought-through pass rather than a decision made in passing. Tracked as issue 06 under
+  `.scratch/transaction-register-ui/`. Everything else in 8b.1 is unaffected.
 - **v0.20 (2026-07-19):** **Stage 8 made concrete**, split into **8a–8f**. **Q-UI-1 resolved
   (surfaced)** — a person's debt account is an ordinary `asset`, already in the default register set,
   so a person-funded pure expense appears with the person on the Account side. Person **entry rides
@@ -324,10 +329,21 @@ Six ordered sub-stages, each green and demoable (7-series cadence):
   revival, auto-provision at commit, same- and cross-currency. Converts the dock's **Account** field
   from a `<select>` to a typed datalist (pre-filled from the previously entered transaction — see
   below) and **deletes** the "or person" field with its `/people/resolve-account` endpoint. Adds the
-  transaction-currency generalisation, the sigil-vs-category-type check (surfaced at
-  **category-resolve** time, with a commit-time backstop in `DockCommitService`), the `person_leaf`
-  flag and its three picker exclusions, and the reserved name-prefix rule. Label tooltips. The
-  register's own display — including its filter — is untouched here and stays 8c's.
+  transaction-currency generalisation, the `person_leaf` flag and its three picker exclusions, and
+  the reserved name-prefix rule. Label tooltips. The register's own display — including its filter —
+  is untouched here and stays 8c's.
+
+  **The sigil-vs-category-type check is deferred out of 8b.1** (owner, 2026-07-20). Writing it
+  surfaced that the simple dock (`signedAmount`, **absolute**) and the split panel
+  (`signedContribution`, **flip**) already implement *opposite* meanings for an explicit `+`/`−`, and
+  §3.8's prose and §3.5's sigil table document one each. The check cannot be written until that is
+  settled, and the owner chose to re-think and test it properly rather than resolve it in passing.
+  Written up as `.scratch/transaction-register-ui/issues/06-explicit-sign-dock-vs-split-inconsistent.md`.
+
+  Person leaves are also kept out of the register's **viewed set** here, not just the pickers: the
+  cross-cutting bullet puts them in the default set (Q-UI-1), but `RegisterRowRenderer` gains
+  person-name resolution only in **8c**, so until then a person leg would render its cosmetic
+  `personal.<CUR>` name. 8c re-admits them together with the filter entry.
 
   **Sticky entry defaults** (`potential-feature-ideas.md`, Register UX) land here because the field
   conversion forces the question: a committed dock echoes back its **date and funding account** rather

@@ -60,6 +60,7 @@ class DockCommitServiceTest {
   @Mock private LedgerService ledgerService;
   @Mock private SettingsService settingsService;
   @Mock private PersonProvisioningService personProvisioningService;
+  @Mock private TransactionCurrencyResolver transactionCurrencyResolver;
 
   private DockCommitService dockCommitService;
 
@@ -72,7 +73,8 @@ class DockCommitServiceTest {
             currencyLeafService,
             ledgerService,
             settingsService,
-            personProvisioningService);
+            personProvisioningService,
+            transactionCurrencyResolver);
   }
 
   private static Account account(long id, String type, String currency) {
@@ -84,6 +86,9 @@ class DockCommitServiceTest {
         null,
         DATE,
         CASH_ID,
+        null,
+        null,
+        null,
         42L,
         null,
         CATEGORY_ID,
@@ -180,6 +185,9 @@ class DockCommitServiceTest {
             null,
             DATE,
             CASH_ID,
+            null,
+            null,
+            null,
             42L,
             null,
             CATEGORY_ID,
@@ -220,6 +228,9 @@ class DockCommitServiceTest {
             null,
             DATE,
             CASH_ID,
+            null,
+            null,
+            null,
             null,
             "Migros - Switzerland",
             CATEGORY_ID,
@@ -267,6 +278,9 @@ class DockCommitServiceTest {
             CASH_ID,
             null,
             null,
+            null,
+            null,
+            null,
             CATEGORY_ID,
             CHF,
             "9,10",
@@ -300,6 +314,9 @@ class DockCommitServiceTest {
             null,
             DATE,
             CASH_ID,
+            null,
+            null,
+            null,
             null,
             null,
             CATEGORY_ID,
@@ -346,6 +363,9 @@ class DockCommitServiceTest {
             CASH_ID,
             null,
             null,
+            null,
+            null,
+            null,
             CATEGORY_ID,
             USD,
             "9",
@@ -384,6 +404,9 @@ class DockCommitServiceTest {
             CASH_ID,
             null,
             null,
+            null,
+            null,
+            null,
             CATEGORY_ID,
             CHF,
             "9,10",
@@ -414,6 +437,9 @@ class DockCommitServiceTest {
             null,
             DATE,
             CASH_ID,
+            null,
+            null,
+            null,
             null,
             null,
             CATEGORY_ID,
@@ -448,6 +474,9 @@ class DockCommitServiceTest {
             CASH_ID,
             null,
             null,
+            null,
+            null,
+            null,
             CATEGORY_ID,
             CHF,
             "9,10",
@@ -471,6 +500,9 @@ class DockCommitServiceTest {
         null,
         DATE,
         CASH_ID,
+        null,
+        null,
+        null,
         null,
         null,
         VISA_ID,
@@ -560,8 +592,8 @@ class DockCommitServiceTest {
 
     DockEntry entry =
         new DockEntry(
-            null, DATE, CASH_ID, null, null, CASH_ID, null, "20", null, null, null, TO, null, null,
-            null, List.of());
+            null, DATE, CASH_ID, null, null, null, null, null, CASH_ID, null, "20", null, null,
+            null, TO, null, null, null, List.of());
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockCommitService.commit(entry))
         .withMessageContaining("two different accounts");
@@ -583,8 +615,8 @@ class DockCommitServiceTest {
 
   private static DockEntry personEntry(String amount, String direction, String revive) {
     return new DockEntry(
-        null, DATE, CASH_ID, null, null, 0L, null, amount, null, null, null, null, "Max", direction,
-        revive, List.of());
+        null, DATE, CASH_ID, null, null, null, null, null, 0L, null, amount, null, null, null, null,
+        "Max", direction, revive, List.of());
   }
 
   @Test
@@ -674,6 +706,9 @@ class DockCommitServiceTest {
             CASH_ID,
             null,
             null,
+            null,
+            null,
+            null,
             CATEGORY_ID,
             null,
             "30",
@@ -715,5 +750,147 @@ class DockCommitServiceTest {
 
   private static List<Long> tagIds(List<PostingDraft> legs, long accountId) {
     return legs.stream().filter(l -> l.accountId() == accountId).findFirst().orElseThrow().tagIds();
+  }
+
+  // ── person as the FUNDING leg, via the Account field (plan stage 8b.1, register §3.3) ────
+
+  private static DockEntry fundingPersonEntry(String direction, String override, String amount) {
+    return new DockEntry(
+        null,
+        DATE,
+        null,
+        "Max",
+        direction,
+        null,
+        null,
+        null,
+        CATEGORY_ID,
+        override,
+        amount,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of());
+  }
+
+  @Test
+  void fundingPersonLeafIsProvisionedInTheTransactionCurrency() {
+    // No real account in the transaction, so the transaction currency is the only currency source
+    // — and, because the leaf is created in it, the counterpart routes to the same currency and
+    // the transaction is single-currency (register §3.5).
+    Account maxLeaf = account(LEAF_ID, "asset", EUR);
+    Account foodLeaf = account(CATEGORY_ID + 100, EXPENSE, EUR);
+    when(transactionCurrencyResolver.forFundingPerson("Max", null)).thenReturn(EUR);
+    when(personProvisioningService.ensureLeaf("Max", EUR, false)).thenReturn(maxLeaf);
+    when(currencyLeafService.resolveCurrencyLeaf(CATEGORY_ID, EUR)).thenReturn(foodLeaf);
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+
+    dockCommitService.commit(fundingPersonEntry("BY", null, "20"));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    // Max funded your expense, so Max is owed: the expense category's default outflow signs the
+    // funding (Max) leg negative and the category leg positive — data-model §7's worked example.
+    assertThat(leg(legs, LEAF_ID)).isEqualByComparingTo("-20");
+    assertThat(leg(legs, CATEGORY_ID + 100)).isEqualByComparingTo("20");
+    assertThat(baseAmount(legs, LEAF_ID)).isNull();
+  }
+
+  @Test
+  void currencySelectorOverrideSetsEveryLegWhenThereIsNoRealAccount() {
+    Account maxLeaf = account(LEAF_ID, "asset", CHF);
+    Account foodLeaf = account(CATEGORY_ID + 100, EXPENSE, CHF);
+    when(transactionCurrencyResolver.forFundingPerson("Max", CHF)).thenReturn(CHF);
+    when(personProvisioningService.ensureLeaf("Max", CHF, false)).thenReturn(maxLeaf);
+    when(currencyLeafService.resolveCurrencyLeaf(CATEGORY_ID, CHF)).thenReturn(foodLeaf);
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+
+    dockCommitService.commit(fundingPersonEntry("BY", CHF, "20"));
+
+    // Both legs are CHF, so this stays single-currency — no base amounts are frozen.
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(baseAmount(legs, LEAF_ID)).isNull();
+    assertThat(baseAmount(legs, CATEGORY_ID + 100)).isNull();
+  }
+
+  @Test
+  void fundingPersonRevivalDecisionReachesProvisioning() {
+    Account maxLeaf = account(LEAF_ID, "asset", EUR);
+    Account foodLeaf = account(CATEGORY_ID + 100, EXPENSE, EUR);
+    when(transactionCurrencyResolver.forFundingPerson("Max", null)).thenReturn(EUR);
+    when(personProvisioningService.ensureLeaf("Max", EUR, true)).thenReturn(maxLeaf);
+    when(currencyLeafService.resolveCurrencyLeaf(CATEGORY_ID, EUR)).thenReturn(foodLeaf);
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+
+    DockEntry entry =
+        new DockEntry(
+            null,
+            DATE,
+            null,
+            "Max",
+            "BY",
+            "true",
+            null,
+            null,
+            CATEGORY_ID,
+            null,
+            "20",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of());
+    dockCommitService.commit(entry);
+
+    verify(personProvisioningService).ensureLeaf("Max", EUR, true);
+  }
+
+  @Test
+  void personFundedTransactionWithoutAnyCurrencySourceIsRejected() {
+    // No override, no existing debt, and no base currency set — refuse rather than guess.
+    when(transactionCurrencyResolver.forFundingPerson("Max", null)).thenReturn(null);
+
+    assertThatExceptionOfType(IllegalStateException.class)
+        .isThrownBy(() -> dockCommitService.commit(fundingPersonEntry("BY", null, "20")))
+        .withMessageContaining("Base currency");
+  }
+
+  @Test
+  void neitherAccountNorPersonIsRejected() {
+    DockEntry entry =
+        new DockEntry(
+            null,
+            DATE,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            CATEGORY_ID,
+            null,
+            "20",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of());
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> dockCommitService.commit(entry))
+        .withMessageContaining("account or person");
   }
 }

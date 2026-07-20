@@ -108,6 +108,26 @@ public class PersonService {
   }
 
   /**
+   * The one currency this person already carries a debt leaf in, when there is exactly one
+   * (register §3.5, plan stage 8b.1) — the <em>transaction currency</em>'s default when the funding
+   * leg is a person and there is therefore no account to inherit a currency from. Empty when the
+   * name matches no live person, when they have no leaf yet (a brand-new person), or when they have
+   * leaves in more than one currency: all three are cases the caller must fall back to base for,
+   * because picking one would be a guess about which debt the user means.
+   */
+  public Optional<String> soleDebtCurrency(String personName) {
+    if (!(matchExact(personName) instanceof PersonMatch.Live live)) {
+      return Optional.empty();
+    }
+    List<String> currencies =
+        accountOwnerRepository.findPersonCurrencyBalances(live.person().personId()).stream()
+            .map(AccountOwnerRepository.PersonCurrencyBalance::getCurrencyCode)
+            .distinct()
+            .toList();
+    return currencies.size() == 1 ? Optional.of(currencies.get(0)) : Optional.empty();
+  }
+
+  /**
    * Classify a typed name against existing persons by exact match (register §3.5, plan stage 8b):
    * the entry dock's {@code for}/{@code by} and Account-field resolution use this to decide whether
    * it can auto-provision straight away, must ask for a revival decision, or must refuse an
