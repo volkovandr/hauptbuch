@@ -29,6 +29,15 @@ import java.util.List;
  * reuses the same {@code categoryAmount}/{@code baseAmount} machinery as a cross-currency category
  * entry.
  *
+ * <p>Persons (register §3.5, plan stage 8b, data-model §7): when {@code personName}/{@code
+ * personDirection} are set, the counterpart is a person's per-currency debt leaf, auto-provisioned
+ * at commit — {@code categoryId} carries no value for this shape. Currency routing (the funding
+ * account's currency by default, or the category-currency selector's override) is identical to the
+ * plain-category branch; the funding leg's direction is {@code FOR} = outflow (you funded it),
+ * {@code BY} = inflow (they funded it) — the same convention as expense/income. {@code
+ * personRevive} carries the dock's Restore/Create-new decision when the name matched only a
+ * soft-deleted person; irrelevant otherwise.
+ *
  * <p>{@code transactionId} distinguishes the dock's two modes (register §3.1): {@code null} is a
  * <em>new</em> entry that {@link DockCommitService} records; a non-null id is an <em>edit</em> that
  * re-threads that existing transaction in place ({@code editTransaction}). Editing the account or
@@ -50,6 +59,11 @@ import java.util.List;
  * @param note free-text transaction note; nullable
  * @param transferDirection {@code TO}/{@code FROM} when the counterpart is a transfer account
  *     (register §3.8); {@code null} for a category counterpart
+ * @param personName the counterpart person's name when this entry attributes the transaction to a
+ *     person (register §3.5, plan stage 8b); {@code null} otherwise
+ * @param personDirection {@code FOR}/{@code BY} alongside {@code personName} (data-model §7)
+ * @param personRevive the dock's Restore ({@code true}) / Create-new ({@code false}) decision for a
+ *     name that matched only a soft-deleted person; irrelevant when it did not
  * @param tagIds the resolved tag ids the committed chips carry (register §3.6, plan stage 7e). A
  *     transaction-level tag lands on <em>every</em> leg (data-model §10.2), so {@link
  *     DockCommitService} attaches these to both the funding and the counterpart leg; never null,
@@ -68,6 +82,9 @@ public record DockEntry(
     String baseAmount,
     String note,
     String transferDirection,
+    String personName,
+    String personDirection,
+    String personRevive,
     List<Long> tagIds) {
 
   /** Defensively copy the tag ids (null-safe) so the entry cannot be mutated after. */

@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.Posting;
@@ -49,12 +50,17 @@ public class DockEditService {
   private final LedgerService ledgerService;
   private final AccountService accountService;
   private final PayeeService payeeService;
+  private final PersonService personService;
 
   DockEditService(
-      LedgerService ledgerService, AccountService accountService, PayeeService payeeService) {
+      LedgerService ledgerService,
+      AccountService accountService,
+      PayeeService payeeService,
+      PersonService personService) {
     this.ledgerService = ledgerService;
     this.accountService = accountService;
     this.payeeService = payeeService;
+    this.personService = personService;
   }
 
   /**
@@ -89,10 +95,17 @@ public class DockEditService {
       categoryCurrencyCode = legs.counterpartCurrency();
     }
 
+    String fundingPersonLabel =
+        personService
+            .personNameForAccount(legs.fundingAccount().accountId())
+            .map(name -> name + " (" + legs.fundingAccount().currencyCode() + ")")
+            .orElse(null);
+
     return new DockEditModel(
         txn.transactionId(),
         txn.date(),
         legs.fundingAccount().accountId(),
+        fundingPersonLabel,
         payeeText,
         amountText(legs.fundingLeg().amount(), counterpartTypeForAmountText),
         legs.counterpartId(),

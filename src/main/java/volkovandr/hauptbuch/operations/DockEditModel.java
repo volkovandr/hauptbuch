@@ -23,6 +23,10 @@ import volkovandr.hauptbuch.ledger.TransferTarget;
  * @param transactionId the transaction being edited (the dock's hidden id)
  * @param date booking date
  * @param accountId the funding account, selected in the dock's Account picker
+ * @param fundingPersonLabel the {@code "Name (CUR)"} display text for the dock's person sub-field
+ *     (register §3.3, plan stage 8b) when the funding account turns out to be a person's debt leaf
+ *     — the person's current name, not the leaf's cosmetic internal account name; {@code null} for
+ *     an ordinary real-account funding leg
  * @param payeeText the payee's {@code Name - City - Country} entry value to pre-fill the payee
  *     input; {@code null} for a payee-less transaction
  * @param amount the magnitude the user would type, with a leading {@code +}/{@code −} only when the
@@ -44,6 +48,7 @@ public record DockEditModel(
     Long transactionId,
     LocalDate date,
     Long accountId,
+    String fundingPersonLabel,
     String payeeText,
     String amount,
     Long categoryId,

@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.debts;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
@@ -86,5 +87,46 @@ public class PersonService {
       return findAllLive();
     }
     return personRepository.findByNameContaining(nameFragment.strip());
+  }
+
+  /**
+   * The current display name of the person who owns {@code accountId}, if any (register §3.3, plan
+   * stage 8b) — used to pre-fill the entry dock's person sub-field when editing a transaction whose
+   * funding leg turns out to be a person's debt account, so the user sees "Max", not the leaf's
+   * cosmetic internal name. Resolves even a since-soft-deleted person (rename/lifecycle never moves
+   * ids, and an old transaction must still display sensibly), so this is a display lookup, not a
+   * liveness check.
+   */
+  public Optional<String> personNameForAccount(long accountId) {
+    return accountOwnerRepository
+        .findByAccountId(accountId)
+        .flatMap(owner -> personRepository.findByIdIncludingDeleted(owner.personId()))
+        .map(Person::name);
+  }
+
+  /**
+   * Classify a typed name against existing persons by exact match (register §3.5, plan stage 8b):
+   * the entry dock's {@code for}/{@code by} and Account-field resolution use this to decide whether
+   * it can auto-provision straight away, must ask for a revival decision, or must refuse an
+   * ambiguous name (data-model §7 allows duplicate live names).
+   *
+   * @throws IllegalArgumentException if the name is blank
+   */
+  public PersonMatch matchExact(String name) {
+    if (name == null || name.isBlank()) {
+      throw new IllegalArgumentException("Person name cannot be blank");
+    }
+    List<Person> all = personRepository.findAllByNameExact(name.strip());
+    List<Person> live = all.stream().filter(p -> p.deletedAt() == null).toList();
+    if (live.size() > 1) {
+      return new PersonMatch.Ambiguous(live);
+    }
+    if (live.size() == 1) {
+      return new PersonMatch.Live(live.get(0));
+    }
+    return all.stream()
+        .max(Comparator.comparing(Person::deletedAt))
+        .<PersonMatch>map(PersonMatch.DeletedOnly::new)
+        .orElseGet(PersonMatch.NotFound::new);
   }
 }

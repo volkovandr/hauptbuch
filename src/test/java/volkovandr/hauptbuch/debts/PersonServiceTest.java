@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -161,5 +162,102 @@ class PersonServiceTest {
 
     assertThat(result).isEqualTo(persons);
     verify(personRepository).findAllLive();
+  }
+
+  @Test
+  void matchExactReturnsLiveForSoleLiveMatch() {
+    Person max = new Person(1L, "Max", null);
+    when(personRepository.findAllByNameExact("Max")).thenReturn(List.of(max));
+
+    PersonMatch result = service.matchExact("Max");
+
+    assertThat(result).isEqualTo(new PersonMatch.Live(max));
+  }
+
+  @Test
+  void matchExactReturnsNotFoundWhenNoRowsAtAll() {
+    when(personRepository.findAllByNameExact("Max")).thenReturn(List.of());
+
+    PersonMatch result = service.matchExact("Max");
+
+    assertThat(result).isEqualTo(new PersonMatch.NotFound());
+  }
+
+  @Test
+  void matchExactReturnsDeletedOnlyWhenOnlySoftDeletedRowMatches() {
+    OffsetDateTime deletedAt = OffsetDateTime.parse("2026-07-01T00:00:00Z");
+    Person max = new Person(1L, "Max", deletedAt);
+    when(personRepository.findAllByNameExact("Max")).thenReturn(List.of(max));
+
+    PersonMatch result = service.matchExact("Max");
+
+    assertThat(result).isEqualTo(new PersonMatch.DeletedOnly(max));
+  }
+
+  @Test
+  void matchExactReturnsMostRecentlyDeletedAmongSeveralDeletedRows() {
+    Person older = new Person(1L, "Max", OffsetDateTime.parse("2026-01-01T00:00:00Z"));
+    Person newer = new Person(2L, "Max", OffsetDateTime.parse("2026-06-01T00:00:00Z"));
+    when(personRepository.findAllByNameExact("Max")).thenReturn(List.of(older, newer));
+
+    PersonMatch result = service.matchExact("Max");
+
+    assertThat(result).isEqualTo(new PersonMatch.DeletedOnly(newer));
+  }
+
+  @Test
+  void matchExactReturnsAmbiguousForMultipleLiveMatches() {
+    Person max1 = new Person(1L, "Max", null);
+    Person max2 = new Person(2L, "Max", null);
+    when(personRepository.findAllByNameExact("Max")).thenReturn(List.of(max1, max2));
+
+    PersonMatch result = service.matchExact("Max");
+
+    assertThat(result).isInstanceOf(PersonMatch.Ambiguous.class);
+    assertThat(((PersonMatch.Ambiguous) result).matches()).containsExactlyInAnyOrder(max1, max2);
+  }
+
+  @Test
+  void matchExactIgnoresDeletedDuplicateWhenLiveMatchExists() {
+    Person live = new Person(1L, "Max", null);
+    Person deleted = new Person(2L, "Max", OffsetDateTime.parse("2026-01-01T00:00:00Z"));
+    when(personRepository.findAllByNameExact("Max")).thenReturn(List.of(live, deleted));
+
+    PersonMatch result = service.matchExact("Max");
+
+    assertThat(result).isEqualTo(new PersonMatch.Live(live));
+  }
+
+  @Test
+  void matchExactRejectsBlankName() {
+    assertThatThrownBy(() -> service.matchExact("")).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void personNameForAccountReturnsTheOwningPersonsName() {
+    when(accountOwnerRepository.findByAccountId(10L))
+        .thenReturn(Optional.of(new AccountOwner(1L, 10L, 5L)));
+    when(personRepository.findByIdIncludingDeleted(5L))
+        .thenReturn(Optional.of(new Person(5L, "Max", null)));
+
+    assertThat(service.personNameForAccount(10L)).contains("Max");
+  }
+
+  @Test
+  void personNameForAccountResolvesEvenSoftDeletedPerson() {
+    OffsetDateTime deletedAt = OffsetDateTime.parse("2026-01-01T00:00:00Z");
+    when(accountOwnerRepository.findByAccountId(10L))
+        .thenReturn(Optional.of(new AccountOwner(1L, 10L, 5L)));
+    when(personRepository.findByIdIncludingDeleted(5L))
+        .thenReturn(Optional.of(new Person(5L, "Max", deletedAt)));
+
+    assertThat(service.personNameForAccount(10L)).contains("Max");
+  }
+
+  @Test
+  void personNameForAccountReturnsEmptyForAnUnownedAccount() {
+    when(accountOwnerRepository.findByAccountId(10L)).thenReturn(Optional.empty());
+
+    assertThat(service.personNameForAccount(10L)).isEmpty();
   }
 }

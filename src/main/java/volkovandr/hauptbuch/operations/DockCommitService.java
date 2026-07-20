@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonProvisioningService;
+import volkovandr.hauptbuch.debts.PersonTarget;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.PostingDraft;
@@ -48,18 +50,21 @@ public class DockCommitService {
   private final CurrencyLeafService currencyLeafService;
   private final LedgerService ledgerService;
   private final SettingsService settingsService;
+  private final PersonProvisioningService personProvisioningService;
 
   DockCommitService(
       AccountService accountService,
       PayeeService payeeService,
       CurrencyLeafService currencyLeafService,
       LedgerService ledgerService,
-      SettingsService settingsService) {
+      SettingsService settingsService,
+      PersonProvisioningService personProvisioningService) {
     this.accountService = accountService;
     this.payeeService = payeeService;
     this.currencyLeafService = currencyLeafService;
     this.ledgerService = ledgerService;
     this.settingsService = settingsService;
+    this.personProvisioningService = personProvisioningService;
   }
 
   /**
@@ -108,10 +113,12 @@ public class DockCommitService {
   /**
    * Resolve the entry's counter-leg (register §3.5/§3.8): a <em>transfer</em> to a real own account
    * when {@link DockEntry#transferDirection()} is set (its currency fixed by the account, its
-   * funding direction from {@code TO}/{@code FROM}), otherwise the picked category's per-currency
-   * leaf (routed to the overridden currency, or the funding account's by default — §6.5). The
-   * returned {@link Counterpart} carries the account plus the funding leg's default direction
-   * (which an explicit {@code +}/{@code −} on the amount can still override, §3.8).
+   * funding direction from {@code TO}/{@code FROM}); a <em>person</em>'s per-currency debt leaf
+   * when {@link DockEntry#personName()}/{@link DockEntry#personDirection()} are set
+   * (auto-provisioned here, at commit — data-model §7); otherwise the picked category's
+   * per-currency leaf (routed to the overridden currency, or the funding account's by default —
+   * §6.5). The returned {@link Counterpart} carries the account plus the funding leg's default
+   * direction (which an explicit {@code +}/{@code −} on the amount can still override, §3.8).
    */
   private Counterpart resolveCounterpart(DockEntry entry, Account fundingAccount) {
     String direction = blankToNull(entry.transferDirection());
@@ -126,10 +133,32 @@ public class DockCommitService {
       }
       return new Counterpart(other, TransferTarget.Direction.TO.name().equals(direction));
     }
+    String personName = blankToNull(entry.personName());
+    String personDirection = blankToNull(entry.personDirection());
+    if (personName != null && personDirection != null) {
+      return resolvePersonCounterpart(entry, fundingAccount, personName, personDirection);
+    }
     String override = blankToNull(entry.categoryCurrencyCode());
     String targetCurrency = override == null ? fundingAccount.currencyCode() : override;
     Account leaf = currencyLeafService.resolveCurrencyLeaf(entry.categoryId(), targetCurrency);
     return new Counterpart(leaf, "expense".equals(leaf.type()));
+  }
+
+  /**
+   * Resolve (auto-provisioning if needed) a person's per-currency debt leaf (data-model §7): the
+   * target currency follows exactly the plain-category branch's rule (the category-currency
+   * selector's override, or the funding account's currency by default — register §3.5), so the same
+   * cross-currency machinery below applies unchanged. {@code FOR} (you funded it) defaults the
+   * funding leg to an outflow, the same convention as an expense category; {@code BY} (they funded
+   * it) defaults it to an inflow, like income.
+   */
+  private Counterpart resolvePersonCounterpart(
+      DockEntry entry, Account fundingAccount, String personName, String personDirection) {
+    String override = blankToNull(entry.categoryCurrencyCode());
+    String targetCurrency = override == null ? fundingAccount.currencyCode() : override;
+    boolean revive = "true".equalsIgnoreCase(blankToNull(entry.personRevive()));
+    Account leaf = personProvisioningService.ensureLeaf(personName, targetCurrency, revive);
+    return new Counterpart(leaf, PersonTarget.Direction.FOR.name().equals(personDirection));
   }
 
   /**

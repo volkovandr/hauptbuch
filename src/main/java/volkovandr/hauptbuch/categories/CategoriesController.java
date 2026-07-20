@@ -12,6 +12,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonMatch;
+import volkovandr.hauptbuch.debts.PersonService;
+import volkovandr.hauptbuch.debts.PersonTarget;
 import volkovandr.hauptbuch.ledger.TransferTarget;
 import volkovandr.hauptbuch.web.NavItem;
 
@@ -45,6 +48,19 @@ class CategoriesController {
   private static final String RESOLVED_DIRECTION = "transferDirection";
   private static final String RESOLVED_ERROR = "error";
 
+  /** Model keys for a resolved (or pending) person counterpart (register §3.5, plan stage 8b). */
+  private static final String RESOLVED_PERSON_NAME = "personName";
+
+  private static final String RESOLVED_PERSON_DIRECTION = "personDirection";
+  private static final String RESOLVED_PERSON_REVIVE = "personRevive";
+  private static final String RESOLVED_PERSON_PENDING = "personPending";
+  private static final String RESOLVED_PERSON_PENDING_NAME = "personPendingName";
+
+  /** Revival decision values the pending Restore/Create-new buttons re-post (plan stage 8b). */
+  private static final String DECISION_REVIVE = "REVIVE";
+
+  private static final String DECISION_NEW = "NEW";
+
   /**
    * htmx response header the transfer branch raises so the dock recomputes its amount fields
    * (register §3.8a, plan stage 7d.3): a transfer's counterpart currency is fixed by the resolved
@@ -65,12 +81,17 @@ class CategoriesController {
   private final CategoryService categoryService;
   private final AccountService accountService;
   private final TagService tagService;
+  private final PersonService personService;
 
   CategoriesController(
-      CategoryService categoryService, AccountService accountService, TagService tagService) {
+      CategoryService categoryService,
+      AccountService accountService,
+      TagService tagService,
+      PersonService personService) {
     this.categoryService = categoryService;
     this.accountService = accountService;
     this.tagService = tagService;
+    this.personService = personService;
   }
 
   /** The category list plus the create-category form. */
@@ -105,14 +126,21 @@ class CategoriesController {
   }
 
   /**
-   * Resolve the Category field's counterpart (register §3.5, plan stage 7b/7d.3): an existing
-   * category by name, a new {@code Parent - Child} leaf, or a <em>transfer target</em> ({@code To →
-   * <account>} / {@code From ← <account>}) routing the counter-leg to a real own account. Returns
-   * the {@code categoryResolved} fragment — the hidden id the caller commits, plus a status; a
-   * transfer additionally carries the {@code transferDirection} the commit signs the funding leg by
-   * (register §3.8) and raises the {@link #COUNTERPART_RESOLVED} header so the dock reveals the
-   * counterpart-amount field for a cross-currency transfer. On a bad value it returns the fragment
-   * carrying the error and no id, so nothing can commit an unresolved counterpart.
+   * Resolve the Category field's counterpart (register §3.5, plan stage 7b/7d.3/8b): an existing
+   * category by name, a new {@code Parent - Child} leaf, a <em>transfer target</em> ({@code To →
+   * <account>} / {@code From ← <account>}) routing the counter-leg to a real own account, or a
+   * <em>person target</em> ({@code for <person>} / {@code by <person>}, data-model §7) routing it
+   * to that person's per-currency debt leaf. Returns the {@code categoryResolved} fragment — the
+   * hidden id (or person name/direction) the caller commits, plus a status; a transfer additionally
+   * carries the {@code transferDirection} the commit signs the funding leg by (register §3.8) and
+   * raises the {@link #COUNTERPART_RESOLVED} header so the dock reveals the counterpart-amount
+   * field for a cross-currency transfer. On a bad value it returns the fragment carrying the error
+   * and no id, so nothing can commit an unresolved counterpart.
+   *
+   * <p>A person target whose name matches only a <em>soft-deleted</em> person is never resolved
+   * silently (data-model §7): the fragment instead renders a Restore/Create-new choice, which
+   * re-posts here with {@code personDecision} set to finalise the pick — the auto-provisioning
+   * itself still happens later, at commit ({@code operations}' {@code DockCommitService}).
    *
    * <p>Parameterised so both the simple dock and the split panel's per-line pickers share it (plan
    * stage 7c.2): {@code fieldName} names the hidden id input ({@code categoryId} for the dock,
@@ -127,9 +155,10 @@ class CategoriesController {
    *
    * <p>Lives here, not in the dock's {@code operations} controller: creating a category is this
    * module's logic, and {@code operations → categories} would close a module cycle (plan stage 7
-   * boundary note). Resolving a transfer target is an {@code accounts} lookup, which this module
-   * may reach; the browser bridges the two — it resolves here, then commits to {@code operations}
-   * with the returned id (and direction).
+   * boundary note). Resolving a transfer target is an {@code accounts} lookup, and matching a
+   * person name is a read-only {@code debts} lookup — both of which this module may reach; the
+   * browser bridges the two — it resolves here, then commits to {@code operations} with the
+   * returned id (and direction), or the returned person name (and direction).
    */
   @PostMapping("/categories/resolve")
   String resolveCategory(
@@ -138,14 +167,22 @@ class CategoriesController {
       @RequestParam(defaultValue = RESOLVED_ID) String fieldName,
       @RequestParam(required = false) String typeFieldName,
       @RequestParam(required = false) String directionFieldName,
+      @RequestParam(required = false) String personDecision,
       Model model,
       HttpServletResponse response) {
     String text = index >= 0 && index < categoryText.size() ? categoryText.get(index) : "";
     Optional<TransferTarget.Parsed> transfer = TransferTarget.parse(text);
+    Optional<PersonTarget.Parsed> person =
+        transfer.isPresent() ? Optional.empty() : PersonTarget.parse(text);
     if (transfer.isPresent()) {
       resolveTransfer(transfer.get(), model, response);
+      clearPersonAttributes(model);
+    } else if (person.isPresent()) {
+      resolvePerson(person.get(), personDecision, model);
+      model.addAttribute(RESOLVED_DIRECTION, null);
     } else {
       resolveCategoryText(text, model);
+      clearPersonAttributes(model);
     }
     model.addAttribute("fieldName", fieldName);
     model.addAttribute("typeFieldName", typeFieldName);
@@ -153,7 +190,10 @@ class CategoriesController {
     return "fragments/entry-dock :: categoryResolved(categoryId=${categoryId},"
         + " categoryName=${categoryName}, error=${error}, fieldName=${fieldName},"
         + " typeFieldName=${typeFieldName}, categoryType=${categoryType},"
-        + " transferDirection=${transferDirection}, directionFieldName=${directionFieldName})";
+        + " transferDirection=${transferDirection}, directionFieldName=${directionFieldName},"
+        + " personName=${personName}, personDirection=${personDirection},"
+        + " personRevive=${personRevive}, personPending=${personPending},"
+        + " personPendingName=${personPendingName})";
   }
 
   /** Resolve a plain category name or {@code Parent - Child} to its (existing or new) leaf id. */
@@ -203,6 +243,79 @@ class CategoriesController {
     model.addAttribute(RESOLVED_DIRECTION, transfer.direction().name());
     model.addAttribute(RESOLVED_ERROR, null);
     response.setHeader(TRIGGER_AFTER_SWAP, COUNTERPART_RESOLVED);
+  }
+
+  /**
+   * Resolve a person target (register §3.5, plan stage 8b, data-model §7): a name matching exactly
+   * one live person, or no person at all, is ready to commit straight away — {@code personName}/
+   * {@code personDirection} fill the hidden fields {@link operations.DockCommitService} reads to
+   * auto-provision at commit. A name matching <em>only</em> a soft-deleted person is never resolved
+   * silently: absent a {@code personDecision}, the fragment renders a Restore/Create-new choice
+   * instead of the ready-to-commit fields; once decided, {@code personRevive} carries the choice
+   * through. An ambiguous name (more than one live person, data-model §7) is refused — the caller
+   * cannot pick for the user.
+   */
+  private void resolvePerson(PersonTarget.Parsed parsed, String personDecision, Model model) {
+    PersonMatch match = personService.matchExact(parsed.personName());
+    model.addAttribute(RESOLVED_ID, "");
+    model.addAttribute(RESOLVED_TYPE, "");
+
+    if (match instanceof PersonMatch.Ambiguous) {
+      model.addAttribute(RESOLVED_NAME, null);
+      model.addAttribute(
+          RESOLVED_ERROR,
+          "More than one person named '"
+              + parsed.personName()
+              + "' — rename one via the People page to disambiguate");
+      clearPersonAttributes(model);
+      return;
+    }
+
+    boolean decided = DECISION_REVIVE.equals(personDecision) || DECISION_NEW.equals(personDecision);
+    if (match instanceof PersonMatch.DeletedOnly && !decided) {
+      model.addAttribute(RESOLVED_NAME, null);
+      model.addAttribute(RESOLVED_ERROR, null);
+      model.addAttribute(RESOLVED_PERSON_NAME, null);
+      model.addAttribute(RESOLVED_PERSON_DIRECTION, null);
+      model.addAttribute(RESOLVED_PERSON_REVIVE, null);
+      model.addAttribute(RESOLVED_PERSON_PENDING, Boolean.TRUE);
+      model.addAttribute(RESOLVED_PERSON_PENDING_NAME, parsed.personName());
+      return;
+    }
+
+    boolean revive =
+        match instanceof PersonMatch.DeletedOnly && DECISION_REVIVE.equals(personDecision);
+    model.addAttribute(RESOLVED_NAME, personStatusText(parsed, match, revive));
+    model.addAttribute(RESOLVED_ERROR, null);
+    model.addAttribute(RESOLVED_PERSON_NAME, parsed.personName());
+    model.addAttribute(RESOLVED_PERSON_DIRECTION, parsed.direction().name());
+    model.addAttribute(
+        RESOLVED_PERSON_REVIVE,
+        match instanceof PersonMatch.DeletedOnly ? String.valueOf(revive) : null);
+    model.addAttribute(RESOLVED_PERSON_PENDING, null);
+    model.addAttribute(RESOLVED_PERSON_PENDING_NAME, null);
+  }
+
+  /** The resolved status caption shown beside a resolved person target. */
+  private static String personStatusText(
+      PersonTarget.Parsed parsed, PersonMatch match, boolean revive) {
+    String base = PersonTarget.option(parsed.direction(), parsed.personName());
+    if (match instanceof PersonMatch.NotFound) {
+      return base + " (new person)";
+    }
+    if (match instanceof PersonMatch.DeletedOnly) {
+      return base + (revive ? " (restoring)" : " (new person)");
+    }
+    return base;
+  }
+
+  /** Blank every person-target model attribute — the transfer and plain-category branches. */
+  private static void clearPersonAttributes(Model model) {
+    model.addAttribute(RESOLVED_PERSON_NAME, null);
+    model.addAttribute(RESOLVED_PERSON_DIRECTION, null);
+    model.addAttribute(RESOLVED_PERSON_REVIVE, null);
+    model.addAttribute(RESOLVED_PERSON_PENDING, null);
+    model.addAttribute(RESOLVED_PERSON_PENDING_NAME, null);
   }
 
   /**

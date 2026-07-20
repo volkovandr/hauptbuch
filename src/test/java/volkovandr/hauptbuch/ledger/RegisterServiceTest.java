@@ -21,6 +21,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.Person;
+import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.RegisterView.RegisterAccountOption;
 import volkovandr.hauptbuch.ledger.RegisterView.RegisterCategoryOption;
 import volkovandr.hauptbuch.ledger.repository.PayeeRepository;
@@ -47,6 +49,7 @@ class RegisterServiceTest {
   @Mock private SettingsService settingsService;
   @Mock private RegisterRowRenderer rowRenderer;
   @Mock private TagReadRepository tagReadRepository;
+  @Mock private PersonService personService;
 
   private RegisterService registerService;
 
@@ -59,10 +62,12 @@ class RegisterServiceTest {
             accountService,
             settingsService,
             rowRenderer,
-            tagReadRepository);
+            tagReadRepository,
+            personService);
     lenient().when(tagReadRepository.liveTagLabels()).thenReturn(List.of());
     lenient().when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
     lenient().when(payeeRepository.findFilterOptions()).thenReturn(List.of());
+    lenient().when(personService.findAllLive()).thenReturn(List.of());
     lenient()
         .when(registerRepository.findRows(anyList(), any(), any(), any(), anyString()))
         .thenReturn(List.of());
@@ -160,5 +165,18 @@ class RegisterServiceTest {
     // 7d.3).
     assertThat(view.transferTargets())
         .containsExactly("To → Cash", "From ← Cash", "To → Giro", "From ← Giro");
+  }
+
+  @Test
+  void offersForAndByPersonTargetsForEveryLivePerson() {
+    when(accountService.findLiveByTypes(List.of("asset", "liability"))).thenReturn(List.of());
+    when(accountService.findLiveByTypes(List.of("income", "expense"))).thenReturn(List.of());
+    when(personService.findAllLive())
+        .thenReturn(List.of(new Person(1L, "Max", null), new Person(2L, "Alice", null)));
+
+    RegisterView view = registerService.view(defaultFilter());
+
+    // Each live person contributes a for and a by target (register §3.5, plan stage 8b).
+    assertThat(view.personTargets()).containsExactly("for Max", "by Max", "for Alice", "by Alice");
   }
 }

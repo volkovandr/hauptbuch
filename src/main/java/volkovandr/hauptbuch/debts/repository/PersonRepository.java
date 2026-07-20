@@ -37,6 +37,19 @@ public class PersonRepository {
         .optional();
   }
 
+  /**
+   * Fetch a person by ID whether live or soft-deleted; returns empty only if absent. Used for
+   * display lookups (e.g. resolving an old transaction's funding leg back to a person's current
+   * name, plan stage 8b) where a since-deleted person must still resolve, not vanish.
+   */
+  public Optional<Person> findByIdIncludingDeleted(Long personId) {
+    return jdbcClient
+        .sql("select * from person where person_id = :id")
+        .param("id", personId)
+        .query(Person.class)
+        .optional();
+  }
+
   /** Fetch all live persons, ordered by name. */
   public List<Person> findAllLive() {
     return jdbcClient
@@ -70,6 +83,24 @@ public class PersonRepository {
         .param("n", name)
         .query(Person.class)
         .optional();
+  }
+
+  /**
+   * Fetch every person (live or soft-deleted) with this exact name — the raw material for the entry
+   * dock's match-status classification (plan stage 8b): more than one live row is ambiguous, zero
+   * live rows with at least one deleted row needs a revival decision, and no rows at all is a
+   * genuinely new person. Ordered live-first, then most-recently-deleted first.
+   */
+  public List<Person> findAllByNameExact(String name) {
+    return jdbcClient
+        .sql(
+            """
+            select * from person where name = :n
+            order by deleted_at is null desc, deleted_at desc
+            """)
+        .param("n", name)
+        .query(Person.class)
+        .list();
   }
 
   /**
