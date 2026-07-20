@@ -23,6 +23,13 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.25 (2026-07-20):** **8d complete.** One decision: the People page **does** carry a
+  supplementary base-currency total (T-DM-5 had leaned per-currency-only) — but it **names the base
+  currency** and is **shown only for a person holding a non-base currency** (an all-base position
+  needs no conversion gloss). Because that total is a mark-to-market valuation needing `ledger`'s
+  rates, and `debts` may not depend on `ledger` (the edge already runs the other way), the People
+  **list view moved to `operations`** (`PeopleOverviewController`); the person lifecycle POSTs stayed
+  in `debts`.
 - **v0.24 (2026-07-20):** **8c complete.** No scope change (routine).
 - **v0.23 (2026-07-20):** **8b.2 complete.** Owner testing surfaced that a person funding a *whole*
   split (`Account: by Max`, then Split) is unsupported — the split panel's Account is a real-account
@@ -73,7 +80,7 @@ it shipped. "Stage N complete" needs no recap here.
   three-tier test strategy; the stage-3 service framed as invariant-upholding domain ops, not CRUD.
 - **Stages marked complete** (routine, no recap): 1 (v0.3), 2 (v0.4), 3 (v0.5), 4 (v0.6), 5 (v0.7),
   6a (v0.9), 6b (v0.10), 6c (v0.12), 6d (v0.14), 7a (v0.16), 7b (v0.17), 7c (v0.18), 8a (v0.21),
-  8b.1 (v0.22), 8b.2 (v0.23), 8c (v0.24).
+  8b.1 (v0.22), 8b.2 (v0.23), 8c (v0.24), 8d (v0.25).
 
 ---
 
@@ -383,8 +390,12 @@ Six ordered sub-stages, each green and demoable (7-series cadence):
   combinable with each other and with real accounts. (Only the pre-filtered *link* from the People page
   was previously planned, in 8d; ticking people yourself was not.) The filter block growing bulky with
   many people is acknowledged and deferred — collapsing it is a later UX pass.
-- **8d — People balances.** Net-balance column, expand → per-currency signed balances, and a "view in
-  register (pre-filtered to this person)" link, on the existing People page.
+- **8d — People balances.** ✅ **complete.** Net-balance column (signed per-currency figures, side by
+  side, never netted across currencies), expand → directional per-currency wording plus a "view in
+  register (pre-filtered to this person)" link, on the existing People page. A supplementary
+  base-currency total sits beside the figures **only** when the person holds a non-base currency and
+  every currency could be valued (an all-base position, a missing rate, or an unset base currency
+  suppress it) — named in the base currency, not the word "base".
 - **8e — Settle-up button.** A per-person×currency launcher: pick account + date + amount(s) (one or
   two fields by currency match, §3.8a), direction auto-detected from the balance sign, committed
   through the existing path — a pre-scoped transaction, not new engine.
