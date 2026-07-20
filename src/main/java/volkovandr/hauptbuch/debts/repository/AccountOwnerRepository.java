@@ -83,6 +83,26 @@ public class AccountOwnerRepository {
   }
 
   /**
+   * Every account_owner link whose person is live (plan stage 8d) — the People-balances screen
+   * needs each live person's full set of leaf ids, including any that net to zero, to build a
+   * register link scoped to everything that is theirs. Soft-deleted persons are excluded (they are
+   * off the People page). A plain two-table join, so a round-trip.
+   */
+  public List<AccountOwner> findLiveAccountLinks() {
+    return jdbcClient
+        .sql(
+            """
+            select ao.*
+            from account_owner ao
+            join person p on ao.person_id = p.person_id
+            where p.deleted_at is null
+            order by ao.person_id, ao.account_id
+            """)
+        .query(AccountOwner.class)
+        .list();
+  }
+
+  /**
    * Tuple of (personId, currencyCode, signedBalance) from the per-person per-currency balance query
    * (data-model §7). Summed across all live postings to that person's accounts in that currency. A
    * negative balance means the user owes the person; positive means the person owes the user.

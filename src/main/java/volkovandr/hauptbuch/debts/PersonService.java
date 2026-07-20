@@ -85,6 +85,42 @@ public class PersonService {
   }
 
   /**
+   * Every live person paired with their per-currency debt position (data-model §7, plan stage 8d) —
+   * the roster for the People-balances screen, ordered by name like {@link #findAllLive}. Each
+   * summary carries only the currencies the person has a <em>non-zero</em> net balance in (a
+   * settled person's list is empty) plus their full set of leaf account ids for the register
+   * pre-filter link. Base-currency valuation is deliberately not done here: it needs {@code
+   * ledger}'s rates, and {@code debts} must not depend on {@code ledger} (that edge already runs
+   * the other way), so the {@code operations} assembler layers it on.
+   */
+  public List<PersonBalanceSummary> balanceSummaries() {
+    Map<Long, List<CurrencyBalance>> balancesByPerson =
+        accountOwnerRepository.findAllPersonCurrencyBalances().stream()
+            .filter(b -> b.getSignedBalance().signum() != 0)
+            .collect(
+                Collectors.groupingBy(
+                    AccountOwnerRepository.PersonCurrencyBalance::getPersonId,
+                    Collectors.mapping(
+                        b -> new CurrencyBalance(b.getCurrencyCode(), b.getSignedBalance()),
+                        Collectors.toList())));
+    Map<Long, List<Long>> accountsByPerson =
+        accountOwnerRepository.findLiveAccountLinks().stream()
+            .collect(
+                Collectors.groupingBy(
+                    AccountOwner::personId,
+                    Collectors.mapping(AccountOwner::accountId, Collectors.toList())));
+    return personRepository.findAllLive().stream()
+        .map(
+            p ->
+                new PersonBalanceSummary(
+                    p.personId(),
+                    p.name(),
+                    balancesByPerson.getOrDefault(p.personId(), List.of()),
+                    accountsByPerson.getOrDefault(p.personId(), List.of())))
+        .toList();
+  }
+
+  /**
    * Fetch live persons matching a name fragment (substring search). Useful for pickers with
    * type-ahead.
    */
