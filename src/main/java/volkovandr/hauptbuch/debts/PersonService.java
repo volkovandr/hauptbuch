@@ -1,9 +1,12 @@
 package volkovandr.hauptbuch.debts;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.ReservedNamePrefix;
@@ -105,6 +108,25 @@ public class PersonService {
         .findByAccountId(accountId)
         .flatMap(owner -> personRepository.findByIdIncludingDeleted(owner.personId()))
         .map(Person::name);
+  }
+
+  /**
+   * The owning person's display name for each of {@code accountIds} that is a per-person debt leaf,
+   * keyed by account id (register §2.6, plan stage 8c) — the register renderer's one-shot
+   * resolution of the {@code personal.<CUR>} leaves it renders into people's real names. Account
+   * ids that are not person leaves are simply absent from the map, which is how the caller tells a
+   * person leg from an ordinary account. Resolves a since-soft-deleted person too (a display
+   * lookup, not a liveness check).
+   */
+  public Map<Long, String> personNamesForAccounts(Collection<Long> accountIds) {
+    if (accountIds == null || accountIds.isEmpty()) {
+      return Map.of();
+    }
+    return accountOwnerRepository.findPersonNamesByAccountIds(accountIds).stream()
+        .collect(
+            Collectors.toMap(
+                AccountOwnerRepository.AccountPersonName::accountId,
+                AccountOwnerRepository.AccountPersonName::name));
   }
 
   /**

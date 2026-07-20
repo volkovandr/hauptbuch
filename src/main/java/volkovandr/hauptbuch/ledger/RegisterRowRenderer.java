@@ -2,10 +2,13 @@ package volkovandr.hauptbuch.ledger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
+import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.RegisterRowView.CategoryChip;
 import volkovandr.hauptbuch.ledger.RegisterRowView.RegisterCategoryCell;
 import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
@@ -37,10 +40,15 @@ class RegisterRowRenderer {
 
   private final RegisterRepository registerRepository;
   private final TagReadRepository tagReadRepository;
+  private final PersonService personService;
 
-  RegisterRowRenderer(RegisterRepository registerRepository, TagReadRepository tagReadRepository) {
+  RegisterRowRenderer(
+      RegisterRepository registerRepository,
+      TagReadRepository tagReadRepository,
+      PersonService personService) {
     this.registerRepository = registerRepository;
     this.tagReadRepository = tagReadRepository;
+    this.personService = personService;
   }
 
   /**
@@ -54,6 +62,11 @@ class RegisterRowRenderer {
     // The tags of the rows' own postings (register §3.6) — one lookup for the whole page.
     Map<Long, List<String>> tagsByPosting =
         tagReadRepository.labelsByPosting(rows.stream().map(RegisterRow::postingId).toList());
+    // The person names of every leg on screen — the rows' own legs and their counterparts alike —
+    // resolved in one round-trip (register §2.6, plan stage 8c). A person's debt leaf renders its
+    // owner's real name, never the cosmetic personal.<CUR>; a leg absent from this map is an
+    // ordinary account.
+    Map<Long, String> personNames = personNames(rows, legsByTxn);
 
     Map<Long, Integer> threadCount = new HashMap<>();
     List<RegisterRowView> views = new ArrayList<>(rows.size());
@@ -63,16 +76,36 @@ class RegisterRowRenderer {
       int index = threadCount.merge(row.accountId(), 1, Integer::sum);
       boolean pending = "pending_review".equals(row.lifecycle());
       RegisterCategoryCell cell =
-          cellFor(row, legsByTxn.getOrDefault(row.transactionId(), List.of()));
+          cellFor(row, legsByTxn.getOrDefault(row.transactionId(), List.of()), personNames);
       views.add(
           toView(
               row,
               cell,
               index % 2 == 0,
               pending,
-              tagsByPosting.getOrDefault(row.postingId(), List.of())));
+              tagsByPosting.getOrDefault(row.postingId(), List.of()),
+              personNames.get(row.accountId())));
     }
     return views;
+  }
+
+  /**
+   * The owning person's name for every leg on screen (register §2.6, plan stage 8c): the union of
+   * the rows' own account ids and every counterpart leg's account id, resolved through {@code
+   * debts} in a single lookup so no row triggers its own query.
+   */
+  private Map<Long, String> personNames(
+      List<RegisterRow> rows, Map<Long, List<RegisterCounterpartLeg>> legsByTxn) {
+    Set<Long> accountIds = new LinkedHashSet<>();
+    for (RegisterRow row : rows) {
+      accountIds.add(row.accountId());
+    }
+    for (List<RegisterCounterpartLeg> legs : legsByTxn.values()) {
+      for (RegisterCounterpartLeg leg : legs) {
+        accountIds.add(leg.accountId());
+      }
+    }
+    return personService.personNamesForAccounts(accountIds);
   }
 
   private RegisterRowView toView(
@@ -80,7 +113,8 @@ class RegisterRowRenderer {
       RegisterCategoryCell cell,
       boolean zebraDark,
       boolean pending,
-      List<String> tags) {
+      List<String> tags,
+      String personName) {
     String amount =
         MoneyFormat.display(MoneyFactory.of(row.amount(), row.currencyCode()), base(row));
     String balance =
@@ -88,11 +122,15 @@ class RegisterRowRenderer {
             ? "—"
             : MoneyFormat.display(
                 MoneyFactory.of(row.runningBalance(), row.currencyCode()), base(row));
+    // A person's debt leg shows the owner's name with a direction arrow, not the cosmetic leaf name
+    // (register §2.6, plan stage 8c). The arrow side is set by the leg's sign in the template.
+    boolean accountPerson = personName != null;
     return new RegisterRowView(
         row.postingId(),
         row.transactionId(),
         row.date().toString(),
-        row.accountName(),
+        accountPerson ? personName : row.accountName(),
+        accountPerson,
         row.payeeName(),
         row.accountHue(),
         zebraDark,
@@ -135,18 +173,32 @@ class RegisterRowRenderer {
    * 7d.3), capped at {@link #MAX_CATEGORY_CHIPS} with the remainder folded into a {@code · +n}
    * overflow hint.
    */
-  private static RegisterCategoryCell cellFor(RegisterRow row, List<RegisterCounterpartLeg> legs) {
+  private static RegisterCategoryCell cellFor(
+      RegisterRow row, List<RegisterCounterpartLeg> legs, Map<Long, String> personNames) {
     List<RegisterCounterpartLeg> counterparts =
         legs.stream().filter(leg -> leg.accountId() != row.accountId()).toList();
     List<CategoryChip> chips = new ArrayList<>();
     for (int i = 0; i < counterparts.size() && i < MAX_CATEGORY_CHIPS; i++) {
       RegisterCounterpartLeg leg = counterparts.get(i);
-      // A transfer chip's arrow follows the counterpart leg's flow: a debit (+) received the money
-      // (→ Account), a credit (−) sent it (← Account).
-      chips.add(new CategoryChip(leg.accountName(), isOwnAccount(leg), leg.amount().signum() < 0));
+      chips.add(chipFor(leg, personNames.get(leg.accountId())));
     }
     int overflow = Math.max(0, counterparts.size() - MAX_CATEGORY_CHIPS);
     return new RegisterCategoryCell(List.copyOf(chips), overflow);
+  }
+
+  /**
+   * One counterpart chip (register §2.6). A person's debt leg (its account id resolves to a {@code
+   * personName}) is a person chip — {@code → Name} on a debit, {@code Name →} on a credit. Any
+   * other own account is a transfer chip whose arrow follows the leg's flow — a debit (+) received
+   * the money ({@code → Account}), a credit (−) sent it ({@code ← Account}). An income/expense leg
+   * is a plain category name.
+   */
+  private static CategoryChip chipFor(RegisterCounterpartLeg leg, String personName) {
+    boolean credit = leg.amount().signum() < 0;
+    if (personName != null) {
+      return new CategoryChip(personName, false, credit, true);
+    }
+    return new CategoryChip(leg.accountName(), isOwnAccount(leg), credit, false);
   }
 
   /**

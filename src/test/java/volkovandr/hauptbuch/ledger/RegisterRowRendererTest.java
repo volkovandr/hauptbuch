@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.ledger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.RegisterRowView.CategoryChip;
 import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
 import volkovandr.hauptbuch.ledger.repository.TagReadRepository;
@@ -38,13 +40,15 @@ class RegisterRowRendererTest {
 
   @Mock private RegisterRepository registerRepository;
   @Mock private TagReadRepository tagReadRepository;
+  @Mock private PersonService personService;
 
   private RegisterRowRenderer renderer;
 
   @BeforeEach
   void setUp() {
-    renderer = new RegisterRowRenderer(registerRepository, tagReadRepository);
+    renderer = new RegisterRowRenderer(registerRepository, tagReadRepository, personService);
     lenient().when(tagReadRepository.labelsByPosting(anyList())).thenReturn(Map.of());
+    lenient().when(personService.personNamesForAccounts(any())).thenReturn(Map.of());
   }
 
   private RegisterRow row(
@@ -90,7 +94,8 @@ class RegisterRowRendererTest {
 
     RegisterRowView view = renderOne(row(1L, 100L, CASH, EUR, "-20.00"));
 
-    assertThat(view.category().chips()).containsExactly(new CategoryChip("Food", false, false));
+    assertThat(view.category().chips())
+        .containsExactly(new CategoryChip("Food", false, false, false));
     assertThat(view.category().overflow()).isZero();
   }
 
@@ -118,7 +123,8 @@ class RegisterRowRendererTest {
 
     RegisterRowView view = renderOne(row(1L, 100L, CASH, EUR, "200.00"));
 
-    assertThat(view.category().chips()).containsExactly(new CategoryChip("Giro", true, true));
+    assertThat(view.category().chips())
+        .containsExactly(new CategoryChip("Giro", true, true, false));
   }
 
   @Test
@@ -137,9 +143,65 @@ class RegisterRowRendererTest {
     // Cash's row: money went out to Giro → → Giro (outbound). Giro's row: money came from Cash →
     // ← Cash (inbound).
     assertThat(views.get(0).category().chips())
-        .containsExactly(new CategoryChip("Giro", true, false));
+        .containsExactly(new CategoryChip("Giro", true, false, false));
     assertThat(views.get(1).category().chips())
-        .containsExactly(new CategoryChip("Cash", true, true));
+        .containsExactly(new CategoryChip("Cash", true, true, false));
+  }
+
+  // ── Person legs (register §2.6, plan stage 8c) ────────────────────────────
+
+  @Test
+  void personCounterpartDebitRendersAsArrowToPerson() {
+    // You fronted cash for Max (Cash −10, Max +10). Viewing Cash, Max's leg is the counterpart: a
+    // debit (+10) → they owe you more → → Max, resolved to the person's real name, not the leaf.
+    stubLegs(leg(100L, 9L, "personal.EUR", ASSET, "10.00"));
+    when(personService.personNamesForAccounts(any())).thenReturn(Map.of(9L, "Max"));
+
+    RegisterRowView view = renderOne(row(1L, 100L, CASH, EUR, "-10.00"));
+
+    assertThat(view.category().chips())
+        .containsExactly(new CategoryChip("Max", false, false, true));
+  }
+
+  @Test
+  void personCounterpartCreditRendersAsPersonArrow() {
+    // Max lent you cash (Cash +10, Max −10). Viewing Cash, Max's leg is a credit (−10) → you owe
+    // them more → Max → (trailing arrow), flagged as a person chip so the template moves the arrow.
+    stubLegs(leg(100L, 9L, "personal.EUR", ASSET, "-10.00"));
+    when(personService.personNamesForAccounts(any())).thenReturn(Map.of(9L, "Max"));
+
+    RegisterRowView view = renderOne(row(1L, 100L, CASH, EUR, "10.00"));
+
+    assertThat(view.category().chips()).containsExactly(new CategoryChip("Max", false, true, true));
+  }
+
+  @Test
+  void personOwnLegRendersTheResolvedNameInTheAccountCell() {
+    // Max paid for a pure expense of yours (Food +10, Max −10): with no cash leg the person's debt
+    // leaf is the row's own account (register §2.6 pattern 3). The Account cell shows the person's
+    // name, flagged so the template arrows it (a credit → Max →), never the cosmetic leaf name.
+    stubLegs(
+        leg(100L, 20L, "Food", EXPENSE, "10.00"), leg(100L, 9L, "personal.EUR", ASSET, "-10.00"));
+    when(personService.personNamesForAccounts(any())).thenReturn(Map.of(9L, "Max"));
+
+    RegisterRowView view = renderOne(row(1L, 100L, 9L, EUR, "-10.00"));
+
+    assertThat(view.accountName()).isEqualTo("Max");
+    assertThat(view.accountPerson()).isTrue();
+    assertThat(view.income()).isFalse();
+    // The counterpart is the ordinary expense category.
+    assertThat(view.category().chips())
+        .containsExactly(new CategoryChip("Food", false, false, false));
+  }
+
+  @Test
+  void anOrdinaryAccountRowIsNotFlaggedAsPerson() {
+    stubLegs(leg(100L, "Food", EXPENSE, "20.00"));
+
+    RegisterRowView view = renderOne(row(1L, 100L, CASH, EUR, "-20.00"));
+
+    assertThat(view.accountPerson()).isFalse();
+    assertThat(view.accountName()).isEqualTo("Cash");
   }
 
   // ── Formatting, colour, lifecycle ─────────────────────────────────────────

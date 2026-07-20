@@ -112,7 +112,11 @@ th.register__spine {
   margin-right: 0.4rem;
 }
 
-.cat-chip--transfer {
+/* A transfer or a person's debt leg (§2.6, plan stage 8c) is a "movement", not a spending category:
+   both get the quieter, italic treatment. A person chip reads → Name / Name → with the arrow on
+   the side that shows the flow through them. */
+.cat-chip--transfer,
+.cat-chip--person {
   font-style: italic;
   color: var(--ink-soft);
 }

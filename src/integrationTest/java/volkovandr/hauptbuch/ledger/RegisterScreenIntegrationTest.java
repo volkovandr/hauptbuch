@@ -22,6 +22,7 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountDraft;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonProvisioningService;
 
 /**
  * Integration tier (plan §1.5): the stage-7a register screen rendered through the controller
@@ -52,6 +53,7 @@ class RegisterScreenIntegrationTest {
   @Autowired AccountService accountService;
   @Autowired LedgerService ledgerService;
   @Autowired SettingsService settingsService;
+  @Autowired PersonProvisioningService personProvisioningService;
 
   @BeforeEach
   void setUp() {
@@ -178,5 +180,61 @@ class RegisterScreenIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString(CASH)))
         .andExpect(content().string(not(containsString("999,00"))));
+  }
+
+  // ── Person legs (register §2.6, plan stage 8c) ────────────────────────────
+
+  /** Auto-provision a person's per-currency debt leaf and return its account id. */
+  private long provisionPersonLeaf(String name, String currency) {
+    return personProvisioningService.ensureLeaf(name, currency, false).accountId();
+  }
+
+  /** Record a balanced two-leg transaction (debit +magnitude / credit −magnitude). */
+  private void twoLeg(String date, long debit, long credit, String magnitude) {
+    ledgerService.recordTransaction(
+        new TransactionDraft(
+            LocalDate.parse(date),
+            null,
+            "person",
+            CONFIRMED,
+            List.of(
+                PostingDraft.of(debit, new BigDecimal(magnitude)),
+                PostingDraft.of(credit, new BigDecimal("-" + magnitude)))));
+  }
+
+  @Test
+  void personCounterpartRendersAsAnArrowChipWithTheResolvedName() throws Exception {
+    long cash = openAccount(CASH, EUR, "500");
+    long max = provisionPersonLeaf("Max", EUR);
+    // You fronted 10 for Max: Cash −10, Max +10. Viewing Cash, Max is the counterpart → a person
+    // chip, → Max (a debit — Max owes you), showing the real name, never the cosmetic leaf.
+    twoLeg("2026-04-01", max, cash, "10");
+
+    mockMvc
+        .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("cat-chip--person")))
+        .andExpect(content().string(containsString("Max")))
+        .andExpect(content().string(not(containsString("personal.EUR"))));
+  }
+
+  @Test
+  void personFundedExpenseShowsThePersonOnTheAccountSideAndInTheFilter() throws Exception {
+    long food = insertCategory(FOOD, EUR);
+    long max = provisionPersonLeaf("Max", EUR);
+    // Max paid for a pure expense of yours: Food +10, Max −10. No cash leg, so the person's debt
+    // leaf is the row's own account (register §2.6 pattern 3) and appears on the default view.
+    twoLeg("2026-05-01", food, max, "10");
+
+    mockMvc
+        .perform(get(REGISTER_PATH))
+        .andExpect(status().isOk())
+        // The person's real name shows on the Account side; the cosmetic leaf name never leaks.
+        .andExpect(content().string(containsString("Max")))
+        .andExpect(content().string(not(containsString("personal.EUR"))))
+        // The counterpart is the ordinary expense category.
+        .andExpect(content().string(containsString(FOOD)))
+        // And the person is offered in the account filter as `Max (EUR)` (plan stage 8c).
+        .andExpect(content().string(containsString("Max (EUR)")));
   }
 }

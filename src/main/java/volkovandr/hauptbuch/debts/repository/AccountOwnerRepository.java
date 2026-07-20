@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.debts.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -37,6 +38,40 @@ public class AccountOwnerRepository {
         .query(AccountOwner.class)
         .optional();
   }
+
+  /**
+   * The owning person's display name for each of {@code accountIds} that is a per-person debt leaf
+   * (register §2.6, plan stage 8c) — the register renderer's batch resolution of the {@code
+   * personal.<CUR>} leaves it shows into the person's real name, in one round-trip rather than a
+   * lookup per row. Account ids that are not person leaves simply have no row. Resolves even a
+   * since-soft-deleted person (no {@code deleted_at} filter): an old transaction's person leg must
+   * still display sensibly, and lifecycle never moves ids.
+   */
+  public List<AccountPersonName> findPersonNamesByAccountIds(Collection<Long> accountIds) {
+    if (accountIds.isEmpty()) {
+      return List.of();
+    }
+    return jdbcClient
+        .sql(
+            """
+            select ao.account_id, p.name
+            from account_owner ao
+            join person p on ao.person_id = p.person_id
+            where ao.account_id in (:ids)
+            """)
+        .param("ids", accountIds)
+        .query(AccountPersonName.class)
+        .list();
+  }
+
+  /**
+   * A per-person debt leaf's account id paired with its owning person's display name (plan stage
+   * 8c) — the projection of {@link #findPersonNamesByAccountIds}.
+   *
+   * @param accountId the person's debt-leaf account
+   * @param name the owning person's current display name
+   */
+  public record AccountPersonName(long accountId, String name) {}
 
   /** Fetch all accounts owned by a person. */
   public List<Long> findAccountIdsByPersonId(Long personId) {
