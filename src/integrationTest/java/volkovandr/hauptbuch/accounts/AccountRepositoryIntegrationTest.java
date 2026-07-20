@@ -41,16 +41,20 @@ class AccountRepositoryIntegrationTest {
   @Autowired CurrencyOptionRepository currencyOptionRepository;
 
   private Account draft(String name, String type, Integer hue) {
-    return new Account(null, name, type, null, EUR, hue, OPENED, null, null, false);
+    return new Account(null, name, type, null, EUR, hue, OPENED, null, null, false, false);
   }
 
   private Account childDraft(String name, String type, long parentId) {
-    return new Account(null, name, type, parentId, EUR, null, null, null, null, false);
+    return new Account(null, name, type, parentId, EUR, null, null, null, null, false, false);
+  }
+
+  private Account personLeafDraft(String name) {
+    return new Account(null, name, ASSET, null, EUR, null, null, null, null, false, true);
   }
 
   private Account currencyLeafDraft(String currencyCode, long parentId) {
     return new Account(
-        null, currencyCode, EXPENSE, parentId, currencyCode, null, null, null, null, true);
+        null, currencyCode, EXPENSE, parentId, currencyCode, null, null, null, null, true, false);
   }
 
   @Test
@@ -216,6 +220,24 @@ class AccountRepositoryIntegrationTest {
     // A plain leaf is never marked — the default stays false.
     long milk = accountRepository.insert(childDraft("Milk", EXPENSE, parent));
     assertThat(accountRepository.findById(milk).orElseThrow().currencyLeaf()).isFalse();
+  }
+
+  @Test
+  void personLeafRoundTripsMarkedAndIndependentOfCurrencyLeaf() {
+    long maxEur = accountRepository.insert(personLeafDraft("personal.EUR"));
+
+    Account loaded = accountRepository.findById(maxEur).orElseThrow();
+    assertThat(loaded.name()).isEqualTo("personal.EUR");
+    assertThat(loaded.type()).isEqualTo(ASSET);
+    assertThat(loaded.parentId()).isNull();
+    assertThat(loaded.personLeaf()).isTrue();
+    assertThat(loaded.currencyLeaf()).isFalse();
+
+    // The two markers are orthogonal — a plain account carries neither (V8's default).
+    long cash = accountRepository.insert(draft("Cash", ASSET, 210));
+    Account plain = accountRepository.findById(cash).orElseThrow();
+    assertThat(plain.personLeaf()).isFalse();
+    assertThat(plain.currencyLeaf()).isFalse();
   }
 
   @Test

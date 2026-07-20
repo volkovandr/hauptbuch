@@ -31,6 +31,11 @@ import java.time.OffsetDateTime;
  *     auto-provisioned under its parent category (data-model §6.5) — hidden from every picker and
  *     the categories screen, and carried along automatically when its parent is subdivided,
  *     renamed, or deleted. {@code false} for every other account.
+ * @param personLeaf whether this is a per-person, per-currency debt leaf {@code
+ *     PersonProvisioningService} auto-provisions on first reference (data-model §7) — hidden from
+ *     the dock's Account picker, the accounts screen, and transfer-target resolution, since a
+ *     person is reached by the {@code for}/{@code by} sigils, never by its cosmetic {@code
+ *     personal.<CUR>} name. {@code false} for every other account.
  */
 public record Account(
     Long accountId,
@@ -42,4 +47,5 @@ public record Account(
     LocalDate openedAt,
     LocalDate closedAt,
     OffsetDateTime deletedAt,
-    boolean currencyLeaf) {}
+    boolean currencyLeaf,
+    boolean personLeaf) {}

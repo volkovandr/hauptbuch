@@ -62,12 +62,12 @@ class CategoryServiceTest {
   }
 
   private static Account account(long id, String name, String type, Long parentId) {
-    return new Account(id, name, type, parentId, EUR, null, null, null, null, false);
+    return new Account(id, name, type, parentId, EUR, null, null, null, null, false, false);
   }
 
   private static Account currencyLeaf(long id, String currencyCode, String type, long parentId) {
     return new Account(
-        id, currencyCode, type, parentId, currencyCode, null, null, null, null, true);
+        id, currencyCode, type, parentId, currencyCode, null, null, null, null, true, false);
   }
 
   @Test
@@ -161,6 +161,18 @@ class CategoryServiceTest {
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> categoryService.createCategory(new CategoryDraft("  ", EXPENSE, null)))
         .withMessageContaining("name");
+
+    verify(accountService, never()).insertLeaf(any(), any(), any(), any());
+  }
+
+  @Test
+  void rejectsNameBeginningWithReservedSigil() {
+    // A category named "for Kids" would be read as the for-sigil naming a person (data-model §7,
+    // plan stage 8b.1). Accepted cost: it must be written "Kids".
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(
+            () -> categoryService.createCategory(new CategoryDraft("for Kids", EXPENSE, null)))
+        .withMessageContaining("cannot begin with");
 
     verify(accountService, never()).insertLeaf(any(), any(), any(), any());
   }

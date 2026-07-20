@@ -126,7 +126,8 @@ public class AccountService {
   public Account insertLeaf(String name, String type, Long parentId, String currencyCode) {
     long accountId =
         accountRepository.insert(
-            new Account(null, name, type, parentId, currencyCode, null, null, null, null, false));
+            new Account(
+                null, name, type, parentId, currencyCode, null, null, null, null, false, false));
     return accountRepository.findById(accountId).orElseThrow();
   }
 
@@ -143,7 +144,34 @@ public class AccountService {
     long accountId =
         accountRepository.insert(
             new Account(
-                null, currencyCode, type, parentId, currencyCode, null, null, null, null, true));
+                null,
+                currencyCode,
+                type,
+                parentId,
+                currencyCode,
+                null,
+                null,
+                null,
+                null,
+                true,
+                false));
+    return accountRepository.findById(accountId).orElseThrow();
+  }
+
+  /**
+   * Insert a per-person, per-currency debt leaf, marked as auto-provisioned (data-model §7) —
+   * standalone (no parent), type {@code asset}, and allowed to go negative, the sign of its balance
+   * being the direction of the debt. The flag hides it from the dock's Account picker, the accounts
+   * screen, and transfer-target resolution: a person is reached by the {@code for}/{@code by}
+   * sigils, never by this leaf's cosmetic name. Used only by {@code PersonProvisioningService}.
+   *
+   * @return the persisted account
+   */
+  public Account insertPersonLeaf(String name, String currencyCode) {
+    long accountId =
+        accountRepository.insert(
+            new Account(
+                null, name, "asset", null, currencyCode, null, null, null, null, false, true));
     return accountRepository.findById(accountId).orElseThrow();
   }
 
@@ -169,6 +197,7 @@ public class AccountService {
     if (name == null || name.isBlank()) {
       throw new IllegalArgumentException("An account needs a name");
     }
+    ReservedNamePrefix.check(name);
     Account account =
         accountRepository
             .findById(accountId)
@@ -177,9 +206,16 @@ public class AccountService {
     accountRepository.updateNameAndHue(accountId, name, account.hue());
   }
 
-  /** The live asset and liability accounts the accounts screen lists and manages. */
+  /**
+   * The live asset and liability accounts the accounts screen lists and manages. Per-person debt
+   * leaves are {@code asset} accounts too (data-model §7) but are not user-managed — they are
+   * auto-provisioned, renamed only through the person, and deleted only with them — so they are
+   * excluded here (plan stage 8b.1).
+   */
   public List<Account> manageableAccounts() {
-    return accountRepository.findLiveByTypes(MANAGEABLE_TYPES);
+    return accountRepository.findLiveByTypes(MANAGEABLE_TYPES).stream()
+        .filter(a -> !a.personLeaf())
+        .toList();
   }
 
   /** The live accounts of the given types — the read other modules' screens list against. */
@@ -194,10 +230,15 @@ public class AccountService {
    * more than one does — an ambiguous name is refused rather than guessed). Filters over {@link
    * #findLiveByTypes} rather than adding a repository query: the option set is small and already
    * fetched the same way the register lists it.
+   *
+   * <p>Per-person debt leaves are excluded (plan stage 8b.1): a person is a transfer counterpart
+   * only through the {@code for}/{@code by} sigils, never by their leaf's cosmetic {@code
+   * personal.<CUR>} name, so {@code to personal.EUR} must not resolve.
    */
   public Optional<Account> findOwnAccountByName(String name) {
     List<Account> matches =
         findLiveByTypes(MANAGEABLE_TYPES).stream()
+            .filter(a -> !a.personLeaf())
             .filter(a -> a.closedAt() == null)
             .filter(a -> a.name().equalsIgnoreCase(name))
             .toList();
@@ -252,6 +293,7 @@ public class AccountService {
                 openedAt,
                 null,
                 null,
+                false,
                 false));
 
     if (draft.openingBalance() != null && draft.openingBalance().signum() != 0) {
@@ -276,6 +318,7 @@ public class AccountService {
     if (name == null || name.isBlank()) {
       throw new IllegalArgumentException("An account needs a name");
     }
+    ReservedNamePrefix.check(name);
     if (hue != null && (hue < 0 || hue > 359)) {
       throw new IllegalArgumentException("Hue must be a degree on the colour wheel (0–359)");
     }
@@ -319,6 +362,7 @@ public class AccountService {
     if (draft.name() == null || draft.name().isBlank()) {
       throw new IllegalArgumentException("An account needs a name");
     }
+    ReservedNamePrefix.check(draft.name());
     if (!MANAGEABLE_TYPES.contains(draft.type())) {
       throw new IllegalArgumentException(
           "Account type must be one of " + MANAGEABLE_TYPES + ", not '" + draft.type() + "'");

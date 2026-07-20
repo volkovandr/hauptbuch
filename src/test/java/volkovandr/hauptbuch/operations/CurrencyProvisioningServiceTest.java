@@ -47,7 +47,7 @@ class CurrencyProvisioningServiceTest {
   }
 
   private static Account topLevel(long id, String name, String type) {
-    return new Account(id, name, type, null, "EUR", null, null, null, null, false);
+    return new Account(id, name, type, null, "EUR", null, null, null, null, false, false);
   }
 
   @Test

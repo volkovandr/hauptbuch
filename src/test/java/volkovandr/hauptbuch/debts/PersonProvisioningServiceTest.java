@@ -38,7 +38,8 @@ class PersonProvisioningServiceTest {
         null,
         null,
         null,
-        false);
+        false,
+        true);
   }
 
   @Test
@@ -59,8 +60,7 @@ class PersonProvisioningServiceTest {
     Person max = new Person(1L, "Max", null);
     when(personService.matchExact("Max")).thenReturn(new PersonMatch.Live(max));
     when(accountOwnerRepository.findAccountIdsByPersonId(1L)).thenReturn(List.of());
-    when(accountService.insertLeaf("personal.EUR", "asset", null, "EUR"))
-        .thenReturn(leaf(20L, "EUR"));
+    when(accountService.insertPersonLeaf("personal.EUR", "EUR")).thenReturn(leaf(20L, "EUR"));
 
     Account result = service.ensureLeaf("Max", "EUR", false);
 
@@ -73,8 +73,7 @@ class PersonProvisioningServiceTest {
     when(personService.matchExact("Max")).thenReturn(new PersonMatch.NotFound());
     when(personRepository.insert("Max")).thenReturn(new Person(2L, "Max", null));
     when(accountOwnerRepository.findAccountIdsByPersonId(2L)).thenReturn(List.of());
-    when(accountService.insertLeaf("personal.EUR", "asset", null, "EUR"))
-        .thenReturn(leaf(21L, "EUR"));
+    when(accountService.insertPersonLeaf("personal.EUR", "EUR")).thenReturn(leaf(21L, "EUR"));
 
     Account result = service.ensureLeaf("Max", "EUR", false);
 
@@ -89,8 +88,7 @@ class PersonProvisioningServiceTest {
     when(personService.matchExact("Max")).thenReturn(new PersonMatch.DeletedOnly(deleted));
     when(personRepository.revive(3L)).thenReturn(new Person(3L, "Max", null));
     when(accountOwnerRepository.findAccountIdsByPersonId(3L)).thenReturn(List.of());
-    when(accountService.insertLeaf("personal.EUR", "asset", null, "EUR"))
-        .thenReturn(leaf(30L, "EUR"));
+    when(accountService.insertPersonLeaf("personal.EUR", "EUR")).thenReturn(leaf(30L, "EUR"));
 
     Account result = service.ensureLeaf("Max", "EUR", true);
 
@@ -105,8 +103,7 @@ class PersonProvisioningServiceTest {
     when(personService.matchExact("Max")).thenReturn(new PersonMatch.DeletedOnly(deleted));
     when(personRepository.insert("Max")).thenReturn(new Person(4L, "Max", null));
     when(accountOwnerRepository.findAccountIdsByPersonId(4L)).thenReturn(List.of());
-    when(accountService.insertLeaf("personal.EUR", "asset", null, "EUR"))
-        .thenReturn(leaf(31L, "EUR"));
+    when(accountService.insertPersonLeaf("personal.EUR", "EUR")).thenReturn(leaf(31L, "EUR"));
 
     Account result = service.ensureLeaf("Max", "EUR", false);
 

@@ -75,7 +75,7 @@ class RegisterServiceTest {
   }
 
   private static Account ownAccount(long id, String name) {
-    return new Account(id, name, ASSET, null, EUR, 210, LocalDate.now(), null, null, false);
+    return new Account(id, name, ASSET, null, EUR, 210, LocalDate.now(), null, null, false, false);
   }
 
   private static Account closed(long id, String name) {
@@ -89,16 +89,21 @@ class RegisterServiceTest {
         LocalDate.now().minusYears(1),
         LocalDate.now(),
         null,
+        false,
         false);
   }
 
+  private static Account personLeaf(long id, String name) {
+    return new Account(id, name, ASSET, null, EUR, null, LocalDate.now(), null, null, false, true);
+  }
+
   private static Account category(long id, String name) {
-    return new Account(id, name, "expense", null, EUR, null, null, null, null, false);
+    return new Account(id, name, "expense", null, EUR, null, null, null, null, false, false);
   }
 
   private static Account currencyLeaf(long id, String currencyCode, long parentId) {
     return new Account(
-        id, currencyCode, "expense", parentId, currencyCode, null, null, null, null, true);
+        id, currencyCode, "expense", parentId, currencyCode, null, null, null, null, true, false);
   }
 
   private RegisterFilter defaultFilter() {
@@ -178,5 +183,22 @@ class RegisterServiceTest {
 
     // Each live person contributes a for and a by target (register §3.5, plan stage 8b).
     assertThat(view.personTargets()).containsExactly("for Max", "by Max", "for Alice", "by Alice");
+  }
+
+  @Test
+  void keepsPersonLeavesOutOfTheAccountPickerAndTransferTargets() {
+    // A person's debt leaf is an open asset, so it would otherwise fall into the own-account set
+    // that feeds both the dock's Account picker and the To →/From ← targets (plan stage 8b.1). A
+    // person is reached by for/by only, never by the leaf's cosmetic name.
+    when(accountService.findLiveByTypes(List.of("asset", "liability")))
+        .thenReturn(List.of(ownAccount(CASH, "Cash"), personLeaf(9L, "personal.EUR")));
+    when(accountService.findLiveByTypes(List.of("income", "expense"))).thenReturn(List.of());
+
+    RegisterView view = registerService.view(defaultFilter());
+
+    assertThat(view.accounts())
+        .extracting(RegisterView.RegisterAccountOption::name)
+        .containsExactly("Cash");
+    assertThat(view.transferTargets()).containsExactly("To → Cash", "From ← Cash");
   }
 }

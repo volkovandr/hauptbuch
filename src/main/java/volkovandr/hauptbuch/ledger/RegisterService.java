@@ -127,9 +127,17 @@ public class RegisterService {
 
   /**
    * The open own accounts (asset/liability, not closed) — the default viewed set (register §2.3).
+   *
+   * <p>Per-person debt leaves are {@code asset} accounts (data-model §7) but are excluded here
+   * (plan stage 8b.1): this list feeds the dock's Account picker and the transfer targets, and a
+   * person is reached only by the {@code for}/{@code by} sigils, never by their leaf's cosmetic
+   * name. Stage 8c re-admits them to the <em>viewed</em> set and the filter — listed as {@code Max
+   * (EUR)} — once {@link RegisterRowRenderer} can resolve a person's name; until then a person leg
+   * would render its {@code personal.<CUR>} leaf name in the register.
    */
   private List<Account> openOwnAccounts() {
     return accountService.findLiveByTypes(OWN_ACCOUNT_TYPES).stream()
+        .filter(a -> !a.personLeaf())
         .filter(a -> a.closedAt() == null)
         .toList();
   }

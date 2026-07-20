@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import volkovandr.hauptbuch.accounts.ReservedNamePrefix;
 import volkovandr.hauptbuch.debts.repository.AccountOwnerRepository;
 import volkovandr.hauptbuch.debts.repository.PersonRepository;
 
@@ -31,6 +32,7 @@ public class PersonService {
     if (name == null || name.isBlank()) {
       throw new IllegalArgumentException("Person name cannot be blank");
     }
+    ReservedNamePrefix.check(name);
     return personRepository.insert(name.strip());
   }
 
@@ -39,6 +41,7 @@ public class PersonService {
     if (newName == null || newName.isBlank()) {
       throw new IllegalArgumentException("Person name cannot be blank");
     }
+    ReservedNamePrefix.check(newName);
     return personRepository.updateName(personId, newName.strip());
   }
 
