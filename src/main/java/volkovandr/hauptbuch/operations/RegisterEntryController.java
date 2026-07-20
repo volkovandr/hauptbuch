@@ -159,7 +159,7 @@ class RegisterEntryController {
     model.addAttribute(STICKY, sticky);
     addCurrencyAttributes(
         model,
-        sticky == null
+        sticky == null || sticky.accountId() == null
             ? dockAmountFieldsService.fresh(register)
             : dockAmountFieldsService.forAccount(sticky.accountId()));
     return COMMITTED;

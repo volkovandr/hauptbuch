@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountEntryLabel;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.debts.PersonTarget;
@@ -121,38 +122,38 @@ public class DockEditService {
    * tags — is deliberately left blank; only the two fields that are usually unchanged stick.
    *
    * <p>A <em>person</em> funding leg is never sticky: an unnoticed sticky person would silently
-   * book a debt, and possibly provision a leaf, against the next transaction the user enters. Such
-   * a commit returns {@code null} here and the caller falls back to the ordinary fresh default.
+   * book a debt, and possibly provision a leaf, against the next transaction the user enters. The
+   * <em>date</em> still sticks in that case — only the account falls away, leaving the dock to
+   * pre-fill its ordinary default (the plan's "falls back to the last real account"; the dock has
+   * no history of which real account that was, so it uses the default the fresh dock would).
    *
    * @param accountId the funding account just committed, or {@code null} when it was a person
    * @param date the date just committed
    * @return the pre-filled dock model, or {@code null} to fall back to a bare reset
    */
   public DockEditModel stickyAfterCommit(Long accountId, LocalDate date) {
-    if (accountId == null || date == null) {
+    if (date == null) {
       return null;
     }
-    return accountService
-        .findById(accountId)
-        .filter(a -> !a.personLeaf())
-        .map(
-            a ->
-                new DockEditModel(
-                    null,
-                    date,
-                    a.accountId(),
-                    a.name() + " (" + a.currencyCode() + ")",
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    List.of()))
-        .orElse(null);
+    Account sticky =
+        accountId == null
+            ? null
+            : accountService.findById(accountId).filter(a -> !a.personLeaf()).orElse(null);
+    return new DockEditModel(
+        null,
+        date,
+        sticky == null ? null : sticky.accountId(),
+        sticky == null ? null : AccountEntryLabel.format(sticky),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of());
   }
 
   /**
@@ -176,8 +177,7 @@ public class DockEditService {
                         ? PersonTarget.Direction.BY
                         : PersonTarget.Direction.FOR,
                     name))
-        .orElseGet(
-            () -> legs.fundingAccount().name() + " (" + legs.fundingAccount().currencyCode() + ")");
+        .orElseGet(() -> AccountEntryLabel.format(legs.fundingAccount()));
   }
 
   /**

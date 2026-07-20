@@ -69,4 +69,30 @@ rows are literal as written.
 The owner's call (2026-07-20): document and defer — the behaviour is inconsistent, and it should be
 re-thought and tested thoroughly rather than settled in passing during 8b.1.
 
+## A second case the same deferred check would have caught
+
+Surfaced by the 8b.1 spec review, 2026-07-20. Deferring the check leaves a **sigil-vs-sigil**
+contradiction committing silently, which register §3.5 explicitly forbids ("never silently
+corrected: flipping the sign of money on the user's behalf is how books go quietly wrong").
+
+`DockCommitService` reads `fundingPersonDirection` only as a *presence flag* — it decides "the
+funding leg is a person", never a direction. The funding leg's sign always comes from the
+counterpart (category type, transfer direction, or the counterpart person's sigil). So with a person
+on **both** sides:
+
+- Account `for Max` + Category `by Anna` → consistent (Max debit, Anna credit) — commits correctly.
+- Account `for Max` + Category `for Anna` → **both sigils assert the debit side**, which two legs
+  summing to zero cannot satisfy. The counterpart wins; `for Max` is silently violated.
+- Account `by Max` + Category `by Anna` → the mirror image, same silent violation.
+
+Note this sub-case is **independent of the absolute-vs-flip question above**: `for X` + `for Y` can
+never be satisfiable under either sign model, because whichever way the amount is signed exactly one
+of the two assertions is violated. It could therefore be checked before the sign semantics are
+settled — but it belongs to the same "sigil is a checked assertion" feature, so it is parked here
+rather than half-built.
+
+The same applies to a sigil against a transfer keyword (Account `for Max` + Category `To → Cash`),
+though there the amount's explicit sign does re-enter, so that one genuinely waits on the decision
+above.
+
 ## Comments

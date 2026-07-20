@@ -83,31 +83,41 @@ class DockAmountFieldsService {
    * reveals the same counterpart-amount field a cross-currency category entry does.
    */
   CrossCurrencyFields forForm(DockEntryForm form) {
-    if (form.hasFundingPerson()) {
-      // No real account in the transaction, so the selector is the transaction currency and sets
-      // every leg — single-currency by construction, never the cross-currency branch (§3.5).
-      String currency =
-          transactionCurrencyResolver.forFundingPerson(
-              form.fundingPersonName(), form.categoryCurrencyCode());
-      return CrossCurrencyFields.singleCurrency(currency == null ? "" : currency);
-    }
-    Long fundingAccountId = form.accountId();
-    if (fundingAccountId == null) {
+    String fundingCurrency = fundingCurrency(form);
+    if (fundingCurrency == null) {
       return CrossCurrencyFields.singleCurrency("");
     }
-    return accountService
-        .findById(fundingAccountId)
-        .map(
-            a ->
-                crossCurrencyFieldsService.resolve(
-                    new CrossCurrencyFieldsQuery(
-                        a.currencyCode(),
-                        counterpartCurrency(form),
-                        form.date(),
-                        form.amount(),
-                        form.categoryAmount(),
-                        form.baseAmount())))
-        .orElseGet(() -> CrossCurrencyFields.singleCurrency(""));
+    return crossCurrencyFieldsService.resolve(
+        new CrossCurrencyFieldsQuery(
+            fundingCurrency,
+            counterpartCurrency(form),
+            form.date(),
+            form.amount(),
+            form.categoryAmount(),
+            form.baseAmount()));
+  }
+
+  /**
+   * The funding leg's currency: the account's own, or — when the Account field named a person
+   * (register §3.3, plan stage 8b.1) — the transaction currency, since a debt leaf has no currency
+   * of its own until it is provisioned in one at commit.
+   *
+   * <p>A person funding leg does <em>not</em> force the transaction single-currency. It does so
+   * against a category or another person, because the currency selector sets every non-account leg
+   * and they therefore all agree — but a person paying <em>into a real account</em> (a transfer
+   * counterpart) is legitimately cross-currency, and must reveal the counterpart-amount field like
+   * any other cross-currency entry. Deciding it here rather than short-circuiting keeps the field
+   * layout the user sees identical to what {@link DockCommitService} will actually book.
+   */
+  private String fundingCurrency(DockEntryForm form) {
+    if (form.hasFundingPerson()) {
+      return transactionCurrencyResolver.forFundingPerson(
+          form.fundingPersonName(), form.categoryCurrencyCode());
+    }
+    if (form.accountId() == null) {
+      return null;
+    }
+    return accountService.findById(form.accountId()).map(Account::currencyCode).orElse(null);
   }
 
   /**
