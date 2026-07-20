@@ -53,7 +53,7 @@ class PeopleOverviewService {
     for (PersonBalanceSummary summary : personService.balanceSummaries()) {
       rows.add(row(summary, baseCurrency, today));
     }
-    return new PeopleOverview(rows);
+    return new PeopleOverview(rows, baseCurrency.orElse(""));
   }
 
   private PersonRow row(
@@ -64,9 +64,12 @@ class PeopleOverviewService {
       lines.add(line(summary.name(), balance, base));
     }
     BaseTotal baseTotal = baseTotal(summary.balances(), baseCurrency, today);
-    // The base gloss is shown only for a person who has a balance and whose every currency could be
-    // valued; a settled person (no lines) or a missing rate suppresses it.
-    boolean shown = !lines.isEmpty() && baseTotal.complete();
+    // The base gloss earns its place only when it says something the per-currency figures don't: a
+    // person holding some non-base currency, whose every currency could be valued. An all-base
+    // position (the total just restates the one figure), a settled person, or a missing rate all
+    // suppress it — redundant or partial, never shown.
+    boolean hasNonBase = summary.balances().stream().anyMatch(b -> !b.currencyCode().equals(base));
+    boolean shown = hasNonBase && baseTotal.complete();
     return new PersonRow(
         summary.personId(),
         summary.name(),

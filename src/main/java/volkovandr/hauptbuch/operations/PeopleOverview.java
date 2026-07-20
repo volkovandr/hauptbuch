@@ -13,8 +13,11 @@ import java.util.List;
  * are the truth and the settlement basis; the base total is a gloss (data-model §7, T-DM-5).
  *
  * @param people the live persons, ordered by name
+ * @param baseCurrencyCode the book's base currency code, shown as the base-total gloss's unit (the
+ *     base amount is rendered bare, so its currency is named here); empty when no base is set, in
+ *     which case no gloss is ever shown
  */
-public record PeopleOverview(List<PersonRow> people) {
+public record PeopleOverview(List<PersonRow> people, String baseCurrencyCode) {
 
   /** Defensively copy the person list to an immutable list. */
   public PeopleOverview {
@@ -30,10 +33,12 @@ public record PeopleOverview(List<PersonRow> people) {
    * @param name the person's display name
    * @param lines the non-zero per-currency balances; empty when the person is settled (all balances
    *     net to zero, or they have no leaf yet)
-   * @param baseTotalShown whether a base-currency total could be computed (every currency had a
-   *     rate, or was base) — false suppresses the gloss rather than showing a wrong number
-   * @param baseTotal the base-currency total, German-formatted and bare (base is rendered without a
-   *     symbol); meaningful only when {@code baseTotalShown}
+   * @param baseTotalShown whether to show the base-currency gloss: true only when the person holds
+   *     at least one non-base currency (an all-base position needs no conversion gloss)
+   *     <em>and</em> every currency could be valued (each non-base leg had a rate) — otherwise
+   *     suppressed rather than shown redundant or partial
+   * @param baseTotal the base-currency total, German-formatted and bare (its currency is named by
+   *     {@link PeopleOverview#baseCurrencyCode}); meaningful only when {@code baseTotalShown}
    * @param baseTotalNegative whether that total is negative (you owe on balance) — drives the ink
    * @param accountIds the person's leaf account ids for the register pre-filter link; empty for a
    *     brand-new person with no leaves yet, which suppresses the link
