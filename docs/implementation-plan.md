@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.21
-**Date:** 2026-07-19
+**Status:** Draft v0.22
+**Date:** 2026-07-20
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md` (the five authoritative design docs)
@@ -23,6 +23,11 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.22 (2026-07-20):** The **sigil-vs-category-type check leaves 8b.1** (owner call). Implementing
+  it uncovered that the dock and the split panel already disagree on what an explicit `+`/`−` means
+  (absolute vs flip), with §3.8's prose and §3.5's table documenting one each; it needs its own
+  thought-through pass rather than a decision made in passing. Tracked as issue 06 under
+  `.scratch/transaction-register-ui/`. Everything else in 8b.1 is unaffected.
 - **v0.21 (2026-07-20):** **Person entry redesigned mid-8b**, splitting **8b into 8b.1 / 8b.2**. The
   dock's separate "or person" field is **removed**: the **Account field becomes a typed datalist**
   accepting `for`/`by` sigils, so a person — including a **brand-new** one — is entered there the same
@@ -34,11 +39,6 @@ it shipped. "Stage N complete" needs no recap here.
   longer begin `to `/`from `/`for `/`by `. Split-panel person support becomes **8b.2**; the
   htmx commit-error 500 (register blanks on any error) is **out of scope for stage 8** — a global
   error-handling gap, scheduled between stages 8 and 9.
-- **v0.22 (2026-07-20):** The **sigil-vs-category-type check leaves 8b.1** (owner call). Implementing
-  it uncovered that the dock and the split panel already disagree on what an explicit `+`/`−` means
-  (absolute vs flip), with §3.8's prose and §3.5's table documenting one each; it needs its own
-  thought-through pass rather than a decision made in passing. Tracked as issue 06 under
-  `.scratch/transaction-register-ui/`. Everything else in 8b.1 is unaffected.
 - **v0.20 (2026-07-19):** **Stage 8 made concrete**, split into **8a–8f**. **Q-UI-1 resolved
   (surfaced)** — a person's debt account is an ordinary `asset`, already in the default register set,
   so a person-funded pure expense appears with the person on the Account side. Person **entry rides
@@ -64,7 +64,8 @@ it shipped. "Stage N complete" needs no recap here.
 - **v0.1 (2026-06-25):** Initial plan — staged increments + backlog; module-first from day one;
   three-tier test strategy; the stage-3 service framed as invariant-upholding domain ops, not CRUD.
 - **Stages marked complete** (routine, no recap): 1 (v0.3), 2 (v0.4), 3 (v0.5), 4 (v0.6), 5 (v0.7),
-  6a (v0.9), 6b (v0.10), 6c (v0.12), 6d (v0.14), 7a (v0.16), 7b (v0.17), 7c (v0.18), 8a (v0.21).
+  6a (v0.9), 6b (v0.10), 6c (v0.12), 6d (v0.14), 7a (v0.16), 7b (v0.17), 7c (v0.18), 8a (v0.21),
+  8b.1 (v0.22).
 
 ---
 
@@ -325,13 +326,13 @@ Six ordered sub-stages, each green and demoable (7-series cadence):
   query (`sqlLogicTest`), the **provisioning** op (ensure person + leaf + link, with revival),
   `PersonService` (create / rename / soft-delete with a **zero-balance guard**), and a bare People
   page (list, create, rename, soft-delete — names only). `ApplicationModules.verify()` green.
-- **8b.1 — Person entry, single line.** `for`/`by` in **both** pickers with inline create + confirmed
-  revival, auto-provision at commit, same- and cross-currency. Converts the dock's **Account** field
-  from a `<select>` to a typed datalist (pre-filled from the previously entered transaction — see
-  below) and **deletes** the "or person" field with its `/people/resolve-account` endpoint. Adds the
-  transaction-currency generalisation, the `person_leaf` flag and its three picker exclusions, and
-  the reserved name-prefix rule. Label tooltips. The register's own display — including its filter —
-  is untouched here and stays 8c's.
+- **8b.1 — Person entry, single line.** ✅ **complete.** `for`/`by` in **both** pickers with inline
+  create + confirmed revival, auto-provision at commit, same- and cross-currency. Converts the dock's
+  **Account** field from a `<select>` to a typed datalist (pre-filled from the previously entered
+  transaction — see below) and **deletes** the "or person" field with its
+  `/people/resolve-account` endpoint. Adds the transaction-currency generalisation, the
+  `person_leaf` flag and its three picker exclusions, and the reserved name-prefix rule. Label
+  tooltips. The register's own display — including its filter — is untouched here and stays 8c's.
 
   **The sigil-vs-category-type check is deferred out of 8b.1** (owner, 2026-07-20). Writing it
   surfaced that the simple dock (`signedAmount`, **absolute**) and the split panel
