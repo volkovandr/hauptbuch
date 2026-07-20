@@ -23,6 +23,17 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.21 (2026-07-20):** **Person entry redesigned mid-8b**, splitting **8b into 8b.1 / 8b.2**. The
+  dock's separate "or person" field is **removed**: the **Account field becomes a typed datalist**
+  accepting `for`/`by` sigils, so a person — including a **brand-new** one — is entered there the same
+  way as in Category. The category-currency selector generalises to **the transaction currency** (the
+  currency of every leg that is not a real account), which is what supplies the currency when the
+  funding leg is itself a person. A **`person_leaf` flag** joins `currency_leaf` on `account`
+  (person leaves are hidden from the dock's Account picker, the accounts screen, and transfer-target
+  resolution — but stay in the register's viewed set per Q-UI-1). Account and person names may no
+  longer begin `to `/`from `/`for `/`by `. Split-panel person support becomes **8b.2**; the
+  htmx commit-error 500 (register blanks on any error) is **out of scope for stage 8** — a global
+  error-handling gap, scheduled between stages 8 and 9.
 - **v0.20 (2026-07-19):** **Stage 8 made concrete**, split into **8a–8f**. **Q-UI-1 resolved
   (surfaced)** — a person's debt account is an ordinary `asset`, already in the default register set,
   so a person-funded pure expense appears with the person on the Account side. Person **entry rides
@@ -257,14 +268,41 @@ decisions, settled before slicing:
   Leaf names are cosmetic (`personal.<CUR>`); every display resolves the person's name via that link.
   **Rename touches `person.name` only**; ids never move. **Duplicate person names are allowed**,
   disambiguated in pickers (as payees already are).
-- **Entry = transfer.** In the **Category** field, `for <person>` books `→ Person` (you funded — the
-  person owes you), `by <person>` books `Person →` (they funded — you owe them); the reserved
-  `for`/`by` keywords sit beside the existing `to`/`from` transfer keywords and dodge the
-  person-vs-account name collision. The category-currency selector applies (defaults to the funding
-  account's currency; an override makes it cross-currency — e.g. settle a EUR debt with USD cash). In
-  the **Account** field a person, surfaced by typing (not listed by default), is the **funding** leg
-  for the "they paid a pure expense of mine" case (register §2.6 pattern 3); direction is implied by
-  the counterpart. Both picker labels gain a **tooltip** documenting the shortcuts.
+- **Entry = transfer.** The reserved `for`/`by` sigils sit beside the existing `to`/`from` transfer
+  keywords and mean the same thing in **either** picker: `for <person>` puts the person's leg on the
+  **debit** side (`→ Person` — they owe you), `by <person>` on the **credit** side (`Person →` — you
+  owe them). **Both pickers are typed datalists** and both accept a person, including a brand-new one;
+  the Account field carries the person as the **funding** leg (register §2.6 pattern 3), the Category
+  field as the counterpart. There is **no separate person field** — see §3.3/§3.5 of the register doc
+  for the field behaviour, and §3.8 for the direction rule below.
+- **The sigil adds no direction machinery — it is a checked assertion.** Where the counterpart is a
+  **category**, direction is already decided by §3.8 (the category type sets the funding leg's sign; a
+  negative amount flips it) and the sigil is verified against it: agreement commits, contradiction is
+  **blocked with an explanation** and never silently corrected. Where the counterpart is a person or an
+  account, the sigils/keywords *are* the direction source, exactly as a transfer's `to`/`from` already
+  is. This makes `by Max` + expense and `for Max` + income ordinary, and their opposites legal **only**
+  with a negative amount (a storno) — one rule, not a table of cases.
+- **The currency selector generalises to the transaction currency** — the currency of every leg that
+  is **not** a real account. With a real funding account it keeps today's behaviour (defaults to that
+  account's currency; an override declares the transaction cross-currency). With **no** real account
+  (a person funding a category, or a person-to-person debt transfer) it sets **every** leg, so the
+  transaction is single-currency, and it defaults to the involved person's leaf currency when that is
+  unambiguous, else to base. This is what makes a brand-new person enterable in the Account field:
+  provisioning finally has a currency source. It is shown unless **every** leg is a real account.
+  Note the consequence, accepted deliberately: an expense a person funded is denominated in the **debt**
+  currency, not the spending currency — the expense leg answers *"where did this debt come from"*, not
+  *"what did this cost in EUR"*.
+- **Person leaves are hidden from pickers, not from the register.** A `person_leaf` flag on `account`
+  (mirroring `currency_leaf`) excludes them from the dock's **Account** picker, the **accounts
+  management** screen, and **transfer-target** resolution — three places they leak today. They stay in
+  the register's **default viewed set** (Q-UI-1, below) and gain a place in its **filter**, listed and
+  displayed as `Max (EUR)`; the cosmetic leaf name never reaches the UI. The flag is required rather
+  than an `account_owner` lookup because `debts` already depends on `accounts` — the reverse edge
+  would be a module cycle.
+- **Reserved name prefixes.** An **account** name (hence a category name) and a **person** name may not
+  begin `to `, `from `, `for ` or `by ` (case-insensitive), so a sigil is never ambiguous with a name.
+  Enforced in the **service layer only** — this is a UI-parser convenience, not a data-model invariant,
+  so it earns no DB constraint. Accepted cost: names like "For Kids" must be written "Kids".
 - **Display.** Person legs are ordinary `asset` legs → **two-row symmetry** (register §2.4); the
   funding/edit-anchor leg of a multi-own-leg transaction is the **most-negative own leg**
   (generalises the shipped transfer sign rule to any number of legs); arrow-chips render per register
@@ -282,11 +320,36 @@ Six ordered sub-stages, each green and demoable (7-series cadence):
   query (`sqlLogicTest`), the **provisioning** op (ensure person + leaf + link, with revival),
   `PersonService` (create / rename / soft-delete with a **zero-balance guard**), and a bare People
   page (list, create, rename, soft-delete — names only). `ApplicationModules.verify()` green.
-- **8b — Person entry.** `for`/`by` in the counterpart picker with inline create + confirmed revival,
-  the currency selector, auto-provision at commit, and the Account-field funding-leg case — riding
-  the transfer path for **single-line and split**, same- and cross-currency. Label tooltips.
+- **8b.1 — Person entry, single line.** `for`/`by` in **both** pickers with inline create + confirmed
+  revival, auto-provision at commit, same- and cross-currency. Converts the dock's **Account** field
+  from a `<select>` to a typed datalist (pre-filled from the previously entered transaction — see
+  below) and **deletes** the "or person" field with its `/people/resolve-account` endpoint. Adds the
+  transaction-currency generalisation, the sigil-vs-category-type check (surfaced at
+  **category-resolve** time, with a commit-time backstop in `DockCommitService`), the `person_leaf`
+  flag and its three picker exclusions, and the reserved name-prefix rule. Label tooltips. The
+  register's own display — including its filter — is untouched here and stays 8c's.
+
+  **Sticky entry defaults** (`potential-feature-ideas.md`, Register UX) land here because the field
+  conversion forces the question: a committed dock echoes back its **date and funding account** rather
+  than resetting them. A **person** funding leg is never sticky — it falls back to the last real
+  account — since an unnoticed sticky person would silently book a debt and possibly provision a leaf.
+  A fresh page load keeps today's fallback (today's date, first account).
+- **8b.2 — Person entry, splits.** The same `for`/`by` capability per split line — multi-person
+  attribution ("€31,50: €21,50 my food, €10 for Max", register §2.6). Threads person fields through
+  `SplitForm`/`SplitFormBinder`, `SplitLineDraft`, `DockSplitService`, `SplitLineAmounts`,
+  `SplitPanelAssembler`, `SplitLineView`, `SplitEditService` and `split-panel.html` the way
+  `lineTransferDirection` already is. The 8b.1 direction check and currency default apply **per line**.
+  Split from 8b.1 to keep each diff hand-reviewable (§0) and to prove the Account conversion in real
+  use before threading it through the split machinery.
 - **8c — Register display.** Two-row symmetry with person legs, arrow-chip rendering (Account/Category
-  per §2.6), the most-negative-own-leg funding rule, Q-UI-1 surfacing.
+  per §2.6), the most-negative-own-leg funding rule, Q-UI-1 surfacing. Includes the **name
+  resolution** that 8b.1 deliberately leaves out: `RegisterRowRenderer` has no person awareness today,
+  so a person leg renders its cosmetic `personal.<CUR>` leaf name in both columns. Until this lands,
+  8b.1 is verifiable by its tests and by the stored postings, **not** by reading the register.
+  Also **new here:** the register **filter** lists people as `Max (EUR)` — individually selectable and
+  combinable with each other and with real accounts. (Only the pre-filtered *link* from the People page
+  was previously planned, in 8d; ticking people yourself was not.) The filter block growing bulky with
+  many people is acknowledged and deferred — collapsing it is a later UX pass.
 - **8d — People balances.** Net-balance column, expand → per-currency signed balances, and a "view in
   register (pre-filtered to this person)" link, on the existing People page.
 - **8e — Settle-up button.** A per-person×currency launcher: pick account + date + amount(s) (one or

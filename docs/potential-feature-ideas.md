@@ -60,6 +60,12 @@ from the button, and the type (expense or income) from the parent category as we
   in the backend and no error on the frontend. This is actually an issue.
 * When anything is wrong and I press Add it displays the error message, but the table gets emtptied and the form is cleared. I would prefer to fix whatever was wrong and press Add again.
   And why the whole table get cleared? That is actually a bug.
+  **Diagnosed 2026-07-20:** the backend throws, Spring returns a raw HTTP 500, and htmx — having no
+  error strategy — swaps the error body into `#register-body`. So it is a *global* error-handling gap
+  (a `@ControllerAdvice` returning an htmx-aware error response), not a register bug, which is why it
+  is out of scope for stage 8. **Scheduled between stage 8 and stage 9.** Note it gets sharper in
+  8b.1: the Account field stops being a `<select>` (always valid by construction) and becomes free
+  text, so the commit error path will be reached far more often.
 * When editing the transfer transaction the account is always pre-selected to the source account, event if I pressed Edit on the destination account. This is fine, but it feels more consistent
   to pre-fill the edit form with the account of the line I pressed Edit on.
 * There is an annoying problem that on small screen the register table consumes the whole space. One should scroll down to see the Add/Edit dock. And in case
