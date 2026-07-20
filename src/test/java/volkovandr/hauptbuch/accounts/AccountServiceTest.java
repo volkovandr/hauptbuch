@@ -58,7 +58,7 @@ class AccountServiceTest {
   }
 
   private static Account account(long id, String name, String type, Integer hue) {
-    return new Account(id, name, type, null, EUR, hue, OPENED, null, null, false);
+    return new Account(id, name, type, null, EUR, hue, OPENED, null, null, false, false);
   }
 
   private void stubInsertReturning(long id) {
@@ -133,6 +133,25 @@ class AccountServiceTest {
   }
 
   @Test
+  void rejectsNameBeginningWithReservedSigil() {
+    // An account named "to Cash" would be indistinguishable from a transfer target (data-model §7,
+    // plan stage 8b.1) — refused when opening and when renaming.
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(
+            () ->
+                accountService.openAccount(
+                    new AccountDraft("to Cash", ASSET, null, EUR, OPENED, null)))
+        .withMessageContaining("cannot begin with");
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> accountService.renameAccount(NEW_ID, "by Max"))
+        .withMessageContaining("cannot begin with");
+
+    verify(accountRepository, never()).insert(any());
+    verify(accountRepository, never()).updateNameAndHue(anyLong(), any(), any());
+  }
+
+  @Test
   void rejectsTypesTheAccountsScreenDoesNotManage() {
     // Categories (income/expense) and equity are not opened here — 6b and system plumbing.
     assertThatExceptionOfType(IllegalArgumentException.class)
@@ -183,7 +202,7 @@ class AccountServiceTest {
     Account fresh = account(3L, GIRO, ASSET, 30);
     Account closed =
         new Account(
-            4L, "Old", ASSET, null, EUR, 140, OPENED, LocalDate.of(2026, 7, 2), null, false);
+            4L, "Old", ASSET, null, EUR, 140, OPENED, LocalDate.of(2026, 7, 2), null, false, false);
     when(accountRepository.findLiveByTypes(any()))
         .thenReturn(List.of(parent, posted, fresh, closed));
     when(accountRepository.findPostedAccountIds()).thenReturn(List.of(2L));
@@ -252,7 +271,8 @@ class AccountServiceTest {
   @Test
   void insertCurrencyLeafIsNamedAfterTheBareCurrencyCodeAndMarked() {
     Account chfLeaf =
-        new Account(NEW_ID, "CHF", "expense", PARENT_ID, "CHF", null, null, null, null, true);
+        new Account(
+            NEW_ID, "CHF", "expense", PARENT_ID, "CHF", null, null, null, null, true, false);
     when(accountRepository.insert(any())).thenReturn(NEW_ID);
     when(accountRepository.findById(NEW_ID)).thenReturn(Optional.of(chfLeaf));
 
@@ -276,6 +296,63 @@ class AccountServiceTest {
     ArgumentCaptor<Account> captor = ArgumentCaptor.forClass(Account.class);
     verify(accountRepository).insert(captor.capture());
     assertThat(captor.getValue().currencyLeaf()).isFalse();
+  }
+
+  // ── person leaves (data-model §7, plan stage 8b.1) ───────────────────────────
+
+  @Test
+  void insertPersonLeafIsStandaloneAssetAndMarked() {
+    Account maxEur = personLeaf(NEW_ID, "personal.EUR");
+    when(accountRepository.insert(any())).thenReturn(NEW_ID);
+    when(accountRepository.findById(NEW_ID)).thenReturn(Optional.of(maxEur));
+
+    Account result = accountService.insertPersonLeaf("personal.EUR", EUR);
+
+    assertThat(result).isEqualTo(maxEur);
+    ArgumentCaptor<Account> captor = ArgumentCaptor.forClass(Account.class);
+    verify(accountRepository).insert(captor.capture());
+    assertThat(captor.getValue().name()).isEqualTo("personal.EUR");
+    assertThat(captor.getValue().type()).isEqualTo(ASSET);
+    assertThat(captor.getValue().parentId()).isNull();
+    assertThat(captor.getValue().currencyCode()).isEqualTo(EUR);
+    assertThat(captor.getValue().personLeaf()).isTrue();
+    assertThat(captor.getValue().currencyLeaf()).isFalse();
+  }
+
+  @Test
+  void insertLeafIsNeverMarkedAsPersonLeaf() {
+    stubInsertReturning(NEW_ID);
+
+    accountService.insertLeaf(GIRO, ASSET, null, EUR);
+
+    ArgumentCaptor<Account> captor = ArgumentCaptor.forClass(Account.class);
+    verify(accountRepository).insert(captor.capture());
+    assertThat(captor.getValue().personLeaf()).isFalse();
+  }
+
+  @Test
+  void accountsScreenDoesNotListPersonLeaves() {
+    // A person's debt leaf is an asset, but auto-provisioned — the screen manages neither its
+    // name nor its lifecycle, so it must not appear alongside the user's real accounts.
+    when(accountRepository.findLiveByTypes(any()))
+        .thenReturn(List.of(account(1L, "Cash", ASSET, 210), personLeaf(2L, "personal.EUR")));
+
+    assertThat(accountService.manageableAccounts())
+        .extracting(Account::name)
+        .containsExactly("Cash");
+  }
+
+  @Test
+  void doesNotResolvePersonLeafAsTransferTarget() {
+    // "to personal.EUR" must not reach a person — the for/by sigils are the only way in (§3.5).
+    when(accountRepository.findLiveByTypes(any()))
+        .thenReturn(List.of(personLeaf(2L, "personal.EUR")));
+
+    assertThat(accountService.findOwnAccountByName("personal.EUR")).isEmpty();
+  }
+
+  private static Account personLeaf(long id, String name) {
+    return new Account(id, name, ASSET, null, EUR, null, null, null, null, false, true);
   }
 
   @Test
@@ -314,7 +391,8 @@ class AccountServiceTest {
 
   @Test
   void doesNotResolveClosedOwnAccount() {
-    Account closed = new Account(3L, "Old", ASSET, null, EUR, 140, OPENED, OPENED, null, false);
+    Account closed =
+        new Account(3L, "Old", ASSET, null, EUR, 140, OPENED, OPENED, null, false, false);
     when(accountRepository.findLiveByTypes(any())).thenReturn(List.of(closed));
 
     assertThat(accountService.findOwnAccountByName("Old")).isEmpty();

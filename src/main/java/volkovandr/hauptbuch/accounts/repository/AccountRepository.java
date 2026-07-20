@@ -36,12 +36,13 @@ public class AccountRepository {
   private static final String HUE = "hue";
   private static final String TYPE = "type";
   private static final String CURRENCY_LEAF = "currencyLeaf";
+  private static final String PERSON_LEAF = "personLeaf";
 
   /** The {@code select} clause every {@link Account}-mapping query starts with. */
   private static final String SELECT_ACCOUNT_COLUMNS =
       """
       select account_id, name, type, parent_id, currency_code, hue,
-             opened_at, closed_at, deleted_at, currency_leaf
+             opened_at, closed_at, deleted_at, currency_leaf, person_leaf
       """;
 
   private final JdbcClient jdbcClient;
@@ -70,7 +71,7 @@ public class AccountRepository {
             """
             select child.account_id, child.name, child.type, child.parent_id,
                    child.currency_code, child.hue, child.opened_at, child.closed_at,
-                   child.deleted_at, child.currency_leaf
+                   child.deleted_at, child.currency_leaf, child.person_leaf
             from account child
             join account parent on child.parent_id = parent.account_id
             where parent.name = :parentName
@@ -167,7 +168,7 @@ public class AccountRepository {
             """
             with recursive tree as (
               select account_id, name, type, parent_id, currency_code, hue,
-                     opened_at, closed_at, deleted_at, currency_leaf,
+                     opened_at, closed_at, deleted_at, currency_leaf, person_leaf,
                      0 as depth,
                      array[name] as sort_path
               from account
@@ -176,7 +177,7 @@ public class AccountRepository {
                 and parent_id is null
               union all
               select a.account_id, a.name, a.type, a.parent_id, a.currency_code, a.hue,
-                     a.opened_at, a.closed_at, a.deleted_at, a.currency_leaf,
+                     a.opened_at, a.closed_at, a.deleted_at, a.currency_leaf, a.person_leaf,
                      tree.depth + 1,
                      tree.sort_path || a.name
               from account a
@@ -184,7 +185,7 @@ public class AccountRepository {
               where a.deleted_at is null
             )
             select account_id, name, type, parent_id, currency_code, hue,
-                   opened_at, closed_at, deleted_at, currency_leaf, depth
+                   opened_at, closed_at, deleted_at, currency_leaf, person_leaf, depth
             from tree
             order by type, sort_path
             """)
@@ -202,7 +203,8 @@ public class AccountRepository {
                         rs.getObject("opened_at", LocalDate.class),
                         rs.getObject("closed_at", LocalDate.class),
                         rs.getObject("deleted_at", OffsetDateTime.class),
-                        rs.getBoolean("currency_leaf")),
+                        rs.getBoolean("currency_leaf"),
+                        rs.getBoolean("person_leaf")),
                     rs.getInt("depth")))
         .list();
   }
@@ -278,9 +280,9 @@ public class AccountRepository {
         .sql(
             """
             insert into account
-              (name, type, parent_id, currency_code, hue, opened_at, currency_leaf)
+              (name, type, parent_id, currency_code, hue, opened_at, currency_leaf, person_leaf)
             values
-              (:name, :type, :parentId, :currencyCode, :hue, :openedAt, :currencyLeaf)
+              (:name, :type, :parentId, :currencyCode, :hue, :openedAt, :currencyLeaf, :personLeaf)
             returning account_id
             """)
         .param(NAME, account.name())
@@ -290,6 +292,7 @@ public class AccountRepository {
         .param(HUE, account.hue())
         .param(OPENED_AT, account.openedAt())
         .param(CURRENCY_LEAF, account.currencyLeaf())
+        .param(PERSON_LEAF, account.personLeaf())
         .query(Long.class)
         .single();
   }

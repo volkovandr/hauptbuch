@@ -52,12 +52,12 @@ class SubdivisionServiceTest {
   }
 
   private static Account account(long id, String name, String type, Long parentId) {
-    return new Account(id, name, type, parentId, EUR, null, null, null, null, false);
+    return new Account(id, name, type, parentId, EUR, null, null, null, null, false, false);
   }
 
   private static Account currencyLeaf(long id, String currencyCode, String type, long parentId) {
     return new Account(
-        id, currencyCode, type, parentId, currencyCode, null, null, null, null, true);
+        id, currencyCode, type, parentId, currencyCode, null, null, null, null, true, false);
   }
 
   @Test

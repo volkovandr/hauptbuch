@@ -49,12 +49,12 @@ class DockEditServiceTest {
 
   private static Account account(
       long id, String name, String type, Long parentId, String currency) {
-    return new Account(id, name, type, parentId, currency, null, null, null, null, false);
+    return new Account(id, name, type, parentId, currency, null, null, null, null, false, false);
   }
 
   private static Account currencyLeaf(long id, String currencyCode, String type, long parentId) {
     return new Account(
-        id, currencyCode, type, parentId, currencyCode, null, null, null, null, true);
+        id, currencyCode, type, parentId, currencyCode, null, null, null, null, true, false);
   }
 
   private static Posting posting(long accountId, String amount) {

@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.accounts.ReservedNamePrefix;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.operations.DeletionService;
 import volkovandr.hauptbuch.operations.SubdivisionResult;
@@ -187,6 +188,7 @@ public class CategoryService {
     if (name == null || name.isBlank()) {
       throw new IllegalArgumentException("A category needs a name");
     }
+    ReservedNamePrefix.check(name);
     requireManageable(accountId);
     accountService.renameAccount(accountId, name);
   }
@@ -242,6 +244,7 @@ public class CategoryService {
     if (draft.name() == null || draft.name().isBlank()) {
       throw new IllegalArgumentException("A category needs a name");
     }
+    ReservedNamePrefix.check(draft.name());
     if (!MANAGEABLE_TYPES.contains(draft.type())) {
       throw new IllegalArgumentException(
           "Category type must be one of " + MANAGEABLE_TYPES + ", not '" + draft.type() + "'");

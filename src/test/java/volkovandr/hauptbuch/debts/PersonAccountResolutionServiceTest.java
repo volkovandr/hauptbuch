@@ -21,7 +21,7 @@ class PersonAccountResolutionServiceTest {
       new PersonAccountResolutionService(accountService, personService, accountOwnerRepository);
 
   private static Account account(long id, String name, String currencyCode) {
-    return new Account(id, name, "asset", null, currencyCode, null, null, null, null, false);
+    return new Account(id, name, "asset", null, currencyCode, null, null, null, null, false, false);
   }
 
   @Test

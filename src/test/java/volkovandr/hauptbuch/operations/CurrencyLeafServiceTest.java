@@ -49,12 +49,12 @@ class CurrencyLeafServiceTest {
   }
 
   private static Account account(long id, String name, Long parentId, String currency) {
-    return new Account(id, name, EXPENSE, parentId, currency, null, null, null, null, false);
+    return new Account(id, name, EXPENSE, parentId, currency, null, null, null, null, false, false);
   }
 
   private static Account currencyLeaf(long id, String currencyCode, long parentId) {
     return new Account(
-        id, currencyCode, EXPENSE, parentId, currencyCode, null, null, null, null, true);
+        id, currencyCode, EXPENSE, parentId, currencyCode, null, null, null, null, true, false);
   }
 
   @Test

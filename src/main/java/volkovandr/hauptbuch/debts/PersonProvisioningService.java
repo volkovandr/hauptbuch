@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.accounts.ReservedNamePrefix;
 import volkovandr.hauptbuch.debts.repository.AccountOwnerRepository;
 import volkovandr.hauptbuch.debts.repository.PersonRepository;
 
@@ -65,6 +66,9 @@ public class PersonProvisioningService {
       throw new IllegalArgumentException("Person name cannot be blank");
     }
     String trimmedName = personName.strip();
+    // Commit-time backstop for the reserved sigils (plan stage 8b.1): "for for Max" parses to the
+    // person name "for Max", which must not be conjured into existence here.
+    ReservedNamePrefix.check(trimmedName);
     Person person =
         switch (personService.matchExact(trimmedName)) {
           case PersonMatch.Live live -> live.person();
@@ -99,7 +103,7 @@ public class PersonProvisioningService {
       }
     }
 
-    Account leaf = accountService.insertLeaf(leafName, "asset", null, currencyCode);
+    Account leaf = accountService.insertPersonLeaf(leafName, currencyCode);
     accountOwnerRepository.insert(leaf.accountId(), personId);
     return leaf;
   }

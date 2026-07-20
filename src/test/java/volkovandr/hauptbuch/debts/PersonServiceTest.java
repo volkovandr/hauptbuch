@@ -2,7 +2,10 @@ package volkovandr.hauptbuch.debts;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -71,6 +74,22 @@ class PersonServiceTest {
     assertThatThrownBy(() -> service.rename(1L, ""))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("cannot be blank");
+  }
+
+  @Test
+  void rejectsNameBeginningWithReservedSigil() {
+    // A person named "for Max" would be indistinguishable from the sigil "for" applied to "Max"
+    // (data-model §7, plan stage 8b.1) — refused at both entry points into the name.
+    assertThatThrownBy(() -> service.create("by Max"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("cannot begin with");
+
+    assertThatThrownBy(() -> service.rename(1L, "For Kids"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("cannot begin with");
+
+    verify(personRepository, never()).insert(anyString());
+    verify(personRepository, never()).updateName(anyLong(), anyString());
   }
 
   @Test
