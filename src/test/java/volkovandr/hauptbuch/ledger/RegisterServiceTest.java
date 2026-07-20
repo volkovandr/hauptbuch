@@ -17,6 +17,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
@@ -200,5 +201,22 @@ class RegisterServiceTest {
         .extracting(RegisterView.RegisterAccountOption::name)
         .containsExactly("Cash");
     assertThat(view.transferTargets()).containsExactly("To → Cash", "From ← Cash");
+  }
+
+  @Test
+  void keepsPersonLeavesInTheDefaultViewedSet() {
+    // Q-UI-1 is resolved *surfaced*: a person's debt leaf is an ordinary asset, so a person-funded
+    // transaction must appear in the register with the person on the Account side. Excluding it
+    // from the pickers must not exclude it from the view — an invisible row reads as a transaction
+    // that failed to book (owner testing, plan stage 8b.1).
+    when(accountService.findLiveByTypes(List.of("asset", "liability")))
+        .thenReturn(List.of(ownAccount(CASH, "Cash"), personLeaf(9L, "personal.EUR")));
+    when(accountService.findLiveByTypes(List.of("income", "expense"))).thenReturn(List.of());
+
+    registerService.view(defaultFilter());
+
+    ArgumentCaptor<List<Long>> viewed = ArgumentCaptor.captor();
+    verify(registerRepository).findRows(viewed.capture(), any(), any(), any(), anyString());
+    assertThat(viewed.getValue()).containsExactly(CASH, 9L);
   }
 }

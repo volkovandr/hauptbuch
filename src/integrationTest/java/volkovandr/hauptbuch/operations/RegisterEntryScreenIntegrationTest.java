@@ -1010,6 +1010,68 @@ class RegisterEntryScreenIntegrationTest {
         .andExpect(content().string(containsString("No open account named")));
   }
 
+  @Test
+  void personLegShowsInTheRegisterOnBothSidesOfTheTransfer() throws Exception {
+    // Owner testing, 2026-07-20: Account = Cash, Category = `for Max` booked correctly but only
+    // the Cash row appeared — the person's own row was missing. A person leg is an ordinary asset
+    // leg, so two-row symmetry applies (register §2.4) and the person's leaf must be in the
+    // default viewed set (Q-UI-1, resolved surfaced).
+    long cash = openAccount("Cash", "500");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("personName", "Max")
+                .param("personDirection", "FOR"))
+        .andExpect(status().isOk());
+
+    // The default (unfiltered) register view must carry both legs' threads. The person's row
+    // still shows its cosmetic leaf name — resolving it to "Max (EUR)" is stage 8c's.
+    mockMvc
+        .perform(get("/register"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Cash")))
+        .andExpect(content().string(containsString("personal.EUR")));
+  }
+
+  @Test
+  void personFundedExpenseShowsInTheRegister() throws Exception {
+    // Owner testing, 2026-07-20: Account = `by Max`, Category = Food booked correctly but nothing
+    // appeared in the register — the only own-account leg IS the person's, so excluding person
+    // leaves from the viewed set made the whole transaction invisible.
+    long food = insertCategory("Food");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("fundingPersonName", "Max")
+                .param("fundingPersonDirection", "BY")
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(food)))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(get("/register"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("personal.EUR")));
+  }
+
+  @Test
+  void defaultViewCarriesNoExplicitAccountFilterSoPersonRowsSurviveCommit() throws Exception {
+    // The dock must not serialise the resolved default set as a real filter: person leaves are not
+    // in the picker, so freezing it would drop them from the view on the next commit.
+    openAccount("Cash", "500");
+
+    mockMvc
+        .perform(get("/register"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("name=\"viewAccountId\""))));
+  }
+
   private BigDecimal liveBalanceOf(long accountId) {
     return jdbcClient
         .sql(
