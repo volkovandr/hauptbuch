@@ -2,6 +2,8 @@ package volkovandr.hauptbuch.debts;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.entry;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -278,5 +280,24 @@ class PersonServiceTest {
     when(accountOwnerRepository.findByAccountId(10L)).thenReturn(Optional.empty());
 
     assertThat(service.personNameForAccount(10L)).isEmpty();
+  }
+
+  @Test
+  void personNamesForAccountsKeysNamesByAccountId() {
+    when(accountOwnerRepository.findPersonNamesByAccountIds(List.of(10L, 11L, 12L)))
+        .thenReturn(
+            List.of(
+                new AccountOwnerRepository.AccountPersonName(10L, "Max"),
+                new AccountOwnerRepository.AccountPersonName(11L, "Alice")));
+
+    // 12L is an ordinary account (no owner) → simply absent from the map.
+    assertThat(service.personNamesForAccounts(List.of(10L, 11L, 12L)))
+        .containsOnly(entry(10L, "Max"), entry(11L, "Alice"));
+  }
+
+  @Test
+  void personNamesForAccountsShortCircuitsOnEmptyInput() {
+    assertThat(service.personNamesForAccounts(List.of())).isEmpty();
+    verify(accountOwnerRepository, never()).findPersonNamesByAccountIds(any());
   }
 }

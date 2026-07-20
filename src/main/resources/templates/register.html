@@ -52,6 +52,23 @@
           <span th:text="${a.name()}">Cash</span>
           <span class="muted num" th:text="${a.currencyCode()}">EUR</span>
         </label>
+        <!-- People (register §2.6, plan stage 8c): each per-person debt leaf as a filter option,
+             labelled `Name (CUR)`, selectable alongside the real accounts. The value is the leaf's
+             own account id, so a ticked person filters to their debt thread exactly as an account
+             does. (The block grows bulky with many people — collapsing it is a later UX pass.) -->
+        <label class="check" th:each="p : ${register.people()}">
+          <input
+            type="checkbox"
+            name="accountId"
+            th:value="${p.accountId()}"
+            th:checked="${p.selected()}"
+          />
+          <span
+            class="swatch"
+            th:style="${p.hue() != null} ? |background: hsl(${p.hue()} 55% 78%); border-color: hsl(${p.hue()} 55% 45%)|"
+          ></span>
+          <span th:text="${p.entryValue()}">Max (EUR)</span>
+        </label>
       </fieldset>
       <div class="register-filter__row">
         <div class="field">
@@ -137,20 +154,43 @@
               th:style="${r.accountHue() != null} ? |background: hsl(${r.accountHue()} 55% 78%)|"
             ></td>
             <td class="register__date num" th:text="${r.date()}">2026-01-01</td>
-            <td class="register__account" th:text="${r.accountName()}" th:style="${r.accountHue() != null} ? |color: hsl(${r.accountHue()} 55% 25%)|">Cash</td>
+            <!-- Account cell (register §2.6): a real account is a bare name; a person's debt leg
+                 carries a direction arrow on the side that reads as the flow through them —
+                 → Name on a debit (income, they owe you more), Name → on a credit (you owe them
+                 more) — plan stage 8c. -->
+            <td class="register__account" th:style="${r.accountHue() != null} ? |color: hsl(${r.accountHue()} 55% 25%)|">
+              <th:block th:if="${r.accountPerson()}"
+                ><span th:if="${r.income()}" aria-hidden="true">→&nbsp;</span
+                ><span th:text="${r.accountName()}">Max</span
+                ><span th:unless="${r.income()}" aria-hidden="true">&nbsp;→</span
+              ></th:block>
+              <span th:unless="${r.accountPerson()}" th:text="${r.accountName()}">Cash</span>
+            </td>
             <td class="register__payee" th:text="${r.payeeName()}">Rewe</td>
             <td class="register__category">
+              <!-- A counterpart chip (register §2.6): a plain category, a transfer to another own
+                   account (leading ←/→), or a person's debt leg (→ Name on a debit, Name → on a
+                   credit — plan stage 8c). -->
               <span
                 th:each="chip, i : ${r.category().chips()}"
                 class="cat-chip"
-                th:classappend="${chip.transfer()} ? 'cat-chip--transfer'"
+                th:classappend="${chip.transfer()} ? 'cat-chip--transfer' : (${chip.person()} ? 'cat-chip--person' : '')"
               >
                 <span
                   th:if="${chip.transfer()}"
                   aria-hidden="true"
                   th:text="${chip.inbound()} ? '← ' : '→ '"
                   >→ </span
-                ><span th:text="${chip.label()}">Food</span>
+                ><span
+                  th:if="${chip.person() and !chip.inbound()}"
+                  aria-hidden="true"
+                  >→ </span
+                ><span th:text="${chip.label()}">Food</span
+                ><span
+                  th:if="${chip.person() and chip.inbound()}"
+                  aria-hidden="true"
+                  > →</span
+                >
               </span>
               <span
                 class="cat-chip__overflow muted"

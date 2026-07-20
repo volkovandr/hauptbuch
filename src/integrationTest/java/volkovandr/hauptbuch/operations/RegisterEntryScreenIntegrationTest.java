@@ -1028,13 +1028,14 @@ class RegisterEntryScreenIntegrationTest {
                 .param("personDirection", "FOR"))
         .andExpect(status().isOk());
 
-    // The default (unfiltered) register view must carry both legs' threads. The person's row
-    // still shows its cosmetic leaf name — resolving it to "Max (EUR)" is stage 8c's.
+    // The default (unfiltered) register view must carry both legs' threads. The person's row now
+    // resolves to the owner's name (plan stage 8c); the cosmetic leaf name never leaks.
     mockMvc
         .perform(get("/register"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("Cash")))
-        .andExpect(content().string(containsString("personal.EUR")));
+        .andExpect(content().string(containsString("Max")))
+        .andExpect(content().string(not(containsString("personal.EUR"))));
   }
 
   @Test
@@ -1054,10 +1055,13 @@ class RegisterEntryScreenIntegrationTest {
                 .param("categoryId", String.valueOf(food)))
         .andExpect(status().isOk());
 
+    // The person's own leg is the only own-account leg, so it appears on the Account side —
+    // resolved to the owner's name, never the cosmetic leaf (plan stage 8c).
     mockMvc
         .perform(get("/register"))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("personal.EUR")));
+        .andExpect(content().string(containsString("Max")))
+        .andExpect(content().string(not(containsString("personal.EUR"))));
   }
 
   @Test

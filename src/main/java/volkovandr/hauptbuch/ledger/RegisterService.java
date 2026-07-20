@@ -1,6 +1,8 @@
 package volkovandr.hauptbuch.ledger;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
@@ -77,6 +79,7 @@ public class RegisterService {
 
     List<Account> pickable = pickable(ownAccounts);
     List<RegisterAccountOption> accountOptions = accountOptions(pickable, viewed);
+    List<RegisterAccountOption> peopleOptions = peopleOptions(ownAccounts, viewed);
     List<RegisterPayeeOption> payeeOptions = payeeOptions(filter.payeeId());
     List<RegisterCategoryOption> categoryOptions = categoryOptions();
     List<String> transferTargets = transferTargets(pickable);
@@ -85,12 +88,41 @@ public class RegisterService {
     return new RegisterView(
         rows,
         accountOptions,
+        peopleOptions,
         payeeOptions,
         categoryOptions,
         transferTargets,
         personTargets,
         tagOptions,
         filter);
+  }
+
+  /**
+   * The per-person debt leaves offered in the register's account filter (register §2.6, plan stage
+   * 8c): every person leaf in the viewed set, resolved to its owner's name and listed as {@code
+   * Name (CUR)}, so a person is individually selectable and combinable with the real accounts. They
+   * are kept out of {@link #accountOptions} — hence out of the dock's Account datalist — because a
+   * person is reached in <em>entry</em> only by the {@code for}/{@code by} sigils, never by picking
+   * their leaf's cosmetic name (plan stage 8b.1). Names resolve in one lookup; a leaf whose person
+   * cannot be resolved (never expected) falls back to its stored name.
+   */
+  private List<RegisterAccountOption> peopleOptions(List<Account> ownAccounts, List<Long> viewed) {
+    List<Account> leaves = ownAccounts.stream().filter(Account::personLeaf).toList();
+    Map<Long, String> names =
+        personService.personNamesForAccounts(leaves.stream().map(Account::accountId).toList());
+    return leaves.stream()
+        .map(
+            a ->
+                new RegisterAccountOption(
+                    a.accountId(),
+                    names.getOrDefault(a.accountId(), a.name()),
+                    a.hue(),
+                    a.currencyCode(),
+                    viewed.contains(a.accountId())))
+        .sorted(
+            Comparator.comparing(RegisterAccountOption::name, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(RegisterAccountOption::currencyCode))
+        .toList();
   }
 
   /**

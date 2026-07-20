@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,6 +70,7 @@ class RegisterServiceTest {
     lenient().when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
     lenient().when(payeeRepository.findFilterOptions()).thenReturn(List.of());
     lenient().when(personService.findAllLive()).thenReturn(List.of());
+    lenient().when(personService.personNamesForAccounts(any())).thenReturn(Map.of());
     lenient()
         .when(registerRepository.findRows(anyList(), any(), any(), any(), anyString()))
         .thenReturn(List.of());
@@ -201,6 +203,25 @@ class RegisterServiceTest {
         .extracting(RegisterView.RegisterAccountOption::name)
         .containsExactly("Cash");
     assertThat(view.transferTargets()).containsExactly("To → Cash", "From ← Cash");
+  }
+
+  @Test
+  void listsPersonLeavesInTheFilterAsNameCurrency() {
+    // A person's debt leaf is kept out of the Account picker but IS offered in the filter, labelled
+    // `Name (CUR)` and resolved to the owner's real name (register §2.6, plan stage 8c).
+    when(accountService.findLiveByTypes(List.of("asset", "liability")))
+        .thenReturn(List.of(ownAccount(CASH, "Cash"), personLeaf(9L, "personal.EUR")));
+    when(accountService.findLiveByTypes(List.of("income", "expense"))).thenReturn(List.of());
+    when(personService.personNamesForAccounts(List.of(9L))).thenReturn(Map.of(9L, "Max"));
+
+    RegisterView view = registerService.view(defaultFilter());
+
+    assertThat(view.accounts()).extracting(RegisterAccountOption::name).containsExactly("Cash");
+    assertThat(view.people())
+        .extracting(RegisterAccountOption::accountId, RegisterAccountOption::name)
+        .containsExactly(tuple(9L, "Max"));
+    // The label the template prints is `Max (EUR)`.
+    assertThat(view.people().get(0).entryValue()).isEqualTo("Max (EUR)");
   }
 
   @Test

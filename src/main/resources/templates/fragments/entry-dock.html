@@ -75,6 +75,16 @@
             th:value="${a.accountId()}"
           />
         </th:block>
+        <!-- A selected person filter (plan stage 8c) is carried the same way — its leaf id is a
+             real account id, and omitting it would drop the person from the view on commit. -->
+        <th:block th:each="p : ${register.people()}">
+          <input
+            th:if="${p.selected()}"
+            type="hidden"
+            name="viewAccountId"
+            th:value="${p.accountId()}"
+          />
+        </th:block>
       </th:block>
       <input type="hidden" name="viewFromDate" th:value="${register.filter().fromDate()}" />
       <input type="hidden" name="viewToDate" th:value="${register.filter().toDate()}" />
