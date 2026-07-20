@@ -340,10 +340,18 @@ Six ordered sub-stages, each green and demoable (7-series cadence):
   settled, and the owner chose to re-think and test it properly rather than resolve it in passing.
   Written up as `.scratch/transaction-register-ui/issues/06-explicit-sign-dock-vs-split-inconsistent.md`.
 
-  Person leaves are also kept out of the register's **viewed set** here, not just the pickers: the
-  cross-cutting bullet puts them in the default set (Q-UI-1), but `RegisterRowRenderer` gains
-  person-name resolution only in **8c**, so until then a person leg would render its cosmetic
-  `personal.<CUR>` name. 8c re-admits them together with the filter entry.
+  Person leaves are in the register's **viewed set** as the cross-cutting bullet specifies (Q-UI-1,
+  surfaced) but out of the **pickers** — the Account picker, the account filter, and the transfer
+  targets. An earlier attempt to keep them out of the viewed set too (reasoning that
+  `RegisterRowRenderer` cannot resolve a person's name until 8c) was **reverted after owner testing
+  on 2026-07-20**: it made a `for Max` entry show only one of its two rows, and a `by Max` funded
+  expense show nothing at all, which reads as a transaction that failed to book. Cosmetically-named
+  but visible beats invisible; 8c replaces the `personal.<CUR>` name with `Max (EUR)`.
+
+  Relatedly, the dock no longer serialises the **resolved default account set** as an explicit
+  `viewAccountId` filter — on the default view every option reads as selected, so carrying them
+  froze the default into a real filter and dropped any account not in the picker (a person's leaf)
+  from the view on the next commit.
 
   **Sticky entry defaults** (`potential-feature-ideas.md`, Register UX) land here because the field
   conversion forces the question: a committed dock echoes back its **date and funding account** rather

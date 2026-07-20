@@ -59,14 +59,22 @@
       <!-- Edit mode: the hidden id that turns the commit into an in-place re-thread (§3.1/§3.3). -->
       <input th:if="${isEdit}" type="hidden" name="transactionId" th:value="${edit.transactionId()}" />
 
-      <!-- The active filter, so the commit re-renders exactly the current view (§2.2). -->
-      <th:block th:each="a : ${register.accounts()}">
-        <input
-          th:if="${a.selected()}"
-          type="hidden"
-          name="viewAccountId"
-          th:value="${a.accountId()}"
-        />
+      <!-- The active filter, so the commit re-renders exactly the current view (§2.2).
+
+           Only an EXPLICIT account filter is carried. On the default view every option reads as
+           selected, so serialising those would freeze the resolved default set into a real filter —
+           and any account not in the picker (a person's debt leaf, plan stage 8b.1) would silently
+           drop out of the view on the next commit. An empty selection means "the default set", and
+           must stay empty for the server to re-resolve it. -->
+      <th:block th:if="${!register.filter().accountIds().isEmpty()}">
+        <th:block th:each="a : ${register.accounts()}">
+          <input
+            th:if="${a.selected()}"
+            type="hidden"
+            name="viewAccountId"
+            th:value="${a.accountId()}"
+          />
+        </th:block>
       </th:block>
       <input type="hidden" name="viewFromDate" th:value="${register.filter().fromDate()}" />
       <input type="hidden" name="viewToDate" th:value="${register.filter().toDate()}" />
@@ -125,18 +133,6 @@
             <option th:each="p : ${register.personTargets()}" th:value="${p}"></option>
           </datalist>
         </div>
-        <!-- The resolved funding leg, swapped in by /register/account/resolve: either the hidden
-             accountId, or the funding person's name/direction (their leaf is provisioned at commit,
-             once the transaction currency is known). Pre-filled on first render so the dock is
-             committable without touching the field. -->
-        <span id="entry-account-resolved">
-          <input
-            type="hidden"
-            name="accountId"
-            th:value="${edit != null and edit.accountEntryText() != null}
-                      ? ${edit.accountId()} : ${register.defaultAccountId()}"
-          />
-        </span>
         <!-- Funding-leg reveal (register §3.3, plan stage 8b.1): resolving the Account field changes
              the funding leg, so the amount-field layout and the currency default must recompute —
              mirrors the transfer counterpart-resolved chain below.
@@ -369,6 +365,22 @@
       <!-- Status line, below the fields so it never changes the fields' row height/alignment: the
            resolved category id (hidden) the dock commits, and the ghost suggestion note (§3.9). -->
       <div class="entry-dock__status">
+        <!-- The resolved funding leg, swapped in by /register/account/resolve: either the hidden
+             accountId, or the funding person's name/direction (their leaf is provisioned at commit,
+             once the transaction currency is known). Pre-filled on first render so the dock is
+             committable without touching the field.
+
+             It lives on this status line, not beside the Account field, for the same reason the
+             category's does: .entry-dock__fields is a flex row, so a visible label there becomes a
+             column of its own and shoves every following control sideways as it appears. -->
+        <span id="entry-account-resolved">
+          <input
+            type="hidden"
+            name="accountId"
+            th:value="${edit != null and edit.accountEntryText() != null}
+                      ? ${edit.accountId()} : ${register.defaultAccountId()}"
+          />
+        </span>
         <!-- The resolved category id (hidden) + status, swapped in by /categories/resolve. In edit
              mode it starts pre-filled with the loaded transaction's category id. -->
         <span id="entry-category-resolved">
