@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.operations;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -81,7 +82,7 @@ class PeopleOverviewScreenIntegrationTest {
   }
 
   @Test
-  void personWhoOwesYouShowsSignedFigureBaseGlossDirectionAndRegisterLink() throws Exception {
+  void baseCurrencyOnlyPersonShowsFigureDirectionAndRegisterLinkButNoGloss() throws Exception {
     long benLeaf = provisionLeaf("Ben", EUR);
     seedPosting(benLeaf, "25.00");
 
@@ -90,10 +91,13 @@ class PeopleOverviewScreenIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("Ben")))
         .andExpect(content().string(containsString("25,00")))
-        .andExpect(content().string(containsString("base"))) // the supplementary gloss
         .andExpect(content().string(containsString("Ben owes you 25,00"))) // expanded wording
         .andExpect(content().string(containsString("View in register")))
-        .andExpect(content().string(containsString("accountId=" + benLeaf)));
+        .andExpect(content().string(containsString("accountId=" + benLeaf)))
+        // A wholly-base position shows no base-currency gloss - it would just restate the figure.
+        // Base figures render bare, so the code "EUR" appears only inside a gloss: its absence
+        // proves the gloss is suppressed.
+        .andExpect(content().string(not(containsString("EUR"))));
   }
 
   @Test
@@ -119,6 +123,8 @@ class PeopleOverviewScreenIntegrationTest {
         .perform(get(PEOPLE_PATH))
         .andExpect(content().string(containsString("5,00 CHF")))
         .andExpect(content().string(containsString("-5,50"))) // the base total
+        .andExpect(
+            content().string(containsString("EUR"))) // named in the base currency, not "base"
         .andExpect(content().string(containsString("accountId=" + maxEur)))
         .andExpect(content().string(containsString("accountId=" + maxChf)));
   }

@@ -52,7 +52,9 @@ class PeopleOverviewServiceTest {
                         new CurrencyBalance("CHF", new BigDecimal("5.00"))),
                     List.of(100L, 101L))));
 
-    PersonRow max = service.overview().people().get(0);
+    PeopleOverview overview = service.overview();
+    assertThat(overview.baseCurrencyCode()).isEqualTo("EUR");
+    PersonRow max = overview.people().get(0);
 
     assertThat(max.lines()).hasSize(2);
     assertThat(max.lines().get(0).amount()).isEqualTo("-10,00");
@@ -68,8 +70,10 @@ class PeopleOverviewServiceTest {
   }
 
   @Test
-  void showsBaseGlossForSingleBaseCurrencyPosition() {
+  void suppressesBaseGlossForBaseCurrencyOnlyPosition() {
     baseIsEur();
+    // Ben's whole position is already in the base currency, so a base total would just restate the
+    // €25,00 figure — no gloss.
     when(personService.balanceSummaries())
         .thenReturn(
             List.of(
@@ -81,9 +85,8 @@ class PeopleOverviewServiceTest {
 
     PersonRow ben = service.overview().people().get(0);
 
-    assertThat(ben.baseTotalShown()).isTrue();
-    assertThat(ben.baseTotal()).isEqualTo("25,00");
-    assertThat(ben.baseTotalNegative()).isFalse();
+    assertThat(ben.lines().get(0).amount()).isEqualTo("25,00");
+    assertThat(ben.baseTotalShown()).isFalse();
   }
 
   @Test

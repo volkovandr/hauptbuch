@@ -5,7 +5,9 @@
 
     • A person's position is a small set of signed per-currency balances (sign = direction:
       positive means they owe you, negative means you owe them) — currencies are never netted
-      against each other (data-model §7). The base total beside them is a mark-to-market gloss.
+      against each other (data-model §7). A mark-to-market base-currency total (named in that
+      currency) sits beside them only when it adds something: a person holding a non-base currency.
+      An all-base position shows no gloss — the total would just restate the figure.
     • Each person is a native <details>: collapsed shows the signed figures and base gloss; expanded
       shows the directional wording, a link into the register pre-filtered to their leaves, and the
       edit page (rename / soft-delete). No bespoke JS — <details> is server-rendered HTML.
@@ -43,7 +45,8 @@
                     th:if="${p.baseTotalShown()}"
                     class="person__base muted"
                     th:classappend="${p.baseTotalNegative()} ? 'num--credit'"
-                    >(&asymp; <span th:text="${p.baseTotal()}">&minus;5,50</span> base)</span
+                    >(&asymp; <span th:text="${p.baseTotal()}">&minus;5,50</span>
+                    <span th:text="${overview.baseCurrencyCode()}">EUR</span>)</span
                   >
                 </th:block>
               </span>
