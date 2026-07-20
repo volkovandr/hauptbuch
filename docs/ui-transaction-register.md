@@ -262,8 +262,23 @@ Editing an existing row's Account **re-threads** it: it re-colours, and both the
 account's running balances **from that date downward** recompute — the same slice machinery as a
 backdated insert (§2.2).
 
-The Account field accepts a **person debt account** as well as a real account — that is how the "Max
-paid for an expense of mine" case (§2.6) is entered: Account = `Max →`, Category = the expense.
+**The Account field is a typed datalist, not a `<select>`** — the same shape as Category. Its options
+are the open own accounts *plus* `for <person>` / `by <person>` for every live person; a person's
+underlying leaf is **never** listed under its own (cosmetic) name. Typing a person who does not exist
+yet **creates** them, so the "Max paid for a pure expense of mine" case (§2.6 pattern 3) is entered
+as Account = `by Max`, Category = the expense — with no separate person field. A person typed here is
+the **funding** leg; the sigil means exactly what it means in Category (§3.5).
+
+*Rejected: a `<select>` carrying "By a person" sentinel options that reveal a second picker.* It does
+not remove the extra field, it only hides it — and it adds a show/hide state machine on the same
+`change` event that already recomputes the currency fields. The typed field is both fewer moving
+parts and the smaller diff.
+
+**Because the field is free text, two things follow.** It is **pre-filled** with the previously
+entered transaction's account (and the date likewise) rather than defaulting to whichever account was
+created first; and an edited-but-unresolved field must **clear its hidden id and block commit**, so a
+stale resolved id can never ride along under changed text. A person funding leg is never carried
+forward as the sticky default.
 
 ### 3.4 Payee picker & create-new
 
@@ -308,16 +323,45 @@ text** (no gazetteer). The pre-filled mini-form is the safety net for any mis-cl
   `Uncategorized` sibling. No new machinery.
 - **The category type drives entry direction** (§3.8): choosing an expense vs income (vs `→ Person` /
   `Person →`) counterpart sets the sign of the funding leg, so the amount stays sign-free.
-- **Person attribution (`for` / `by`).** Typing `for <person>` books the person as the counterpart
-  **you funded** (`→ Person`), `by <person>` the person who **funded it** (`Person →`) — the reserved
-  `for`/`by` keywords parallel the `to`/`from` transfer keywords and dodge the person-vs-account name
-  clash. A person leg **is** a transfer to/from that person's per-currency leaf (data-model §7), so it
-  rides the transfer commit path; the currency selector applies as above (funding-account currency by
-  default, override → cross-currency, e.g. settling a EUR debt with USD cash). An unknown name
-  **creates** the person, with a confirm when the name would instead **revive** a soft-deleted one
-  (data-model §7). The **Account** field also accepts a person — surfaced by typing, not listed by
-  default — as the *funding* leg for the "they paid a pure expense of mine" case (§2.6, the resolved
-  Q-UI-1). Both the Account and Category picker labels carry a tooltip listing these shortcuts.
+- **Person attribution (`for` / `by`).** The sigil names the person **and asserts the sign of their
+  leg**, identically in either picker: `for <person>` puts it on the **debit** side (`→ Person` — they
+  owe you), `by <person>` on the **credit** side (`Person →` — you owe them). The reserved keywords
+  parallel `to`/`from` and dodge the person-vs-account name clash; an account or person name may not
+  **begin** with any of the four (data-model §7). A person leg **is** a transfer to/from that person's
+  per-currency leaf (data-model §7), so it rides the transfer commit path. An unknown name **creates**
+  the person, with a confirm when the name would instead **revive** a soft-deleted one. Both picker
+  labels carry a tooltip listing the shortcuts.
+- **The currency selector sets the transaction currency** — the currency of every leg that is **not** a
+  real account. With a real funding account this is exactly the behaviour above (its currency by
+  default; an override declares the transaction cross-currency). With **no** real account — a person
+  funding a category (§2.6 pattern 3), or a person-to-person debt transfer — it sets **every** leg, the
+  transaction is single-currency, and it defaults to the involved person's leaf currency when
+  unambiguous, else to base. This is the only currency source in that case, which is what lets a
+  brand-new person be provisioned from the Account field. Shown unless **every** leg is a real account.
+
+  *Accepted consequence:* an expense a person funded is denominated in the **debt** currency, not the
+  spending currency. Max buys you €10 of groceries against an agreed $11 debt and the book records
+  `Food-USD +11`; the €10 never exists. The expense leg answers *"where did this debt come from"*, not
+  *"what did this cost"* — the deliberate reading, not an approximation.
+- **The sigil is a checked assertion, not a second direction source.** Against a **category**
+  counterpart, direction is already fixed by §3.8 — the category type sets the funding leg's sign, a
+  negative amount flips it — and the sigil is verified against that result. Agreement commits; a
+  contradiction is **blocked with an explanation**, surfaced at category-resolve time (before Add is
+  ever pressed) and re-checked at commit. It is never silently corrected: flipping the sign of money on
+  the user's behalf is how books go quietly wrong. Against a **person or account** counterpart there is
+  no category type, so the sigils/keywords are themselves the direction source, as with a transfer.
+
+  One rule, six cases — `by` + expense and `for` + income are ordinary; their opposites are legal only
+  with a negative amount (a storno or a reversal):
+
+  | Account | Category | Amount | Sign from category | Sigil asserts | |
+  |---|---|---|---|---|---|
+  | `by Max` | expense | + | credit (−) | Max − | ✅ Max paid your expense |
+  | `by Max` | income | + | debit (+) | Max − | ❌ blocked |
+  | `by Max` | income | **−** | debit → flipped credit (−) | Max − | ✅ Max returns overpaid salary |
+  | `for Max` | expense | + | credit (−) | Max + | ❌ blocked |
+  | `for Max` | expense | **−** | credit → flipped debit (+) | Max + | ✅ Max returns goods for you |
+  | `for Max` | income | + | debit (+) | Max + | ✅ Max redeems your bottle deposit |
 
 ### 3.6 Tags — chip field with split inheritance
 

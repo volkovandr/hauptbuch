@@ -635,6 +635,17 @@ Falls entirely out of the account model — no separate debt machinery (requirem
   leaf names are cosmetic (`personal.<CUR>`, duplicates allowed) and every display resolves the
   person's name via that link. **Rename** updates `person.name` only — ids never move. **Duplicate
   person names are allowed**, disambiguated in pickers (as payees are).
+- **`person_leaf` marks them, mirroring `currency_leaf`.** A boolean on `account`, set at provisioning.
+  It hides the leaf from the dock's **Account** picker, the **accounts management** screen, and
+  **transfer-target** (`to`/`from`) resolution — a person leg must have exactly one way in, the `for`/`by`
+  sigil. It does **not** hide them from the register: they are assets and stay in the default viewed
+  set (§2.6's Q-UI-1) and in its filter, shown as `Max (EUR)`. A flag rather than an `account_owner`
+  lookup because `debts` already depends on `accounts`; the reverse edge would be a module cycle.
+- **Reserved name prefixes.** No **account** name (hence no category name) and no **person** name may
+  begin `to `, `from `, `for ` or `by ` (case-insensitive), so a picker sigil is never ambiguous with a
+  name. Enforced in the **service layer only, with no DB constraint** — the database owns the data
+  model, and this is a UI-parser convenience, not a model invariant. Accepted cost: plausible category
+  names like "For Kids" must be written "Kids".
 - **Lifecycle.** A person is created explicitly or inline (first `for`/`by` reference), renamed, and
   **soft-deleted only when every leaf balance is zero** — a soft-deleted person is hidden from pickers
   but keeps all history and is **revived by confirmation** when the name is re-entered. A **non-zero**
