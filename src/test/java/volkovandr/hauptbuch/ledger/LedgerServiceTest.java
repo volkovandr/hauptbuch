@@ -285,6 +285,35 @@ class LedgerServiceTest {
   }
 
   @Test
+  void rejectsCrossCurrencyWhenEveryBaseAmountIsZero() {
+    stubBaseCurrency(EUR);
+    stubAccount(CARD_CHF, CHF);
+    stubAccount(CASH_EUR, EUR);
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+
+    // Every leg carries a base_amount of exactly zero: the base amounts trivially "sum to zero",
+    // but the whole transaction is valued at nothing — a real native amount frozen against no base
+    // is nonsensical (it slipped a person-funded split through with 0,00 base on every leg). The
+    // base sum being zero is necessary but not sufficient; at least one leg must be non-zero.
+    assertThatExceptionOfType(UnbalancedTransactionException.class)
+        .isThrownBy(
+            () ->
+                ledgerService.recordTransaction(
+                    TransactionDraft.confirmed(
+                        LocalDate.of(2026, 6, 1),
+                        null,
+                        null,
+                        List.of(
+                            PostingDraft.ofCrossCurrency(
+                                CARD_CHF, new BigDecimal("-100.00"), BigDecimal.ZERO),
+                            PostingDraft.ofCrossCurrency(
+                                CASH_EUR, new BigDecimal(NINETY_FIVE), BigDecimal.ZERO)))))
+        .withMessageContaining("valued at zero");
+
+    verify(transactionRepository, never()).insertPosting(any());
+  }
+
+  @Test
   void voidingLiveTransactionSoftDeletesIt() {
     when(transactionRepository.softDelete(42L)).thenReturn(1);
 

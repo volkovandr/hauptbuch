@@ -236,6 +236,7 @@ public class LedgerService {
   private List<PostingDraft> validatedCrossCurrency(
       List<PostingDraft> postings, String baseCurrency) {
     BigDecimal baseSum = BigDecimal.ZERO;
+    BigDecimal maxBaseMagnitude = BigDecimal.ZERO;
     for (PostingDraft leg : postings) {
       requireAmount(leg);
       if (leg.baseAmount() == null) {
@@ -246,6 +247,18 @@ public class LedgerService {
                 + "(data-model §6.4)");
       }
       baseSum = baseSum.add(leg.baseAmount());
+      maxBaseMagnitude = maxBaseMagnitude.max(leg.baseAmount().abs());
+    }
+
+    // A base sum of zero is necessary but not sufficient: every leg carrying a base_amount of
+    // exactly zero also sums to zero, yet values the whole transaction at nothing — a real native
+    // amount frozen against no base is meaningless. Reject it before the sign check, or a missing
+    // base total (an unfilled cross-currency field) records as a phantom all-zero-base transaction.
+    if (maxBaseMagnitude.signum() == 0) {
+      throw new UnbalancedTransactionException(
+          "Cross-currency transaction is valued at zero: every leg's base_amount is 0,00 in "
+              + baseCurrency
+              + " — a base total is required (data-model §6.4)");
     }
 
     if (baseSum.signum() != 0) {

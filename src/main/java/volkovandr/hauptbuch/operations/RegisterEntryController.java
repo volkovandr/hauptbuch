@@ -17,6 +17,7 @@ import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.RegisterFilter;
 import volkovandr.hauptbuch.ledger.RegisterService;
 import volkovandr.hauptbuch.ledger.RegisterView;
+import volkovandr.hauptbuch.ledger.UnbalancedTransactionException;
 import volkovandr.hauptbuch.operations.repository.GhostSuggestionRepository;
 
 /**
@@ -148,7 +149,9 @@ class RegisterEntryController {
               form.personDirection(),
               form.personRevive(),
               form.tagId()));
-    } catch (IllegalArgumentException | IllegalStateException e) {
+    } catch (IllegalArgumentException | IllegalStateException | UnbalancedTransactionException e) {
+      // UnbalancedTransactionException is the engine's balance-invariant signal: show it in the
+      // dock rather than let it 500 into an empty swap that reads as a no-op commit.
       return dockError(filter, form, e.getMessage(), model);
     }
     RegisterView register = registerService.view(filter);
