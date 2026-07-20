@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonProvisioningService;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.PostingDraft;
@@ -37,6 +38,14 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
  * <p>Category <em>create-new</em> is not here — like the simple dock, the browser resolves a new
  * category through the {@code categories} module first ({@code operations → categories} would
  * cycle), so every line arrives with an existing category id.
+ *
+ * <p><strong>Person lines (register §3.5, plan stage 8b.2).</strong> A line may instead attribute
+ * its share to a person ({@code for}/{@code by}), which is how one receipt expresses multi-person
+ * attribution — "€31,50: €21,50 my food, €10 for Max" (register §2.6). Unlike a category, a
+ * person's per-currency debt leaf is <em>provisioned here, at commit</em> (data-model §7): it may
+ * not exist yet, and its currency is only known once the line's currency is fixed. Everything
+ * downstream is unchanged — the leaf is an ordinary {@code asset} account and its leg is signed and
+ * summed exactly like any other.
  */
 @Service
 public class DockSplitService {
@@ -52,18 +61,21 @@ public class DockSplitService {
   private final CurrencyLeafService currencyLeafService;
   private final LedgerService ledgerService;
   private final SettingsService settingsService;
+  private final PersonProvisioningService personProvisioningService;
 
   DockSplitService(
       AccountService accountService,
       PayeeService payeeService,
       CurrencyLeafService currencyLeafService,
       LedgerService ledgerService,
-      SettingsService settingsService) {
+      SettingsService settingsService,
+      PersonProvisioningService personProvisioningService) {
     this.accountService = accountService;
     this.payeeService = payeeService;
     this.currencyLeafService = currencyLeafService;
     this.ledgerService = ledgerService;
     this.settingsService = settingsService;
+    this.personProvisioningService = personProvisioningService;
   }
 
   /**
@@ -130,14 +142,25 @@ public class DockSplitService {
   }
 
   /**
-   * Resolve one split line into its counter-leg account and signed contribution (register §3.8): a
-   * <em>transfer</em> to a real own account when {@link SplitLineDraft#transferDirection()} is set
-   * — its currency fixed by the account, its sign from {@code TO}/{@code FROM} ({@code TO} = an
-   * outflow, like an expense; {@code FROM} = an inflow, like income) — otherwise the picked
-   * category's per-currency leaf routed to {@code lineCurrency}, signed by the leaf's type. A
-   * transfer's account must be denominated in {@code lineCurrency}: the split's shared rate fixes
-   * at most two currencies at the header (register §3.8a), so a third-currency transfer leg cannot
-   * be expressed and is refused. A storno (a leading {@code −}) flows through either path.
+   * Resolve one split line into its counter-leg account and signed contribution (register §3.8):
+   *
+   * <ul>
+   *   <li>a <em>transfer</em> to a real own account when {@link SplitLineDraft#transferDirection()}
+   *       is set — its currency fixed by the account, its sign from {@code TO}/{@code FROM} ({@code
+   *       TO} = an outflow, like an expense; {@code FROM} = an inflow, like income);
+   *   <li>a <em>person</em> (register §3.5, plan stage 8b.2) when {@link
+   *       SplitLineDraft#personName()}/{@link SplitLineDraft#personDirection()} are set — their
+   *       per-currency debt leaf, auto-provisioned here at commit in {@code lineCurrency} (so a
+   *       cross-currency split attributes the line in its spending currency, exactly as a category
+   *       line is routed), its sign from {@code FOR}/{@code BY};
+   *   <li>otherwise the picked category's per-currency leaf routed to {@code lineCurrency}, signed
+   *       by the leaf's type.
+   * </ul>
+   *
+   * <p>A transfer's account must be denominated in {@code lineCurrency}: the split's shared rate
+   * fixes at most two currencies at the header (register §3.8a), so a third-currency transfer leg
+   * cannot be expressed and is refused. A person's leaf needs no such check — it is provisioned in
+   * {@code lineCurrency}. A storno (a leading {@code −}) flows through every path.
    */
   private ResolvedLine resolveLine(
       SplitLineDraft line, Account fundingAccount, String lineCurrency) {
@@ -145,7 +168,7 @@ public class DockSplitService {
     if (direction != null) {
       Account other =
           accountService
-              .findById(line.categoryId())
+              .findById(requireCategoryId(line))
               .orElseThrow(
                   () -> new IllegalArgumentException("No account with id " + line.categoryId()));
       if (other.accountId().equals(fundingAccount.accountId())) {
@@ -167,12 +190,35 @@ public class DockSplitService {
           blankToNull(line.note()),
           line.tagIds());
     }
-    Account leaf = currencyLeafService.resolveCurrencyLeaf(line.categoryId(), lineCurrency);
+    String personName = blankToNull(line.personName());
+    String personDirection = blankToNull(line.personDirection());
+    if (personName != null && personDirection != null) {
+      boolean revive = "true".equalsIgnoreCase(blankToNull(line.personRevive()));
+      Account leaf = personProvisioningService.ensureLeaf(personName, lineCurrency, revive);
+      return new ResolvedLine(
+          leaf,
+          SplitLineAmounts.personContribution(line.amount(), personDirection),
+          blankToNull(line.note()),
+          line.tagIds());
+    }
+    Account leaf = currencyLeafService.resolveCurrencyLeaf(requireCategoryId(line), lineCurrency);
     return new ResolvedLine(
         leaf,
         SplitLineAmounts.signedContribution(line.amount(), leaf.type()),
         blankToNull(line.note()),
         line.tagIds());
+  }
+
+  /**
+   * The line's category/account id, required by every branch except a person line (whose leaf does
+   * not exist until commit). Blank is already refused at binding time (a line needs a category);
+   * this is the commit-side backstop for a caller that built the draft directly.
+   */
+  private static long requireCategoryId(SplitLineDraft line) {
+    if (line.categoryId() == null) {
+      throw new IllegalArgumentException("Each split line needs a category (pick or create one)");
+    }
+    return line.categoryId();
   }
 
   /**

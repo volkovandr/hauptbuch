@@ -694,6 +694,170 @@ class RegisterSplitScreenIntegrationTest {
         .andExpect(content().string(not(containsString("3.000,00"))));
   }
 
+  // ── person lines (register §3.5/§2.6, plan stage 8b.2) ────────────────────────
+
+  @Test
+  void resolvingaSplitLinePersonTargetReturnsThePersonNameAndDirection() throws Exception {
+    mockMvc
+        .perform(
+            post("/categories/resolve")
+                .param("categoryText", "for Max")
+                .param("fieldName", "lineCategoryId")
+                .param("typeFieldName", "lineCategoryType")
+                .param("directionFieldName", "lineTransferDirection")
+                .param("personFieldPrefix", "line"))
+        .andExpect(status().isOk())
+        // A person is carried by NAME, not id — the debt leaf is provisioned at commit — and the
+        // per-line inputs are prefixed so the panel's index-aligned arrays stay aligned.
+        .andExpect(content().string(containsString("name=\"linePersonName\"")))
+        .andExpect(content().string(containsString("value=\"Max\"")))
+        .andExpect(content().string(containsString("name=\"linePersonDirection\"")))
+        .andExpect(content().string(containsString("value=\"FOR\"")))
+        // The line's category id stays empty: there is nothing to resolve to yet.
+        .andExpect(content().string(containsString("name=\"lineCategoryId\"")));
+  }
+
+  @Test
+  void splitAttributesOneReceiptToTwoPeopleProvisioningTheirLeaves() throws Exception {
+    // Register §2.6's worked shape, generalised: one €45 receipt — €15 mine, €15 for Max, €15 for
+    // Anna. Cash −45; each person's EUR leaf +15, so both owe you. Sum = 0.
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food", "expense");
+
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("lineCategoryId", String.valueOf(food), "", "")
+                .param("lineCategoryType", "expense", "", "")
+                .param("lineTransferDirection", "", "", "")
+                .param("linePersonName", "", "Max", "Anna")
+                .param("linePersonDirection", "", "FOR", "FOR")
+                .param("lineAmount", "15", "15", "15")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"register-rows\"")))
+        .andExpect(content().string(containsString("455,00"))); // 500 − 45
+
+    long txnId = latestTransactionId();
+    assertThat(legCount(txnId)).isEqualTo(4L);
+    assertThat(legSum(txnId)).isEqualByComparingTo("0");
+    assertThat(fundingNative(txnId, cash)).isEqualByComparingTo("-45");
+    // Both people were auto-provisioned with a EUR leaf, each carrying its +15 debit.
+    assertThat(personLegAmount(txnId, "Max")).isEqualByComparingTo("15");
+    assertThat(personLegAmount(txnId, "Anna")).isEqualByComparingTo("15");
+  }
+
+  @Test
+  void byPersonSplitLineCreditsTheirLeaf() throws Exception {
+    // Max chips in €10 towards a €20 Food receipt: Cash −10, Food +20, Max −10 — you owe Max.
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food", "expense");
+
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("lineCategoryId", String.valueOf(food), "")
+                .param("lineCategoryType", "expense", "")
+                .param("linePersonName", "", "Max")
+                .param("linePersonDirection", "", "BY")
+                .param("lineAmount", "20", "10")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk());
+
+    long txnId = latestTransactionId();
+    assertThat(legSum(txnId)).isEqualByComparingTo("0");
+    assertThat(fundingNative(txnId, cash)).isEqualByComparingTo("-10");
+    assertThat(personLegAmount(txnId, "Max")).isEqualByComparingTo("-10");
+  }
+
+  @Test
+  void splitWithaPersonLineReloadsAsTheSigilAndReSaves() throws Exception {
+    // The reload must show `for Max`, never the cosmetic personal.EUR leaf name — and re-saving it
+    // untouched must reproduce the same legs (the same round-trip the transfer lines get).
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food", "expense");
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("lineCategoryId", String.valueOf(food), "")
+                .param("lineCategoryType", "expense", "")
+                .param("linePersonName", "", "Max")
+                .param("linePersonDirection", "", "FOR")
+                .param("lineAmount", "20", "10")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk());
+    long txnId = latestTransactionId();
+
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(containsString("value=\"for Max\"")))
+        .andExpect(content().string(containsString("name=\"linePersonDirection\"")))
+        .andExpect(content().string(not(containsString("personal.EUR"))));
+
+    // Re-save the reloaded shape: same transaction, same three legs, still balanced.
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("transactionId", String.valueOf(txnId))
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("lineCategoryId", String.valueOf(food), "")
+                .param("lineCategoryType", "expense", "")
+                .param("linePersonName", "", "Max")
+                .param("linePersonDirection", "", "FOR")
+                .param("lineAmount", "20", "10")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk());
+
+    assertThat(latestTransactionId()).isEqualTo(txnId);
+    assertThat(legCount(txnId)).isEqualTo(3L);
+    assertThat(legSum(txnId)).isEqualByComparingTo("0");
+    assertThat(personLegAmount(txnId, "Max")).isEqualByComparingTo("10");
+    // Re-saving reused the existing leaf rather than provisioning a second one.
+    assertThat(personLeafCount("Max")).isEqualTo(1L);
+  }
+
+  /** The amount on the leg hitting {@code personName}'s debt leaf in this transaction. */
+  private BigDecimal personLegAmount(long transactionId, String personName) {
+    return jdbcClient
+        .sql(
+            """
+            select p.amount
+            from posting p
+            join account_owner ao on ao.account_id = p.account_id
+            join person pe on pe.person_id = ao.person_id
+            where p.transaction_id = :id and pe.name = :name
+            """)
+        .param("id", transactionId)
+        .param("name", personName)
+        .query(BigDecimal.class)
+        .single();
+  }
+
+  /** How many live debt leaves this person owns — one per currency, never more. */
+  private long personLeafCount(String personName) {
+    return jdbcClient
+        .sql(
+            """
+            select count(*)
+            from account_owner ao
+            join person pe on pe.person_id = ao.person_id
+            join account a on a.account_id = ao.account_id
+            where pe.name = :name and a.deleted_at is null
+            """)
+        .param("name", personName)
+        .query(Long.class)
+        .single();
+  }
+
   private BigDecimal baseAmountSum(long transactionId) {
     return jdbcClient
         .sql("select coalesce(sum(base_amount), 0) from posting where transaction_id = :id")

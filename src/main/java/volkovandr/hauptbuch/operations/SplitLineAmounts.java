@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.operations;
 
 import java.math.BigDecimal;
+import volkovandr.hauptbuch.debts.PersonTarget;
 import volkovandr.hauptbuch.ledger.TransferTarget;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 
@@ -17,7 +18,9 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
  * amount} is the number the user typed <em>already signed</em>, so a leading {@code −} (a storno)
  * flows through: a negative on an income line counts negatively, on an expense line positively. A
  * <em>transfer</em> line (register §3.8, plan stage 7d.3) has no category type — its direction
- * signs it: {@code TO} is an outflow (like an expense), {@code FROM} an inflow (like income).
+ * signs it: {@code TO} is an outflow (like an expense), {@code FROM} an inflow (like income). A
+ * <em>person</em> line ({@code for}/{@code by}, register §3.5, plan stage 8b.2) is the same shape:
+ * {@code FOR} is an outflow, {@code BY} an inflow.
  */
 final class SplitLineAmounts {
 
@@ -57,28 +60,50 @@ final class SplitLineAmounts {
   }
 
   /**
-   * A split line's signed contribution for the panel's <em>live readout</em> (the lenient sibling
-   * of {@link #signedContribution}/{@link #transferContribution} used by {@link
-   * SplitPanelAssembler}): zero for an incomplete line — blank amount, or neither a resolved
-   * category type nor a transfer direction — and zero for mid-entry unparseable text, so the panel
-   * renders sensibly before a line is complete. The commit path re-derives the same numbers
-   * strictly.
+   * A <em>person</em> line's signed contribution to the funding sum (register §3.5, plan stage
+   * 8b.2): the typed amount kept with its own sign (a storno flows through), made negative for
+   * {@code FOR} (you funded it — the person's leg is a debit, so the funding leg outflows, like an
+   * expense) and positive for {@code BY} (they funded it — their leg is a credit, so the funding
+   * leg inflows, like income). Against a person counterpart there is no category type, so the sigil
+   * is itself the direction source (register §3.5) — the person analogue of {@link
+   * #transferContribution}, which a person leg's underlying transfer shape makes it a twin of.
    */
-  static BigDecimal lenientContribution(String amount, String type, String direction) {
-    if (amount == null || amount.isBlank()) {
+  static BigDecimal personContribution(String amountText, String direction) {
+    BigDecimal value = parseSignedAmount(amountText);
+    return PersonTarget.Direction.BY.name().equals(direction) ? value : value.negate();
+  }
+
+  /**
+   * A split line's signed contribution for the panel's <em>live readout</em> (the lenient sibling
+   * of {@link #signedContribution}/{@link #transferContribution}/{@link #personContribution} used
+   * by {@link SplitPanelAssembler}): zero for an incomplete line — blank amount, or none of a
+   * resolved category type, a transfer direction and a person direction — and zero for mid-entry
+   * unparseable text, so the panel renders sensibly before a line is complete. The commit path
+   * re-derives the same numbers strictly.
+   */
+  static BigDecimal lenientContribution(
+      String amount, String type, String transferDirection, String personDirection) {
+    if (isBlank(amount)) {
       return BigDecimal.ZERO;
     }
     try {
-      if (direction != null && !direction.isBlank()) {
-        return transferContribution(amount, direction);
+      if (!isBlank(transferDirection)) {
+        return transferContribution(amount, transferDirection);
       }
-      if (type == null || type.isBlank()) {
+      if (!isBlank(personDirection)) {
+        return personContribution(amount, personDirection);
+      }
+      if (isBlank(type)) {
         return BigDecimal.ZERO;
       }
       return signedContribution(amount, type);
     } catch (IllegalArgumentException e) {
       return BigDecimal.ZERO;
     }
+  }
+
+  private static boolean isBlank(String value) {
+    return value == null || value.isBlank();
   }
 
   /**

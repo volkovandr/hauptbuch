@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonProvisioningService;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.PostingDraft;
@@ -50,12 +51,15 @@ class DockSplitServiceTest {
   private static final long DEPOSIT_ID = 20L;
   private static final long DEPOSIT_LEAF_ID = 21L;
   private static final long SAVINGS_ID = 30L;
+  private static final long MAX_LEAF_ID = 40L;
+  private static final long ANNA_LEAF_ID = 41L;
 
   @Mock private AccountService accountService;
   @Mock private PayeeService payeeService;
   @Mock private CurrencyLeafService currencyLeafService;
   @Mock private LedgerService ledgerService;
   @Mock private SettingsService settingsService;
+  @Mock private PersonProvisioningService personProvisioningService;
 
   private DockSplitService dockSplitService;
 
@@ -63,7 +67,12 @@ class DockSplitServiceTest {
   void setUp() {
     dockSplitService =
         new DockSplitService(
-            accountService, payeeService, currencyLeafService, ledgerService, settingsService);
+            accountService,
+            payeeService,
+            currencyLeafService,
+            ledgerService,
+            settingsService,
+            personProvisioningService);
   }
 
   private static Account account(long id, String type, String currency) {
@@ -86,15 +95,20 @@ class DockSplitServiceTest {
   }
 
   private static SplitLineDraft line(long categoryId, String amount) {
-    return new SplitLineDraft(categoryId, amount, null, null, List.of());
+    return new SplitLineDraft(categoryId, amount, null, null, null, null, null, List.of());
   }
 
   private static SplitLineDraft line(long categoryId, String amount, List<Long> tagIds) {
-    return new SplitLineDraft(categoryId, amount, null, null, tagIds);
+    return new SplitLineDraft(categoryId, amount, null, null, null, null, null, tagIds);
+  }
+
+  /** A for/by person line (register §3.5, plan stage 8b.2) with no category id. */
+  private static SplitLineDraft personLine(String personName, String direction, String amount) {
+    return new SplitLineDraft(null, amount, null, null, personName, direction, null, List.of());
   }
 
   private static SplitLineDraft transferLine(long accountId, String amount, String direction) {
-    return new SplitLineDraft(accountId, amount, null, direction, List.of());
+    return new SplitLineDraft(accountId, amount, null, direction, null, null, null, List.of());
   }
 
   /** A same-currency split entry (the 7c.2 shape) — the 7d.2 header currency fields left blank. */
@@ -247,7 +261,9 @@ class DockSplitServiceTest {
             LocalDate.of(2026, 2, 1),
             CASH_ID,
             null,
-            List.of(new SplitLineDraft(FOOD_ID, "20", "organic aisle", null, List.of()))));
+            List.of(
+                new SplitLineDraft(
+                    FOOD_ID, "20", "organic aisle", null, null, null, null, List.of()))));
 
     ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
     verify(ledgerService).recordTransaction(draft.capture());
@@ -295,6 +311,168 @@ class DockSplitServiceTest {
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockSplitService.commit(entry))
         .withMessageContaining("No account");
+  }
+
+  // ── person lines (register §3.5/§2.6, plan stage 8b.2) ────────────────────────
+
+  @Test
+  void splitWithaForPersonLineBooksTheirLeafOnTheDebitSide() {
+    // "€31,50: €21,50 my food, €10 for Max" (register §2.6) — you funded it, so Max owes you €10:
+    // Cash −31,50, Food +21,50, Max's EUR leaf +10. Sum = 0.
+    cashFunds();
+    foodLeaf();
+    when(personProvisioningService.ensureLeaf("Max", EUR, false))
+        .thenReturn(account(MAX_LEAF_ID, "asset", EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(7L);
+
+    dockSplitService.commit(
+        entry(
+            null,
+            LocalDate.of(2026, 2, 1),
+            CASH_ID,
+            null,
+            List.of(line(FOOD_ID, "21,50"), personLine("Max", "FOR", "10"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(legs).hasSize(3);
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("-31.50");
+    assertThat(leg(legs, FOOD_LEAF_ID)).isEqualByComparingTo("21.50");
+    assertThat(leg(legs, MAX_LEAF_ID)).isEqualByComparingTo("10");
+    assertThat(sum(legs)).isEqualByComparingTo("0");
+    // A person leg is their debt leaf, never routed through the category currency-leaf resolver.
+    verify(currencyLeafService, never()).resolveCurrencyLeaf(eq(MAX_LEAF_ID), any());
+  }
+
+  @Test
+  void splitWithaByPersonLineCreditsTheirLeaf() {
+    // Cash pays €20 Food while Max chips in €10: Cash −10, Food +20, Max −10. Sum = 0 — you owe
+    // Max.
+    cashFunds();
+    foodLeaf();
+    when(personProvisioningService.ensureLeaf("Max", EUR, false))
+        .thenReturn(account(MAX_LEAF_ID, "asset", EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(8L);
+
+    dockSplitService.commit(
+        entry(
+            null,
+            LocalDate.of(2026, 2, 1),
+            CASH_ID,
+            null,
+            List.of(line(FOOD_ID, "20"), personLine("Max", "BY", "10"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("-10");
+    assertThat(leg(legs, FOOD_LEAF_ID)).isEqualByComparingTo("20");
+    assertThat(leg(legs, MAX_LEAF_ID)).isEqualByComparingTo("-10");
+    assertThat(sum(legs)).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void twoPersonLinesAttributeOneReceiptToTwoPeople() {
+    // The point of 8b.2: one receipt, several people. Cash −45; Anna and Max each owe €15.
+    cashFunds();
+    foodLeaf();
+    when(personProvisioningService.ensureLeaf("Max", EUR, false))
+        .thenReturn(account(MAX_LEAF_ID, "asset", EUR));
+    when(personProvisioningService.ensureLeaf("Anna", EUR, false))
+        .thenReturn(account(ANNA_LEAF_ID, "asset", EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(9L);
+
+    dockSplitService.commit(
+        entry(
+            null,
+            LocalDate.of(2026, 2, 1),
+            CASH_ID,
+            null,
+            List.of(
+                line(FOOD_ID, "15"),
+                personLine("Max", "FOR", "15"),
+                personLine("Anna", "FOR", "15"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(legs).hasSize(4);
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("-45");
+    assertThat(leg(legs, MAX_LEAF_ID)).isEqualByComparingTo("15");
+    assertThat(leg(legs, ANNA_LEAF_ID)).isEqualByComparingTo("15");
+    assertThat(sum(legs)).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void stornoOnaForPersonLineFlipsItToaCredit() {
+    // Max returns €5 of goods he bought for you (register §3.5's storno row): his leg goes credit.
+    cashFunds();
+    foodLeaf();
+    when(personProvisioningService.ensureLeaf("Max", EUR, false))
+        .thenReturn(account(MAX_LEAF_ID, "asset", EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(10L);
+
+    dockSplitService.commit(
+        entry(
+            null,
+            LocalDate.of(2026, 2, 1),
+            CASH_ID,
+            null,
+            List.of(line(FOOD_ID, "20"), personLine("Max", "FOR", "-5"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(leg(legs, MAX_LEAF_ID)).isEqualByComparingTo("-5");
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("-15");
+    assertThat(sum(legs)).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void personLineProvisionsTheLeafInTheSplitsSpendingCurrency() {
+    // Cross-currency (register §3.8a): the lines are in the spending currency, so Max's leaf is
+    // provisioned there too — the currency default applies per line, as it does to a category leaf.
+    when(accountService.findById(CARD_ID))
+        .thenReturn(java.util.Optional.of(account(CARD_ID, "asset", CHF)));
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, USD))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, USD));
+    when(personProvisioningService.ensureLeaf("Max", USD, false))
+        .thenReturn(account(MAX_LEAF_ID, "asset", USD));
+    when(settingsService.baseCurrency()).thenReturn(java.util.Optional.of(EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(11L);
+
+    dockSplitService.commit(
+        crossEntry(USD, "100", "95", List.of(line(FOOD_ID, "60"), personLine("Max", "FOR", "30"))));
+
+    verify(personProvisioningService).ensureLeaf("Max", USD, false);
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    assertThat(leg(draft.getValue().postings(), MAX_LEAF_ID)).isEqualByComparingTo("30");
+  }
+
+  @Test
+  void personLineHonoursTheRestoreDecisionForaSoftDeletedName() {
+    cashFunds();
+    when(personProvisioningService.ensureLeaf("Max", EUR, true))
+        .thenReturn(account(MAX_LEAF_ID, "asset", EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(12L);
+
+    dockSplitService.commit(
+        entry(
+            null,
+            LocalDate.of(2026, 2, 1),
+            CASH_ID,
+            null,
+            List.of(new SplitLineDraft(null, "10", null, null, "Max", "FOR", "true", List.of()))));
+
+    verify(personProvisioningService).ensureLeaf("Max", EUR, true);
   }
 
   // ── split transfers (register §3.8, plan stage 7d.3) ───────────────────────────

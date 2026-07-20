@@ -29,6 +29,14 @@ import volkovandr.hauptbuch.ledger.TransactionTag;
  *     to a {@code To →}/{@code From ←} transfer target (register §3.8, plan stage 7d.3), else
  *     {@code ""} — the keyboard.js leaf reads it (via {@code lineTransferDirection}) to sign a
  *     transfer line in the live readout, which has no category type
+ * @param personName the person this line is attributed to when it resolved to a {@code for}/{@code
+ *     by} target (register §3.5, plan stage 8b.2), else {@code ""} — a name, not an id: the
+ *     person's debt leaf is provisioned at commit
+ * @param personDirection the line's person direction ({@code FOR}/{@code BY}), else {@code ""} —
+ *     the sign source a person line has instead of a category type, read by keyboard.js like the
+ *     transfer direction
+ * @param personRevive the line's Restore ({@code "true"}) / Create-new decision for a name that
+ *     matched only a soft-deleted person, else {@code ""}
  * @param amount the typed amount to prefill (a bare magnitude, optionally a leading {@code −}
  *     storno), in the spending currency
  * @param note the line's posting-level note; {@code ""} if none
@@ -48,6 +56,9 @@ public record SplitLineView(
     String categoryId,
     String categoryType,
     String transferDirection,
+    String personName,
+    String personDirection,
+    String personRevive,
     String amount,
     String note,
     String accountAmount,

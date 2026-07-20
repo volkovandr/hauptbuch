@@ -104,6 +104,12 @@ class RegisterSplitController {
             List.of(categoryId),
             List.of(type),
             List.of(direction == null ? "" : direction),
+            // The dock's committed line may itself be a person attribution (register §3.5, plan
+            // stage 8b.1): it seeds the split's first line the same way a category or transfer
+            // does, so splitting a `for Max` entry keeps Max on line one.
+            List.of(SplitFormBinder.orEmpty(form.personName())),
+            List.of(SplitFormBinder.orEmpty(form.personDirection())),
+            List.of(SplitFormBinder.orEmpty(form.personRevive())),
             List.of(seed.lineAmount()),
             List.of(""),
             headerTags,

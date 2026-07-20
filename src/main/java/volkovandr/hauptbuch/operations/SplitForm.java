@@ -42,6 +42,14 @@ import java.util.List;
  *     for an ordinary category line) — set when the line resolved to a {@code To →}/{@code From ←}
  *     transfer target (register §3.8, plan stage 7d.3); index-aligned like the others, so every
  *     line emits it (blank for a category) to keep the arrays aligned
+ * @param linePersonName each line's attributed person (register §3.5, plan stage 8b.2), {@code ""}
+ *     for an ordinary line — set when the line resolved to a {@code for}/{@code by} person target.
+ *     A name, not an id: the person's debt leaf is provisioned at commit, once the line's currency
+ *     is known. Emitted by every line (blank when none) to keep the arrays aligned
+ * @param linePersonDirection each line's person direction ({@code FOR}/{@code BY}, {@code ""} when
+ *     the line is not a person line) — the sign source a person line has instead of a category type
+ * @param linePersonRevive each line's Restore ({@code "true"}) / Create-new decision for a person
+ *     name that matched only a soft-deleted person; {@code ""} when no revival was in question
  * @param lineAmount each line's typed amount (a bare magnitude, optionally a leading {@code −}
  *     storno)
  * @param lineNote each line's posting-level note; nullable per line
@@ -69,6 +77,9 @@ public record SplitForm(
     List<String> lineCategoryId,
     List<String> lineCategoryType,
     List<String> lineTransferDirection,
+    List<String> linePersonName,
+    List<String> linePersonDirection,
+    List<String> linePersonRevive,
     List<String> lineAmount,
     List<String> lineNote,
     List<Long> tagId,
@@ -85,6 +96,9 @@ public record SplitForm(
     lineCategoryType = lineCategoryType == null ? null : List.copyOf(lineCategoryType);
     lineTransferDirection =
         lineTransferDirection == null ? null : List.copyOf(lineTransferDirection);
+    linePersonName = linePersonName == null ? null : List.copyOf(linePersonName);
+    linePersonDirection = linePersonDirection == null ? null : List.copyOf(linePersonDirection);
+    linePersonRevive = linePersonRevive == null ? null : List.copyOf(linePersonRevive);
     lineAmount = lineAmount == null ? null : List.copyOf(lineAmount);
     lineNote = lineNote == null ? null : List.copyOf(lineNote);
     tagId = tagId == null ? null : List.copyOf(tagId);

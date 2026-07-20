@@ -64,20 +64,46 @@ class SplitLineAmountsTest {
     assertThat(SplitLineAmounts.transferContribution("-5", "TO")).isEqualByComparingTo("5");
   }
 
+  // ── person contribution (a `for`/`by` line, plan stage 8b.2) ──────────────────
+
+  @Test
+  void forPersonLineContributesNegativelyLikeAnExpense() {
+    assertThat(SplitLineAmounts.personContribution("20", "FOR")).isEqualByComparingTo("-20");
+  }
+
+  @Test
+  void byPersonLineContributesPositivelyLikeIncome() {
+    assertThat(SplitLineAmounts.personContribution("20", "BY")).isEqualByComparingTo("20");
+  }
+
+  @Test
+  void stornoOnaForPersonLineCountsPositively() {
+    assertThat(SplitLineAmounts.personContribution("-5", "FOR")).isEqualByComparingTo("5");
+  }
+
   // ── lenient contribution (the panel readout's incomplete-line tolerance) ───────
 
   @Test
   void lenientContributionIsZeroForanIncompleteLine() {
-    assertThat(SplitLineAmounts.lenientContribution("", EXPENSE, "")).isEqualByComparingTo("0");
-    assertThat(SplitLineAmounts.lenientContribution("20", "", "")).isEqualByComparingTo("0");
-    assertThat(SplitLineAmounts.lenientContribution("nonsense", EXPENSE, ""))
+    assertThat(SplitLineAmounts.lenientContribution("", EXPENSE, "", "")).isEqualByComparingTo("0");
+    assertThat(SplitLineAmounts.lenientContribution("20", "", "", "")).isEqualByComparingTo("0");
+    assertThat(SplitLineAmounts.lenientContribution("nonsense", EXPENSE, "", ""))
         .isEqualByComparingTo("0");
   }
 
   @Test
   void lenientContributionSignsaCompleteTransferLineByDirection() {
-    assertThat(SplitLineAmounts.lenientContribution("50", "", "TO")).isEqualByComparingTo("-50");
-    assertThat(SplitLineAmounts.lenientContribution("50", "", "FROM")).isEqualByComparingTo("50");
+    assertThat(SplitLineAmounts.lenientContribution("50", "", "TO", ""))
+        .isEqualByComparingTo("-50");
+    assertThat(SplitLineAmounts.lenientContribution("50", "", "FROM", ""))
+        .isEqualByComparingTo("50");
+  }
+
+  @Test
+  void lenientContributionSignsaCompletePersonLineByDirection() {
+    assertThat(SplitLineAmounts.lenientContribution("50", "", "", "FOR"))
+        .isEqualByComparingTo("-50");
+    assertThat(SplitLineAmounts.lenientContribution("50", "", "", "BY")).isEqualByComparingTo("50");
   }
 
   // ── amount text (reconstruction for the panel's edit mode) ─────────────────────

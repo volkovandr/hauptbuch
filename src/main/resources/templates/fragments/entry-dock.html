@@ -383,7 +383,7 @@
         </span>
         <!-- The resolved category id (hidden) + status, swapped in by /categories/resolve. In edit
              mode it starts pre-filled with the loaded transaction's category id. -->
-        <span id="entry-category-resolved">
+        <span id="entry-category-resolved" data-counterpart-resolved>
           <input type="hidden" name="categoryId" th:value="${edit != null and edit.categoryId() != null} ? ${edit.categoryId()} : ''" />
           <!-- The transfer marker (register §3.8, plan stage 7f): when the edited transaction is a
                transfer, the direction the commit signs the funding leg by must be pre-filled here
@@ -516,9 +516,17 @@
          in the live remaining/direction readout; when `directionFieldName` is set (lineTransferDirection
          for a split line) the transfer-direction input is emitted on every line, blank for a
          category, so the aligned line arrays stay aligned. The dock resolves without those, so they
-         default (its transfer marker is emitted only when a transfer resolves). -->
+         default (its transfer marker is emitted only when a transfer resolves).
+
+         `personFieldPrefix` does for the person inputs what `directionFieldName` does for the
+         transfer marker (plan stage 8b.2): unset, they are the dock's `personName`/`personDirection`/
+         `personRevive`, emitted only when a person actually resolved; set to `line`, they become
+         `linePersonName`/`linePersonDirection`/`linePersonRevive` and every line emits them (blank
+         for a category) so the aligned line arrays stay aligned. `index` is the line being resolved,
+         carried so the revival buttons below re-post against the right one (0 for the dock). -->
     <th:block
-      th:fragment="categoryResolved(categoryId, categoryName, error, fieldName, typeFieldName, categoryType, transferDirection, directionFieldName, personName, personDirection, personRevive, personPending, personPendingName)"
+      th:fragment="categoryResolved(categoryId, categoryName, error, fieldName, typeFieldName, categoryType, transferDirection, directionFieldName, personName, personDirection, personRevive, personPending, personPendingName, personFieldPrefix, index)"
+      th:with="resolveVals=|&quot;fieldName&quot;:&quot;${fieldName}&quot;,&quot;typeFieldName&quot;:&quot;${typeFieldName == null ? '' : typeFieldName}&quot;,&quot;directionFieldName&quot;:&quot;${directionFieldName == null ? '' : directionFieldName}&quot;,&quot;personFieldPrefix&quot;:&quot;${personFieldPrefix == null ? '' : personFieldPrefix}&quot;,&quot;index&quot;:${index == null ? 0 : index}|"
     >
       <input type="hidden" th:name="${fieldName}" th:value="${categoryId}" />
       <input
@@ -541,17 +549,22 @@
       <!-- A person target (register §3.5, plan stage 8b, data-model §7): for/by resolve to a name
            and direction, not an id — the leaf is auto-provisioned at commit, once the currency is
            known. Blank while a revival decision is pending (personPending, below). -->
-      <input th:if="${personName != null}" type="hidden" name="personName" th:value="${personName}" />
       <input
-        th:if="${personDirection != null}"
+        th:if="${personFieldPrefix != null ? true : personName != null}"
         type="hidden"
-        name="personDirection"
+        th:name="${personFieldPrefix != null ? personFieldPrefix + 'PersonName' : 'personName'}"
+        th:value="${personName}"
+      />
+      <input
+        th:if="${personFieldPrefix != null ? true : personDirection != null}"
+        type="hidden"
+        th:name="${personFieldPrefix != null ? personFieldPrefix + 'PersonDirection' : 'personDirection'}"
         th:value="${personDirection}"
       />
       <input
-        th:if="${personRevive != null}"
+        th:if="${personFieldPrefix != null ? true : personRevive != null}"
         type="hidden"
-        name="personRevive"
+        th:name="${personFieldPrefix != null ? personFieldPrefix + 'PersonRevive' : 'personRevive'}"
         th:value="${personRevive}"
       />
       <span th:if="${categoryName}" class="entry-dock__resolved muted" th:text="${categoryName}"
@@ -561,7 +574,10 @@
       <!-- Revival is never silent (data-model §7): a for/by name matching only a soft-deleted
            person renders this choice instead of a ready-to-commit result. Both buttons re-post the
            typed categoryText here with personDecision set, finalising the pick into the hidden
-           fields above. -->
+           fields above. They carry the caller's own field names + index back, so a split line's
+           choice resolves that line (plan stage 8b.2) — and target `closest
+           [data-counterpart-resolved]`, the slot this fragment was swapped into, which is the dock's
+           #entry-category-resolved or the line's #line-<i>-resolved without either needing naming. -->
       <span th:if="${personPending}" class="entry-dock__resolved warning">
         <span th:text="'&#8216;' + ${personPendingName} + '&#8217; is deleted.'"></span>
         <button
@@ -569,9 +585,9 @@
           class="btn btn--ghost"
           hx-post="/categories/resolve"
           hx-include="[name='categoryText']"
-          hx-vals='{"personDecision":"REVIVE"}'
-          hx-target="#entry-category-resolved"
+          hx-target="closest [data-counterpart-resolved]"
           hx-swap="innerHTML"
+          th:attr="hx-vals=|{&quot;personDecision&quot;:&quot;REVIVE&quot;,${resolveVals}}|"
         >
           Restore
         </button>
@@ -580,9 +596,9 @@
           class="btn btn--ghost"
           hx-post="/categories/resolve"
           hx-include="[name='categoryText']"
-          hx-vals='{"personDecision":"NEW"}'
-          hx-target="#entry-category-resolved"
+          hx-target="closest [data-counterpart-resolved]"
           hx-swap="innerHTML"
+          th:attr="hx-vals=|{&quot;personDecision&quot;:&quot;NEW&quot;,${resolveVals}}|"
         >
           Create new
         </button>
