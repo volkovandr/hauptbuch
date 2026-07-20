@@ -1,7 +1,7 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.22
+**Status:** Draft v0.24
 **Date:** 2026-07-20
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
@@ -23,6 +23,7 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.24 (2026-07-20):** **8c complete.** No scope change (routine).
 - **v0.23 (2026-07-20):** **8b.2 complete.** Owner testing surfaced that a person funding a *whole*
   split (`Account: by Max`, then Split) is unsupported — the split panel's Account is a real-account
   `<select>`, not the dock's person datalist — and silently misbooked. Blocked with a message for
@@ -72,7 +73,7 @@ it shipped. "Stage N complete" needs no recap here.
   three-tier test strategy; the stage-3 service framed as invariant-upholding domain ops, not CRUD.
 - **Stages marked complete** (routine, no recap): 1 (v0.3), 2 (v0.4), 3 (v0.5), 4 (v0.6), 5 (v0.7),
   6a (v0.9), 6b (v0.10), 6c (v0.12), 6d (v0.14), 7a (v0.16), 7b (v0.17), 7c (v0.18), 8a (v0.21),
-  8b.1 (v0.22).
+  8b.1 (v0.22), 8b.2 (v0.23), 8c (v0.24).
 
 ---
 
@@ -373,8 +374,8 @@ Six ordered sub-stages, each green and demoable (7-series cadence):
   `lineTransferDirection` already is. The 8b.1 direction check and currency default apply **per line**.
   Split from 8b.1 to keep each diff hand-reviewable (§0) and to prove the Account conversion in real
   use before threading it through the split machinery.
-- **8c — Register display.** Two-row symmetry with person legs, arrow-chip rendering (Account/Category
-  per §2.6), the most-negative-own-leg funding rule, Q-UI-1 surfacing. Includes the **name
+- **8c — Register display.** ✅ **complete.** Two-row symmetry with person legs, arrow-chip rendering
+  (Account/Category per §2.6), the most-negative-own-leg funding rule, Q-UI-1 surfacing. Includes the **name
   resolution** that 8b.1 deliberately leaves out: `RegisterRowRenderer` has no person awareness today,
   so a person leg renders its cosmetic `personal.<CUR>` leaf name in both columns. Until this lands,
   8b.1 is verifiable by its tests and by the stored postings, **not** by reading the register.
