@@ -51,6 +51,7 @@ public class DockCommitService {
   private final LedgerService ledgerService;
   private final SettingsService settingsService;
   private final PersonProvisioningService personProvisioningService;
+  private final TransactionCurrencyResolver transactionCurrencyResolver;
 
   DockCommitService(
       AccountService accountService,
@@ -58,13 +59,15 @@ public class DockCommitService {
       CurrencyLeafService currencyLeafService,
       LedgerService ledgerService,
       SettingsService settingsService,
-      PersonProvisioningService personProvisioningService) {
+      PersonProvisioningService personProvisioningService,
+      TransactionCurrencyResolver transactionCurrencyResolver) {
     this.accountService = accountService;
     this.payeeService = payeeService;
     this.currencyLeafService = currencyLeafService;
     this.ledgerService = ledgerService;
     this.settingsService = settingsService;
     this.personProvisioningService = personProvisioningService;
+    this.transactionCurrencyResolver = transactionCurrencyResolver;
   }
 
   /**
@@ -81,11 +84,7 @@ public class DockCommitService {
    */
   @Transactional
   public long commit(DockEntry entry) {
-    Account fundingAccount =
-        accountService
-            .findById(entry.accountId())
-            .orElseThrow(
-                () -> new IllegalArgumentException("No account with id " + entry.accountId()));
+    Account fundingAccount = resolveFundingAccount(entry);
     Long payeeId = payeeService.resolvePayee(entry.payeeId(), entry.payeeText());
 
     Counterpart counterpart = resolveCounterpart(entry, fundingAccount);
@@ -108,6 +107,57 @@ public class DockCommitService {
     }
     ledgerService.editTransaction(entry.transactionId(), draft);
     return entry.transactionId();
+  }
+
+  /**
+   * Resolve the entry's <em>funding</em> leg (register §3.3, plan stage 8b.1): normally the picked
+   * own account, but the Account field equally accepts a {@code for}/{@code by} sigil — "Max paid
+   * for a pure expense of mine" (register §2.6 pattern 3) — in which case the funding leg is that
+   * person's per-currency debt leaf, auto-provisioned here at commit exactly as a person
+   * counterpart is.
+   *
+   * <p>Provisioning it needs a currency, and with no real account in the transaction there is none
+   * to inherit: the <em>transaction currency</em> supplies it (see {@link #transactionCurrency}).
+   * Because the leaf is then created in that currency, every currency decision downstream — the
+   * counterpart's leaf routing, the single- vs cross-currency branch — reads it off the funding
+   * account as it always did, and needs no special case.
+   */
+  private Account resolveFundingAccount(DockEntry entry) {
+    if (blankToNull(entry.fundingPersonName()) == null
+        || blankToNull(entry.fundingPersonDirection()) == null) {
+      if (entry.accountId() == null) {
+        throw new IllegalArgumentException("An account or person is required");
+      }
+      return accountService
+          .findById(entry.accountId())
+          .orElseThrow(
+              () -> new IllegalArgumentException("No account with id " + entry.accountId()));
+    }
+    boolean revive = "true".equalsIgnoreCase(blankToNull(entry.fundingPersonRevive()));
+    return personProvisioningService.ensureLeaf(
+        entry.fundingPersonName(), transactionCurrency(entry), revive);
+  }
+
+  /**
+   * The currency of every leg that is not a real account (register §3.5, plan stage 8b.1) — needed
+   * only when the funding leg is itself a person, since otherwise the funding account fixes it. The
+   * currency selector's explicit choice wins; absent one it defaults to the person's existing debt
+   * currency when that is unambiguous, and to the book's base currency otherwise.
+   *
+   * <p>Note the deliberate consequence (register §3.5): an expense a person funded is denominated
+   * in the <em>debt</em> currency, not the spending currency. The expense leg answers "where did
+   * this debt come from", not "what did this cost".
+   */
+  private String transactionCurrency(DockEntry entry) {
+    String currency =
+        transactionCurrencyResolver.forFundingPerson(
+            entry.fundingPersonName(), entry.categoryCurrencyCode());
+    if (currency == null) {
+      throw new IllegalStateException(
+          "Base currency is not set; a person-funded transaction needs it to pick a currency "
+              + "(data-model §3.8)");
+    }
+    return currency;
   }
 
   /**

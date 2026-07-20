@@ -42,6 +42,24 @@ public record RegisterView(
   }
 
   /**
+   * The account a fresh dock pre-fills its Account field with, and the id it pre-resolves to
+   * (register §3.3, plan stage 8b.1). Because the field is free text rather than a {@code
+   * <select>}, the dock must render a value <em>and</em> its resolved id together, or accepting the
+   * default without typing would commit nothing — the regression risk that kept the field a {@code
+   * <select>} until the field conversion. Empty when the book has no accounts yet.
+   */
+  public String defaultAccountEntryText() {
+    return accounts.isEmpty() ? "" : accounts.get(0).entryValue();
+  }
+
+  /**
+   * The id matching {@link #defaultAccountEntryText()}; {@code null} when there are no accounts.
+   */
+  public Long defaultAccountId() {
+    return accounts.isEmpty() ? null : accounts.get(0).accountId();
+  }
+
+  /**
    * One account offered in the register's account multi-select (register §2.3), carrying whether it
    * is currently selected so the form redisplays the active choice.
    *
@@ -52,7 +70,18 @@ public record RegisterView(
    * @param selected whether this account is in the applied filter
    */
   public record RegisterAccountOption(
-      long accountId, String name, Integer hue, String currencyCode, boolean selected) {}
+      long accountId, String name, Integer hue, String currencyCode, boolean selected) {
+
+    /**
+     * The {@code Name (CUR)} value the dock's Account datalist offers and its resolver round-trips
+     * back to this account (register §3.3, plan stage 8b.1) — the same shape {@link
+     * RegisterPayeeOption#entryValue()} plays for payees. Defined here rather than in the template
+     * so the label the picker offers and the label the resolver parses can never drift apart.
+     */
+    public String entryValue() {
+      return name + " (" + currencyCode + ")";
+    }
+  }
 
   /**
    * One payee offered in the register's pickers, carrying whether it is the active filter choice.

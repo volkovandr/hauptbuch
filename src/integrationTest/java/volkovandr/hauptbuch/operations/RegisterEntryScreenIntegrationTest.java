@@ -896,14 +896,14 @@ class RegisterEntryScreenIntegrationTest {
         .andExpect(status().isOk());
   }
 
-  // ── person sub-field, Account (plan stage 8b, register §3.3) ─────────────────
+  // ── person as the funding leg, via the Account field (plan stage 8b.1, register §3.3) ────
 
   @Test
-  void personAccountOverrideMakesTheEstablishedPersonTheFundingLeg() throws Exception {
-    // "Max pays for a pure expense of yours" (register §2.6 pattern 3): Account resolves to Max's
-    // leg, Category is a plain expense — the expense category's default outflow signs Max's leg
-    // negative (you now owe Max more), Food's leg positive, riding the exact same sign machinery a
-    // real-account expense entry does (data-model §7's worked example: Food +10, Max-EUR −10).
+  void personInTheAccountFieldBecomesTheFundingLeg() throws Exception {
+    // "Max pays for a pure expense of yours" (register §2.6 pattern 3): Account = `by Max`,
+    // Category = a plain expense. The expense category's default outflow signs Max's leg negative
+    // (you now owe Max more), Food's positive — the exact same sign machinery a real-account
+    // expense entry rides (data-model §7's worked example: Food +10, Max-EUR −10).
     commitPersonSpend(openAccount("Cash", "500"), "Max", "FOR", "2026-02-01", "1"); // Max owed +1
     long food = insertCategory("Food");
     long maxLeaf =
@@ -916,7 +916,8 @@ class RegisterEntryScreenIntegrationTest {
         .perform(
             post(ENTRY_PATH)
                 .param("date", "2026-02-02")
-                .param("personAccountId", String.valueOf(maxLeaf))
+                .param("fundingPersonName", "Max")
+                .param("fundingPersonDirection", "BY")
                 .param("amount", "20")
                 .param("categoryId", String.valueOf(food))
                 .param("viewAccountId", String.valueOf(maxLeaf)))
@@ -924,16 +925,99 @@ class RegisterEntryScreenIntegrationTest {
         .andExpect(content().string(containsString("id=\"register-rows\"")));
 
     // Max was owed +1 (the establishing entry); Max funding a 20 expense flips the balance to
-    // 1 − 20 = −19 (you now owe Max).
-    BigDecimal maxBalance =
+    // 1 − 20 = −19 (you now owe Max). No second leaf was provisioned — the existing EUR one is
+    // reused, because the transaction currency defaults to Max's sole existing debt currency.
+    assertThat(liveBalanceOf(maxLeaf)).isEqualByComparingTo("-19");
+    assertThat(
+            jdbcClient
+                .sql("select count(*) from account where person_leaf")
+                .query(Long.class)
+                .single())
+        .isEqualTo(1L);
+  }
+
+  @Test
+  void brandNewPersonInTheAccountFieldIsProvisionedInTheBaseCurrency() throws Exception {
+    // The case the old "or person" sub-field could not do at all (plan stage 8b.1): a person with
+    // no leaf yet has no currency to inherit, so the transaction currency supplies one — base,
+    // absent both an existing debt and an explicit override.
+    long food = insertCategory("Food");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-02")
+                .param("fundingPersonName", "Nina")
+                .param("fundingPersonDirection", "BY")
+                .param("amount", "12")
+                .param("categoryId", String.valueOf(food)))
+        .andExpect(status().isOk());
+
+    Long ninaLeaf =
         jdbcClient
             .sql(
-                "select sum(amount) from posting p join transaction t on p.transaction_id ="
-                    + " t.transaction_id where p.account_id = :id and t.deleted_at is null")
-            .param("id", maxLeaf)
-            .query(BigDecimal.class)
+                "select a.account_id from account a join account_owner o on a.account_id ="
+                    + " o.account_id join person p on o.person_id = p.person_id where p.name ="
+                    + " 'Nina'")
+            .query(Long.class)
             .single();
-    assertThat(maxBalance).isEqualByComparingTo("-19");
+    assertThat(ninaLeaf).isNotNull();
+    assertThat(
+            jdbcClient
+                .sql("select currency_code from account where account_id = :id")
+                .param("id", ninaLeaf)
+                .query(String.class)
+                .single())
+        .isEqualTo("EUR");
+    // Nina funded your expense, so she is owed: her leg is the credit.
+    assertThat(liveBalanceOf(ninaLeaf)).isEqualByComparingTo("-12");
+  }
+
+  @Test
+  void accountFieldResolvesAnOwnAccountByItsLabel() throws Exception {
+    long cash = openAccount("Cash", "500");
+
+    mockMvc
+        .perform(post("/register/account/resolve").param("accountText", "Cash (EUR)"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"accountId\"")))
+        .andExpect(content().string(containsString(String.valueOf(cash))));
+  }
+
+  @Test
+  void accountFieldResolvesPersonSigilWithoutProvisioningAnything() throws Exception {
+    // Resolution is read-only (data-model §7): the leaf appears at commit, not at typing time.
+    mockMvc
+        .perform(post("/register/account/resolve").param("accountText", "by Max"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"fundingPersonName\"")))
+        .andExpect(content().string(containsString("name=\"fundingPersonDirection\"")));
+
+    assertThat(jdbcClient.sql("select count(*) from person").query(Long.class).single())
+        .isEqualTo(0L);
+  }
+
+  @Test
+  void accountFieldClearsTheResolvedIdWhenTheTextNoLongerResolves() throws Exception {
+    // A stale id must never ride along under changed text (register §3.3).
+    openAccount("Cash", "500");
+
+    mockMvc
+        .perform(post("/register/account/resolve").param("accountText", "Nonexistent"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("name=\"accountId\""))))
+        .andExpect(content().string(not(containsString("name=\"fundingPersonName\""))))
+        .andExpect(content().string(containsString("No open account named")));
+  }
+
+  private BigDecimal liveBalanceOf(long accountId) {
+    return jdbcClient
+        .sql(
+            "select sum(amount) from posting p join transaction t on p.transaction_id ="
+                + " t.transaction_id where p.account_id = :id and t.deleted_at is null")
+        .param("id", accountId)
+        .query(BigDecimal.class)
+        .single();
   }
 
   // ── edit mode & void (plan stage 7c, register §3.1) ──────────────────────────

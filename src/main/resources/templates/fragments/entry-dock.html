@@ -87,84 +87,69 @@
           />
         </div>
 
-        <!-- 2 · Account (funding account). Changing it resets the currency-selector default and
-             recomputes the amount fields (§3.5) — the hx-include deliberately omits the current
-             categoryCurrencyCode, so the server always re-derives it from the new account. -->
+        <!-- 2 · Account (funding leg) — a typed datalist, not a <select> (register §3.3, plan
+             stage 8b.1). Its options are the open own accounts as "Name (CUR)" plus
+             `for <person>` / `by <person>` for every live person; a person's underlying leaf is
+             never listed under its own cosmetic name. Typing a person who does not exist yet
+             CREATES them, so "Max paid for a pure expense of mine" (register §2.6 pattern 3) is
+             entered as Account = `by Max` with no separate person field.
+
+             Because the field is free text, the hidden accountId below is authoritative and is
+             cleared whenever the text no longer resolves — a stale id must never ride along under
+             changed text (§3.3). Both the fresh and the edit render pre-fill text AND id together,
+             so the common path (accept the default, type nothing) commits exactly as the old
+             <select> did. -->
         <div class="field">
           <label
             class="field__label"
             for="entry-account"
-            title="An already-established person also works here — see 'or person' below (data-model §7)."
+            title="An account, or a person: type `for Max` (Max owes you) / `by Max` (you owe Max). A person who does not exist yet is created."
             >Account</label
           >
-          <select
-            id="entry-account"
-            name="accountId"
-            class="input"
-            required
-            hx-post="/register/currency-fields"
-            hx-trigger="change"
-            hx-include="[name='date'], [name='accountId'], [name='amount']"
-            hx-target="#entry-currency-amount"
-            hx-swap="outerHTML"
-          >
-            <option
-              th:each="a : ${register.accounts()}"
-              th:value="${a.accountId()}"
-              th:selected="${edit != null and edit.accountId() != null and edit.accountId() == a.accountId()}"
-              th:text="${a.name() + ' (' + a.currencyCode() + ')'}"
-            >
-              Cash (EUR)
-            </option>
-          </select>
-        </div>
-
-        <!-- 2b · Or person (register §3.3, plan stage 8b): typing an already-established person's
-             name makes them the funding leg instead — "Max paid for a pure expense of mine"
-             (register §2.6 pattern 3). Not listed by default (an empty datalist), surfaced only by
-             typing; a brand-new person is not accepted here — that goes through Category's for/by
-             (data-model §7). Resolving fills the hidden personAccountId override below, which wins
-             over the Account select at commit (DockEntryForm#effectiveAccountId). -->
-        <div class="field">
-          <label
-            class="field__label"
-            for="entry-account-person"
-            title="Type an already-established person's name to make them the funding leg (they paid for a pure expense of yours). Leave blank to use Account above."
-            >or person</label
-          >
           <input
-            id="entry-account-person"
-            name="personAccountText"
+            id="entry-account"
+            name="accountText"
             class="input"
-            list="entry-account-person-options"
+            list="entry-account-options"
             autocomplete="off"
-            placeholder="Max"
-            th:value="${edit != null} ? ${edit.fundingPersonLabel()}"
-            hx-post="/people/resolve-account"
+            required
+            th:value="${edit != null} ? ${edit.accountEntryText()} : ${register.defaultAccountEntryText()}"
+            hx-post="/register/account/resolve"
             hx-trigger="change"
             hx-target="#entry-account-resolved"
             hx-swap="innerHTML"
           />
-          <datalist id="entry-account-person-options"></datalist>
+          <datalist id="entry-account-options">
+            <option th:each="a : ${register.accounts()}" th:value="${a.entryValue()}"></option>
+            <option th:each="p : ${register.personTargets()}" th:value="${p}"></option>
+          </datalist>
         </div>
-        <!-- The resolved override (hidden) + status, swapped in by /people/resolve-account. In
-             edit mode it starts pre-filled when the loaded transaction's funding leg is a
-             person's. -->
+        <!-- The resolved funding leg, swapped in by /register/account/resolve: either the hidden
+             accountId, or the funding person's name/direction (their leaf is provisioned at commit,
+             once the transaction currency is known). Pre-filled on first render so the dock is
+             committable without touching the field. -->
         <span id="entry-account-resolved">
-          <input
-            type="hidden"
-            name="personAccountId"
-            th:value="${edit != null and edit.fundingPersonLabel() != null} ? ${edit.accountId()} : ''"
-          />
+          <th:block th:if="${edit != null and edit.accountEntryText() != null}">
+            <input type="hidden" name="accountId" th:value="${edit.accountId()}" />
+          </th:block>
+          <th:block th:if="${edit == null}">
+            <input type="hidden" name="accountId" th:value="${register.defaultAccountId()}" />
+          </th:block>
         </span>
-        <!-- Person-account reveal (register §3.3, plan stage 8b): resolving the person sub-field
-             changes the effective funding account, so the amount-field layout must recompute —
-             mirrors the transfer counterpart-resolved chain below. -->
+        <!-- Funding-leg reveal (register §3.3, plan stage 8b.1): resolving the Account field changes
+             the funding leg, so the amount-field layout and the currency default must recompute —
+             mirrors the transfer counterpart-resolved chain below.
+
+             The hx-include deliberately omits the (possibly stale) categoryCurrencyCode, exactly as
+             the old Account <select> did: changing the funding leg must always re-derive the
+             currency default — from the new account's currency, or, when the leg is a person, from
+             the transaction-currency rule (§3.5). Including it would pin the old override. -->
         <span
           hidden
           hx-post="/register/currency-fields"
-          hx-trigger="person-account-resolved from:body"
-          hx-include="closest form"
+          hx-trigger="account-resolved from:body"
+          hx-include="[name='date'], [name='accountId'], [name='amount'],
+                      [name='fundingPersonName'], [name='fundingPersonDirection']"
           hx-target="#entry-currency-amount"
           hx-swap="outerHTML"
         ></span>
@@ -410,9 +395,14 @@
          #register-body) plus the reset dock (oob=true, so its hx-swap-oob lifts it out to replace
          #entry-dock). One response repaints the affected thread and clears the dock for the next
          entry — both top-level elements are parse-safe (a div and a form). -->
-    <th:block th:fragment="committed(register, amountFields)">
+    <!-- `sticky` is a pre-filled NEW dock (a DockEditModel with a null transactionId) carrying the
+         date and funding account just committed, so consecutive entries on the same account and day
+         need no re-typing (register §3.3, plan stage 8b.1). Null falls back to a bare reset. -->
+    <th:block th:fragment="committed(register, amountFields, sticky)">
       <div th:replace="~{register :: rows(${register})}"></div>
-      <div th:replace="~{fragments/entry-dock :: dock(${register}, true, null, ${amountFields})}"></div>
+      <div
+        th:replace="~{fragments/entry-dock :: dock(${register}, true, ${sticky}, ${amountFields})}"
+      ></div>
     </th:block>
 
     <!-- The extra amount field(s) themselves (§3.8a) — inlined directly within `dock` (so a normal
@@ -592,16 +582,68 @@
          next chip can be typed. Also rendered inline for each of an edited transaction's tags
          (edit-mode pre-fill). A blank chip yields an empty fragment (no pill). `fieldName` names
          the hidden id input (tagId for the dock; a split line passes its own — plan stage 7e.3). -->
-    <!-- POST /people/resolve-account response (register §3.3, plan stage 8b): the hidden
-         personAccountId override the commit reads (DockEntryForm#effectiveAccountId), plus a
-         small status (the resolved account/person's "Name (CUR)" label, or an error). Swapped
-         into #entry-account-resolved. -->
-    <th:block th:fragment="personAccountResolved(accountId, accountName, error)">
-      <input type="hidden" name="personAccountId" th:value="${accountId}" />
+    <!-- POST /register/account/resolve response (register §3.3, plan stage 8b.1): the resolved
+         funding leg — either the hidden accountId, or the funding person's name/direction (whose
+         leaf is provisioned at commit) — plus a status. Swapped into #entry-account-resolved.
+
+         Exactly one branch emits hidden inputs, and an error emits none: the whole slot re-renders
+         on every resolve, so unresolvable text leaves nothing behind and the commit fails
+         validation rather than booking against a stale id (§3.3). -->
+    <th:block
+      th:fragment="accountResolved(accountId, fundingPersonName, fundingPersonDirection,
+                   fundingPersonRevive, accountName, error, personPending, personPendingName)"
+    >
+      <input th:if="${accountId != null}" type="hidden" name="accountId" th:value="${accountId}" />
+      <input
+        th:if="${fundingPersonName != null}"
+        type="hidden"
+        name="fundingPersonName"
+        th:value="${fundingPersonName}"
+      />
+      <input
+        th:if="${fundingPersonDirection != null}"
+        type="hidden"
+        name="fundingPersonDirection"
+        th:value="${fundingPersonDirection}"
+      />
+      <input
+        th:if="${fundingPersonRevive != null}"
+        type="hidden"
+        name="fundingPersonRevive"
+        th:value="${fundingPersonRevive}"
+      />
       <span th:if="${accountName}" class="entry-dock__resolved muted" th:text="${accountName}"
-        >Max (EUR)</span
+        >Cash (EUR)</span
       >
       <span th:if="${error}" class="entry-dock__resolved warning" th:text="${error}"></span>
+      <!-- Revival is never silent (data-model §7): a for/by name in the Account field matching only
+           a soft-deleted person renders the same three-way choice the Category field does. Both
+           buttons re-post the typed accountText with personDecision set. -->
+      <span th:if="${personPending}" class="entry-dock__resolved warning">
+        <span th:text="'&#8216;' + ${personPendingName} + '&#8217; is deleted.'"></span>
+        <button
+          type="button"
+          class="btn btn--ghost"
+          hx-post="/register/account/resolve"
+          hx-include="[name='accountText']"
+          hx-vals='{"personDecision":"REVIVE"}'
+          hx-target="#entry-account-resolved"
+          hx-swap="innerHTML"
+        >
+          Restore
+        </button>
+        <button
+          type="button"
+          class="btn btn--ghost"
+          hx-post="/register/account/resolve"
+          hx-include="[name='accountText']"
+          hx-vals='{"personDecision":"NEW"}'
+          hx-target="#entry-account-resolved"
+          hx-swap="innerHTML"
+        >
+          Create new
+        </button>
+      </span>
     </th:block>
 
     <th:block th:fragment="tagChip(tagId, tagLabel, fieldName)">
