@@ -21,6 +21,9 @@ final class SplitLineArrays {
             size(form.lineCategoryId()),
             size(form.lineCategoryType()),
             size(form.lineTransferDirection()),
+            size(form.linePersonName()),
+            size(form.linePersonDirection()),
+            size(form.linePersonRevive()),
             size(form.lineAmount()),
             size(form.lineNote()))
         .stream()
@@ -47,13 +50,13 @@ final class SplitLineArrays {
     return perLine.get(index);
   }
 
-  static List<String> appended(List<String> list, String value) {
+  private static List<String> appended(List<String> list, String value) {
     List<String> copy = new ArrayList<>(list == null ? List.of() : list);
     copy.add(value);
     return copy;
   }
 
-  static List<String> removed(List<String> list, int index) {
+  private static List<String> removed(List<String> list, int index) {
     List<String> copy = new ArrayList<>(list == null ? List.of() : list);
     if (index >= 0 && index < copy.size()) {
       copy.remove(index);
@@ -61,13 +64,13 @@ final class SplitLineArrays {
     return copy;
   }
 
-  static List<List<Long>> appendedTags(List<List<Long>> perLine, List<Long> value) {
+  private static List<List<Long>> appendedTags(List<List<Long>> perLine, List<Long> value) {
     List<List<Long>> copy = new ArrayList<>(perLine == null ? List.of() : perLine);
     copy.add(value);
     return copy;
   }
 
-  static List<List<Long>> removedTags(List<List<Long>> perLine, int index) {
+  private static List<List<Long>> removedTags(List<List<Long>> perLine, int index) {
     List<List<Long>> copy = new ArrayList<>(perLine == null ? List.of() : perLine);
     if (index >= 0 && index < copy.size()) {
       copy.remove(index);
@@ -80,7 +83,7 @@ final class SplitLineArrays {
    * (header) tags when any were set — so every line carries them — otherwise the previous line's
    * own tags (the convenience for a run of same-tagged lines). Empty when there is neither.
    */
-  static List<Long> inheritedTags(SplitForm form) {
+  private static List<Long> inheritedTags(SplitForm form) {
     List<Long> header = form.tagId();
     if (header != null && !header.isEmpty()) {
       return List.copyOf(header);
@@ -93,37 +96,134 @@ final class SplitLineArrays {
     return List.of();
   }
 
-  /** Rebuild the form with the given line arrays, carrying every other field through unchanged. */
-  static SplitForm withLines(
-      SplitForm form,
+  /**
+   * Append a blank line whose amount is {@code amount}, extending every aligned array in step and
+   * seeding the new line's inherited tags (§3.6). Returns a new form; every non-line field carries
+   * through unchanged.
+   *
+   * <p>The caller names the line it wants rather than handing over the nine rebuilt arrays: the
+   * arrays only stay aligned if every one of them grows, and that is this class's job to guarantee,
+   * not each caller's to remember.
+   */
+  static SplitForm appendedLine(SplitForm form, String amount) {
+    return new Lines(form)
+        .map(list -> appended(list, ""))
+        .withAmount(appended(form.lineAmount(), amount))
+        .withTags(appendedTags(form.lineTagIds(), inheritedTags(form)))
+        .applyTo(form);
+  }
+
+  /** Drop the line at {@code index} from every aligned array in step. Returns a new form. */
+  static SplitForm removedLine(SplitForm form, int index) {
+    return new Lines(form)
+        .map(list -> removed(list, index))
+        .withTags(removedTags(form.lineTagIds(), index))
+        .applyTo(form);
+  }
+
+  /**
+   * The ten index-aligned per-line arrays of a {@link SplitForm}, grouped so the append/remove
+   * operations can reshape them in step and rebuild the form without threading eleven parameters
+   * (or duplicating the 24-arg {@code SplitForm} constructor) through a helper. The nine String
+   * arrays reshape uniformly via {@link #map}; the amount and tag arrays, which take a distinct
+   * value, override afterwards.
+   */
+  private record Lines(
       List<String> categoryText,
       List<String> lineCategoryId,
       List<String> lineCategoryType,
       List<String> lineTransferDirection,
+      List<String> linePersonName,
+      List<String> linePersonDirection,
+      List<String> linePersonRevive,
       List<String> lineAmount,
       List<String> lineNote,
       List<List<Long>> lineTagIds) {
-    return new SplitForm(
-        form.transactionId(),
-        form.date(),
-        form.accountId(),
-        form.payeeText(),
-        form.note(),
-        form.total(),
-        form.spendingCurrencyCode(),
-        form.fundingTotal(),
-        form.baseTotal(),
-        categoryText,
-        lineCategoryId,
-        lineCategoryType,
-        lineTransferDirection,
-        lineAmount,
-        lineNote,
-        form.tagId(),
-        lineTagIds,
-        form.viewAccountId(),
-        form.viewFromDate(),
-        form.viewToDate(),
-        form.viewPayeeId());
+
+    Lines(SplitForm form) {
+      this(
+          form.categoryText(),
+          form.lineCategoryId(),
+          form.lineCategoryType(),
+          form.lineTransferDirection(),
+          form.linePersonName(),
+          form.linePersonDirection(),
+          form.linePersonRevive(),
+          form.lineAmount(),
+          form.lineNote(),
+          form.lineTagIds());
+    }
+
+    /** Reshape every String array (including amount) the same way; tags are handled separately. */
+    Lines map(java.util.function.UnaryOperator<List<String>> op) {
+      return new Lines(
+          op.apply(categoryText),
+          op.apply(lineCategoryId),
+          op.apply(lineCategoryType),
+          op.apply(lineTransferDirection),
+          op.apply(linePersonName),
+          op.apply(linePersonDirection),
+          op.apply(linePersonRevive),
+          op.apply(lineAmount),
+          op.apply(lineNote),
+          lineTagIds);
+    }
+
+    Lines withAmount(List<String> newLineAmount) {
+      return new Lines(
+          categoryText,
+          lineCategoryId,
+          lineCategoryType,
+          lineTransferDirection,
+          linePersonName,
+          linePersonDirection,
+          linePersonRevive,
+          newLineAmount,
+          lineNote,
+          lineTagIds);
+    }
+
+    Lines withTags(List<List<Long>> newLineTagIds) {
+      return new Lines(
+          categoryText,
+          lineCategoryId,
+          lineCategoryType,
+          lineTransferDirection,
+          linePersonName,
+          linePersonDirection,
+          linePersonRevive,
+          lineAmount,
+          lineNote,
+          newLineTagIds);
+    }
+
+    /** Rebuild {@code form} with these line arrays, carrying every non-line field through. */
+    SplitForm applyTo(SplitForm form) {
+      return new SplitForm(
+          form.transactionId(),
+          form.date(),
+          form.accountId(),
+          form.payeeText(),
+          form.note(),
+          form.total(),
+          form.spendingCurrencyCode(),
+          form.fundingTotal(),
+          form.baseTotal(),
+          categoryText,
+          lineCategoryId,
+          lineCategoryType,
+          lineTransferDirection,
+          linePersonName,
+          linePersonDirection,
+          linePersonRevive,
+          lineAmount,
+          lineNote,
+          form.tagId(),
+          lineTagIds,
+          form.viewAccountId(),
+          form.viewFromDate(),
+          form.viewToDate(),
+          form.viewPayeeId());
+    }
   }
 }

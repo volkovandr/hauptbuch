@@ -3,9 +3,12 @@ package volkovandr.hauptbuch.operations;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonService;
+import volkovandr.hauptbuch.debts.PersonTarget;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.Posting;
@@ -50,12 +53,17 @@ public class SplitEditService {
   private final AccountService accountService;
   private final PayeeService payeeService;
   private final LedgerService ledgerService;
+  private final PersonService personService;
 
   SplitEditService(
-      AccountService accountService, PayeeService payeeService, LedgerService ledgerService) {
+      AccountService accountService,
+      PayeeService payeeService,
+      LedgerService ledgerService,
+      PersonService personService) {
     this.accountService = accountService;
     this.payeeService = payeeService;
     this.ledgerService = ledgerService;
+    this.personService = personService;
   }
 
   /**
@@ -83,6 +91,8 @@ public class SplitEditService {
     List<String> categoryId = new ArrayList<>();
     List<String> categoryType = new ArrayList<>();
     List<String> transferDirection = new ArrayList<>();
+    List<String> personName = new ArrayList<>();
+    List<String> personDirection = new ArrayList<>();
     List<String> amount = new ArrayList<>();
     List<String> note = new ArrayList<>();
     List<List<Long>> lineTagIds = new ArrayList<>();
@@ -93,6 +103,8 @@ public class SplitEditService {
       categoryId.add(line.categoryId());
       categoryType.add(line.categoryType());
       transferDirection.add(line.transferDirection());
+      personName.add(line.personName());
+      personDirection.add(line.personDirection());
       amount.add(line.amount());
       note.add(line.note());
       // Each line reloads its own tags (register §3.6, plan stage 7e.3); the funding leg's tags
@@ -138,6 +150,10 @@ public class SplitEditService {
         categoryId,
         categoryType,
         transferDirection,
+        personName,
+        personDirection,
+        // A reloaded person line names an existing person, so no revival decision is in question.
+        java.util.Collections.nCopies(personName.size(), ""),
         amount,
         note,
         headerTagIds,
@@ -155,11 +171,31 @@ public class SplitEditService {
    * and a negative one as a {@code FROM}, its bare magnitude shown in the direction-prefixed {@code
    * To →}/{@code From ←} field text (register §3.8, plan stage 7d.3/7f). A category leg maps back
    * to its semantic category and the sign-free amount its type implies.
+   *
+   * <p>A <em>person</em> leg (plan stage 8b.2) is an own-account leg too — a person's debt leaf is
+   * an ordinary {@code asset} account — so it is checked first and reloads as the {@code
+   * for}/{@code by} sigil, never the cosmetic {@code personal.<CUR>} leaf name (the same rule
+   * {@link DockEditService} applies to a person funding leg). Its direction follows the leg's own
+   * sign: a debit (positive) is {@code for} — they owe you — a credit is {@code by}.
    */
   private ReloadedLine reloadLine(LegAccount leg) {
     BigDecimal legAmount = leg.posting().amount();
     String noteText = leg.posting().note() == null ? "" : leg.posting().note();
     if (OWN_TYPES.contains(leg.account().type())) {
+      Optional<String> person = personService.personNameForAccount(leg.account().accountId());
+      if (person.isPresent()) {
+        PersonTarget.Direction direction =
+            legAmount.signum() < 0 ? PersonTarget.Direction.BY : PersonTarget.Direction.FOR;
+        return new ReloadedLine(
+            PersonTarget.option(direction, person.get()),
+            "",
+            "",
+            "",
+            person.get(),
+            direction.name(),
+            MoneyFormat.number(legAmount.abs(), FRACTION_DIGITS),
+            noteText);
+      }
       TransferTarget.Direction direction =
           legAmount.signum() < 0 ? TransferTarget.Direction.FROM : TransferTarget.Direction.TO;
       return new ReloadedLine(
@@ -167,6 +203,8 @@ public class SplitEditService {
           String.valueOf(leg.account().accountId()),
           "",
           direction.name(),
+          "",
+          "",
           MoneyFormat.number(legAmount.abs(), FRACTION_DIGITS),
           noteText);
     }
@@ -176,16 +214,23 @@ public class SplitEditService {
         String.valueOf(semantic.accountId()),
         leg.account().type(),
         "",
+        "",
+        "",
         SplitLineAmounts.amountText(legAmount, leg.account().type()),
         noteText);
   }
 
-  /** One counter leg reconstructed into its panel-line fields (a category line or a transfer). */
+  /**
+   * One counter leg reconstructed into its panel-line fields (a category line, a transfer, or a
+   * person attribution).
+   */
   private record ReloadedLine(
       String categoryText,
       String categoryId,
       String categoryType,
       String transferDirection,
+      String personName,
+      String personDirection,
       String amount,
       String note) {}
 

@@ -61,7 +61,8 @@ class SplitPanelAssembler {
       String amount = SplitLineArrays.at(form.lineAmount(), i);
       String type = SplitLineArrays.at(form.lineCategoryType(), i);
       String direction = SplitLineArrays.at(form.lineTransferDirection(), i);
-      net = net.add(SplitLineAmounts.lenientContribution(amount, type, direction));
+      String personDirection = SplitLineArrays.at(form.linePersonDirection(), i);
+      net = net.add(SplitLineAmounts.lenientContribution(amount, type, direction, personDirection));
       BigDecimal magnitude = lenientParse(amount).abs();
       lines.add(
           new SplitLineView(
@@ -70,6 +71,9 @@ class SplitPanelAssembler {
               SplitLineArrays.at(form.lineCategoryId(), i),
               type,
               direction,
+              SplitLineArrays.at(form.linePersonName(), i),
+              personDirection,
+              SplitLineArrays.at(form.linePersonRevive(), i),
               amount,
               SplitLineArrays.at(form.lineNote(), i),
               ctx.derived(magnitude, ctx.rateSpendingToFunding()),
@@ -177,28 +181,12 @@ class SplitPanelAssembler {
     SplitPanel current = panel(form, null);
     BigDecimal remaining = lenientParse(current.remaining());
     String rest = remaining.signum() > 0 ? current.remaining() : "";
-    return SplitLineArrays.withLines(
-        form,
-        SplitLineArrays.appended(form.categoryText(), ""),
-        SplitLineArrays.appended(form.lineCategoryId(), ""),
-        SplitLineArrays.appended(form.lineCategoryType(), ""),
-        SplitLineArrays.appended(form.lineTransferDirection(), ""),
-        SplitLineArrays.appended(form.lineAmount(), rest),
-        SplitLineArrays.appended(form.lineNote(), ""),
-        SplitLineArrays.appendedTags(form.lineTagIds(), SplitLineArrays.inheritedTags(form)));
+    return SplitLineArrays.appendedLine(form, rest);
   }
 
   /** Remove the line at {@code index} across every aligned array. Returns a new form. */
   SplitForm removeLine(SplitForm form, int index) {
-    return SplitLineArrays.withLines(
-        form,
-        SplitLineArrays.removed(form.categoryText(), index),
-        SplitLineArrays.removed(form.lineCategoryId(), index),
-        SplitLineArrays.removed(form.lineCategoryType(), index),
-        SplitLineArrays.removed(form.lineTransferDirection(), index),
-        SplitLineArrays.removed(form.lineAmount(), index),
-        SplitLineArrays.removed(form.lineNote(), index),
-        SplitLineArrays.removedTags(form.lineTagIds(), index));
+    return SplitLineArrays.removedLine(form, index);
   }
 
   private static BigDecimal lenientParse(String text) {

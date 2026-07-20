@@ -234,6 +234,14 @@
         net += dir === "FROM" ? parseGerman(amountEl.value) : -parseGerman(amountEl.value);
         return;
       }
+      // A person line (register §3.5, plan stage 8b.2) is the same shape: BY is an inflow (they
+      // funded it), FOR an outflow (you funded it, so they owe you).
+      const personDirEl = line.querySelector('input[name="linePersonDirection"]');
+      const personDir = personDirEl ? personDirEl.value : "";
+      if (personDir) {
+        net += personDir === "BY" ? parseGerman(amountEl.value) : -parseGerman(amountEl.value);
+        return;
+      }
       const type = typeEl ? typeEl.value : "";
       if (!type) return;
       net += type === "income" ? parseGerman(amountEl.value) : -parseGerman(amountEl.value);

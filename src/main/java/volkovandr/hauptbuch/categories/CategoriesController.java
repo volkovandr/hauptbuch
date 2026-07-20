@@ -141,7 +141,11 @@ class CategoriesController {
    * stage 7c.2): {@code fieldName} names the hidden id input ({@code categoryId} for the dock,
    * {@code lineCategoryId} for a split line), and {@code typeFieldName}, when present, adds a
    * second hidden input carrying the resolved category's {@code income}/{@code expense} type — the
-   * split line needs it to sign its contribution in the live remaining/direction readout.
+   * split line needs it to sign its contribution in the live remaining/direction readout. {@code
+   * personFieldPrefix} does the same for the person inputs (plan stage 8b.2): unset they are the
+   * dock's {@code personName}/{@code personDirection}/{@code personRevive}, emitted only when a
+   * person resolved; set to {@code line} they become {@code linePersonName} etc. and every line
+   * emits them (blank for a category) so the panel's index-aligned arrays stay aligned.
    *
    * <p>A split line's resolve request carries <em>every</em> line's {@code categoryText} (htmx
    * includes the whole panel form), so {@code index} selects which one is being resolved —
@@ -162,6 +166,7 @@ class CategoriesController {
       @RequestParam(defaultValue = RESOLVED_ID) String fieldName,
       @RequestParam(required = false) String typeFieldName,
       @RequestParam(required = false) String directionFieldName,
+      @RequestParam(required = false) String personFieldPrefix,
       @RequestParam(required = false) String personDecision,
       Model model,
       HttpServletResponse response) {
@@ -180,15 +185,25 @@ class CategoriesController {
       clearPersonAttributes(model);
     }
     model.addAttribute("fieldName", fieldName);
-    model.addAttribute("typeFieldName", typeFieldName);
-    model.addAttribute("directionFieldName", directionFieldName);
+    // The optional field-name params round-trip through the fragment's revival buttons, which can
+    // only re-post them as strings — so a blank comes back where the first call passed nothing.
+    // Normalise it to null, or the fragment would emit an input with an empty name.
+    model.addAttribute("typeFieldName", blankToNull(typeFieldName));
+    model.addAttribute("directionFieldName", blankToNull(directionFieldName));
+    model.addAttribute("personFieldPrefix", blankToNull(personFieldPrefix));
+    model.addAttribute("index", index);
     return "fragments/entry-dock :: categoryResolved(categoryId=${categoryId},"
         + " categoryName=${categoryName}, error=${error}, fieldName=${fieldName},"
         + " typeFieldName=${typeFieldName}, categoryType=${categoryType},"
         + " transferDirection=${transferDirection}, directionFieldName=${directionFieldName},"
         + " personName=${personName}, personDirection=${personDirection},"
         + " personRevive=${personRevive}, personPending=${personPending},"
-        + " personPendingName=${personPendingName})";
+        + " personPendingName=${personPendingName}, personFieldPrefix=${personFieldPrefix},"
+        + " index=${index})";
+  }
+
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   /** Resolve a plain category name or {@code Parent - Child} to its (existing or new) leaf id. */

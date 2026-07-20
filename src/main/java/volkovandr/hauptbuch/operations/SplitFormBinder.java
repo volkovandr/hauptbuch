@@ -36,6 +36,9 @@ final class SplitFormBinder {
     List<String> lineCategoryId = orEmpty(p.get("lineCategoryId"));
     List<String> lineCategoryType = orEmpty(p.get("lineCategoryType"));
     List<String> lineTransferDirection = orEmpty(p.get("lineTransferDirection"));
+    List<String> linePersonName = orEmpty(p.get("linePersonName"));
+    List<String> linePersonDirection = orEmpty(p.get("linePersonDirection"));
+    List<String> linePersonRevive = orEmpty(p.get("linePersonRevive"));
     List<String> lineAmount = orEmpty(p.get("lineAmount"));
     List<String> lineNote = orEmpty(p.get("lineNote"));
     int lineCount =
@@ -44,6 +47,9 @@ final class SplitFormBinder {
             lineCategoryId,
             lineCategoryType,
             lineTransferDirection,
+            linePersonName,
+            linePersonDirection,
+            linePersonRevive,
             lineAmount,
             lineNote);
     return new SplitForm(
@@ -60,6 +66,9 @@ final class SplitFormBinder {
         lineCategoryId,
         lineCategoryType,
         lineTransferDirection,
+        linePersonName,
+        linePersonDirection,
+        linePersonRevive,
         lineAmount,
         lineNote,
         longValues(p.get("tagId")),
@@ -110,6 +119,9 @@ final class SplitFormBinder {
         form.lineCategoryId(),
         form.lineCategoryType(),
         form.lineTransferDirection(),
+        form.linePersonName(),
+        form.linePersonDirection(),
+        form.linePersonRevive(),
         form.lineAmount(),
         form.lineNote(),
         form.tagId(),
@@ -131,7 +143,13 @@ final class SplitFormBinder {
     return MoneyFormat.number(net.abs(), FRACTION_DIGITS);
   }
 
-  /** The complete lines of the form; skips fully-blank lines, rejects a line with no category. */
+  /**
+   * The complete lines of the form; skips fully-blank lines, rejects a line with no counterpart.
+   *
+   * <p>A <em>person</em> line (register §3.5, plan stage 8b.2) is complete without a category id —
+   * its counterpart is the person's debt leaf, which does not exist until commit provisions it — so
+   * the "needs a category" refusal applies only to a line that named no person either.
+   */
   static List<SplitLineDraft> linesOf(SplitForm form) {
     List<SplitLineDraft> lines = new ArrayList<>();
     int count =
@@ -140,18 +158,22 @@ final class SplitFormBinder {
     for (int i = 0; i < count; i++) {
       String idText = at(form.lineCategoryId(), i);
       String amount = at(form.lineAmount(), i);
-      if (idText.isBlank() && amount.isBlank()) {
+      String personName = at(form.linePersonName(), i);
+      if (idText.isBlank() && amount.isBlank() && personName.isBlank()) {
         continue; // an empty line the user never filled in
       }
-      if (idText.isBlank()) {
+      if (idText.isBlank() && personName.isBlank()) {
         throw new IllegalArgumentException("Each split line needs a category (pick or create one)");
       }
       lines.add(
           new SplitLineDraft(
-              Long.parseLong(idText.strip()),
+              idText.isBlank() ? null : Long.parseLong(idText.strip()),
               amount,
               blankToNull(at(form.lineNote(), i)),
               blankToNull(at(form.lineTransferDirection(), i)),
+              blankToNull(personName),
+              blankToNull(at(form.linePersonDirection(), i)),
+              blankToNull(at(form.linePersonRevive(), i)),
               tagsAt(form.lineTagIds(), i)));
     }
     return lines;

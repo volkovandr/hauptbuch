@@ -213,7 +213,12 @@
       <ol class="split-lines" data-split-lines>
         <li class="split-line" th:each="line : ${panel.lines()}" data-split-line>
           <div class="field field--split-category">
-            <label class="field__label" th:for="'split-cat-' + ${line.index()}">Category</label>
+            <label
+              class="field__label"
+              th:for="'split-cat-' + ${line.index()}"
+              title="Food, or Food - Milk to create a leaf. To → Account / From ← Account transfers. for Max / by Max attributes this line to a person (data-model §7)."
+              >Category</label
+            >
             <input
               th:id="'split-cat-' + ${line.index()}"
               name="categoryText"
@@ -226,7 +231,7 @@
               hx-trigger="change"
               hx-swap="innerHTML"
               th:attr="hx-target='#line-' + ${line.index()} + '-resolved',
-                       hx-vals=|{&quot;fieldName&quot;:&quot;lineCategoryId&quot;,&quot;typeFieldName&quot;:&quot;lineCategoryType&quot;,&quot;directionFieldName&quot;:&quot;lineTransferDirection&quot;,&quot;index&quot;:${line.index()}}|"
+                       hx-vals=|{&quot;fieldName&quot;:&quot;lineCategoryId&quot;,&quot;typeFieldName&quot;:&quot;lineCategoryType&quot;,&quot;directionFieldName&quot;:&quot;lineTransferDirection&quot;,&quot;personFieldPrefix&quot;:&quot;line&quot;,&quot;index&quot;:${line.index()}}|"
             />
           </div>
           <div class="field field--amount">
@@ -314,25 +319,37 @@
           >
             ✕
           </button>
-          <!-- This line's resolved category id + type + transfer direction (hidden), filled by
-               /categories/resolve. The type feeds the live signed-sum readout; the direction signs a
-               transfer line, which has no category type (register §3.8, plan stage 7d.3). Every line
-               emits the direction input (blank for a category) so the aligned line arrays stay
-               aligned across a per-line re-resolve. -->
-          <span th:id="'line-' + ${line.index()} + '-resolved'" class="split-line__resolved">
+          <!-- This line's resolved category id + type + transfer direction + person attribution
+               (hidden), filled by /categories/resolve. The type feeds the live signed-sum readout;
+               the direction signs a transfer line, which has no category type (register §3.8, plan
+               stage 7d.3), and the person direction does the same for a `for`/`by` line (register
+               §3.5, plan stage 8b.2) — whose person is carried by NAME, its debt leaf provisioned at
+               commit. Every line emits all of them (blank for a category) so the aligned line arrays
+               stay aligned across a per-line re-resolve. -->
+          <span
+            th:id="'line-' + ${line.index()} + '-resolved'"
+            class="split-line__resolved"
+            data-counterpart-resolved
+          >
             <input type="hidden" name="lineCategoryId" th:value="${line.categoryId()}" />
             <input type="hidden" name="lineCategoryType" th:value="${line.categoryType()}" />
             <input type="hidden" name="lineTransferDirection" th:value="${line.transferDirection()}" />
+            <input type="hidden" name="linePersonName" th:value="${line.personName()}" />
+            <input type="hidden" name="linePersonDirection" th:value="${line.personDirection()}" />
+            <input type="hidden" name="linePersonRevive" th:value="${line.personRevive()}" />
           </span>
         </li>
       </ol>
 
-      <!-- Categories plus the transfer targets (register §3.5, plan stage 7d.3): a split line may be
-           a `To → <account>` / `From ← <account>` transfer to a real own account, resolved by the
-           same /categories/resolve as the dock (the arrow prefix tells the two apart). -->
+      <!-- Categories plus the transfer targets (register §3.5, plan stage 7d.3) and the person
+           targets (plan stage 8b.2): a split line may be a `To → <account>` / `From ← <account>`
+           transfer to a real own account, or a `for <person>` / `by <person>` attribution — which is
+           how one receipt splits across several people (register §2.6). All resolved by the same
+           /categories/resolve as the dock, which tells the three apart by the prefix. -->
       <datalist id="split-category-options">
         <option th:each="c : ${register.categories()}" th:value="${c.name()}"></option>
         <option th:each="t : ${register.transferTargets()}" th:value="${t}"></option>
+        <option th:each="p : ${register.personTargets()}" th:value="${p}"></option>
       </datalist>
 
       <!-- Existing tags as pick-ahead suggestions, shared by the header and every line's tag input
