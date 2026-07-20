@@ -66,6 +66,38 @@ class AccountTreeSqlLogicTest {
         .single();
   }
 
+  private long insertMarkedRoot(
+      String name, String type, boolean currencyLeaf, boolean personLeaf) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code, currency_leaf, person_leaf) "
+                + "values (:n, :t, :c, :cl, :pl) returning account_id")
+        .param("n", name)
+        .param("t", type)
+        .param("c", EUR)
+        .param("cl", currencyLeaf)
+        .param("pl", personLeaf)
+        .query(Long.class)
+        .single();
+  }
+
+  private long insertMarkedChild(
+      String name, String type, long parentId, boolean currencyLeaf, boolean personLeaf) {
+    return jdbcClient
+        .sql(
+            "insert into account "
+                + "(name, type, parent_id, currency_code, currency_leaf, person_leaf) "
+                + "values (:n, :t, :p, :c, :cl, :pl) returning account_id")
+        .param("n", name)
+        .param("t", type)
+        .param("p", parentId)
+        .param("c", EUR)
+        .param("cl", currencyLeaf)
+        .param("pl", personLeaf)
+        .query(Long.class)
+        .single();
+  }
+
   private void softDelete(long accountId) {
     jdbcClient
         .sql("update account set deleted_at = now() where account_id = :id")
@@ -192,5 +224,39 @@ class AccountTreeSqlLogicTest {
   @Test
   void subtreeOfNonExistentRootIsEmpty() {
     assertThat(accountRepository.findSubtreeAccountIds(-1L)).isEmpty();
+  }
+
+  @Test
+  void depthWalkCarriesBothLeafMarkersThroughTheRecursiveCte() {
+    // The CTE re-lists every column in three places (anchor, recursive arm, final select) plus the
+    // row mapper, so a column added to one and missed in another maps silently wrong. Assert both
+    // markers survive the walk, at depth and independently of each other (plan stage 8b.1).
+    long food = insertRoot(FOOD, EXPENSE);
+    long eurLeaf = insertMarkedChild("EUR", EXPENSE, food, true, false);
+    long milk = insertChild("Milk", EXPENSE, food);
+
+    List<AccountNode> nodes = accountRepository.findLiveByTypesWithDepth(List.of(EXPENSE));
+
+    assertThat(nodes)
+        .extracting(
+            n -> n.account().accountId(),
+            n -> n.account().currencyLeaf(),
+            n -> n.account().personLeaf())
+        .containsExactly(
+            tuple(food, false, false), tuple(eurLeaf, true, false), tuple(milk, false, false));
+  }
+
+  @Test
+  void depthWalkCarriesThePersonLeafMarker() {
+    // A person's debt leaf is a standalone asset root (no parent), so it exercises the anchor arm
+    // of the CTE rather than the recursive one (data-model §7).
+    long maxLeaf = insertMarkedRoot("personal.EUR", "asset", false, true);
+    long cash = insertRoot("Cash", "asset");
+
+    List<AccountNode> nodes = accountRepository.findLiveByTypesWithDepth(List.of("asset"));
+
+    assertThat(nodes)
+        .extracting(n -> n.account().accountId(), n -> n.account().personLeaf())
+        .containsExactly(tuple(cash, false), tuple(maxLeaf, true));
   }
 }

@@ -113,7 +113,8 @@
             list="entry-account-options"
             autocomplete="off"
             required
-            th:value="${edit != null} ? ${edit.accountEntryText()} : ${register.defaultAccountEntryText()}"
+            th:value="${edit != null and edit.accountEntryText() != null}
+                      ? ${edit.accountEntryText()} : ${register.defaultAccountEntryText()}"
             hx-post="/register/account/resolve"
             hx-trigger="change"
             hx-target="#entry-account-resolved"
@@ -129,12 +130,12 @@
              once the transaction currency is known). Pre-filled on first render so the dock is
              committable without touching the field. -->
         <span id="entry-account-resolved">
-          <th:block th:if="${edit != null and edit.accountEntryText() != null}">
-            <input type="hidden" name="accountId" th:value="${edit.accountId()}" />
-          </th:block>
-          <th:block th:if="${edit == null}">
-            <input type="hidden" name="accountId" th:value="${register.defaultAccountId()}" />
-          </th:block>
+          <input
+            type="hidden"
+            name="accountId"
+            th:value="${edit != null and edit.accountEntryText() != null}
+                      ? ${edit.accountId()} : ${register.defaultAccountId()}"
+          />
         </span>
         <!-- Funding-leg reveal (register §3.3, plan stage 8b.1): resolving the Account field changes
              the funding leg, so the amount-field layout and the currency default must recompute —

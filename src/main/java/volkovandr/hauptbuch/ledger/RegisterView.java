@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.ledger;
 
 import java.util.List;
+import volkovandr.hauptbuch.accounts.AccountEntryLabel;
 
 /**
  * The whole register screen as one immutable view model (register §2) — the rows to render plus the
@@ -75,11 +76,12 @@ public record RegisterView(
     /**
      * The {@code Name (CUR)} value the dock's Account datalist offers and its resolver round-trips
      * back to this account (register §3.3, plan stage 8b.1) — the same shape {@link
-     * RegisterPayeeOption#entryValue()} plays for payees. Defined here rather than in the template
-     * so the label the picker offers and the label the resolver parses can never drift apart.
+     * RegisterPayeeOption#entryValue()} plays for payees. Delegates to {@link AccountEntryLabel},
+     * which owns both this format and the parser that reads it back, so the label the picker offers
+     * and the label the resolver parses cannot drift apart.
      */
     public String entryValue() {
-      return name + " (" + currencyCode + ")";
+      return AccountEntryLabel.format(name, currencyCode);
     }
   }
 

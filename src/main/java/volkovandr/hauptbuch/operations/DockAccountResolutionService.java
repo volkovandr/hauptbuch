@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.operations;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountEntryLabel;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.debts.PersonResolution;
 import volkovandr.hauptbuch.debts.PersonResolutionService;
@@ -74,7 +75,7 @@ class DockAccountResolutionService {
    * it would fund the transaction from an account the user did not name.
    */
   private DockAccountResolution resolveAccount(String text) {
-    NameAndCurrency parsed = NameAndCurrency.parse(text);
+    AccountEntryLabel.Parsed parsed = AccountEntryLabel.parse(text);
     Optional<Account> match = accountService.findOwnAccountByName(parsed.name());
     if (match.isEmpty()) {
       return DockAccountResolution.error(
@@ -97,23 +98,6 @@ class DockAccountResolutionService {
               + ", not "
               + parsed.currencyCode());
     }
-    return DockAccountResolution.account(
-        account.accountId(), account.name() + " (" + account.currencyCode() + ")");
-  }
-
-  /** A typed {@code Name (CUR)} split into its parts; the suffix is optional. */
-  private record NameAndCurrency(String name, String currencyCode) {
-
-    static NameAndCurrency parse(String text) {
-      int open = text.lastIndexOf('(');
-      if (open > 0 && text.endsWith(")")) {
-        String currency = text.substring(open + 1, text.length() - 1).strip();
-        String name = text.substring(0, open).strip();
-        if (!currency.isBlank() && !name.isBlank()) {
-          return new NameAndCurrency(name, currency);
-        }
-      }
-      return new NameAndCurrency(text, null);
-    }
+    return DockAccountResolution.account(account.accountId(), AccountEntryLabel.format(account));
   }
 }

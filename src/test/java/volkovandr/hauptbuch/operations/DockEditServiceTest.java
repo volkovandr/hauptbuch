@@ -455,9 +455,10 @@ class DockEditServiceTest {
   }
 
   @Test
-  void personFundingLegIsNeverSticky() {
+  void personFundingAccountIsNeverStickyButTheDateStill() {
     // An unnoticed sticky person would silently book a debt against the next transaction, and
-    // possibly provision a leaf for it (plan stage 8b.1) — so it falls back to the fresh default.
+    // possibly provision a leaf for it (plan stage 8b.1) — so the account falls away and the dock
+    // pre-fills its ordinary default. The date is not person-risky and still carries over.
     long maxLeaf = 77L;
     when(accountService.findById(maxLeaf))
         .thenReturn(
@@ -475,12 +476,23 @@ class DockEditServiceTest {
                     false,
                     true)));
 
-    assertThat(service().stickyAfterCommit(maxLeaf, LocalDate.of(2026, 2, 1))).isNull();
+    DockEditModel sticky = service().stickyAfterCommit(maxLeaf, LocalDate.of(2026, 2, 1));
+
+    assertThat(sticky.date()).isEqualTo(LocalDate.of(2026, 2, 1));
+    assertThat(sticky.accountId()).isNull();
+    assertThat(sticky.accountEntryText()).isNull();
   }
 
   @Test
-  void stickyIsAbsentWithoutAnAccountOrDate() {
-    assertThat(service().stickyAfterCommit(null, LocalDate.of(2026, 2, 1))).isNull();
+  void stickyKeepsTheDateEvenWithNoAccountAtAll() {
+    DockEditModel sticky = service().stickyAfterCommit(null, LocalDate.of(2026, 2, 1));
+
+    assertThat(sticky.date()).isEqualTo(LocalDate.of(2026, 2, 1));
+    assertThat(sticky.accountId()).isNull();
+  }
+
+  @Test
+  void stickyIsAbsentWithoutDate() {
     assertThat(service().stickyAfterCommit(CASH_ID, null)).isNull();
   }
 }
