@@ -91,7 +91,12 @@
              recomputes the amount fields (§3.5) — the hx-include deliberately omits the current
              categoryCurrencyCode, so the server always re-derives it from the new account. -->
         <div class="field">
-          <label class="field__label" for="entry-account">Account</label>
+          <label
+            class="field__label"
+            for="entry-account"
+            title="An already-established person also works here — see 'or person' below (data-model §7)."
+            >Account</label
+          >
           <select
             id="entry-account"
             name="accountId"
@@ -113,6 +118,56 @@
             </option>
           </select>
         </div>
+
+        <!-- 2b · Or person (register §3.3, plan stage 8b): typing an already-established person's
+             name makes them the funding leg instead — "Max paid for a pure expense of mine"
+             (register §2.6 pattern 3). Not listed by default (an empty datalist), surfaced only by
+             typing; a brand-new person is not accepted here — that goes through Category's for/by
+             (data-model §7). Resolving fills the hidden personAccountId override below, which wins
+             over the Account select at commit (DockEntryForm#effectiveAccountId). -->
+        <div class="field">
+          <label
+            class="field__label"
+            for="entry-account-person"
+            title="Type an already-established person's name to make them the funding leg (they paid for a pure expense of yours). Leave blank to use Account above."
+            >or person</label
+          >
+          <input
+            id="entry-account-person"
+            name="personAccountText"
+            class="input"
+            list="entry-account-person-options"
+            autocomplete="off"
+            placeholder="Max"
+            th:value="${edit != null} ? ${edit.fundingPersonLabel()}"
+            hx-post="/people/resolve-account"
+            hx-trigger="change"
+            hx-target="#entry-account-resolved"
+            hx-swap="innerHTML"
+          />
+          <datalist id="entry-account-person-options"></datalist>
+        </div>
+        <!-- The resolved override (hidden) + status, swapped in by /people/resolve-account. In
+             edit mode it starts pre-filled when the loaded transaction's funding leg is a
+             person's. -->
+        <span id="entry-account-resolved">
+          <input
+            type="hidden"
+            name="personAccountId"
+            th:value="${edit != null and edit.fundingPersonLabel() != null} ? ${edit.accountId()} : ''"
+          />
+        </span>
+        <!-- Person-account reveal (register §3.3, plan stage 8b): resolving the person sub-field
+             changes the effective funding account, so the amount-field layout must recompute —
+             mirrors the transfer counterpart-resolved chain below. -->
+        <span
+          hidden
+          hx-post="/register/currency-fields"
+          hx-trigger="person-account-resolved from:body"
+          hx-include="closest form"
+          hx-target="#entry-currency-amount"
+          hx-swap="outerHTML"
+        ></span>
 
         <!-- 3 · Payee (datalist + create-new-at-commit). Changing it fetches the ghost category. -->
         <div class="field">
@@ -154,23 +209,30 @@
 
         <!-- 5 · Category (datalist; resolve/create via categories on change, into the hidden id) -->
         <div class="field">
-          <label class="field__label" for="entry-category">Category</label>
+          <label
+            class="field__label"
+            for="entry-category"
+            title="Food, or Food - Milk to create a leaf. To → Account / From ← Account transfers. for Max / by Max attributes it to a person (data-model §7)."
+            >Category</label
+          >
           <input
             id="entry-category"
             name="categoryText"
             class="input"
             list="entry-category-options"
             autocomplete="off"
-            placeholder="Food  ·  or  Food - Milk"
+            placeholder="Food  ·  or  for Max"
             th:value="${edit != null} ? ${edit.categoryEntryText()}"
             hx-post="/categories/resolve"
             hx-trigger="change"
             hx-target="#entry-category-resolved"
             hx-swap="innerHTML"
           />
-          <!-- Categories plus the transfer targets (register §3.5, plan stage 7d.3): picking a
-               `To → <account>` / `From ← <account>` routes the counter-leg to a real account. The
-               server resolver (/categories/resolve) tells the two apart by the arrow prefix. -->
+          <!-- Categories plus the transfer targets (register §3.5, plan stage 7d.3) and the person
+               targets (register §3.5, plan stage 8b, data-model §7): picking a `To → <account>` /
+               `From ← <account>` routes the counter-leg to a real account; `for <person>` / `by
+               <person>` routes it to that person's per-currency debt leaf. The server resolver
+               (/categories/resolve) tells the three apart by the prefix. -->
           <datalist id="entry-category-options">
             <option
               th:each="c : ${register.categories()}"
@@ -179,6 +241,10 @@
             <option
               th:each="t : ${register.transferTargets()}"
               th:value="${t}"
+            ></option>
+            <option
+              th:each="p : ${register.personTargets()}"
+              th:value="${p}"
             ></option>
           </datalist>
         </div>
@@ -449,7 +515,7 @@
          category, so the aligned line arrays stay aligned. The dock resolves without those, so they
          default (its transfer marker is emitted only when a transfer resolves). -->
     <th:block
-      th:fragment="categoryResolved(categoryId, categoryName, error, fieldName, typeFieldName, categoryType, transferDirection, directionFieldName)"
+      th:fragment="categoryResolved(categoryId, categoryName, error, fieldName, typeFieldName, categoryType, transferDirection, directionFieldName, personName, personDirection, personRevive, personPending, personPendingName)"
     >
       <input type="hidden" th:name="${fieldName}" th:value="${categoryId}" />
       <input
@@ -469,10 +535,55 @@
         th:name="${directionFieldName != null ? directionFieldName : 'transferDirection'}"
         th:value="${transferDirection}"
       />
+      <!-- A person target (register §3.5, plan stage 8b, data-model §7): for/by resolve to a name
+           and direction, not an id — the leaf is auto-provisioned at commit, once the currency is
+           known. Blank while a revival decision is pending (personPending, below). -->
+      <input th:if="${personName != null}" type="hidden" name="personName" th:value="${personName}" />
+      <input
+        th:if="${personDirection != null}"
+        type="hidden"
+        name="personDirection"
+        th:value="${personDirection}"
+      />
+      <input
+        th:if="${personRevive != null}"
+        type="hidden"
+        name="personRevive"
+        th:value="${personRevive}"
+      />
       <span th:if="${categoryName}" class="entry-dock__resolved muted" th:text="${categoryName}"
         >Food</span
       >
       <span th:if="${error}" class="entry-dock__resolved warning" th:text="${error}"></span>
+      <!-- Revival is never silent (data-model §7): a for/by name matching only a soft-deleted
+           person renders this choice instead of a ready-to-commit result. Both buttons re-post the
+           typed categoryText here with personDecision set, finalising the pick into the hidden
+           fields above. -->
+      <span th:if="${personPending}" class="entry-dock__resolved warning">
+        <span th:text="'&#8216;' + ${personPendingName} + '&#8217; is deleted.'"></span>
+        <button
+          type="button"
+          class="btn btn--ghost"
+          hx-post="/categories/resolve"
+          hx-include="[name='categoryText']"
+          hx-vals='{"personDecision":"REVIVE"}'
+          hx-target="#entry-category-resolved"
+          hx-swap="innerHTML"
+        >
+          Restore
+        </button>
+        <button
+          type="button"
+          class="btn btn--ghost"
+          hx-post="/categories/resolve"
+          hx-include="[name='categoryText']"
+          hx-vals='{"personDecision":"NEW"}'
+          hx-target="#entry-category-resolved"
+          hx-swap="innerHTML"
+        >
+          Create new
+        </button>
+      </span>
     </th:block>
 
     <!-- POST /categories/tags/resolve response (register §3.6, plan stage 7e): one removable chip
@@ -481,6 +592,18 @@
          next chip can be typed. Also rendered inline for each of an edited transaction's tags
          (edit-mode pre-fill). A blank chip yields an empty fragment (no pill). `fieldName` names
          the hidden id input (tagId for the dock; a split line passes its own — plan stage 7e.3). -->
+    <!-- POST /people/resolve-account response (register §3.3, plan stage 8b): the hidden
+         personAccountId override the commit reads (DockEntryForm#effectiveAccountId), plus a
+         small status (the resolved account/person's "Name (CUR)" label, or an error). Swapped
+         into #entry-account-resolved. -->
+    <th:block th:fragment="personAccountResolved(accountId, accountName, error)">
+      <input type="hidden" name="personAccountId" th:value="${accountId}" />
+      <span th:if="${accountName}" class="entry-dock__resolved muted" th:text="${accountName}"
+        >Max (EUR)</span
+      >
+      <span th:if="${error}" class="entry-dock__resolved warning" th:text="${error}"></span>
+    </th:block>
+
     <th:block th:fragment="tagChip(tagId, tagLabel, fieldName)">
       <span th:if="${tagId != null}" class="chip" data-tag-chip>
         <span class="chip__label" th:text="${tagLabel}">Car:Passat</span>

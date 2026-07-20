@@ -13,6 +13,9 @@ import java.util.List;
  * @param transferTargets the {@code To → <account>} / {@code From ← <account>} values the Category
  *     datalist also offers, routing the counter-leg to a real account (register §3.5, plan stage
  *     7d.3)
+ * @param personTargets the {@code for <person>} / {@code by <person>} values the Category datalist
+ *     also offers, routing the counter-leg to that person's per-currency debt leaf (register §3.5,
+ *     plan stage 8b, data-model §7)
  * @param tagOptions the canonical {@code Parent:Child} labels of every live tag, the dock's tag
  *     chip datalist suggestions (register §3.6, plan stage 7e)
  * @param filter the currently-applied filter (selected accounts, date range, payee), for redisplay
@@ -23,6 +26,7 @@ public record RegisterView(
     List<RegisterPayeeOption> payees,
     List<RegisterCategoryOption> categories,
     List<String> transferTargets,
+    List<String> personTargets,
     List<String> tagOptions,
     RegisterFilter filter) {
 
@@ -33,6 +37,7 @@ public record RegisterView(
     payees = List.copyOf(payees);
     categories = List.copyOf(categories);
     transferTargets = List.copyOf(transferTargets);
+    personTargets = List.copyOf(personTargets);
     tagOptions = List.copyOf(tagOptions);
   }
 

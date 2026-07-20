@@ -95,28 +95,37 @@ class RegisterEntryController {
   @PostMapping("/register/entry")
   String commit(@ModelAttribute DockEntryForm form, Model model) {
     RegisterFilter filter = filterFrom(form);
-    if (form.accountId() == null) {
+    Long fundingAccountId = form.effectiveAccountId();
+    if (fundingAccountId == null) {
       return dockError(filter, form, "An account is required", model);
     }
-    if (form.categoryId() == null) {
+    boolean hasPerson =
+        blankToNull(form.personName()) != null && blankToNull(form.personDirection()) != null;
+    if (form.categoryId() == null && !hasPerson) {
       return dockError(
-          filter, form, "A category or transfer target is required (pick or create one)", model);
+          filter,
+          form,
+          "A category, transfer target, or person is required (pick, create, or resolve one)",
+          model);
     }
     try {
       dockCommitService.commit(
           new DockEntry(
               form.transactionId(),
               form.date(),
-              form.accountId(),
+              fundingAccountId,
               null,
               blankToNull(form.payeeText()),
-              form.categoryId(),
+              form.categoryId() == null ? 0L : form.categoryId(),
               form.categoryCurrencyCode(),
               form.amount(),
               form.categoryAmount(),
               form.baseAmount(),
               form.note(),
               form.transferDirection(),
+              form.personName(),
+              form.personDirection(),
+              form.personRevive(),
               form.tagId()));
     } catch (IllegalArgumentException | IllegalStateException e) {
       return dockError(filter, form, e.getMessage(), model);

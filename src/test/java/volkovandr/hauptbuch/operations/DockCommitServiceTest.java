@@ -20,6 +20,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonProvisioningService;
+import volkovandr.hauptbuch.debts.PersonTarget;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.PostingDraft;
@@ -48,6 +50,8 @@ class DockCommitServiceTest {
   private static final long VISA_ID = 4L;
   private static final String TO = TransferTarget.Direction.TO.name();
   private static final String FROM = TransferTarget.Direction.FROM.name();
+  private static final String FOR = PersonTarget.Direction.FOR.name();
+  private static final String BY = PersonTarget.Direction.BY.name();
   private static final LocalDate DATE = LocalDate.of(2026, 2, 1);
 
   @Mock private AccountService accountService;
@@ -55,6 +59,7 @@ class DockCommitServiceTest {
   @Mock private CurrencyLeafService currencyLeafService;
   @Mock private LedgerService ledgerService;
   @Mock private SettingsService settingsService;
+  @Mock private PersonProvisioningService personProvisioningService;
 
   private DockCommitService dockCommitService;
 
@@ -62,7 +67,12 @@ class DockCommitServiceTest {
   void setUp() {
     dockCommitService =
         new DockCommitService(
-            accountService, payeeService, currencyLeafService, ledgerService, settingsService);
+            accountService,
+            payeeService,
+            currencyLeafService,
+            ledgerService,
+            settingsService,
+            personProvisioningService);
   }
 
   private static Account account(long id, String type, String currency) {
@@ -82,6 +92,9 @@ class DockCommitServiceTest {
         null,
         null,
         "lunch",
+        null,
+        null,
+        null,
         null,
         List.of());
   }
@@ -176,6 +189,9 @@ class DockCommitServiceTest {
             null,
             "lunch",
             null,
+            null,
+            null,
+            null,
             List.of(5L, 6L, 5L));
     dockCommitService.commit(entry);
 
@@ -209,6 +225,9 @@ class DockCommitServiceTest {
             CATEGORY_ID,
             null,
             "10",
+            null,
+            null,
+            null,
             null,
             null,
             null,
@@ -255,6 +274,9 @@ class DockCommitServiceTest {
             null,
             null,
             null,
+            null,
+            null,
+            null,
             List.of());
     dockCommitService.commit(entry);
 
@@ -284,6 +306,9 @@ class DockCommitServiceTest {
             CHF,
             "9,10",
             "10",
+            null,
+            null,
+            null,
             null,
             null,
             null,
@@ -328,6 +353,9 @@ class DockCommitServiceTest {
             "8,50",
             null,
             null,
+            null,
+            null,
+            null,
             List.of());
     dockCommitService.commit(entry);
 
@@ -363,6 +391,9 @@ class DockCommitServiceTest {
             null,
             null,
             null,
+            null,
+            null,
+            null,
             List.of());
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockCommitService.commit(entry))
@@ -389,6 +420,9 @@ class DockCommitServiceTest {
             USD,
             "9",
             "10",
+            null,
+            null,
+            null,
             null,
             null,
             null,
@@ -421,6 +455,9 @@ class DockCommitServiceTest {
             null,
             null,
             null,
+            null,
+            null,
+            null,
             List.of());
     assertThatExceptionOfType(IllegalStateException.class)
         .isThrownBy(() -> dockCommitService.commit(entry));
@@ -443,6 +480,9 @@ class DockCommitServiceTest {
         baseAmount,
         null,
         direction,
+        null,
+        null,
+        null,
         List.of());
   }
 
@@ -520,7 +560,8 @@ class DockCommitServiceTest {
 
     DockEntry entry =
         new DockEntry(
-            null, DATE, CASH_ID, null, null, CASH_ID, null, "20", null, null, null, TO, List.of());
+            null, DATE, CASH_ID, null, null, CASH_ID, null, "20", null, null, null, TO, null, null,
+            null, List.of());
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockCommitService.commit(entry))
         .withMessageContaining("two different accounts");
@@ -536,6 +577,82 @@ class DockCommitServiceTest {
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> dockCommitService.commit(transferEntry("20", TO, null, null)))
         .withMessageContaining("No account");
+  }
+
+  // ── persons (for/by), single line (plan stage 8b, register §3.5, data-model §7) ──
+
+  private static DockEntry personEntry(String amount, String direction, String revive) {
+    return new DockEntry(
+        null, DATE, CASH_ID, null, null, 0L, null, amount, null, null, null, null, "Max", direction,
+        revive, List.of());
+  }
+
+  @Test
+  void forDirectionIsAnOutflowFromTheFundingLeg() {
+    Account cash = account(CASH_ID, "asset", EUR);
+    Account maxLeaf = account(LEAF_ID, "asset", EUR);
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(cash));
+    when(personProvisioningService.ensureLeaf("Max", EUR, false)).thenReturn(maxLeaf);
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(1L);
+
+    dockCommitService.commit(personEntry("20", FOR, null));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    // "for Max" — you funded it: Cash −20, Max +20 (the leg auto-provisioned at commit).
+    assertThat(legs).hasSize(2);
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("-20");
+    assertThat(leg(legs, LEAF_ID)).isEqualByComparingTo("20");
+    verify(currencyLeafService, never()).resolveCurrencyLeaf(any(Long.class), any());
+  }
+
+  @Test
+  void byDirectionIsAnInflowToTheFundingLeg() {
+    Account cash = account(CASH_ID, "asset", EUR);
+    Account maxLeaf = account(LEAF_ID, "asset", EUR);
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(cash));
+    when(personProvisioningService.ensureLeaf("Max", EUR, false)).thenReturn(maxLeaf);
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(1L);
+
+    dockCommitService.commit(personEntry("20", BY, null));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    // "by Max" — they funded it: Cash +20, Max −20.
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("20");
+    assertThat(leg(legs, LEAF_ID)).isEqualByComparingTo("-20");
+  }
+
+  @Test
+  void personEntryRoutesToTheFundingAccountsCurrencyWhenNoOverride() {
+    Account chfCard = account(CASH_ID, "asset", CHF);
+    Account maxLeaf = account(LEAF_ID, "asset", CHF);
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(chfCard));
+    when(personProvisioningService.ensureLeaf("Max", CHF, false)).thenReturn(maxLeaf);
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(1L);
+
+    dockCommitService.commit(personEntry("20", FOR, null));
+
+    verify(personProvisioningService).ensureLeaf("Max", CHF, false);
+  }
+
+  @Test
+  void personEntryPassesTheReviveDecisionThrough() {
+    Account cash = account(CASH_ID, "asset", EUR);
+    Account maxLeaf = account(LEAF_ID, "asset", EUR);
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(cash));
+    when(personProvisioningService.ensureLeaf("Max", EUR, true)).thenReturn(maxLeaf);
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(1L);
+
+    dockCommitService.commit(personEntry("20", FOR, "true"));
+
+    verify(personProvisioningService).ensureLeaf("Max", EUR, true);
   }
 
   // ── edit & void (register §3.1) ───────────────────────────────────────────────
@@ -560,6 +677,9 @@ class DockCommitServiceTest {
             CATEGORY_ID,
             null,
             "30",
+            null,
+            null,
+            null,
             null,
             null,
             null,

@@ -6,6 +6,8 @@ import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonService;
+import volkovandr.hauptbuch.debts.PersonTarget;
 import volkovandr.hauptbuch.ledger.RegisterView.RegisterAccountOption;
 import volkovandr.hauptbuch.ledger.RegisterView.RegisterCategoryOption;
 import volkovandr.hauptbuch.ledger.RegisterView.RegisterPayeeOption;
@@ -38,6 +40,7 @@ public class RegisterService {
   private final SettingsService settingsService;
   private final RegisterRowRenderer rowRenderer;
   private final TagReadRepository tagReadRepository;
+  private final PersonService personService;
 
   RegisterService(
       RegisterRepository registerRepository,
@@ -45,13 +48,15 @@ public class RegisterService {
       AccountService accountService,
       SettingsService settingsService,
       RegisterRowRenderer rowRenderer,
-      TagReadRepository tagReadRepository) {
+      TagReadRepository tagReadRepository,
+      PersonService personService) {
     this.registerRepository = registerRepository;
     this.payeeRepository = payeeRepository;
     this.accountService = accountService;
     this.settingsService = settingsService;
     this.rowRenderer = rowRenderer;
     this.tagReadRepository = tagReadRepository;
+    this.personService = personService;
   }
 
   /**
@@ -74,9 +79,17 @@ public class RegisterService {
     List<RegisterPayeeOption> payeeOptions = payeeOptions(filter.payeeId());
     List<RegisterCategoryOption> categoryOptions = categoryOptions();
     List<String> transferTargets = transferTargets(ownAccounts);
+    List<String> personTargets = personTargets();
     List<String> tagOptions = tagReadRepository.liveTagLabels();
     return new RegisterView(
-        rows, accountOptions, payeeOptions, categoryOptions, transferTargets, tagOptions, filter);
+        rows,
+        accountOptions,
+        payeeOptions,
+        categoryOptions,
+        transferTargets,
+        personTargets,
+        tagOptions,
+        filter);
   }
 
   /**
@@ -92,6 +105,23 @@ public class RegisterService {
                 Stream.of(
                     TransferTarget.option(TransferTarget.Direction.TO, a.name()),
                     TransferTarget.option(TransferTarget.Direction.FROM, a.name())))
+        .toList();
+  }
+
+  /**
+   * The person-attribution targets the Category datalist offers alongside categories and transfer
+   * targets (register §3.5, plan stage 8b, data-model §7): {@code for <name>} and {@code by <name>}
+   * for every live person, so picking one routes the counter-leg to that person's per-currency debt
+   * leaf instead of a category. An unlisted (new) name is still accepted by typing it — this is
+   * autocomplete convenience, not the only way in.
+   */
+  private List<String> personTargets() {
+    return personService.findAllLive().stream()
+        .flatMap(
+            p ->
+                Stream.of(
+                    PersonTarget.option(PersonTarget.Direction.FOR, p.name()),
+                    PersonTarget.option(PersonTarget.Direction.BY, p.name())))
         .toList();
   }
 

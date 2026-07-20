@@ -14,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.Posting;
@@ -40,9 +41,10 @@ class DockEditServiceTest {
   @Mock private LedgerService ledgerService;
   @Mock private AccountService accountService;
   @Mock private PayeeService payeeService;
+  @Mock private PersonService personService;
 
   private DockEditService service() {
-    return new DockEditService(ledgerService, accountService, payeeService);
+    return new DockEditService(ledgerService, accountService, payeeService, personService);
   }
 
   private static Account account(
@@ -108,6 +110,43 @@ class DockEditServiceTest {
     assertThat(model.amount()).isEqualTo("20,00");
     assertThat(model.payeeText()).isEqualTo("Rewe - Dortmund - Germany");
     assertThat(model.note()).isEqualTo("lunch");
+  }
+
+  @Test
+  void loadsPersonFundedExpenseWithTheFundingPersonLabel() {
+    // "Max pays for a pure expense of yours" (register §2.6 pattern 3): Max's leg is an ordinary
+    // asset account, so it classifies as the funding leg exactly like a real account — the person
+    // label is the one extra fact the dock's person sub-field needs to redisplay it as "Max", not
+    // the leaf's cosmetic internal name.
+    long maxLeafId = 9L;
+    when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
+    when(ledgerService.findPostings(TXN_ID))
+        .thenReturn(List.of(posting(maxLeafId, "-20"), posting(FOOD_ID, "20")));
+    when(accountService.findById(maxLeafId))
+        .thenReturn(Optional.of(account(maxLeafId, "personal.EUR", ASSET, null, EUR)));
+    when(accountService.findById(FOOD_ID))
+        .thenReturn(Optional.of(account(FOOD_ID, "Food", EXPENSE, null, EUR)));
+    when(personService.personNameForAccount(maxLeafId)).thenReturn(Optional.of("Max"));
+
+    DockEditModel model = service().load(TXN_ID);
+
+    assertThat(model.accountId()).isEqualTo(maxLeafId);
+    assertThat(model.fundingPersonLabel()).isEqualTo("Max (EUR)");
+  }
+
+  @Test
+  void loadsAnOrdinaryExpenseWithNoFundingPersonLabel() {
+    when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
+    when(ledgerService.findPostings(TXN_ID))
+        .thenReturn(List.of(posting(CASH_ID, "-20"), posting(FOOD_ID, "20")));
+    when(accountService.findById(CASH_ID))
+        .thenReturn(Optional.of(account(CASH_ID, "Cash", ASSET, null, EUR)));
+    when(accountService.findById(FOOD_ID))
+        .thenReturn(Optional.of(account(FOOD_ID, "Food", EXPENSE, null, EUR)));
+
+    DockEditModel model = service().load(TXN_ID);
+
+    assertThat(model.fundingPersonLabel()).isNull();
   }
 
   @Test

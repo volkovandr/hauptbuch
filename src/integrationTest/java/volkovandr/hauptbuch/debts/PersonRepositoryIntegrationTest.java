@@ -44,6 +44,33 @@ class PersonRepositoryIntegrationTest {
   }
 
   @Test
+  void findByIdIncludingDeletedFindsLivePerson() {
+    Person alice = personRepository.insert("AliceIt");
+
+    Optional<Person> found = personRepository.findByIdIncludingDeleted(alice.personId());
+
+    assertThat(found).contains(alice);
+  }
+
+  @Test
+  void findByIdIncludingDeletedFindsSoftDeletedPerson() {
+    Person alice = personRepository.insert("AliceIt");
+    personRepository.softDelete(alice.personId());
+
+    Optional<Person> found = personRepository.findByIdIncludingDeleted(alice.personId());
+
+    assertThat(found).isPresent();
+    assertThat(found.get().deletedAt()).isNotNull();
+  }
+
+  @Test
+  void findByIdIncludingDeletedReturnsEmptyWhenAbsent() {
+    Optional<Person> found = personRepository.findByIdIncludingDeleted(999L);
+
+    assertThat(found).isEmpty();
+  }
+
+  @Test
   void findAllLiveReturnsList() {
     personRepository.insert("AliceIt");
     personRepository.insert("CharlieIt");
@@ -153,6 +180,37 @@ class PersonRepositoryIntegrationTest {
     assertThat(found).isPresent();
     assertThat(found.get().deletedAt()).isNotNull();
     assertThat(found.get().name()).isEqualTo("AliceIt");
+  }
+
+  @Test
+  void findAllByNameExactReturnsLiveAndDeletedRows() {
+    Person live = personRepository.insert("AliceIt");
+    Person deleted = personRepository.insert("AliceIt");
+    personRepository.softDelete(deleted.personId());
+
+    List<Person> found = personRepository.findAllByNameExact("AliceIt");
+
+    assertThat(found)
+        .extracting(Person::personId)
+        .containsExactlyInAnyOrder(live.personId(), deleted.personId());
+  }
+
+  @Test
+  void findAllByNameExactOrdersLiveBeforeDeleted() {
+    Person deleted = personRepository.insert("AliceIt");
+    personRepository.softDelete(deleted.personId());
+    Person live = personRepository.insert("AliceIt");
+
+    List<Person> found = personRepository.findAllByNameExact("AliceIt");
+
+    assertThat(found.get(0).personId()).isEqualTo(live.personId());
+  }
+
+  @Test
+  void findAllByNameExactReturnsEmptyWhenNoneMatch() {
+    List<Person> found = personRepository.findAllByNameExact("NoOneIt");
+
+    assertThat(found).isEmpty();
   }
 
   @Test

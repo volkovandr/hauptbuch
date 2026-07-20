@@ -25,6 +25,8 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountDraft;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.Person;
+import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
@@ -52,6 +54,7 @@ class RegisterEntryScreenIntegrationTest {
   @Autowired AccountService accountService;
   @Autowired SettingsService settingsService;
   @Autowired JdbcClient jdbcClient;
+  @Autowired PersonService personService;
 
   @BeforeEach
   void setUp() {
@@ -703,6 +706,234 @@ class RegisterEntryScreenIntegrationTest {
     // One balanced cross-currency transfer: Σ base_amount = 0 across the frozen legs.
     assertThat(spendTransactionCount()).isEqualTo(1L);
     assertThat(baseAmountSum()).isEqualByComparingTo(BigDecimal.ZERO);
+  }
+
+  // ── persons (for/by), single line (plan stage 8b, register §3.5, data-model §7) ──
+
+  @Test
+  void registerOffersForAndByPersonTargetsInTheCategoryDatalist() throws Exception {
+    personService.create("Max");
+
+    mockMvc
+        .perform(get(REGISTER_PATH))
+        .andExpect(status().isOk())
+        // Every live person contributes a for and a by option to the Category datalist.
+        .andExpect(content().string(containsString("value=\"for Max\"")))
+        .andExpect(content().string(containsString("value=\"by Max\"")));
+  }
+
+  @Test
+  void resolvingForTargetForNewNameReturnsPersonNameAndDirection() throws Exception {
+    mockMvc
+        .perform(post("/categories/resolve").param("categoryText", "for Max"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"personName\"")))
+        .andExpect(content().string(containsString("value=\"Max\"")))
+        .andExpect(content().string(containsString("name=\"personDirection\"")))
+        .andExpect(content().string(containsString("value=\"FOR\"")))
+        // No numeric category id — the leaf is auto-provisioned at commit, not here.
+        .andExpect(content().string(containsString("name=\"categoryId\" value=\"\"")));
+  }
+
+  @Test
+  void resolvingByTargetForAnExistingLivePersonReturnsTheirNameAndDirection() throws Exception {
+    personService.create("Max");
+
+    mockMvc
+        .perform(post("/categories/resolve").param("categoryText", "by Max"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"personName\"")))
+        .andExpect(content().string(containsString("value=\"Max\"")))
+        .andExpect(content().string(containsString("name=\"personDirection\"")))
+        .andExpect(content().string(containsString("value=\"BY\"")));
+  }
+
+  @Test
+  void resolvingForTargetForAnAmbiguousNameReturnsErrorAndNoPersonFields() throws Exception {
+    personService.create("Max");
+    personService.create("Max");
+
+    mockMvc
+        .perform(post("/categories/resolve").param("categoryText", "for Max"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("More than one person named")))
+        .andExpect(content().string(containsString("disambiguate")))
+        .andExpect(content().string(not(containsString("name=\"personName\""))));
+  }
+
+  @Test
+  void resolvingForTargetForSoftDeletedOnlyNameOffersRestoreOrCreateNew() throws Exception {
+    Person max = personService.create("Max");
+    personService.softDeleteIfZeroBalance(max.personId());
+
+    mockMvc
+        .perform(post("/categories/resolve").param("categoryText", "for Max"))
+        .andExpect(status().isOk())
+        // Revival is never silent: no ready-to-commit personName yet, just the choice.
+        .andExpect(content().string(not(containsString("name=\"personName\""))))
+        .andExpect(content().string(containsString("is deleted")))
+        .andExpect(content().string(containsString("Restore")))
+        .andExpect(content().string(containsString("Create new")));
+  }
+
+  @Test
+  void choosingRestoreFinalisesThePersonFieldsWithRevive() throws Exception {
+    Person max = personService.create("Max");
+    personService.softDeleteIfZeroBalance(max.personId());
+
+    mockMvc
+        .perform(
+            post("/categories/resolve")
+                .param("categoryText", "for Max")
+                .param("personDecision", "REVIVE"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"personName\"")))
+        .andExpect(content().string(containsString("value=\"Max\"")))
+        .andExpect(content().string(containsString("name=\"personRevive\"")))
+        .andExpect(content().string(containsString("value=\"true\"")));
+  }
+
+  @Test
+  void choosingCreateNewFinalisesThePersonFieldsWithoutRevive() throws Exception {
+    Person max = personService.create("Max");
+    personService.softDeleteIfZeroBalance(max.personId());
+
+    mockMvc
+        .perform(
+            post("/categories/resolve")
+                .param("categoryText", "for Max")
+                .param("personDecision", "NEW"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"personName\"")))
+        .andExpect(content().string(containsString("value=\"Max\"")))
+        .andExpect(content().string(containsString("name=\"personRevive\"")))
+        .andExpect(content().string(containsString("value=\"false\"")));
+  }
+
+  @Test
+  void forEntryAutoProvisionsNewPersonAndBooksAnOutflow() throws Exception {
+    long cash = openAccount("Cash", "500");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("personName", "Max")
+                .param("personDirection", "FOR")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"register-rows\"")))
+        // "for Max" — you funded it: Cash −20 (500 → 480).
+        .andExpect(content().string(containsString("480,00")));
+    assertThat(spendTransactionCount()).isEqualTo(1L);
+    assertThat(personService.findAllLive()).extracting(Person::name).contains("Max");
+  }
+
+  @Test
+  void byEntryBooksAnInflowFromTheFundingAccountsPerspective() throws Exception {
+    long cash = openAccount("Cash", "500");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("personName", "Max")
+                .param("personDirection", "BY")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        // "by Max" — they funded it: Cash +20 (500 → 520).
+        .andExpect(content().string(containsString("520,00")));
+  }
+
+  @Test
+  void reReferencingTheSameLivePersonReusesTheirExistingLeaf() throws Exception {
+    long cash = openAccount("Cash", "500");
+    commitPersonSpend(cash, "Max", "FOR", "2026-02-01", "20");
+    commitPersonSpend(cash, "Max", "FOR", "2026-02-02", "10");
+
+    // Both postings landed on the same Max-EUR leaf, not two separate leaves.
+    long leafCount =
+        jdbcClient
+            .sql("select count(*) from account where name = 'personal.EUR' and deleted_at is null")
+            .query(Long.class)
+            .single();
+    assertThat(leafCount).isEqualTo(1L);
+    assertThat(personService.findAllLive()).hasSize(1);
+  }
+
+  @Test
+  void personEntryRejectsWhenNoCategoryOrPersonResolved() throws Exception {
+    long cash = openAccount("Cash", "500");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"entry-dock\"")))
+        .andExpect(content().string(not(containsString("id=\"register-rows\""))));
+  }
+
+  private void commitPersonSpend(
+      long accountId, String personName, String direction, String date, String amount)
+      throws Exception {
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", date)
+                .param("accountId", String.valueOf(accountId))
+                .param("amount", amount)
+                .param("personName", personName)
+                .param("personDirection", direction)
+                .param("viewAccountId", String.valueOf(accountId)))
+        .andExpect(status().isOk());
+  }
+
+  // ── person sub-field, Account (plan stage 8b, register §3.3) ─────────────────
+
+  @Test
+  void personAccountOverrideMakesTheEstablishedPersonTheFundingLeg() throws Exception {
+    // "Max pays for a pure expense of yours" (register §2.6 pattern 3): Account resolves to Max's
+    // leg, Category is a plain expense — the expense category's default outflow signs Max's leg
+    // negative (you now owe Max more), Food's leg positive, riding the exact same sign machinery a
+    // real-account expense entry does (data-model §7's worked example: Food +10, Max-EUR −10).
+    commitPersonSpend(openAccount("Cash", "500"), "Max", "FOR", "2026-02-01", "1"); // Max owed +1
+    long food = insertCategory("Food");
+    long maxLeaf =
+        jdbcClient
+            .sql("select account_id from account where name = 'personal.EUR'")
+            .query(Long.class)
+            .single();
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-02")
+                .param("personAccountId", String.valueOf(maxLeaf))
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(food))
+                .param("viewAccountId", String.valueOf(maxLeaf)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"register-rows\"")));
+
+    // Max was owed +1 (the establishing entry); Max funding a 20 expense flips the balance to
+    // 1 − 20 = −19 (you now owe Max).
+    BigDecimal maxBalance =
+        jdbcClient
+            .sql(
+                "select sum(amount) from posting p join transaction t on p.transaction_id ="
+                    + " t.transaction_id where p.account_id = :id and t.deleted_at is null")
+            .param("id", maxLeaf)
+            .query(BigDecimal.class)
+            .single();
+    assertThat(maxBalance).isEqualByComparingTo("-19");
   }
 
   // ── edit mode & void (plan stage 7c, register §3.1) ──────────────────────────

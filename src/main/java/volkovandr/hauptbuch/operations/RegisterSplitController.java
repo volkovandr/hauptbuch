@@ -230,6 +230,7 @@ class RegisterSplitController {
             null,
             form.date(),
             form.accountId(),
+            null, // fundingPersonLabel (splits don't reach a person leg in the dock's edit mode)
             form.payeeText(),
             amounts.isEmpty() ? null : SplitFormBinder.blankToNull(amounts.get(0)),
             SplitFormBinder.parseLong(ids.isEmpty() ? null : ids.get(0)),

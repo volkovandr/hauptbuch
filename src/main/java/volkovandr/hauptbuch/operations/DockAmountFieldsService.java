@@ -80,11 +80,12 @@ class DockAmountFieldsService {
    * reveals the same counterpart-amount field a cross-currency category entry does.
    */
   CrossCurrencyFields forForm(DockEntryForm form) {
-    if (form.accountId() == null) {
+    Long fundingAccountId = form.effectiveAccountId();
+    if (fundingAccountId == null) {
       return CrossCurrencyFields.singleCurrency("");
     }
     return accountService
-        .findById(form.accountId())
+        .findById(fundingAccountId)
         .map(
             a ->
                 crossCurrencyFieldsService.resolve(
