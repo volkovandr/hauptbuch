@@ -58,7 +58,7 @@
                   <!-- Settle up (plan stage 8e): per currency line, since a single settle is one
                        transfer and cannot span currencies (data-model §7). -->
                   <a
-                    class="person__settle"
+                    class="person__settle btn"
                     th:href="@{/people/{id}/settle(id=${p.personId()},currency=${line.currencyCode()})}"
                     >Settle up</a
                   >
@@ -67,11 +67,12 @@
               <p class="muted" th:if="${settled}">Nothing outstanding.</p>
               <p class="person__links">
                 <a
+                  class="btn"
                   th:unless="${#lists.isEmpty(p.accountIds())}"
                   th:href="@{/register(accountId=${p.accountIds()})}"
                   >View in register</a
                 >
-                <a th:href="@{/people/{id}(id=${p.personId()})}">Edit</a>
+                <a class="btn" th:href="@{/people/{id}(id=${p.personId()})}">Edit</a>
               </p>
             </div>
           </details>

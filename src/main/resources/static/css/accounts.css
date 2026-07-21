@@ -181,18 +181,19 @@
 .person__breakdown li {
   display: flex;
   gap: 0.8rem;
-  align-items: baseline;
+  align-items: center;
 }
 
-/* The per-currency settle-up launcher (plan stage 8e), a quiet link beside each debt line. */
+/* The per-currency settle-up launcher (plan stage 8e), a quiet button beside each debt line. Pushed
+   to the row's end so the directional wording and the control don't crowd. */
 .person__settle {
-  font-size: 0.85rem;
+  margin-left: auto;
 }
 
 .person__links {
   display: flex;
-  gap: 1.2rem;
-  margin: 0;
+  gap: 0.6rem;
+  margin: 0.2rem 0 0;
 }
 
 /* The source person's positions on the merge form (plan stage 8f) — what is about to move. */

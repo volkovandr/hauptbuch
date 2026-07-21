@@ -116,6 +116,8 @@ h2 {
   background: var(--green-wash);
   color: var(--green-ink);
   cursor: pointer;
+  /* Button-styled anchors carry the control's look, not a link's underline. */
+  text-decoration: none;
 }
 
 .btn:hover {
