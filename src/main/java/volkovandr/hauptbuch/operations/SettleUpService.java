@@ -84,10 +84,10 @@ class SettleUpService {
       long personId, String currencyCode, Long selectedAccountId, LocalDate date) {
     SettleTarget target = requireTarget(personId, currencyCode);
     LocalDate settleDate = date != null ? date : LocalDate.now();
-    Account funding = chooseFunding(pickableAccounts(), selectedAccountId, currencyCode);
+    List<Account> pickable = pickableAccounts();
+    Account funding = chooseFunding(pickable, selectedAccountId, currencyCode);
 
-    String fundingCurrency = funding != null ? funding.currencyCode() : currencyCode;
-    boolean cross = !fundingCurrency.equals(currencyCode);
+    boolean cross = !fundingCurrency(funding, currencyCode).equals(currencyCode);
     // The person-leg native amount defaults to the whole outstanding figure; in the single-currency
     // case that IS the one Amount field, so it seeds fundingAmountText instead. When
     // cross-currency,
@@ -99,7 +99,8 @@ class SettleUpService {
         personId,
         currencyCode,
         target,
-        selectedAccountId,
+        pickable,
+        funding,
         settleDate,
         cross ? null : outstandingText,
         cross ? outstandingText : null,
@@ -123,11 +124,14 @@ class SettleUpService {
       String baseAmount) {
     SettleTarget target = requireTarget(personId, currencyCode);
     LocalDate settleDate = date != null ? date : LocalDate.now();
+    List<Account> pickable = pickableAccounts();
+    Account funding = chooseFunding(pickable, selectedAccountId, currencyCode);
     return build(
         personId,
         currencyCode,
         target,
-        selectedAccountId,
+        pickable,
+        funding,
         settleDate,
         amount,
         categoryAmount,
@@ -135,17 +139,19 @@ class SettleUpService {
   }
 
   /**
-   * Assemble a settle-up view for an explicit set of amount-field values — shared by the fresh form
-   * (defaulted amounts) and the error redisplay (the user's typed amounts). The funding-amount
-   * field value is {@code fundingAmountText}; the person-leg native amount and base amount are
-   * echoed through {@link CrossCurrencyFieldsService#resolve}, which also decides whether they are
-   * shown.
+   * Assemble a settle-up view for an already-resolved funding account and an explicit set of
+   * amount-field values — shared by the fresh form (defaulted amounts) and the error redisplay (the
+   * user's typed amounts). The caller resolves the funding account once and hands it in, so the
+   * pickable-account fetch and the choice are not repeated. The funding-amount field value is
+   * {@code fundingAmountText}; the person-leg native amount and base amount are echoed through
+   * {@link CrossCurrencyFieldsService#resolve}, which also decides whether they are shown.
    */
   private SettleUpView build(
       long personId,
       String currencyCode,
       SettleTarget target,
-      Long selectedAccountId,
+      List<Account> pickable,
+      Account funding,
       LocalDate settleDate,
       String fundingAmountText,
       String categoryAmountText,
@@ -155,9 +161,6 @@ class SettleUpService {
             .findById(personId)
             .orElseThrow(() -> new IllegalArgumentException("No person with id " + personId))
             .name();
-    List<Account> pickable = pickableAccounts();
-    Account funding = chooseFunding(pickable, selectedAccountId, currencyCode);
-    String fundingCurrency = funding != null ? funding.currencyCode() : currencyCode;
 
     String base = settingsService.baseCurrency().orElse("");
     BigDecimal signed = target.signedBalance();
@@ -171,7 +174,7 @@ class SettleUpService {
     CrossCurrencyFields fields =
         crossCurrencyFieldsService.resolve(
             new CrossCurrencyFieldsQuery(
-                fundingCurrency,
+                fundingCurrency(funding, currencyCode),
                 currencyCode,
                 settleDate,
                 fundingAmountText,
@@ -250,6 +253,15 @@ class SettleUpService {
             null,
             List.of());
     return dockCommitService.commit(entry);
+  }
+
+  /**
+   * The funding leg's currency: the chosen account's own, or the debt currency when there is no
+   * pickable account at all (a same-currency, single-field degenerate case the template guards with
+   * its "no account" note).
+   */
+  private static String fundingCurrency(Account funding, String currencyCode) {
+    return funding != null ? funding.currencyCode() : currencyCode;
   }
 
   /** The open own accounts a settle can be funded from — person leaves excluded (data-model §7). */
