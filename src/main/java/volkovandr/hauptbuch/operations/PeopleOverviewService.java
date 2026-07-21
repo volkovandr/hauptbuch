@@ -86,7 +86,8 @@ class PeopleOverviewService {
     boolean negative = balance.signedBalance().signum() < 0;
     String magnitude = MoneyFormat.display(signed.abs(), base);
     String direction = negative ? "You owe " + magnitude : personName + " owes you " + magnitude;
-    return new CurrencyLine(MoneyFormat.display(signed, base), negative, direction);
+    return new CurrencyLine(
+        balance.currencyCode(), MoneyFormat.display(signed, base), negative, direction);
   }
 
   /**
