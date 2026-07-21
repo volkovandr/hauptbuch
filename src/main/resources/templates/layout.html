@@ -29,6 +29,13 @@
   </head>
   <body>
     <a class="skip-link" href="#content">Skip to content</a>
+    <!--
+      Global htmx error slot (issue 10). Empty on a normal render; the global error boundary
+      (GlobalHtmxErrorAdvice) retargets an unexpected exception's response here (HX-Retarget +
+      innerHTML swap) so the failure is shown as a toast without blanking the element that
+      triggered the request. A live region so assistive tech announces it.
+    -->
+    <div id="app-error" class="app-error" role="alert" aria-live="assertive"></div>
     <header class="app-bar">
       <a class="app-bar__brand" th:href="@{/}" th:text="'Hauptbuch'">Hauptbuch</a>
       <span class="app-bar__sub">Das Hauptbuch — general ledger</span>

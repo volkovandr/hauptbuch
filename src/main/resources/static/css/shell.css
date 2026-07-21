@@ -178,3 +178,27 @@
   border: 1px solid var(--rule);
   background: var(--paper);
 }
+
+/* ── Global htmx error toast (issue 10) ───────────────────────────────────
+   Fixed to the top-right so an unexpected failure is announced without shifting
+   the page. Empty #app-error has nothing to show; the toast appears only once the
+   error boundary swaps a message in. Oxblood, the app's one accent that carries
+   meaning (here: something went wrong). */
+.app-error:empty {
+  display: none;
+}
+.app-error {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 1000;
+  max-width: min(28rem, calc(100vw - 1.5rem));
+}
+.app-error__toast {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--oxblood);
+  border-left: 4px solid var(--oxblood);
+  background: var(--paper);
+  color: var(--oxblood);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
+}
