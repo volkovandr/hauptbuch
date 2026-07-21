@@ -22,11 +22,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountPath;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.debts.Person;
 import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.RegisterView.RegisterAccountOption;
-import volkovandr.hauptbuch.ledger.RegisterView.RegisterCategoryOption;
 import volkovandr.hauptbuch.ledger.repository.PayeeRepository;
 import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
 import volkovandr.hauptbuch.ledger.repository.TagReadRepository;
@@ -100,15 +100,6 @@ class RegisterServiceTest {
     return new Account(id, name, ASSET, null, EUR, null, LocalDate.now(), null, null, false, true);
   }
 
-  private static Account category(long id, String name) {
-    return new Account(id, name, "expense", null, EUR, null, null, null, null, false, false);
-  }
-
-  private static Account currencyLeaf(long id, String currencyCode, long parentId) {
-    return new Account(
-        id, currencyCode, "expense", parentId, currencyCode, null, null, null, null, true, false);
-  }
-
   private RegisterFilter defaultFilter() {
     return new RegisterFilter(List.of(), null, null, null);
   }
@@ -150,22 +141,27 @@ class RegisterServiceTest {
   }
 
   @Test
-  void categoryOptionsExcludeAutoManagedCurrencyLeaves() {
+  void categoryOptionsAreComposedLeafPathsSortedByPath() {
+    // The posting-leaf paths come composed from AccountService (leaves-only, currency leaves and
+    // real parents already excluded there); the register maps them to options and sorts by path.
     when(accountService.findLiveByTypes(List.of("asset", "liability")))
         .thenReturn(List.of(ownAccount(CASH, "Cash")));
-    when(accountService.findLiveByTypes(List.of("income", "expense")))
-        .thenReturn(List.of(category(1L, "Food"), currencyLeaf(2L, "EUR", 1L)));
+    when(accountService.findPostableLeafPaths(List.of("income", "expense"), " - "))
+        .thenReturn(List.of(new AccountPath(3L, "Transport"), new AccountPath(2L, "Food - Milk")));
 
     RegisterView view = registerService.view(defaultFilter());
 
-    assertThat(view.categories()).extracting(RegisterCategoryOption::name).containsExactly("Food");
+    assertThat(view.categories())
+        .extracting(
+            RegisterView.RegisterCategoryOption::accountId,
+            RegisterView.RegisterCategoryOption::name)
+        .containsExactly(tuple(2L, "Food - Milk"), tuple(3L, "Transport"));
   }
 
   @Test
   void offersToAndFromTransferTargetsForEveryOpenOwnAccount() {
     when(accountService.findLiveByTypes(List.of("asset", "liability")))
         .thenReturn(List.of(ownAccount(CASH, "Cash"), ownAccount(GIRO, "Giro")));
-    when(accountService.findLiveByTypes(List.of("income", "expense"))).thenReturn(List.of());
 
     RegisterView view = registerService.view(defaultFilter());
 
@@ -178,7 +174,6 @@ class RegisterServiceTest {
   @Test
   void offersForAndByPersonTargetsForEveryLivePerson() {
     when(accountService.findLiveByTypes(List.of("asset", "liability"))).thenReturn(List.of());
-    when(accountService.findLiveByTypes(List.of("income", "expense"))).thenReturn(List.of());
     when(personService.findAllLive())
         .thenReturn(List.of(new Person(1L, "Max", null), new Person(2L, "Alice", null)));
 
@@ -195,7 +190,6 @@ class RegisterServiceTest {
     // person is reached by for/by only, never by the leaf's cosmetic name.
     when(accountService.findLiveByTypes(List.of("asset", "liability")))
         .thenReturn(List.of(ownAccount(CASH, "Cash"), personLeaf(9L, "personal.EUR")));
-    when(accountService.findLiveByTypes(List.of("income", "expense"))).thenReturn(List.of());
 
     RegisterView view = registerService.view(defaultFilter());
 
@@ -211,7 +205,6 @@ class RegisterServiceTest {
     // `Name (CUR)` and resolved to the owner's real name (register §2.6, plan stage 8c).
     when(accountService.findLiveByTypes(List.of("asset", "liability")))
         .thenReturn(List.of(ownAccount(CASH, "Cash"), personLeaf(9L, "personal.EUR")));
-    when(accountService.findLiveByTypes(List.of("income", "expense"))).thenReturn(List.of());
     when(personService.personNamesForAccounts(List.of(9L))).thenReturn(Map.of(9L, "Max"));
 
     RegisterView view = registerService.view(defaultFilter());
@@ -232,7 +225,6 @@ class RegisterServiceTest {
     // that failed to book (owner testing, plan stage 8b.1).
     when(accountService.findLiveByTypes(List.of("asset", "liability")))
         .thenReturn(List.of(ownAccount(CASH, "Cash"), personLeaf(9L, "personal.EUR")));
-    when(accountService.findLiveByTypes(List.of("income", "expense"))).thenReturn(List.of());
 
     registerService.view(defaultFilter());
 

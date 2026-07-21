@@ -1259,6 +1259,64 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
+  void categoryDatalistOffersNestedLeavesAsComposedPathsAndOmitsGroups() throws Exception {
+    // Food becomes a group once it has the real child Milk: only the leaf is offered, shown by its
+    // full "Food - Milk" path so the datalist conveys the hierarchy it cannot indent (issue 03).
+    openAccount("Cash", "100");
+    long food = insertCategory("Food");
+    accountService.insertLeaf("Milk", "expense", food, EUR);
+
+    mockMvc
+        .perform(get(REGISTER_PATH))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(matchesPattern("(?s).*<option\\s+value=\"Food - Milk\"\\s*></option>.*")))
+        // The non-leaf group itself is not offered — posting to it would be rejected at commit.
+        .andExpect(
+            content()
+                .string(not(matchesPattern("(?s).*<option\\s+value=\"Food\"\\s*></option>.*"))));
+  }
+
+  @Test
+  void categoryResolveMatchesNestedLeafByItsFullPathWithoutCreating() throws Exception {
+    long food = insertCategory("Food");
+    long milk = accountService.insertLeaf("Milk", "expense", food, EUR).accountId();
+    long expenseAccountsBefore =
+        jdbcClient
+            .sql("select count(*) from account where type = 'expense'")
+            .query(Long.class)
+            .single();
+
+    mockMvc
+        .perform(post("/categories/resolve").param("categoryText", "Food - Milk"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"categoryId\"")))
+        .andExpect(content().string(containsString("value=\"" + milk + "\"")));
+
+    // The existing leaf resolved — nothing was created or subdivided.
+    assertThat(
+            jdbcClient
+                .sql("select count(*) from account where type = 'expense'")
+                .query(Long.class)
+                .single())
+        .isEqualTo(expenseAccountsBefore);
+  }
+
+  @Test
+  void categoryResolveRefusesNonLeafGroupWithNoId() throws Exception {
+    long food = insertCategory("Food");
+    accountService.insertLeaf("Milk", "expense", food, EUR);
+
+    mockMvc
+        .perform(post("/categories/resolve").param("categoryText", "Food"))
+        .andExpect(status().isOk())
+        // A clear inline error, and no id — the dock cannot carry a non-leaf group to commit.
+        .andExpect(content().string(containsString("group")))
+        .andExpect(content().string(containsString("value=\"\"")));
+  }
+
+  @Test
   void ghostSuggestsThePayeesMostCommonCategory() throws Exception {
     long cash = openAccount("Cash", "500");
     long fuel = insertCategory("Fuel");

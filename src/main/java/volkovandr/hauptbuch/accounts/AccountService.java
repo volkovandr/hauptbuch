@@ -1,6 +1,8 @@
 package volkovandr.hauptbuch.accounts;
 
 import java.time.LocalDate;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -252,6 +254,55 @@ public class AccountService {
    */
   public List<AccountNode> findLiveByTypesWithDepth(List<String> types) {
     return accountRepository.findLiveByTypesWithDepth(types);
+  }
+
+  /**
+   * The live <em>posting leaves</em> of the given types — the accounts a posting may actually hit —
+   * each with its full root-to-leaf path (ancestor names joined by {@code separator}, e.g. {@code
+   * Food - Milk}) so a picker can convey hierarchy where a native control cannot indent (register
+   * §3.5). A posting leaf excludes:
+   *
+   * <ul>
+   *   <li>{@code CurrencyLeafService}'s auto-managed per-currency leaves — never individually
+   *       selectable; routing to them is automatic (data-model §6.5); and
+   *   <li>any account with a <em>real</em> (non-currency-leaf) child — posting lands only on leaves
+   *       (data-model §5), so a semantic parent is reached through its children, never directly.
+   * </ul>
+   *
+   * <p>An account whose only children are currency leaves stays a posting leaf: it is a valid
+   * target and the currency leaf is chosen for it automatically. Composed in Java over {@link
+   * #findLiveByTypesWithDepth} — the same live, depth-annotated hierarchy the categories screen
+   * indents — so no separate query is needed.
+   */
+  public List<AccountPath> findPostableLeafPaths(List<String> types, String separator) {
+    List<Account> accounts =
+        findLiveByTypesWithDepth(types).stream().map(AccountNode::account).toList();
+    Map<Long, Account> byId = new HashMap<>();
+    for (Account account : accounts) {
+      byId.put(account.accountId(), account);
+    }
+    Set<Long> realParents = new HashSet<>();
+    for (Account account : accounts) {
+      if (!account.currencyLeaf() && account.parentId() != null) {
+        realParents.add(account.parentId());
+      }
+    }
+    return accounts.stream()
+        .filter(a -> !a.currencyLeaf())
+        .filter(a -> !realParents.contains(a.accountId()))
+        .map(a -> new AccountPath(a.accountId(), composePath(a, byId, separator)))
+        .toList();
+  }
+
+  /** Join a leaf's name to all its ancestors' names, root first, with the given separator. */
+  private static String composePath(Account leaf, Map<Long, Account> byId, String separator) {
+    Deque<String> names = new ArrayDeque<>();
+    Account current = leaf;
+    while (current != null) {
+      names.addFirst(current.name());
+      current = current.parentId() == null ? null : byId.get(current.parentId());
+    }
+    return String.join(separator, names);
   }
 
   /**
