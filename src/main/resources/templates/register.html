@@ -155,41 +155,33 @@
             ></td>
             <td class="register__date num" th:text="${r.date()}">2026-01-01</td>
             <!-- Account cell (register §2.6): a real account is a bare name; a person's debt leg
-                 carries a direction arrow on the side that reads as the flow through them —
-                 → Name on a debit (income, they owe you more), Name → on a credit (you owe them
-                 more) — plan stage 8c. -->
+                 carries a trailing arrow (the column's inner edge), the glyph carrying the flow —
+                 Name ← on a debit (income), Name → on a credit. -->
             <td class="register__account" th:style="${r.accountHue() != null} ? |color: hsl(${r.accountHue()} 55% 25%)|">
               <th:block th:if="${r.accountPerson()}"
-                ><span th:if="${r.income()}" aria-hidden="true">→&nbsp;</span
                 ><span th:text="${r.accountName()}">Max</span
+                ><span th:if="${r.income()}" aria-hidden="true">&nbsp;←</span
                 ><span th:unless="${r.income()}" aria-hidden="true">&nbsp;→</span
               ></th:block>
               <span th:unless="${r.accountPerson()}" th:text="${r.accountName()}">Cash</span>
             </td>
             <td class="register__payee" th:text="${r.payeeName()}">Rewe</td>
             <td class="register__category">
-              <!-- A counterpart chip (register §2.6): a plain category, a transfer to another own
-                   account (leading ←/→), or a person's debt leg (→ Name on a debit, Name → on a
-                   credit — plan stage 8c). -->
+              <!-- A counterpart chip (register §2.6): a plain category is a bare name; a leg that
+                   names an account — a transfer to another own account, or a person's debt leg —
+                   carries a leading arrow (the column's inner edge), the glyph carrying the flow
+                   (← from it / → to it). -->
               <span
                 th:each="chip, i : ${r.category().chips()}"
                 class="cat-chip"
                 th:classappend="${chip.transfer()} ? 'cat-chip--transfer' : (${chip.person()} ? 'cat-chip--person' : '')"
               >
                 <span
-                  th:if="${chip.transfer()}"
+                  th:if="${chip.transfer() or chip.person()}"
                   aria-hidden="true"
                   th:text="${chip.inbound()} ? '← ' : '→ '"
                   >→ </span
-                ><span
-                  th:if="${chip.person() and !chip.inbound()}"
-                  aria-hidden="true"
-                  >→ </span
                 ><span th:text="${chip.label()}">Food</span
-                ><span
-                  th:if="${chip.person() and chip.inbound()}"
-                  aria-hidden="true"
-                  > →</span
                 >
               </span>
               <span
