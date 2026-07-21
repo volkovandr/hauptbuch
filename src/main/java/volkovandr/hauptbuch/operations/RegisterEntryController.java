@@ -113,10 +113,10 @@ class RegisterEntryController {
    * (including any cross-currency amounts, §3.8a).
    */
   @PostMapping("/register/entry")
-  String commit(@ModelAttribute DockEntryForm form, Model model) {
+  String commit(@ModelAttribute DockEntryForm form, Model model, HttpServletResponse response) {
     RegisterFilter filter = filterFrom(form);
     if (form.accountId() == null && !form.hasFundingPerson()) {
-      return dockError(filter, form, "An account or person is required", model);
+      return dockError(filter, form, "An account or person is required", model, response);
     }
     boolean hasPerson =
         blankToNull(form.personName()) != null && blankToNull(form.personDirection()) != null;
@@ -125,7 +125,8 @@ class RegisterEntryController {
           filter,
           form,
           "A category, transfer target, or person is required (pick, create, or resolve one)",
-          model);
+          model,
+          response);
     }
     try {
       dockCommitService.commit(
@@ -152,7 +153,7 @@ class RegisterEntryController {
     } catch (IllegalArgumentException | IllegalStateException | UnbalancedTransactionException e) {
       // UnbalancedTransactionException is the engine's balance-invariant signal: show it in the
       // dock rather than let it 500 into an empty swap that reads as a no-op commit.
-      return dockError(filter, form, e.getMessage(), model);
+      return dockError(filter, form, e.getMessage(), model, response);
     }
     RegisterView register = registerService.view(filter);
     model.addAttribute(REGISTER, register);
@@ -213,15 +214,16 @@ class RegisterEntryController {
    * dock to new mode, exactly as a commit does.
    */
   @PostMapping("/register/void")
-  String voidTransaction(@ModelAttribute DockEntryForm form, Model model) {
+  String voidTransaction(
+      @ModelAttribute DockEntryForm form, Model model, HttpServletResponse response) {
     RegisterFilter filter = filterFrom(form);
     if (form.transactionId() == null) {
-      return dockError(filter, form, "No transaction selected to void", model);
+      return dockError(filter, form, "No transaction selected to void", model, response);
     }
     try {
       dockCommitService.voidTransaction(form.transactionId());
     } catch (IllegalArgumentException e) {
-      return dockError(filter, form, e.getMessage(), model);
+      return dockError(filter, form, e.getMessage(), model, response);
     }
     RegisterView register = registerService.view(filter);
     model.addAttribute(REGISTER, register);
@@ -316,8 +318,20 @@ class RegisterEntryController {
    * Re-render the dock (out-of-band) carrying a validation message and the entered fields
    * (including any cross-currency amounts, §3.8a) so the user can correct them; the rows are left
    * untouched.
+   *
+   * <p>The commit/void form's primary target is {@code #register-body}. An OOB-only response leaves
+   * htmx an empty main fragment (it strips the OOB dock out) and swaps that emptiness into {@code
+   * #register-body}, deleting the table (issue 05). {@code HX-Reswap: none} suppresses the main
+   * swap — only the out-of-band dock swap applies — so the rows survive and stay a valid target for
+   * the next Save.
    */
-  private String dockError(RegisterFilter filter, DockEntryForm form, String message, Model model) {
+  private String dockError(
+      RegisterFilter filter,
+      DockEntryForm form,
+      String message,
+      Model model,
+      HttpServletResponse response) {
+    response.setHeader("HX-Reswap", "none");
     RegisterView register = registerService.view(filter);
     model.addAttribute(REGISTER, register);
     model.addAttribute("entryError", message);

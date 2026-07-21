@@ -491,6 +491,9 @@ class RegisterEntryScreenIntegrationTest {
                 .param("viewAccountId", String.valueOf(cash)))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("CHF amount is required")))
+        // HX-Reswap:none keeps htmx from swapping the OOB-only error response into #register-body
+        // (which would delete the table — issue 05); the rows are left untouched.
+        .andExpect(header().string("HX-Reswap", "none"))
         .andExpect(content().string(not(containsString("id=\"register-rows\""))));
   }
 
@@ -532,8 +535,10 @@ class RegisterEntryScreenIntegrationTest {
                 .param("categoryId", String.valueOf(food))
                 .param("viewAccountId", String.valueOf(cash)))
         .andExpect(status().isOk())
-        // The dock re-renders carrying the message; the rows body is not swapped.
+        // The dock re-renders carrying the message; HX-Reswap:none keeps the OOB-only response from
+        // blanking #register-body (issue 05), so the rows body is left untouched.
         .andExpect(content().string(containsString("id=\"entry-dock\"")))
+        .andExpect(header().string("HX-Reswap", "none"))
         .andExpect(content().string(not(containsString("id=\"register-rows\""))));
   }
 

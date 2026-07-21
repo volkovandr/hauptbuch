@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
@@ -299,7 +300,9 @@ class RegisterSplitScreenIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("data-split-panel")))
         .andExpect(content().string(containsString("needs a category")))
-        // The rows body is not swapped on error.
+        // The register survives: HX-Reswap:none suppresses the main swap so htmx does not blank the
+        // #register-body target with the OOB-only response (issue 05), leaving the rows untouched.
+        .andExpect(header().string("HX-Reswap", "none"))
         .andExpect(content().string(not(containsString("id=\"register-rows\""))));
   }
 
@@ -307,7 +310,10 @@ class RegisterSplitScreenIntegrationTest {
   void commitReRendersThePanelWhenaTransferLineTargetsaWrongCurrencyAccount() throws Exception {
     // Issue 05: a split transfer line whose target account is in a different currency than the
     // transaction is (correctly) rejected — but it must re-render the panel inline with the message
-    // and leave the register standing, not 500 into an empty swap that blanks the register.
+    // and leave the register standing. The commit form targets #register-body; an OOB-only error
+    // response would make htmx swap emptiness into it and delete the table, so the error carries
+    // HX-Reswap:none to suppress that main swap (the true guarantee — the absence of register-rows
+    // in the body is not enough on its own).
     long cash = openAccount("Cash", EUR, "500");
     long usdWallet = openAccount("USD Wallet", "USD", "100");
 
@@ -323,7 +329,34 @@ class RegisterSplitScreenIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("data-split-panel")))
         .andExpect(content().string(containsString("must target a")))
-        // The register survives: its rows body is not swapped away by the error.
+        .andExpect(header().string("HX-Reswap", "none"))
+        .andExpect(content().string(not(containsString("id=\"register-rows\""))));
+  }
+
+  @Test
+  void crossCurrencySplitWithaWrongCurrencyTransferLineLeavesTheRegisterStanding()
+      throws Exception {
+    // The exact reported flow (issue 05): funding account Cash EUR, transaction currency CHF, a
+    // transfer line pointing at a USD account. Rejected at commit — and the register must survive
+    // (HX-Reswap:none), so the follow-up corrected Save still finds its #register-body target.
+    long cash = openAccount("Cash", EUR, "500");
+    long usdWallet = openAccount("USD Wallet", "USD", "100");
+
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("spendingCurrencyCode", "CHF")
+                .param("fundingTotal", "18")
+                .param("lineCategoryId", String.valueOf(usdWallet))
+                .param("lineTransferDirection", "TO")
+                .param("lineAmount", "20")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(containsString("must target a")))
+        .andExpect(header().string("HX-Reswap", "none"))
         .andExpect(content().string(not(containsString("id=\"register-rows\""))));
   }
 
