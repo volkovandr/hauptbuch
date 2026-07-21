@@ -23,6 +23,7 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.29 (2026-07-21):** **9a complete** — the four docs ratified and agreed; no scope change (docs slice).
 - **v0.28 (2026-07-21):** **Stages 9–12 merged into one stage 9 (Receipts)** — they were horizontal
   layers, none independently usable; the merged stage is sliced *vertically* (9a–9h) in the new
   dedicated sub-plan `implementation-plan-stage-9.md`. Scope decisions: **duplicate detection +
@@ -430,7 +431,7 @@ The former stages 9–12 were horizontal layers, none independently usable; merg
 dedicated sub-plan `implementation-plan-stage-9.md`** (the stage-7 pattern; deleted on completion,
 summary folded back). Eight ordered sub-stages, each green and owner-confirmed:
 
-- **9a — Docs.** Schema ratified into the data-model doc; scope changes recorded; ARCH-08 reworded.
+- **9a — Docs.** ✅ Schema ratified into the data-model doc; scope changes recorded; ARCH-08 reworded.
 - **9b — Walking skeleton.** Capture (mobile camera + PC upload) → `new` → receipt register
   (state filter) → discard/delete; `ReceiptStorage` on the Pi (ARCH-07).
 - **9c — Pre-process.** Cropper.js leaf + pixel pass (manual only), `edited_path`, the AI note.
