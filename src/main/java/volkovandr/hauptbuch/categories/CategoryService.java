@@ -2,11 +2,13 @@ package volkovandr.hauptbuch.categories;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
+import volkovandr.hauptbuch.accounts.AccountPath;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.accounts.ReservedNamePrefix;
 import volkovandr.hauptbuch.ledger.SettingsService;
@@ -30,6 +32,12 @@ public class CategoryService {
 
   /** The catch-all sibling's name when subdividing a posted-to category leaf (data-model §6.5). */
   static final String UNCATEGORIZED = "Uncategorized";
+
+  /**
+   * The Category field's hierarchy separator (register §3.5): {@code Food - Milk}. The same string
+   * a composed leaf path is displayed with and a new {@code Parent - Child} leaf is created from.
+   */
+  private static final String PATH_SEPARATOR = " - ";
 
   /** The account types the categories screen manages (data-model §6.5). */
   private static final List<String> MANAGEABLE_TYPES = List.of("income", "expense");
@@ -111,17 +119,24 @@ public class CategoryService {
   }
 
   /**
-   * Resolve the dock's category field (register §3.5, plan stage 7b) to a category id: an existing
-   * category is matched by its display name; a {@code Parent - Child} string creates a new leaf
-   * under an existing parent (type inherited), reusing {@link #createCategory} — including its
-   * implicit subdivision of a posted-to parent leaf. This is the categories module's own logic, so
-   * the dock (in {@code operations}) resolves the category through here before committing, keeping
-   * {@code operations} free of a {@code categories} dependency (plan stage 7 boundary note).
+   * Resolve the dock's category field (register §3.5, plan stage 7b) to a <em>leaf</em> category
+   * id. In order: an existing posting leaf matched by its full {@code Parent - Child} path (the
+   * paths the datalist offers, issue 03); an existing leaf matched by its bare display name (an
+   * edit-mode pre-fill, or a leaf typed directly); or a {@code Parent - Child} string that creates
+   * a new leaf under an existing parent (type inherited), reusing {@link #createCategory} —
+   * including its implicit subdivision of a posted-to parent leaf.
    *
-   * @param text the typed category — an existing category's name, or {@code Parent - Child}
-   * @return the resolved (or newly-created) category's id
+   * <p>A name that resolves to a <em>non-leaf</em> (a group with real subcategories) is refused: a
+   * posting lands only on leaves (data-model §5), so silently returning the group's id only to have
+   * the commit reject it read as a broken Save (issue 03). This is the categories module's own
+   * logic, so the dock (in {@code operations}) resolves the category through here before
+   * committing, keeping {@code operations} free of a {@code categories} dependency (plan stage 7
+   * boundary note).
+   *
+   * @param text the typed category — an existing leaf's path or name, or {@code Parent - Child}
+   * @return the resolved (or newly-created) leaf category's id
    * @throws IllegalArgumentException if the text matches nothing and is not a {@code Parent -
-   *     Child} with an existing parent, or names an ambiguous category
+   *     Child} with an existing parent, names an ambiguous category, or names a non-leaf group
    */
   @Transactional
   public long resolveCategory(String text) {
@@ -129,21 +144,66 @@ public class CategoryService {
       throw new IllegalArgumentException("A category is required");
     }
     String trimmed = text.strip();
+    List<AccountPath> leaves =
+        accountService.findPostableLeafPaths(MANAGEABLE_TYPES, PATH_SEPARATOR);
 
-    Optional<Account> existing = findManageableByName(trimmed);
-    if (existing.isPresent()) {
-      return existing.get().accountId();
+    // A leaf matched by the full Parent - Child path the datalist offers (also a top-level leaf's
+    // bare name), else by its bare name; failing both, a Parent - Child string creates a new leaf.
+    OptionalLong byPath = matchLeafByPath(trimmed, leaves);
+    if (byPath.isPresent()) {
+      return byPath.getAsLong();
     }
+    OptionalLong byName = matchLeafByName(trimmed, leaves);
+    if (byName.isPresent()) {
+      return byName.getAsLong();
+    }
+    return createLeafFromParentChild(trimmed);
+  }
 
-    int separator = trimmed.lastIndexOf(" - ");
+  /** A posting leaf whose full {@code Parent - Child} path equals the text; empty if none match. */
+  private OptionalLong matchLeafByPath(String path, List<AccountPath> leaves) {
+    List<AccountPath> matches =
+        leaves.stream().filter(l -> l.path().equalsIgnoreCase(path)).toList();
+    if (matches.size() > 1) {
+      throw new IllegalArgumentException(
+          "Category '" + path + "' is ambiguous — more than one category has that path");
+    }
+    return matches.isEmpty() ? OptionalLong.empty() : OptionalLong.of(matches.get(0).accountId());
+  }
+
+  /**
+   * A leaf matched by its bare display name (an edit-mode pre-fill, or a nested leaf typed
+   * directly); empty if the name matches nothing. A name that resolves to a non-leaf group is
+   * refused — a posting lands only on leaves (data-model §5), so a group must be narrowed first.
+   */
+  private OptionalLong matchLeafByName(String name, List<AccountPath> leaves) {
+    Optional<Account> existing = findManageableByName(name);
+    if (existing.isEmpty()) {
+      return OptionalLong.empty();
+    }
+    long accountId = existing.get().accountId();
+    if (leaves.stream().anyMatch(l -> l.accountId() == accountId)) {
+      return OptionalLong.of(accountId);
+    }
+    throw new IllegalArgumentException(
+        "Category '"
+            + existing.get().name()
+            + "' is a group — pick one of its subcategories (e.g. '"
+            + existing.get().name()
+            + " - …')");
+  }
+
+  /** Create a new leaf under an existing parent from a {@code Parent - Child} string. */
+  private long createLeafFromParentChild(String text) {
+    int separator = text.lastIndexOf(PATH_SEPARATOR);
     if (separator < 0) {
       throw new IllegalArgumentException(
           "Unknown category '"
-              + trimmed
+              + text
               + "' — pick an existing category, or create one as 'Parent - Child'");
     }
-    String parentName = trimmed.substring(0, separator).strip();
-    String childName = trimmed.substring(separator + 3).strip();
+    String parentName = text.substring(0, separator).strip();
+    String childName = text.substring(separator + PATH_SEPARATOR.length()).strip();
     Account parent =
         findManageableByName(parentName)
             .orElseThrow(

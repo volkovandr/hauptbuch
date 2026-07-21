@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.accounts;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
@@ -34,6 +35,7 @@ class AccountServiceTest {
   private static final String EUR = "EUR";
   private static final String GIRO = "Giro";
   private static final String ASSET = "asset";
+  private static final String EXPENSE = "expense";
   private static final LocalDate OPENED = LocalDate.of(2026, 7, 1);
 
   private static final long NEW_ID = 42L;
@@ -396,5 +398,63 @@ class AccountServiceTest {
     when(accountRepository.findLiveByTypes(any())).thenReturn(List.of(closed));
 
     assertThat(accountService.findOwnAccountByName("Old")).isEmpty();
+  }
+
+  // ── posting-leaf paths (register §3.5 Category picker) ────────────────────────
+
+  private static AccountNode categoryNode(long id, String name, Long parentId, int depth) {
+    return new AccountNode(
+        new Account(id, name, EXPENSE, parentId, EUR, null, OPENED, null, null, false, false),
+        depth);
+  }
+
+  private static AccountNode currencyLeafNode(long id, String currencyCode, long parentId) {
+    return new AccountNode(
+        new Account(
+            id,
+            currencyCode,
+            EXPENSE,
+            parentId,
+            currencyCode,
+            null,
+            OPENED,
+            null,
+            null,
+            true,
+            false),
+        1);
+  }
+
+  @Test
+  void composesTheFullPathOfEveryPostingLeaf() {
+    // Food is a real parent of Milk; Transport is a top-level leaf. Milk carries its parent's name.
+    when(accountRepository.findLiveByTypesWithDepth(List.of(EXPENSE)))
+        .thenReturn(
+            List.of(
+                categoryNode(1L, "Food", null, 0),
+                categoryNode(2L, "Milk", 1L, 1),
+                categoryNode(3L, "Transport", null, 0)));
+
+    assertThat(accountService.findPostableLeafPaths(List.of(EXPENSE), " - "))
+        .extracting(AccountPath::accountId, AccountPath::path)
+        .containsExactly(tuple(2L, "Food - Milk"), tuple(3L, "Transport"));
+  }
+
+  @Test
+  void excludesRealParentsButKeepsLeavesWithOnlyCurrencyLeaves() {
+    // Food has a real child (Milk) -> not postable. Fuel has only currency leaves -> still
+    // postable.
+    when(accountRepository.findLiveByTypesWithDepth(List.of(EXPENSE)))
+        .thenReturn(
+            List.of(
+                categoryNode(1L, "Food", null, 0),
+                categoryNode(2L, "Milk", 1L, 1),
+                categoryNode(4L, "Fuel", null, 0),
+                currencyLeafNode(5L, "EUR", 4L),
+                currencyLeafNode(6L, "CHF", 4L)));
+
+    assertThat(accountService.findPostableLeafPaths(List.of(EXPENSE), " - "))
+        .extracting(AccountPath::accountId, AccountPath::path)
+        .containsExactly(tuple(2L, "Food - Milk"), tuple(4L, "Fuel"));
   }
 }

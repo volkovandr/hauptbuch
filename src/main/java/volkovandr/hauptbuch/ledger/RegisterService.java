@@ -36,6 +36,13 @@ public class RegisterService {
   /** The category types the dock offers in its category picker (data-model §6.5). */
   private static final List<String> CATEGORY_TYPES = List.of("income", "expense");
 
+  /**
+   * The Category field's hierarchy separator (register §3.5): a nested leaf shows as {@code Food -
+   * Milk}. The same string the categories resolver accepts to create a {@code Parent - Child} leaf,
+   * so display, selection, and creation all speak one syntax.
+   */
+  private static final String CATEGORY_PATH_SEPARATOR = " - ";
+
   private final RegisterRepository registerRepository;
   private final PayeeRepository payeeRepository;
   private final AccountService accountService;
@@ -214,16 +221,18 @@ public class RegisterService {
   }
 
   /**
-   * The categories the dock offers (register §3.5): live income/expense accounts, listed by name.
-   * The user picks semantically; the currency leaf is resolved from the paying account at commit
-   * (data-model §6.5), so real categories — parents and never-subdivided leaves alike — are offered
-   * as-is. {@code CurrencyLeafService}'s auto-managed per-currency leaves are excluded: they are
-   * never individually selectable, only ever reached by routing through their semantic parent.
+   * The categories the dock offers (register §3.5): the live income/expense <em>posting
+   * leaves</em>, each shown by its full {@code Parent - Child} path so the datalist conveys
+   * hierarchy it cannot indent (issue 03), sorted by that path. Only genuine leaves are offered — a
+   * semantic parent is not directly postable (data-model §5), so offering it only to have the
+   * commit reject it read as a broken Save; {@link AccountService#findPostableLeafPaths} filters it
+   * out (along with the auto-managed per-currency leaves) at the source. The user still picks
+   * semantically; the currency leaf is resolved from the paying account at commit (data-model
+   * §6.5).
    */
   private List<RegisterCategoryOption> categoryOptions() {
-    return accountService.findLiveByTypes(CATEGORY_TYPES).stream()
-        .filter(a -> !a.currencyLeaf())
-        .map(a -> new RegisterCategoryOption(a.accountId(), a.name()))
+    return accountService.findPostableLeafPaths(CATEGORY_TYPES, CATEGORY_PATH_SEPARATOR).stream()
+        .map(p -> new RegisterCategoryOption(p.accountId(), p.path()))
         .sorted((x, y) -> x.name().compareToIgnoreCase(y.name()))
         .toList();
   }
