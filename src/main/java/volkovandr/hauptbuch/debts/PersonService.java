@@ -97,6 +97,16 @@ public class PersonService {
         .toList();
   }
 
+  /**
+   * Whether the person carries any non-zero per-currency balance (data-model §7). When true,
+   * soft-delete is refused ({@link #softDeleteIfZeroBalance}) and the person can be removed only by
+   * merge — the People edit screen reads this to offer the merge path instead of a delete button
+   * that would fail.
+   */
+  public boolean hasNonZeroBalance(long personId) {
+    return balancesOf(personId).stream().anyMatch(b -> b.signedBalance().signum() != 0);
+  }
+
   /** Fetch a live person by ID. Returns empty if the person does not exist or is soft-deleted. */
   public Optional<Person> findById(Long personId) {
     return personRepository.findById(personId);

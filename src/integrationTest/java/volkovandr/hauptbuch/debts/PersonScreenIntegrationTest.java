@@ -1,7 +1,6 @@
 package volkovandr.hauptbuch.debts;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -121,13 +120,11 @@ class PersonScreenIntegrationTest {
     assertThat(deletedAt).hasSize(1);
   }
 
-  @Test
-  void nonZeroBalancePersonRefusesSoftDelete() throws Exception {
-    mockMvc.perform(post(PEOPLE_PATH).param(NAME, MAX)).andExpect(status().is3xxRedirection());
-    long personId = personIdNamed(MAX);
-
-    // Provision the person's EUR leaf and give it a non-zero balance directly, bypassing entry
-    // (stage 8b lands the register path) — this stage only needs the guard proven.
+  /**
+   * Provision the person's EUR leaf and give it a non-zero balance directly, bypassing entry (stage
+   * 8b lands the register path) — enough to exercise the zero-balance guard and the merge steering.
+   */
+  private void seedNonZeroEurBalance(long personId) {
     long accountId =
         jdbcClient
             .sql(
@@ -151,11 +148,35 @@ class PersonScreenIntegrationTest {
         .param("a", accountId)
         .param("amt", new BigDecimal("25.00"))
         .update();
+  }
 
-    assertThatThrownBy(() -> mockMvc.perform(post(PERSON_PATH_PREFIX + personId + "/delete")))
-        .rootCause()
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("non-zero balance");
+  @Test
+  void nonZeroBalancePersonsEditPageOffersMergeInsteadOfDelete() throws Exception {
+    mockMvc.perform(post(PEOPLE_PATH).param(NAME, MAX)).andExpect(status().is3xxRedirection());
+    long personId = personIdNamed(MAX);
+    seedNonZeroEurBalance(personId);
+
+    mockMvc
+        .perform(get(PERSON_PATH_PREFIX + personId))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Merge into another person")))
+        // The delete button is not offered for a non-zero person.
+        .andExpect(content().string(not(containsString("Remove person"))));
+  }
+
+  @Test
+  void nonZeroBalanceDeletePostReRendersInsteadOfFailing() throws Exception {
+    mockMvc.perform(post(PEOPLE_PATH).param(NAME, MAX)).andExpect(status().is3xxRedirection());
+    long personId = personIdNamed(MAX);
+    seedNonZeroEurBalance(personId);
+
+    // The delete POST (only reachable on a post-load balance change) degrades to a re-rendered page
+    // steering to merge — not a 500.
+    mockMvc
+        .perform(post(PERSON_PATH_PREFIX + personId + "/delete"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("non-zero balance")))
+        .andExpect(content().string(containsString("Merge into another person")));
 
     Optional<String> deletedAt =
         jdbcClient
