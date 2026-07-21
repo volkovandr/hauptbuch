@@ -74,6 +74,29 @@ public class PersonService {
     personRepository.softDelete(personId);
   }
 
+  /**
+   * Every one of a person's per-currency debt leaves, each with its currency (plan stage 8f,
+   * data-model §7) — the source rows a person <em>merge</em> folds into another person, one leaf's
+   * postings at a time onto the target's matching-currency leaf. Includes leaves that net to zero
+   * so the merge carries the person's full history, not just their outstanding positions.
+   */
+  public List<PersonLeaf> leavesOf(long personId) {
+    return accountOwnerRepository.findLeavesByPersonId(personId);
+  }
+
+  /**
+   * One person's per-currency debt positions (data-model §7) — each currency they have postings in,
+   * signed (the sign is the direction). The single-person counterpart of {@link
+   * #balanceSummaries()} for callers (the merge form, plan stage 8f) that need one person's
+   * positions without valuing the whole roster. Currencies that net to zero are included; a caller
+   * wanting only outstanding positions filters on the sign.
+   */
+  public List<CurrencyBalance> balancesOf(long personId) {
+    return accountOwnerRepository.findPersonCurrencyBalances(personId).stream()
+        .map(b -> new CurrencyBalance(b.getCurrencyCode(), b.getSignedBalance()))
+        .toList();
+  }
+
   /** Fetch a live person by ID. Returns empty if the person does not exist or is soft-deleted. */
   public Optional<Person> findById(Long personId) {
     return personRepository.findById(personId);

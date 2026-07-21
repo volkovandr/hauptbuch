@@ -37,6 +37,30 @@ class PersonServiceTest {
   }
 
   @Test
+  void leavesOfDelegatesToRepository() {
+    List<PersonLeaf> leaves = List.of(new PersonLeaf(10L, "EUR"), new PersonLeaf(11L, "CHF"));
+    when(accountOwnerRepository.findLeavesByPersonId(1L)).thenReturn(leaves);
+
+    assertThat(service.leavesOf(1L)).isEqualTo(leaves);
+  }
+
+  @Test
+  void balancesOfMapsRepositoryRowsToSignedCurrencyBalances() {
+    when(accountOwnerRepository.findPersonCurrencyBalances(1L))
+        .thenReturn(
+            List.of(
+                new AccountOwnerRepository.PersonCurrencyBalance(
+                    1L, "EUR", new BigDecimal("10.00")),
+                new AccountOwnerRepository.PersonCurrencyBalance(
+                    1L, "CHF", new BigDecimal("-4.00"))));
+
+    assertThat(service.balancesOf(1L))
+        .containsExactly(
+            new CurrencyBalance("EUR", new BigDecimal("10.00")),
+            new CurrencyBalance("CHF", new BigDecimal("-4.00")));
+  }
+
+  @Test
   void createStripsWhitespace() {
     Person created = new Person(1L, "Alice", null);
     when(personRepository.insert("Alice")).thenReturn(created);
