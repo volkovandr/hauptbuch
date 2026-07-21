@@ -23,6 +23,7 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.27 (2026-07-21):** **8f complete — all of stage 8 complete.** No scope change (routine).
 - **v0.26 (2026-07-21):** **8e complete.** No scope change (routine); the stage note now records the
   transfer-by-leaf-id booking and corrects the field count to the full §3.8a set (up to three).
 - **v0.25 (2026-07-20):** **8d complete.** One decision: the People page **does** carry a
@@ -82,7 +83,7 @@ it shipped. "Stage N complete" needs no recap here.
   three-tier test strategy; the stage-3 service framed as invariant-upholding domain ops, not CRUD.
 - **Stages marked complete** (routine, no recap): 1 (v0.3), 2 (v0.4), 3 (v0.5), 4 (v0.6), 5 (v0.7),
   6a (v0.9), 6b (v0.10), 6c (v0.12), 6d (v0.14), 7a (v0.16), 7b (v0.17), 7c (v0.18), 8a (v0.21),
-  8b.1 (v0.22), 8b.2 (v0.23), 8c (v0.24), 8d (v0.25).
+  8b.1 (v0.22), 8b.2 (v0.23), 8c (v0.24), 8d (v0.25), 8e (v0.26), 8f (v0.27).
 
 ---
 
@@ -278,7 +279,7 @@ never retrofitted):
   splits containing a transfer leg (same/cross-currency). Every shape the entry surface creates is
   now editable. Detail in the stage-7 plan.
 
-### Stage 8 — People & per-person debts
+### Stage 8 — People & per-person debts ✅ **complete**
 The `debts` module (data-model §7, §3.3) and its two surfaces: the register (entry + display) and a
 new **People page**. The load-bearing decision: **a person leg is just a transfer to/from that
 person's account**, so entry and display ride the existing transfer + split machinery — the only
@@ -404,8 +405,8 @@ Six ordered sub-stages, each green and demoable (7-series cadence):
   existing path — a pre-scoped transaction, not new engine. Booked as a **transfer to the person's
   debt-leaf account id** (not the `for`/`by` name path), which dodges duplicate-name ambiguity and
   needs no provisioning; postings and register display are identical either way.
-- **8f — Merge.** Reassign-based person merge (`PostingReassignmentRepository`) — the way to remove a
-  **non-zero** person by folding their postings, per currency, into another person.
+- **8f — Merge.** ✅ **complete.** Reassign-based person merge (`PostingReassignmentRepository`) — the
+  way to remove a **non-zero** person by folding their postings, per currency, into another person.
 
 Deferred to `potential-feature-ideas.md`: the equal/shares/exact split calculator, per-group
 "simplify debts", groups/trips, and MCP exposure of debts.
