@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.operations;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -204,11 +205,14 @@ class RegisterSplitController {
    * are left untouched and the panel re-renders out-of-band carrying the message.
    */
   @PostMapping("/register/split/commit")
-  String commit(@RequestParam MultiValueMap<String, String> params, Model model) {
+  String commit(
+      @RequestParam MultiValueMap<String, String> params,
+      Model model,
+      HttpServletResponse response) {
     SplitForm form = SplitFormBinder.bind(params);
     RegisterFilter filter = SplitFormBinder.filterFrom(form);
     if (form.accountId() == null) {
-      return renderPanel(form, "An account is required", PANEL_OOB, model);
+      return commitError(form, "An account is required", model, response);
     }
     try {
       dockSplitService.commit(
@@ -228,7 +232,7 @@ class RegisterSplitController {
       // UnbalancedTransactionException is the engine's balance-invariant signal (e.g. a phantom
       // all-zero-base cross-currency split): show it in the panel rather than let it 500 into an
       // empty swap, which reads as a commit that silently did nothing.
-      return renderPanel(form, e.getMessage(), PANEL_OOB, model);
+      return commitError(form, e.getMessage(), model, response);
     }
     RegisterView register = registerService.view(filter);
     model.addAttribute(REGISTER, register);
@@ -300,6 +304,20 @@ class RegisterSplitController {
         form.viewFromDate(),
         form.viewToDate(),
         form.viewPayeeId());
+  }
+
+  /**
+   * Redisplay the split panel out-of-band carrying a validation error, leaving the register rows
+   * exactly as they are. The commit form's primary target is {@code #register-body}; an OOB-only
+   * response would leave htmx an empty main fragment (it strips the OOB form out) and swap that
+   * emptiness into {@code #register-body}, deleting the table (issue 05). {@code HX-Reswap: none}
+   * suppresses that main swap — only the out-of-band panel swap applies — so the rows survive and
+   * stay a valid target for the next Save.
+   */
+  private String commitError(
+      SplitForm form, String error, Model model, HttpServletResponse response) {
+    response.setHeader("HX-Reswap", "none");
+    return renderPanel(form, error, PANEL_OOB, model);
   }
 
   /**
