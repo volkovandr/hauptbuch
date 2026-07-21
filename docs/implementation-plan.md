@@ -23,6 +23,8 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.26 (2026-07-21):** **8e complete.** No scope change (routine); the stage note now records the
+  transfer-by-leaf-id booking and corrects the field count to the full §3.8a set (up to three).
 - **v0.25 (2026-07-20):** **8d complete.** One decision: the People page **does** carry a
   supplementary base-currency total (T-DM-5 had leaned per-currency-only) — but it **names the base
   currency** and is **shown only for a person holding a non-base currency** (an all-base position
@@ -396,9 +398,12 @@ Six ordered sub-stages, each green and demoable (7-series cadence):
   base-currency total sits beside the figures **only** when the person holds a non-base currency and
   every currency could be valued (an all-base position, a missing rate, or an unset base currency
   suppress it) — named in the base currency, not the word "base".
-- **8e — Settle-up button.** A per-person×currency launcher: pick account + date + amount(s) (one or
-  two fields by currency match, §3.8a), direction auto-detected from the balance sign, committed
-  through the existing path — a pre-scoped transaction, not new engine.
+- **8e — Settle-up button.** ✅ **complete.** A per-person×currency launcher: pick account + date +
+  amount(s) (the full §3.8a field set by currency match — one same-currency, two when one side is
+  base, three when neither is), direction auto-detected from the balance sign, committed through the
+  existing path — a pre-scoped transaction, not new engine. Booked as a **transfer to the person's
+  debt-leaf account id** (not the `for`/`by` name path), which dodges duplicate-name ambiguity and
+  needs no provisioning; postings and register display are identical either way.
 - **8f — Merge.** Reassign-based person merge (`PostingReassignmentRepository`) — the way to remove a
   **non-zero** person by folding their postings, per currency, into another person.
 
