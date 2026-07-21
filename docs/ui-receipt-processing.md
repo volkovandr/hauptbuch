@@ -1,8 +1,8 @@
 # Personal Finance Manager — UI: Receipt Processing & Receipt Register
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.2
-**Date:** 2026-06-24
+**Status:** Draft v0.3
+**Date:** 2026-07-21
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
@@ -22,6 +22,24 @@
 > The **exact keyboard state machine** is deferred to implementation, as in the register doc.
 
 **Changelog**
+- **v0.3 (2026-07-21):** Stage-9 planning round (grilled & owner-confirmed; build sequence in
+  `implementation-plan-stage-9.md`). **Schema ratified** into `data-model.md` §13 — that doc is now
+  authoritative for the entities; §9 below is historical. **Duplicate detection +
+  link-to-existing deferred** to the backlog (confirm always creates; Q-RX-2 moot until the stage-13
+  matcher exists). **Reopen/re-enter added** (§7): a committed receipt can be reopened, its draft
+  re-edited, and re-entered — the old transaction is soft-deleted and a new one booked; no drift
+  check. **AI Vocabulary added**: the AI sees an operator-curated projection of the taxonomy
+  (per-category alias / hide / **AI note** — freetext prompt guidance that can also instruct
+  per-line tags and beneficiaries, echoes resolved against live entities or dropped — owned by
+  `categories`, edited on category-edit) — resolves the ARCH-08 tension behind the §6.3 category
+  ghosts. **Transfer lines within a receipt** made explicit: a recognised cash-withdrawal line
+  (supermarket cashback) seeds as a transfer to the marked cash account, and a beneficiary line is
+  a transfer into the person's debt account (a debt increase, no expense booked). Opens closed: Q-RX-3 → concrete
+  `receipt` (no generalised attachment); T-RX-2 → detection config **on the account** (card last-4 +
+  cash marker, account-edit screen); T-RX-3 → `receipt_line_tag` junction; T-RX-4 → keep
+  `receipt_line` after commit (+ reopen). T-RX-1 polling lean stands. Parser client: official
+  Anthropic Java SDK (Messages + Batches). Playwright smoke replaced by MockMvc acceptance (plan
+  §14 decision, 2026-07-05).
 - **v0.2 (2026-06-24):** **Removed AI-assisted cropping entirely** — tried in practice and rejected:
   manual cropping is trivial (≪ 1 s), whereas validating and correcting an AI crop decision takes
   *longer* than just doing it. Pre-processing is now **purely manual**. This **supersedes
@@ -76,8 +94,8 @@ data-model keeps `lifecycle` and `deleted_at` orthogonal on `transaction` (§3.5
 | `new` | Raw scan captured; **not yet pre-processed**. | (capture) |
 | `pre_processed` | Image cleaned + optional AI note set; **queued, not yet analysed**. | `new`, re-edit |
 | `processing` | Submitted to the AI (single or batch); awaiting result. **Grey/locked.** | `pre_processed` |
-| `processed` | Parse returned; working draft lines seeded; **under post-process review**. | `processing` |
-| `committed` | Confirmed; a transaction was created (or an existing one linked) and is attached. | `processed` |
+| `processed` | Parse returned; working draft lines seeded; **under post-process review**. | `processing`; **reopen** from `committed` (§7) |
+| `committed` | Confirmed; a transaction was created (or an existing one linked) and is attached. May be **reopened** for re-entry. | `processed` |
 | `discarded` | Deliberately **not** entered (junk / true duplicate). Terminal; **not** deleted. | any non-committed |
 | `failed` | AI errored or returned nothing usable. Retry (→ `pre_processed`) or discard. | `processing` |
 
@@ -265,12 +283,18 @@ you may navigate away (§3.1). On return: `processed`, and the pane advances to 
 
 - **Image left, editable item table right** (the requested side-by-side).
 - **Header fields:** date, **payee** (existing picker + create-new §3.4), **account**, currency.
-  - **Account detection:** parsed from the payment line — `Bar`/cash → **Cash**; card → matched by
-    **last-4 → account** map (small config table). No match / no payment line → operator **picks**
+  - **Account detection:** parsed from the payment line — `Bar`/cash → the account **marked as the
+    cash account**; card → matched by **last-4**, configured **on the account** (account-edit
+    screen — T-RX-2 resolved, 2026-07-21). No match / no payment line → operator **picks**
     the account (same field as register §3.3, which already accepts real *and* person-debt
     accounts). This is why account selection must always be available, per your note.
 - **Item table = the split panel (§3.10), reused.** Each line carries **category** (picker §3.5,
-  with the AI's suggestion shown as a per-line ghost — §3.9 generalised to per-item), **tags**
+  with the AI's suggestion shown as a per-line ghost — §3.9 generalised to per-item; the suggestion
+  comes from the **AI Vocabulary** — the curated projection of data-model §13.3 — resolved
+  term→category at seeding; a line's target may also be a **real account**, i.e. a transfer leg —
+  a recognised **cash-withdrawal line** (supermarket cashback, *Bargeldauszahlung*) seeds as a
+  transfer to the marked cash account, and the reused split panel already supports split
+  transfers), **tags**
   (chips §3.6), **beneficiary** `→ Person` (§2.6/§3.8), and a **note** (§3.7). This delivers "full
   transaction detail, same as the main register."
 - **`remaining 0,00 ✓` readout** reconciles **Σ items vs parsed total** — here it doubles as a
@@ -289,6 +313,10 @@ you may navigate away (§3.1). On return: `processed`, and the pane advances to 
 
 ### 6.4 Step ④ Confirm
 
+> **Deferred (2026-07-21):** the duplicate check and link-to-existing below are **out of the
+> stage-9 build** — confirm always creates. They land with (or after) the stage-13 matcher they
+> share; the 1:0..1 link and this section's design are unchanged. Q-RX-2 is moot until then.
+
 - **Duplicate check** runs here (final values known): match on **merchant + date + total** using the
   **same matching logic as statement reconciliation** (§5.8). On a hit, ask:
   - **Create a new transaction anyway**, or
@@ -296,7 +324,8 @@ you may navigate away (§3.1). On return: `processed`, and the pane advances to 
     (receipt ↔ transaction is **1:0..1**, §7). If #N already has a receipt, this is a *true*
     duplicate → suggest **Discard**.
 - **Create new** (or no dup): **materialise** the draft `receipt_line`s into a `transaction` + its
-  `posting`s — items as expense/beneficiary legs, the paying account as the −total funding leg —
+  `posting`s — items as expense, transfer (real-account target, e.g. cashback → Cash), or
+  beneficiary (person-debt) legs, the paying account as the −total funding leg —
   set `receipt.transaction_id`, state → `committed`.
 - **Link to existing:** attach the image + parsed metadata to #N (set `transaction_id`), state →
   `committed`, **no** new transaction. Whether to also push the parsed splits onto a bare existing
@@ -315,6 +344,13 @@ you may navigate away (§3.1). On return: `processed`, and the pane advances to 
 - **Jump both ways.** From a `committed` receipt → **Open transaction** (register, scrolled +
   selected + loaded in the dock). From the register, the **receipt paperclip** (register §2.10)
   opens the receipt in this workflow pane.
+- **Reopen & re-enter (added 2026-07-21).** A `committed` receipt may be **reopened** — state back
+  to `processed`, the transaction untouched until re-confirm — its draft lines re-edited, and
+  **re-entered**: the old transaction is **soft-deleted** (postings with it; soft-delete *is* the
+  void mechanism, no new lifecycle value), a new transaction is materialised from the edited
+  draft, and the link repoints. Deliberately **no drift check**: re-enter always overwrites, even
+  if the transaction was hand-edited in the register after commit (owner call). Every previously
+  booked version stays inspectable as a soft-deleted record.
 
 ---
 
@@ -337,11 +373,15 @@ receipt for audit and for re-analysis.
 
 ---
 
-## 9. Provisional data-model sketch (ratify into the data-model doc)
+## 9. Provisional data-model sketch — **ratified 2026-07-21 into `data-model.md` §13**
 
-This is the entity the data-model doc deferred to its **§12 (Attachments)**. Shown here so the UI is
-grounded; it must be **moved into and reconciled with the data-model doc** (naming convention §3.0;
-soft-delete §3.5; per-currency leaf routing §6.5). Not settled here.
+> **Historical.** The sketch below was ratified into the data-model doc, which is now
+> authoritative. Deltas at ratification: `parse_json` renamed **`parse_raw`** and typed `text`, not
+> `jsonb` (the model may return malformed output, and the format is not settled — JSON today,
+> possibly TOON); `receipt_line_tag` junction added (T-RX-3);
+> `receipt_line.account_id` clarified as the *semantic* category node (per-currency leaf resolved
+> at commit); the **AI Vocabulary** table and the on-account detection columns added; lines kept
+> after commit + reopen/re-enter semantics (T-RX-4). Kept for the original reasoning only.
 
 ```sql
 create table receipt (
@@ -425,10 +465,10 @@ create table receipt_line (
 
 | # | Question | Status |
 |---|----------|--------|
-| Q-RX-2 | On **link-to-existing**, push the parsed splits onto the existing transaction, or just attach the image? | Open (§6.4) — lean: only if it's a bare single line |
-| Q-RX-3 | Generalise to one `attachment` entity (receipts **and** statements), or keep `receipt` concrete and parallel the statement entity later? | Open (§9) — lean: concrete now |
-| T-RX-1 | Completion push: htmx **polling** vs **SSE** | Decide at build; polling is the simple default |
-| T-RX-2 | `last-4 → account` map: config table vs learned-on-confirm | Open; small table to start |
-| T-RX-3 | Draft-line **tags**: `receipt_line_tag` junction vs carry in `parse_json` until commit | Open (§9) |
-| T-RX-4 | After commit, keep `receipt_line` (audit) or drop it | Open (§9) |
-| Q-RX-4 | Should mobile show **state badges / a "ready to work" count**, or stay purely thumbnails? | Open (§4) — lean: minimal dot only |
+| Q-RX-2 | On **link-to-existing**, push the parsed splits onto the existing transaction, or just attach the image? | **Moot for now** (2026-07-21) — link-to-existing deferred with the duplicate check (§6.4); reopens with the stage-13 matcher |
+| Q-RX-3 | Generalise to one `attachment` entity (receipts **and** statements), or keep `receipt` concrete and parallel the statement entity later? | **Resolved** (2026-07-21) — concrete `receipt` (data-model §13); revisit only if stage 13 proves a common shape |
+| T-RX-1 | Completion push: htmx **polling** vs **SSE** | **Polling** (lean confirmed 2026-07-21); SSE only if polling grates in use |
+| T-RX-2 | `last-4 → account` map: config table vs learned-on-confirm | **Resolved** (2026-07-21) — config **on the account** (card last-4 + cash marker, account-edit screen; data-model §13.4) |
+| T-RX-3 | Draft-line **tags**: `receipt_line_tag` junction vs carry in `parse_json` until commit | **Resolved** (2026-07-21) — junction mirroring `posting_tag` (data-model §13.2); the raw parse (`parse_raw`) stays immutable |
+| T-RX-4 | After commit, keep `receipt_line` (audit) or drop it | **Resolved** (2026-07-21) — keep, as the middle audit link; extended with reopen/re-enter (§7) |
+| Q-RX-4 | Should mobile show **state badges / a "ready to work" count**, or stay purely thumbnails? | **Minimal dot** (lean confirmed 2026-07-21) |

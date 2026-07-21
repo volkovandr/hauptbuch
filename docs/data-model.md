@@ -1,8 +1,8 @@
 # Hauptbuch — Core Data Model
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.5
-**Date:** 2026-07-11
+**Status:** Draft v0.7
+**Date:** 2026-07-21
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1)
@@ -12,11 +12,21 @@
 > and integrity rules that make it correct. As in the tech-stack doc, decisions are recorded **with
 > their reasoning so the _why_ survives long after the _what_ is code.**
 >
-> Scope note: this is the *core* (the double-entry engine, money valuation, and the tag dimension).
-> Recurring templates, subscriptions, budgets, attachments, and holdings are deliberately **not
-> modeled here yet** — see §12.
+> Scope note: this is the *core* (the double-entry engine, money valuation, and the tag dimension),
+> plus the ratified **receipt** model (§13). Recurring templates, subscriptions, budgets, statement
+> attachments, and holdings are deliberately **not modeled here yet** — see §12.
 
 **Changelog**
+- **v0.7 (2026-07-21):** **Receipts ratified** (§13) from the provisional sketch in
+  `ui-receipt-processing.md` §9, closing the deferred "Attachments" item for receipts (statements
+  remain deferred, §12). Adds `receipt`, `receipt_line`, `receipt_line_tag` (mirroring
+  `posting_tag`), the **AI Vocabulary** (`category_ai_config`, owned by the `categories` module —
+  the operator-curated projection of the taxonomy: alias, hide flag, and a per-category **AI note**
+  steering categorisation/tags/beneficiaries; the *only* category information an AI call may see;
+  resolves the ARCH-08 tension), account detection columns
+  (`card_last4`, `cash_account`), and the **reopen/re-enter** semantics (re-enter soft-deletes the
+  old transaction and re-books — soft-delete *is* the void mechanism; no new lifecycle value).
+  Receipt↔transaction is 1:0..1.
 - **v0.6 (2026-07-12):** Currency leaves get a real marker (§6.5): `account.currency_leaf` (boolean)
   replaces the old `"<Parent> <CODE>"` name-matching heuristic, which two services duplicated and
   which a user-named category could collide with. Currency leaves are now named after their bare
@@ -793,10 +803,155 @@ to be designed next:
 - **Recurring templates & subscriptions** (§5.3, §5.5) — generate `pending_review` transactions.
 - **Budgets** (§5.13) — on the same category (account) taxonomy and/or tags; no separate budget
   table of categories.
-- **Attachments** (receipts/statements on the Pi filesystem, ARCH-07) — linked to transactions.
+- **Statement attachments** (bank statements on the Pi filesystem, ARCH-07) — designed with stage
+  13. *Receipts* are ratified in §13; the two stay separate entities unless stage 13 proves a
+  common shape (Q-RX-3 decision, 2026-07-21).
 - **Holdings / positions** (§5.11) — contribute to net worth via the same `native × rate@D` rule,
   with manually-entered "rates" (prices).
 - **Import canonical representation** (§5.12) — targets this model; idempotency keys live there.
+
+---
+
+## 13. Receipts (ratified 2026-07-21 from `ui-receipt-processing.md` §9)
+
+The receipt is a captured scan moving through a stored lifecycle toward **at most one**
+transaction (1:0..1 both ways). The interaction design — lifecycle §2, modes §3, surfaces §4–§6 —
+lives in `ui-receipt-processing.md`; this section owns the entities and their invariants. The
+standing pattern applies twice over: the **original image** is immutable and the edited image is
+derived; the **raw parse** (`parse_raw`) is immutable and the draft lines are the editable
+working copy.
+
+### 13.1 `receipt`
+
+```sql
+create table receipt (
+  receipt_id     bigint generated always as identity primary key,
+  state          text not null default 'new'
+                 check (state in ('new','pre_processed','processing',
+                                  'processed','committed','discarded','failed')),
+  captured_at    timestamptz not null default now(),
+  source         text not null check (source in ('mobile','pc','telegram')),
+  original_path  text not null,           -- raw scan on the Pi; NEVER mutated (ARCH-07)
+  edited_path    text,                    -- derived, post-preprocess image actually sent to the AI
+  ai_note        text,                    -- per-receipt prompt guidance (receipt doc §8)
+  batch_id       text,                    -- Batches API id while processing (NULL for single mode)
+  parse_raw      text,                    -- raw AI response, retained immutable (audit). text, not
+                                          -- jsonb: the model may return malformed output, and the
+                                          -- response format is not settled (JSON today, possibly
+                                          -- TOON) — the column stores whatever came back, verbatim
+
+  -- denormalised parsed header (register list / filter / search; blank until processed):
+  merchant_text  text,
+  receipt_date   date,
+  total_amount   numeric(19,4),
+  currency_code  text references currency(currency_code),
+  account_id     bigint references account(account_id),   -- detected/picked paying account
+  transaction_id bigint references transaction(transaction_id),  -- NULL until committed
+  deleted_at     timestamptz                              -- orthogonal soft-delete (§3.5)
+);
+```
+
+- **`state` and `deleted_at` are orthogonal**, exactly as `lifecycle`⊥`deleted_at` on
+  `transaction`: `discarded` = "looked and chose not to book" (kept for the record); deleted =
+  "remove this row."
+- **Transaction is born at confirm**, never at parse — a receipt may die (delete/discard) without
+  ever touching the ledger.
+
+### 13.2 `receipt_line` — the editable working copy
+
+Seeded from `parse_raw` at analyse; edited freely in post-process; **kept after commit** as the
+middle link of the audit chain (*what the AI said* → *what you edited it to* → *what got booked*).
+
+```sql
+create table receipt_line (
+  receipt_line_id bigint generated always as identity primary key,
+  receipt_id      bigint not null references receipt(receipt_id),
+  description     text,
+  amount          numeric(19,4) not null,   -- native currency of the paying account
+  account_id      bigint references account(account_id),  -- the line's target: a category (semantic
+                                            -- node; per-currency leaf resolved at commit, §6.5) OR
+                                            -- a real account — a transfer leg, e.g. supermarket
+                                            -- cashback (Bargeldauszahlung) → the cash account
+  person_id       bigint references person(person_id),    -- set ⇒ beneficiary leg: a transfer into
+                                            -- the person's per-currency debt leaf (§7) — a debt
+                                            -- increase, no expense booked
+  note            text,
+  sort_order      int
+);
+
+-- tags on a draft line: mirrors posting_tag one-for-one; header-level tags in the UI are input
+-- convenience expanding to per-line rows (§10.2), and map to posting_tag 1:1 at commit.
+create table receipt_line_tag (
+  receipt_line_tag_id bigint generated always as identity primary key,
+  receipt_line_id     bigint not null references receipt_line(receipt_line_id),
+  tag_id              bigint not null references tag(tag_id),
+  unique (receipt_line_id, tag_id)
+);
+```
+
+- **At commit**, the lines materialise into a `transaction` + postings through the same
+  invariant-upholding path as the dock: items as expense, **transfer** (a real-account target, e.g.
+  cashback → Cash), or beneficiary (person-debt) legs, the paying account as the −total funding
+  leg — sum-to-zero holds by construction (§8.1). The post-process item table reuses the split
+  panel, which already supports transfer lines within a split (stage 7d.3).
+- **Reopen / re-enter.** A `committed` receipt may be reopened (state back to `processed`; the
+  transaction is untouched until re-confirm). **Re-enter soft-deletes the old transaction**
+  (postings with it), materialises a new one from the edited draft, and repoints
+  `receipt.transaction_id`. Soft-delete *is* the void mechanism — no new lifecycle value; every
+  previously booked version stays inspectable. Deliberately **no drift check**: re-enter always
+  overwrites, even if the transaction was hand-edited in the register after commit (owner call,
+  2026-07-21).
+
+### 13.3 The AI Vocabulary (owned by the `categories` module)
+
+The parser must suggest categories from *your* taxonomy, but AI calls may never carry ledger
+contents (ARCH-08). Resolution: the AI sees only an **operator-curated projection** — per
+category node an *alias* (shown to the AI instead of the real name), a *hide* flag (excluded
+entirely, e.g. sensitive categories), and a freetext **AI note**: guidance injected into the
+prompt next to the category, steering how items under it are handled. Examples (the owner's own):
+on `Car - Fuel` — *"diesel → tag Car:Audi; gasoline → tag Car:Skoda; bought outside Germany → tag
+Vacation"*; on `Food - Sweets` — *"M&Ms and Haribo bears → for Bobby"*. The note is the
+per-category sibling of the per-receipt `receipt.ai_note`.
+
+The note is also how the operator steers per-line **tags** and **beneficiaries**: the AI emits
+them **only when a note instructs it**, echoing names the note itself supplied — no tag or person
+list is ever sent (the note is operator-authored disclosure, within ARCH-08). At seeding, every
+AI answer is resolved case-insensitively against the live entity — category term → category, tag
+name → tag, person name → person — and **silently dropped when nothing matches**: suggestions,
+never creations (unresolved category → uncategorised).
+
+```sql
+-- at most one config row per category node; absence = visible under the real name, no note
+create table category_ai_config (
+  category_ai_config_id bigint generated always as identity primary key,
+  account_id bigint not null references account(account_id),
+  visible    boolean not null default true,
+  alias      text,      -- what the AI sees instead of the real name
+  ai_note    text,      -- per-category prompt guidance (mirrors receipt.ai_note)
+  unique (account_id)
+);
+```
+
+Ownership by `categories` is deliberate: rename/merge/subdivide must keep the vocabulary
+consistent, and that module owns keep-the-taxonomy-consistent logic (tags live there too, so tag
+resolution is the same module's API; person resolution is `debts`' public API). Consumers
+(`receipts`) use public APIs only (`aiVocabulary()`, `resolveTerm()`).
+
+### 13.4 Paying-account detection
+
+The parsed payment line seeds the paying account: `Bar`/cash → the account marked as the cash
+account; a card slip's last-4 → the matching account; no match → the operator picks. The config
+lives **on the account** (the same parsing-config-on-the-entity pattern as §13.3).
+
+The cash marker serves double duty: a **cash-withdrawal line** on the receipt (German supermarket
+cashback, *Bargeldauszahlung*) is recognised by the parser and seeded as a **transfer line**
+targeting the marked cash account — `EC-card −50 / Cash +50` inside the same transaction. No
+marked cash account → the line seeds without a target and the operator picks.
+
+```sql
+alter table account add column card_last4   text;                            -- card slips: '1234'
+alter table account add column cash_account boolean not null default false;  -- matches 'Bar'/cash
+```
 
 ---
 

@@ -1,8 +1,8 @@
 # Hauptbuch — Requirements Document
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.4
-**Date:** 2026-06-19
+**Status:** Draft v0.5
+**Date:** 2026-07-21
 **Owner:** volkovandr
 **Type:** Self-hosted, single-user, web-based personal finance application
 
@@ -11,6 +11,13 @@
 > Priorities use MoSCoW: **Must**, **Should**, **Could**, **Won't (this version)**.
 
 **Changelog**
+- **v0.5 (2026-07-21):** **ARCH-08 clarified** for receipt parsing (stage 9): the prohibition is on
+  financial facts (transactions, balances, ledger contents); the operator-curated **AI Vocabulary**
+  — the projection of the category taxonomy the operator chooses to expose (aliases, hidden
+  categories, per-category guidance notes; data-model §13.3) — is sanctioned as part of the
+  parsing instructions.
+  Without it the AI could never suggest the user's own categories (receipt doc §6.3), which the
+  original wording silently assumed.
 - **v0.4 (2026-06-19):** Added an explicit UX & interaction model (Money-style dense inline
   master-detail, numbers-first analytics, visual restraint). Specified the category×month matrix
   report and the consolidated-balance timeline with trend line. Added the monthly narrative
@@ -70,7 +77,7 @@ broader* exposure discussed there. See NFR-09.
 | ARCH-05 | Optional HTTPS via reverse proxy for access beyond localhost. | Should |
 | ARCH-06 | Exchange rates from a configurable feed (lookup only); cached; manual override always possible. | Should |
 | ARCH-07 | **Receipt scans / statements on the Pi filesystem**, retained and linked to transactions; partitioned per profile (§5.14). | Must |
-| ARCH-08 | AI calls send only the document + parsing instructions — never the database or balances. | Must |
+| ARCH-08 | AI calls send only the document + parsing instructions — never transactions, balances, or other ledger contents. The operator-curated **AI Vocabulary** (category names/aliases and per-category guidance notes the operator chooses to write — data-model §13.3; hidden categories are never sent) is part of the parsing instructions. | Must |
 | ARCH-09 | **Format-agnostic ingestion** via a canonical internal representation; all importers target it; importers added as needed without touching the core. | Must |
 | ARCH-10 | **Profile = separate PostgreSQL database** (§5.14), selected via configuration; no cross-profile mixing. | Should |
 | ARCH-11 | Telegram bot (if enabled) is a thin client with minimal exposure (§5.16, NFR-11). | Could |

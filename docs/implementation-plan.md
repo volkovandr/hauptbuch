@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.24
-**Date:** 2026-07-20
+**Status:** Draft v0.28
+**Date:** 2026-07-21
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md` (the five authoritative design docs)
@@ -23,6 +23,18 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.28 (2026-07-21):** **Stages 9–12 merged into one stage 9 (Receipts)** — they were horizontal
+  layers, none independently usable; the merged stage is sliced *vertically* (9a–9h) in the new
+  dedicated sub-plan `implementation-plan-stage-9.md`. Scope decisions: **duplicate detection +
+  link-to-existing deferred** to §14 (the matcher arrives with stage 13, which needs it anyway;
+  Q-RX-2 moot); the **AI Vocabulary** added — an operator-curated projection of the category
+  taxonomy (alias / hide / per-category **AI note** steering categorisation, tags, and
+  beneficiaries, owned by `categories`, edited on category-edit) is what
+  the parser sees, resolving the ARCH-08 tension (requirements reworded, v0.5); **reopen/re-enter**
+  added for committed receipts (re-enter soft-deletes the old transaction and re-books — no drift
+  check, owner call); parser client = official **Anthropic Java SDK** (Messages + Batches; Spring
+  AI has no Batches support); account detection config (card last-4 / cash marker) lives **on the
+  account**. Receipt schema ratified into the data-model doc (v0.7). Batch mode stays in scope.
 - **v0.27 (2026-07-21):** **8f complete — all of stage 8 complete.** No scope change (routine).
 - **v0.26 (2026-07-21):** **8e complete.** No scope change (routine); the stage note now records the
   transfer-by-leaf-id booking and corrects the field count to the full §3.8a set (up to three).
@@ -411,36 +423,34 @@ Six ordered sub-stages, each green and demoable (7-series cadence):
 Deferred to `potential-feature-ideas.md`: the equal/shares/exact split calculator, per-group
 "simplify debts", groups/trips, and MCP exposure of debts.
 
-### Stage 9 — Receipts backend (rough)
-Ratify the provisional `receipt` / `receipt_line` schema (receipt doc §9) **into the data-model
-doc**, then implement: migrations, records, repositories, the state machine (receipt doc §2.1), and
-the **Pi filesystem storage** abstraction (ARCH-07: immutable `original_path`, derived `edited_path`).
-No AI yet.
+### Stage 9 — Receipts (merged; subsumes former stages 10–12)
+The whole receipt loop — capture → pre-process → AI parse → post-process → confirm — as one stage.
+The former stages 9–12 were horizontal layers, none independently usable; merged, the work slices
+*vertically* instead, each slice an end-to-end path with a real caller and test. **Detailed in the
+dedicated sub-plan `implementation-plan-stage-9.md`** (the stage-7 pattern; deleted on completion,
+summary folded back). Eight ordered sub-stages, each green and owner-confirmed:
 
-### Stage 10 — Receipt upload UI (rough)
-Mobile camera-only capture → raw upload → `new` (receipt doc §4). PC receipt **register**
-(master-detail, state as primary filter, §5) and the **pre-process** step (client-side Cropper.js
-leaf + pixel pass; manual cropping only — supersedes tech-stack §5.2; downscale-before-send).
+- **9a — Docs.** Schema ratified into the data-model doc; scope changes recorded; ARCH-08 reworded.
+- **9b — Walking skeleton.** Capture (mobile camera + PC upload) → `new` → receipt register
+  (state filter) → discard/delete; `ReceiptStorage` on the Pi (ARCH-07).
+- **9c — Pre-process.** Cropper.js leaf + pixel pass (manual only), `edited_path`, the AI note.
+- **9d — AI Vocabulary.** The curated taxonomy projection in `categories` (alias / hide /
+  per-category AI note) + category-edit UI; `aiVocabulary()` / `resolveTerm()`.
+- **9e — Analyse (single).** `ReceiptParser` + Anthropic Java SDK (Messages), background worker,
+  htmx polling, immutable `parse_raw`, draft-line seeding, account detection (config on account).
+- **9f — Post-process.** Image left, full split toolkit right; `remaining 0,00 ✓`; redistribute-tax.
+- **9g — Confirm & reopen.** Confirm-time transaction creation via `operations`; 1:0..1 link, jump
+  both ways; reopen/re-enter (soft-delete + re-book). MockMvc acceptance for the money flow.
+- **9h — Batch.** Multi-select → one Batches API request (−50 %), poller, per-receipt distribution.
 
-### Stage 11 — AI processing backend (rough)
-The pluggable parser provider (ARCH-03, ≥ Sonnet 4.6; Anthropic Java SDK / Spring AI) behind a clean
-interface; sends only the image + instructions, never the ledger (ARCH-08). Background worker;
-`processing` state; htmx polling for completion (T-RX-1). Both modes: **Messages API** (single,
-sync-feeling) and **Batches API** (bulk, async, −50% — receipt doc §3). Token tricks (tight output
-schema, downscaling, prompt caching with the per-receipt AI note as a non-cached suffix, optional
-Haiku→Sonnet escalation).
-
-### Stage 12 — Receipt lifecycle UI + transaction integration (rough)
-Post-process (image left, full split toolkit right — reuses the register's pickers), the
-`remaining 0,00 ✓` parse-sanity readout, the redistribute-tax helper, the per-receipt AI note, and
-**confirm-time** transaction creation with duplicate detection and the 1:0..1 receipt↔transaction
-link (receipt doc §6–§7). Adds Playwright smoke for receipt review → commit.
+Deferred to §14: duplicate detection + link-to-existing (the matcher arrives with stage 13, which
+shares it; Q-RX-2 moot until then).
 
 ### Stage 13 — Bank statement reconciliation (rough)
 The `statements` module (§5.8): PDF-first extraction, matching statement lines against existing
 transactions (manual/receipt/pre-registered), flag-and-create for unmatched, manual override, mark
-reconciled. Shares matching logic with receipt duplicate detection. Adds Playwright smoke for
-statement match → confirm.
+reconciled. Builds the matcher that receipt duplicate detection (deferred from stage 9 to §14) will
+share. Money flow covered by MockMvc acceptance (Playwright dropped, §14).
 
 ---
 
@@ -455,6 +465,9 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
   (FR-ANA-05, §1.2); monthly narrative report (FR-RPT, Q12).
 - **Register follow-ons:** column re-sorting with the balance-hide rule (register §2.7) — deferred
   from stage 7a until missed.
+- **Receipt follow-ons:** duplicate detection at confirm (merchant+date+total) + link-to-existing
+  transaction with the Q-RX-2 push-splits question (receipt doc §6.4) — deferred from stage 9;
+  shares the stage-13 matcher, so lands with or after statements.
 - **Currency follow-ons:** ECB rate-feed automation (§1.2 — the engine is already multi-currency;
   this only automates rate lookup/proposal).
 - **Recurring & subscriptions:** recurring templates generating `pending_review` transactions
