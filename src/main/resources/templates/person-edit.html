@@ -44,7 +44,9 @@
       <h2>Remove this person</h2>
       <p class="muted">
         Only possible while every one of their per-currency balances is zero. A person who is owed
-        or owes money is removed by merging them into someone else instead.
+        or owes money is removed by
+        <a th:href="@{/people/{id}/merge(id=${person.personId()})}">merging them into someone else</a>
+        instead.
       </p>
       <p class="warning">
         Reversible: this hides the person from pickers but keeps their history — it does not erase

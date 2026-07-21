@@ -110,4 +110,22 @@ class AccountOwnerRepositoryIntegrationTest {
 
     assertThat(accountOwnerRepository.findLeafAccountId(personId, "USD")).isEmpty();
   }
+
+  @Test
+  void findLeavesByPersonIdReturnsEveryLeafWithItsCurrency() {
+    long maxEur = provisionLeaf("Max", EUR);
+    long maxChf = provisionLeaf("Max", "CHF");
+    long personId = ((PersonMatch.Live) personService.matchExact("Max")).person().personId();
+
+    assertThat(accountOwnerRepository.findLeavesByPersonId(personId))
+        .extracting(PersonLeaf::accountId, PersonLeaf::currencyCode)
+        .containsExactlyInAnyOrder(tuple(maxEur, EUR), tuple(maxChf, "CHF"));
+  }
+
+  @Test
+  void findLeavesByPersonIdIsEmptyForPersonWithNoLeaves() {
+    Person loner = personService.create("Loner");
+
+    assertThat(accountOwnerRepository.findLeavesByPersonId(loner.personId())).isEmpty();
+  }
 }

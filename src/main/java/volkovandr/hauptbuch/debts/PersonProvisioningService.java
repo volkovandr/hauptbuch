@@ -87,6 +87,18 @@ public class PersonProvisioningService {
   }
 
   /**
+   * Ensure an <em>existing</em> person's {@code currencyCode} leaf exists (creating and linking it
+   * if not), and return it — the by-id counterpart of {@link #ensureLeaf(String, String, boolean)}
+   * for callers that already hold a resolved person id and so need no name matching, revival, or
+   * ambiguity handling. Used by the person <em>merge</em> (plan stage 8f) to give the target person
+   * a leaf in each of the source's currencies before the source's postings are folded onto it.
+   */
+  @Transactional
+  public Account ensureLeaf(Long personId, String currencyCode) {
+    return ensureLeafAccount(personId, currencyCode);
+  }
+
+  /**
    * Ensure a per-currency leaf exists for a person and is linked via {@code account_owner},
    * returning it. The leaf is named {@code personal.<CURRENCY>} (cosmetic, data-model §7) and is an
    * {@code asset} type.

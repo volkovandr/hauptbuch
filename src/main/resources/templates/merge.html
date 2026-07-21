@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!--
+  Person-merge form (plan stage 8f, data-model §7): fold one person into another, moving every one
+  of the source's per-currency debt leaves' postings onto the target's matching-currency leaf, then
+  retiring the now-zeroed source. This is the only way to remove a person who is owed or owes money —
+  a non-zero person cannot be soft-deleted.
+
+    • The source's current positions are shown as directional sentences so the merge reads as a
+      deliberate choice; a settled person shows none (a plain soft-delete would do just as well).
+    • The target picker lists every live person but the source. With no one to merge into, the form
+      says so and the button is disabled.
+    • Committed by operations' PersonMergeService (a reassignment of postings, not a re-post through
+      the engine); a rejected merge re-renders here with the message.
+
+  Standard server-rendered form POST with redirect-after-post; no bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <div class="leaf-head">
+      <p class="eyebrow">People</p>
+      <h1 th:text="'Merge ' + ${view.personName()}">Merge Max</h1>
+    </div>
+
+    <section class="panel">
+      <p class="muted">
+        Merging folds all of <strong th:text="${view.personName()}">Max</strong>'s transactions into
+        the person you pick, per currency, and removes them. Their history is kept — it moves to the
+        other person. This cannot be undone from here.
+      </p>
+
+      <ul class="merge__positions" th:unless="${#lists.isEmpty(view.positions())}">
+        <li th:each="pos : ${view.positions()}" th:text="${pos}">You owe Max 10,00 CHF</li>
+      </ul>
+      <p class="muted" th:if="${#lists.isEmpty(view.positions())}">
+        Nothing outstanding — this person could also simply be removed from their edit page.
+      </p>
+
+      <form method="post" th:action="@{/people/{id}/merge(id=${view.personId()})}" class="form">
+        <div class="field" th:if="${!#lists.isEmpty(view.targets())}">
+          <label class="field__label" for="merge-target">Merge into</label>
+          <select id="merge-target" name="targetPersonId" class="input" required>
+            <option
+              th:each="t : ${view.targets()}"
+              th:value="${t.personId()}"
+              th:text="${t.name()}"
+            >
+              Alex
+            </option>
+          </select>
+        </div>
+        <p class="muted" th:if="${#lists.isEmpty(view.targets())}">
+          No one to merge into — add another person first.
+        </p>
+
+        <p class="entry-dock__error warning" th:if="${error}" th:text="${error}"></p>
+
+        <p class="actions">
+          <button
+            type="submit"
+            class="btn btn--danger"
+            th:disabled="${#lists.isEmpty(view.targets())}"
+          >
+            Merge and remove
+          </button>
+          <a th:href="@{/people/{id}(id=${view.personId()})}">Cancel</a>
+        </p>
+      </form>
+    </section>
+  </main>
+</html>

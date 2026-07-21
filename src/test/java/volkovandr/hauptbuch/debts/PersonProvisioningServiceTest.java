@@ -131,4 +131,28 @@ class PersonProvisioningServiceTest {
     assertThatThrownBy(() -> service.ensureLeaf(null, "EUR", false))
         .isInstanceOf(IllegalArgumentException.class);
   }
+
+  // ── ensureLeaf by id (the merge path, plan stage 8f) — no name matching or revival ──
+
+  @Test
+  void byIdReusesTheExistingLeafInThatCurrency() {
+    when(accountOwnerRepository.findAccountIdsByPersonId(1L)).thenReturn(List.of(10L));
+    when(accountService.findById(10L)).thenReturn(Optional.of(leaf(10L, "EUR")));
+
+    Account result = service.ensureLeaf(1L, "EUR");
+
+    assertThat(result.accountId()).isEqualTo(10L);
+    verify(accountService, never()).insertPersonLeaf(anyString(), anyString());
+  }
+
+  @Test
+  void byIdCreatesAndLinksTheLeafWhenThePersonHasNoneInThatCurrency() {
+    when(accountOwnerRepository.findAccountIdsByPersonId(1L)).thenReturn(List.of());
+    when(accountService.insertPersonLeaf("personal.CHF", "CHF")).thenReturn(leaf(40L, "CHF"));
+
+    Account result = service.ensureLeaf(1L, "CHF");
+
+    assertThat(result.accountId()).isEqualTo(40L);
+    verify(accountOwnerRepository).insert(40L, 1L);
+  }
 }

@@ -6,6 +6,7 @@ import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.debts.AccountOwner;
+import volkovandr.hauptbuch.debts.PersonLeaf;
 
 /**
  * Repository for {@link AccountOwner} junctions. Owns the per-person debt account links and the
@@ -97,6 +98,28 @@ public class AccountOwnerRepository {
         .param("cur", currencyCode)
         .query(Long.class)
         .optional();
+  }
+
+  /**
+   * Every one of a person's debt leaves paired with its currency (plan stage 8f) — the source rows
+   * a person <em>merge</em> iterates, moving each leaf's postings onto the target's
+   * matching-currency leaf. All leaves are returned, including any that currently net to zero, so a
+   * merge folds the person's full history, not just their live positions. A plain two-table join
+   * filtered by person, so a round-trip (plan §1.5).
+   */
+  public List<PersonLeaf> findLeavesByPersonId(Long personId) {
+    return jdbcClient
+        .sql(
+            """
+            select ao.account_id, a.currency_code
+            from account_owner ao
+            join account a on ao.account_id = a.account_id
+            where ao.person_id = :pid
+            order by a.currency_code
+            """)
+        .param(PERSON_ID_PARAM, personId)
+        .query(PersonLeaf.class)
+        .list();
   }
 
   /** Fetch all accounts owned by a person. */
