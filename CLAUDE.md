@@ -54,8 +54,11 @@ outranks cleverness, brevity, and raw capability every time. Concretely:
 7. **The service layer upholds invariants — it is domain operations, not CRUD.** Recording a
    transaction creates balanced postings and enforces sum-to-zero and leaves-only. Generic per-table
    CRUD is only for true reference data (payees, tags, account definitions).
-8. **AI calls send only the document + parsing instructions — never the ledger, balances, or DB**
-   (ARCH-08). Secrets (AI keys, DB creds) come from config/env, never hardcoded, never committed.
+8. **AI calls send only the document + parsing instructions — never transactions, balances, or
+   other ledger contents** (ARCH-08). The one sanctioned addition is the **AI Vocabulary**
+   (data-model §13.3): the operator-curated projection of the category taxonomy (aliases, hidden
+   categories excluded, per-category guidance notes) counts as parsing instructions — nothing else
+   from the DB does. Secrets (AI keys, DB creds) come from config/env, never hardcoded, never committed.
 9. **`./gradlew check` is the completion gate — it must be fully green before any step is done.**
    `check` runs the three test suites *and* every quality tool: **Checkstyle, PMD, SpotBugs,
    Spotless, and JaCoCo coverage verification.** Never call a step complete on a red gate, and
@@ -287,7 +290,8 @@ The docs are a navigation aid, not a worklog. Resist the urge to add prose.
 - Package layer-first, or reach into another module's internals.
 - Introduce a React/Svelte/Vue SPA, npm, a bundler, or TypeScript.
 - Build a generic CRUD layer where a domain operation is required.
-- Send the ledger, balances, or DB contents to any AI provider — only the document being parsed.
+- Send transactions, balances, or ledger contents to any AI provider — only the document being
+  parsed plus the curated AI Vocabulary (ARCH-08, data-model §13.3).
 - Enable the Modulith event-publication registry (deferred in v1).
 - Expose raw SQL through the MCP server — structured domain tools only.
 - Auto-apply image transforms or AI-suggested crops — image pre-processing is manual, client-side.
