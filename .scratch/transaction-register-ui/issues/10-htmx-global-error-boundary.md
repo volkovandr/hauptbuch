@@ -1,6 +1,6 @@
 # No global htmx error boundary: an uncaught exception 500s and blanks its swap target
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: medium
 Area: Transaction register / web shell
@@ -73,3 +73,16 @@ not a replacement for local validation.
   picked, rather than on Save) — that is issue 05's carved-out "problem 1", a separate enhancement.
 - Reworking any existing inline validation handling — leave the current per-endpoint catches in place.
 - Global error handling for the MCP surface or any non-web transport.
+
+## Resolution (2026-07-21)
+
+Implemented in commit `e5584a3`: `GlobalHtmxErrorAdvice` in the `web` shell + `fragments/app-error
+.html` + the `#app-error` slot in `layout.html` + oxblood toast styling. For an htmx request, an
+unexpected exception escaping any controller is logged and returned as a 200 retargeted
+(`HX-Retarget: #app-error`, `HX-Reswap: innerHTML`) to the shell error slot — never a swap into the
+triggering element; non-htmx requests propagate to the default whole-page handling. Covered by
+`GlobalHtmxErrorAdviceIntegrationTest`; full `./gradlew check` green; reviewed via `/code-review`.
+
+Note: this is the safety net for *uncaught* exceptions. It is **not** what fixed issue 05 — that was
+a locally-caught validation error whose OOB-only response blanked `#register-body`, fixed separately
+by `HX-Reswap: none` (commit `7a9afeb`).

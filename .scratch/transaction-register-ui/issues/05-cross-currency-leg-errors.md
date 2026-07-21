@@ -1,6 +1,6 @@
 # Selecting a wrong-currency target account in a split breaks the register and locks the dock
 
-Status: needs-info
+Status: resolved
 Category: bug
 Severity: medium
 Area: Transaction register
@@ -54,4 +54,7 @@ absence of rows, plus a cross-currency regression mirroring the owner's exact fl
 - The global htmx error boundary (issue 10) is a *different*, complementary fix — it catches
   genuinely *uncaught* exceptions; it did not address this bug, whose exception is caught locally.
 
-**needs-info:** awaiting the owner re-testing the exact flow in the running app before this closes.
+**Resolved (owner-confirmed, 2026-07-21):** the owner re-ran the exact flow — the register now stays
+put when the currency-mismatch message appears, and the corrected Save creates the transaction. Fix
+in commit `7a9afeb` (`HX-Reswap: none` on commit/void error responses). Problem 1 (validate on
+account *select*) remains a separate, untracked UX enhancement.
