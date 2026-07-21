@@ -121,6 +121,33 @@ public class PersonService {
   }
 
   /**
+   * The live person's outstanding position in one currency, for the settle-up launcher (plan stage
+   * 8e, data-model §7): the debt leaf to zero and its current signed balance. Empty when the person
+   * is not live or holds no leaf in that currency — either way there is nothing to settle. The
+   * balance is read fresh (not from a cached figure) so the launcher's direction and default amount
+   * reflect the ledger now; a leaf that exists but has no postings reads as a zero balance.
+   */
+  public Optional<SettleTarget> settleTarget(long personId, String currencyCode) {
+    if (personRepository.findById(personId).isEmpty()) {
+      return Optional.empty();
+    }
+    return accountOwnerRepository
+        .findLeafAccountId(personId, currencyCode)
+        .map(
+            accountId ->
+                new SettleTarget(accountId, currencyCode, balanceIn(personId, currencyCode)));
+  }
+
+  /** The person's summed native balance in one currency, or zero when the leaf has no postings. */
+  private BigDecimal balanceIn(long personId, String currencyCode) {
+    return accountOwnerRepository.findPersonCurrencyBalances(personId).stream()
+        .filter(b -> b.getCurrencyCode().equals(currencyCode))
+        .map(AccountOwnerRepository.PersonCurrencyBalance::getSignedBalance)
+        .findFirst()
+        .orElse(BigDecimal.ZERO);
+  }
+
+  /**
    * Fetch live persons matching a name fragment (substring search). Useful for pickers with
    * type-ahead.
    */

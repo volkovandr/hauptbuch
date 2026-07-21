@@ -95,9 +95,9 @@ class PeopleOverviewScreenIntegrationTest {
         .andExpect(content().string(containsString("View in register")))
         .andExpect(content().string(containsString("accountId=" + benLeaf)))
         // A wholly-base position shows no base-currency gloss - it would just restate the figure.
-        // Base figures render bare, so the code "EUR" appears only inside a gloss: its absence
-        // proves the gloss is suppressed.
-        .andExpect(content().string(not(containsString("EUR"))));
+        // The gloss is the only place the "≈" marker appears (a per-currency settle link now names
+        // the base code too, plan stage 8e), so its absence proves the gloss is suppressed.
+        .andExpect(content().string(not(containsString("≈"))));
   }
 
   @Test

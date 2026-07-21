@@ -63,10 +63,13 @@ public record PeopleOverview(List<PersonRow> people, String baseCurrencyCode) {
    * One currency's balance, formatted two ways: {@code amount} is the signed figure for the
    * collapsed cell, {@code direction} is the human-readable sentence for the expanded breakdown.
    *
+   * @param currencyCode ISO-4217 code of this line's debt leaf — the scope for its settle-up link
+   *     (plan stage 8e)
    * @param amount the signed native balance, German-formatted with a currency symbol unless base
    * @param negative whether the balance is negative (you owe) — drives the oxblood ink
    * @param direction directional wording, e.g. {@code "You owe 10,00"} or {@code "Max owes you 5,00
    *     CHF"}
    */
-  public record CurrencyLine(String amount, boolean negative, String direction) {}
+  public record CurrencyLine(
+      String currencyCode, String amount, boolean negative, String direction) {}
 }

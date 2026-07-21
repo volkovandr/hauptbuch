@@ -178,6 +178,17 @@
   font-size: 0.9rem;
 }
 
+.person__breakdown li {
+  display: flex;
+  gap: 0.8rem;
+  align-items: baseline;
+}
+
+/* The per-currency settle-up launcher (plan stage 8e), a quiet link beside each debt line. */
+.person__settle {
+  font-size: 0.85rem;
+}
+
 .person__links {
   display: flex;
   gap: 1.2rem;

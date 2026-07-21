@@ -53,8 +53,15 @@
             </summary>
             <div class="person__detail">
               <ul class="person__breakdown" th:unless="${settled}">
-                <li th:each="line : ${p.lines()}" th:text="${line.direction()}">
-                  You owe 10,00
+                <li th:each="line : ${p.lines()}">
+                  <span th:text="${line.direction()}">You owe 10,00</span>
+                  <!-- Settle up (plan stage 8e): per currency line, since a single settle is one
+                       transfer and cannot span currencies (data-model §7). -->
+                  <a
+                    class="person__settle"
+                    th:href="@{/people/{id}/settle(id=${p.personId()},currency=${line.currencyCode()})}"
+                    >Settle up</a
+                  >
                 </li>
               </ul>
               <p class="muted" th:if="${settled}">Nothing outstanding.</p>

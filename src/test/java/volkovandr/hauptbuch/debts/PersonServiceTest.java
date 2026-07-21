@@ -350,4 +350,45 @@ class PersonServiceTest {
     assertThat(result.get(0).balances()).isEmpty();
     assertThat(result.get(0).accountIds()).isEmpty();
   }
+
+  @Test
+  void settleTargetPairsTheLeafWithItsSignedBalance() {
+    when(personRepository.findById(1L)).thenReturn(Optional.of(new Person(1L, "Max", null)));
+    when(accountOwnerRepository.findLeafAccountId(1L, "CHF")).thenReturn(Optional.of(50L));
+    when(accountOwnerRepository.findPersonCurrencyBalances(1L))
+        .thenReturn(
+            List.of(
+                new AccountOwnerRepository.PersonCurrencyBalance(1L, "CHF", new BigDecimal("5.00")),
+                new AccountOwnerRepository.PersonCurrencyBalance(
+                    1L, "EUR", new BigDecimal("-10.00"))));
+
+    assertThat(service.settleTarget(1L, "CHF"))
+        .contains(new SettleTarget(50L, "CHF", new BigDecimal("5.00")));
+  }
+
+  @Test
+  void settleTargetTreatsLeafWithNoPostingsAsZeroBalance() {
+    when(personRepository.findById(1L)).thenReturn(Optional.of(new Person(1L, "Max", null)));
+    when(accountOwnerRepository.findLeafAccountId(1L, "CHF")).thenReturn(Optional.of(50L));
+    when(accountOwnerRepository.findPersonCurrencyBalances(1L)).thenReturn(List.of());
+
+    assertThat(service.settleTarget(1L, "CHF"))
+        .contains(new SettleTarget(50L, "CHF", BigDecimal.ZERO));
+  }
+
+  @Test
+  void settleTargetIsEmptyWhenThePersonHoldsNoLeafInThatCurrency() {
+    when(personRepository.findById(1L)).thenReturn(Optional.of(new Person(1L, "Max", null)));
+    when(accountOwnerRepository.findLeafAccountId(1L, "USD")).thenReturn(Optional.empty());
+
+    assertThat(service.settleTarget(1L, "USD")).isEmpty();
+  }
+
+  @Test
+  void settleTargetIsEmptyForNonLivePerson() {
+    when(personRepository.findById(1L)).thenReturn(Optional.empty());
+
+    assertThat(service.settleTarget(1L, "CHF")).isEmpty();
+    verify(accountOwnerRepository, never()).findLeafAccountId(anyLong(), anyString());
+  }
 }

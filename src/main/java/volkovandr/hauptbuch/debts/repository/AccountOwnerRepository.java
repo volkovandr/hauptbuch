@@ -14,6 +14,9 @@ import volkovandr.hauptbuch.debts.AccountOwner;
 @Repository
 public class AccountOwnerRepository {
 
+  /** The {@code person_id} bind-parameter name, shared by every query that filters by person. */
+  private static final String PERSON_ID_PARAM = "pid";
+
   private final JdbcClient jdbcClient;
 
   AccountOwnerRepository(JdbcClient jdbcClient) {
@@ -25,7 +28,7 @@ public class AccountOwnerRepository {
     return jdbcClient
         .sql("insert into account_owner (account_id, person_id) values (:aid, :pid) returning *")
         .param("aid", accountId)
-        .param("pid", personId)
+        .param(PERSON_ID_PARAM, personId)
         .query(AccountOwner.class)
         .single();
   }
@@ -73,11 +76,34 @@ public class AccountOwnerRepository {
    */
   public record AccountPersonName(long accountId, String name) {}
 
+  /**
+   * The person's live per-currency debt leaf in {@code currencyCode}, if any (plan stage 8e) — the
+   * settle-up launcher's counterpart leg. A person holds at most one leaf per currency (data-model
+   * §7), so this is a lookup, not a list. A soft-deleted leaf is excluded (a closed position is not
+   * settled). A plain two-table join filtered by a field or two, so a round-trip.
+   */
+  public Optional<Long> findLeafAccountId(Long personId, String currencyCode) {
+    return jdbcClient
+        .sql(
+            """
+            select a.account_id
+            from account_owner ao
+            join account a on ao.account_id = a.account_id
+            where ao.person_id = :pid
+              and a.currency_code = :cur
+              and a.deleted_at is null
+            """)
+        .param(PERSON_ID_PARAM, personId)
+        .param("cur", currencyCode)
+        .query(Long.class)
+        .optional();
+  }
+
   /** Fetch all accounts owned by a person. */
   public List<Long> findAccountIdsByPersonId(Long personId) {
     return jdbcClient
         .sql("select account_id from account_owner where person_id = :pid")
-        .param("pid", personId)
+        .param(PERSON_ID_PARAM, personId)
         .query(Long.class)
         .list();
   }
@@ -190,7 +216,7 @@ public class AccountOwnerRepository {
             group by a.currency_code
             order by a.currency_code
             """)
-        .param("pid", personId)
+        .param(PERSON_ID_PARAM, personId)
         .query(
             (rs, rowNum) ->
                 new PersonCurrencyBalance(

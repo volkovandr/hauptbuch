@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<!--
+  Settle-up launcher (plan stage 8e, data-model §7): a per-person, per-currency form that zeroes one
+  debt position through a single dated transfer between a real own account and the person's debt
+  leaf. Linked per currency line from the People page.
+
+    • Direction is NOT a field — it is derived server-side from the live balance sign (positive: they
+      owe you, so they pay you in; negative: you owe them, so you pay out). The form only collects the
+      funding account, the date, and the amount(s).
+    • Amount fields ride the register's cross-currency model (register §3.8a): one Amount field when
+      the funding account is in the debt currency; a second "Settles (CUR)" person-leg amount
+      (defaulted to the outstanding figure) when it is not; a third base amount only when neither leg
+      is the book's base currency. Changing the funding account hx-recomputes the block.
+    • Committed through the existing engine path (operations' DockCommitService) — no new engine. On a
+      rejected commit the form re-renders with the message and the typed amounts.
+
+  Standard server-rendered form POST with redirect-after-post; the one dynamic piece is the
+  htmx amount-field recompute, no bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <div class="leaf-head">
+      <p class="eyebrow">People</p>
+      <h1 th:text="'Settle up with ' + ${view.personName()}">Settle up with Max</h1>
+    </div>
+
+    <section class="panel">
+      <p class="muted settle__summary" th:text="${view.summary()}">Max owes you 10,00 CHF</p>
+
+      <form method="post" th:action="@{/people/{id}/settle(id=${view.personId()})}" class="form">
+        <input type="hidden" name="currency" th:value="${view.currencyCode()}" />
+
+        <!-- Funding account. Person leaves are excluded (you settle a debt FROM a real account, never
+             from another person). Changing it recomputes the amount block: a differently-denominated
+             account makes the settle cross-currency and reveals the person-leg / base amount fields. -->
+        <div class="field" th:if="${!#lists.isEmpty(view.accounts())}">
+          <label class="field__label" for="settle-account">Account</label>
+          <select
+            id="settle-account"
+            name="accountId"
+            class="input"
+            th:attr="hx-post=@{/people/{id}/settle/amount-fields(id=${view.personId()})}"
+            hx-trigger="change"
+            hx-include="closest form"
+            hx-target="#settle-amounts"
+            hx-swap="innerHTML"
+          >
+            <option
+              th:each="a : ${view.accounts()}"
+              th:value="${a.accountId()}"
+              th:text="${a.label()}"
+              th:selected="${a.selected()}"
+            >
+              Cash (EUR)
+            </option>
+          </select>
+        </div>
+        <p class="muted" th:if="${#lists.isEmpty(view.accounts())}">
+          No account to settle from — open an account first.
+        </p>
+
+        <div class="field">
+          <label class="field__label" for="settle-date">Date</label>
+          <input
+            id="settle-date"
+            name="date"
+            type="date"
+            class="input"
+            th:value="${view.date()}"
+            required
+          />
+        </div>
+
+        <div th:replace="~{settle-up :: amounts(view=${view})}"></div>
+
+        <p class="entry-dock__error warning" th:if="${error}" th:text="${error}"></p>
+
+        <p class="actions">
+          <button type="submit" class="btn" th:disabled="${#lists.isEmpty(view.accounts())}">
+            Record settlement
+          </button>
+          <a th:href="@{/people}">Cancel</a>
+        </p>
+      </form>
+    </section>
+  </main>
+
+  <!-- The amount fields (register §3.8a): the funding Amount field plus, when cross-currency, the
+       person-leg "Settles" amount and (neither-base only) a base amount. Inlined in the form on load
+       AND returned standalone by POST /people/{id}/settle/amount-fields to re-render on account
+       change. The whole block swaps so the funding field's currency label and default reset too. -->
+  <div
+    th:fragment="amounts(view)"
+    id="settle-amounts"
+    class="settle__amounts"
+    xmlns:th="http://www.thymeleaf.org"
+  >
+    <!-- Funding leg: what leaves/enters the paying account, in that account's currency. In the
+         single-currency case this IS the settled amount (defaulted to the outstanding figure). -->
+    <div class="field field--amount">
+      <label
+        class="field__label"
+        for="settle-amount"
+        th:text="'Amount (' + ${view.fields().fundingCurrencyCode()} + ')'"
+      >
+        Amount (EUR)
+      </label>
+      <input
+        id="settle-amount"
+        name="amount"
+        class="input num"
+        inputmode="decimal"
+        autocomplete="off"
+        th:value="${view.fundingAmountText()}"
+        required
+      />
+    </div>
+
+    <!-- Person-leg native amount (cross-currency): the debt cleared, in the debt currency, defaulted
+         to the whole outstanding figure. Reduce it for a partial settle. -->
+    <div class="field field--amount" th:if="${view.fields().crossCurrency()}">
+      <label
+        class="field__label"
+        for="settle-category-amount"
+        th:text="'Settles (' + ${view.fields().categoryCurrencyCode()} + ')'"
+      >
+        Settles (CHF)
+      </label>
+      <input
+        id="settle-category-amount"
+        name="categoryAmount"
+        class="input num"
+        inputmode="decimal"
+        autocomplete="off"
+        th:value="${view.fields().categoryAmountText()}"
+      />
+    </div>
+
+    <!-- Base amount (neither leg is the book's base currency): the frozen base value both legs
+         balance in (data-model §6.4), pre-filled from the rate feed and confirmable. -->
+    <div class="field field--amount" th:if="${view.fields().neitherIsBase()}">
+      <label class="field__label" for="settle-base-amount">Base amount</label>
+      <input
+        id="settle-base-amount"
+        name="baseAmount"
+        class="input num"
+        inputmode="decimal"
+        autocomplete="off"
+        th:value="${view.fields().baseAmountText()}"
+      />
+    </div>
+  </div>
+</html>

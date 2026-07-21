@@ -92,4 +92,22 @@ class AccountOwnerRepositoryIntegrationTest {
         .extracting(AccountOwner::accountId)
         .doesNotContain(aliceEur);
   }
+
+  @Test
+  void findLeafAccountIdReturnsThePersonsLeafInThatCurrency() {
+    long maxEur = provisionLeaf("Max", EUR);
+    long maxChf = provisionLeaf("Max", "CHF");
+    long personId = ((PersonMatch.Live) personService.matchExact("Max")).person().personId();
+
+    assertThat(accountOwnerRepository.findLeafAccountId(personId, EUR)).contains(maxEur);
+    assertThat(accountOwnerRepository.findLeafAccountId(personId, "CHF")).contains(maxChf);
+  }
+
+  @Test
+  void findLeafAccountIdIsEmptyForCurrencyThePersonDoesNotHold() {
+    provisionLeaf("Max", EUR); // Max holds a EUR leaf but no USD one.
+    long personId = ((PersonMatch.Live) personService.matchExact("Max")).person().personId();
+
+    assertThat(accountOwnerRepository.findLeafAccountId(personId, "USD")).isEmpty();
+  }
 }
