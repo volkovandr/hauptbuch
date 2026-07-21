@@ -14,8 +14,9 @@ import java.util.List;
  * @param accountName the Account cell — a real account name, or, when {@code accountPerson}, the
  *     owning person's resolved name (never the cosmetic {@code personal.<CUR>} leaf name)
  * @param accountPerson whether the Account cell is a person's debt leg (register §2.6, plan stage
- *     8c): rendered with a direction arrow — {@code → Name} when the leg is a debit ({@code
- *     income}), {@code Name →} when a credit — rather than a bare account name
+ *     8c): rendered with a trailing direction arrow on the column's inner edge — {@code Name ←}
+ *     when the leg is a debit ({@code income}, they owe you more), {@code Name →} when a credit
+ *     (you owe them more) — rather than a bare account name
  * @param payeeName the Payee cell; null for a payee-less transaction (a transfer)
  * @param accountHue the account's stored hue for the same-hue zebra (register §2.8); null → neutral
  * @param zebraDark whether this is the darker of the account's two zebra shades (alternates per
@@ -77,21 +78,22 @@ public record RegisterRowView(
    * (its leg is a debit), {@code ← Account} when it came <em>from</em> it (its leg is a credit). A
    * category chip is a plain name with no arrow.
    *
-   * <p>A person chip (plan stage 8c) shows a person's debt leg with the arrow drawn on the side
-   * that reads as the flow through them (register §2.6): {@code → Name} when their leg is a debit
-   * (they owe you more), {@code Name →} when a credit (you owe them more). The arrow's
-   * <em>side</em> — not just its direction — differs from a transfer, so a person chip is its own
-   * kind rather than a variant of {@code transfer}.
+   * <p>A person chip (plan stage 8c) shows a person's debt leg with a leading direction arrow on
+   * the column's inner edge, exactly like a transfer chip (register §2.6, v0.5): {@code → Name}
+   * when money went <em>to</em> them (their leg is a debit, {@code !inbound}), {@code ← Name} when
+   * it came <em>from</em> them (a credit, {@code inbound}). It stays its own chip kind (its own
+   * {@code cat-chip--person} styling), but the arrow follows the same inner-edge rule as a
+   * transfer.
    *
    * @param label the display text (the category name, the account name for a transfer, or the
    *     person's name for a person chip)
    * @param transfer whether this is a transfer to another own account (rendered with a leading
    *     direction arrow)
-   * @param inbound whether the counterpart leg is a credit (its amount is negative): for a transfer
-   *     it flips {@code ←}/{@code →}, and for a person chip it moves the arrow to the trailing side
-   *     ({@code Name →}). Meaningless for a plain category chip.
-   * @param person whether this is a person's debt leg (rendered {@code → Name} / {@code Name →}
-   *     rather than as a transfer or a bare category)
+   * @param inbound whether the counterpart leg is a credit (its amount is negative): for both a
+   *     transfer and a person chip it flips the leading glyph {@code ←}/{@code →}. Meaningless for
+   *     a plain category chip.
+   * @param person whether this is a person's debt leg (rendered with a leading {@code →}/{@code ←}
+   *     arrow like a transfer, but with its own {@code cat-chip--person} styling)
    */
   public record CategoryChip(String label, boolean transfer, boolean inbound, boolean person) {}
 }
