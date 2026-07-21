@@ -61,6 +61,27 @@ class PersonServiceTest {
   }
 
   @Test
+  void hasNonZeroBalanceIsTrueWhenAnyCurrencyIsNonZero() {
+    when(accountOwnerRepository.findPersonCurrencyBalances(1L))
+        .thenReturn(
+            List.of(
+                new AccountOwnerRepository.PersonCurrencyBalance(1L, "EUR", BigDecimal.ZERO),
+                new AccountOwnerRepository.PersonCurrencyBalance(
+                    1L, "CHF", new BigDecimal("-4.00"))));
+
+    assertThat(service.hasNonZeroBalance(1L)).isTrue();
+  }
+
+  @Test
+  void hasNonZeroBalanceIsFalseWhenEveryCurrencyIsZeroOrAbsent() {
+    when(accountOwnerRepository.findPersonCurrencyBalances(1L))
+        .thenReturn(
+            List.of(new AccountOwnerRepository.PersonCurrencyBalance(1L, "EUR", BigDecimal.ZERO)));
+
+    assertThat(service.hasNonZeroBalance(1L)).isFalse();
+  }
+
+  @Test
   void createStripsWhitespace() {
     Person created = new Person(1L, "Alice", null);
     when(personRepository.insert("Alice")).thenReturn(created);

@@ -1,9 +1,12 @@
 <!DOCTYPE html>
 <!--
-  Person edit page (plan stage 8a): rename and soft-delete only.
+  Person edit page (plan stage 8a): rename, plus removal.
 
-  Soft-delete is refused server-side while any of the person's per-currency accounts carries a
-  non-zero balance — a non-zero person is removed only by merge (stage 8f), not deletion.
+  A person is removed one of two ways (data-model §7): a zero-balance person is soft-deleted here;
+  a person who is owed or owes money cannot be soft-deleted, so the danger section offers merge
+  instead of a delete button (stage 8f). `removable` (set by the controller) picks the branch, so
+  the failing-delete path is never reached from the UI — the delete POST also degrades to a message
+  rather than a 500 if the balance changes after load.
 -->
 <html
   lang="en"
@@ -42,25 +45,48 @@
     <section class="panel">
       <p class="eyebrow">Danger</p>
       <h2>Remove this person</h2>
-      <p class="muted">
-        Only possible while every one of their per-currency balances is zero. A person who is owed
-        or owes money is removed by
-        <a th:href="@{/people/{id}/merge(id=${person.personId()})}">merging them into someone else</a>
-        instead.
-      </p>
-      <p class="warning">
-        Reversible: this hides the person from pickers but keeps their history — it does not erase
-        them.
-      </p>
-      <form
-        method="post"
-        th:action="@{/people/{id}/delete(id=${person.personId()})}"
-        class="form"
-      >
-        <p class="actions">
-          <button type="submit" class="btn btn--danger">Remove person</button>
+
+      <p class="warning" th:if="${error}" th:text="${error}"></p>
+
+      <!-- Zero balance: soft-delete is allowed. -->
+      <div th:if="${removable}">
+        <p class="muted">
+          Only possible while every one of their per-currency balances is zero. A person who is owed
+          or owes money is removed by
+          <a th:href="@{/people/{id}/merge(id=${person.personId()})}">merging them into someone
+            else</a>
+          instead.
         </p>
-      </form>
+        <p class="warning">
+          Reversible: this hides the person from pickers but keeps their history — it does not erase
+          them.
+        </p>
+        <form
+          method="post"
+          th:action="@{/people/{id}/delete(id=${person.personId()})}"
+          class="form"
+        >
+          <p class="actions">
+            <button type="submit" class="btn btn--danger">Remove person</button>
+          </p>
+        </form>
+      </div>
+
+      <!-- Non-zero balance: can't be soft-deleted (data-model §7), so merge is the only way out. -->
+      <div th:unless="${removable}">
+        <p class="muted">
+          <strong th:text="${person.name()}">Max</strong> is owed money or owes money, so they can't
+          be removed directly. Fold them into another person instead — their history moves across and
+          their balance nets into that person's.
+        </p>
+        <p class="actions">
+          <a
+            class="btn btn--danger"
+            th:href="@{/people/{id}/merge(id=${person.personId()})}"
+            >Merge into another person</a
+          >
+        </p>
+      </div>
     </section>
   </main>
 </html>

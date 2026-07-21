@@ -39,16 +39,10 @@ class PersonController {
     return REDIRECT_TO_LIST;
   }
 
-  /** The edit page for one person: rename and soft-delete. */
+  /** The edit page for one person: rename and — for a zero-balance person — soft-delete. */
   @GetMapping("/people/{personId}")
   String editPerson(@PathVariable long personId, Model model) {
-    Person person =
-        personService
-            .findById(personId)
-            .orElseThrow(() -> new IllegalArgumentException("No person with id " + personId));
-    model.addAttribute("person", person);
-    model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
-    model.addAttribute("title", person.name() + " · Hauptbuch");
+    populateEdit(personId, model);
     return EDIT_VIEW;
   }
 
@@ -60,12 +54,36 @@ class PersonController {
   }
 
   /**
-   * Soft-delete the person. Refused if any of their per-currency accounts carries a non-zero
-   * balance — a non-zero person is removed only by merge (stage 8f), not deletion.
+   * Soft-delete the person. Refused when any of their per-currency accounts carries a non-zero
+   * balance — a non-zero person is removed only by merge (stage 8f), not deletion. The edit page
+   * already hides the delete button for such a person and offers merge instead, so this normally
+   * only fires on the race where the balance changed after the page loaded; rather than 500, it
+   * re-renders the edit page with a message steering the user to merge.
    */
   @PostMapping("/people/{personId}/delete")
-  String deletePerson(@PathVariable long personId) {
-    personService.softDeleteIfZeroBalance(personId);
+  String deletePerson(@PathVariable long personId, Model model) {
+    try {
+      personService.softDeleteIfZeroBalance(personId);
+    } catch (IllegalStateException e) {
+      populateEdit(personId, model);
+      model.addAttribute(
+          "error",
+          "This person has a non-zero balance and can't be removed — merge them into someone else"
+              + " instead.");
+      return EDIT_VIEW;
+    }
     return REDIRECT_TO_LIST;
+  }
+
+  /** Populate the edit-page model for a person, including whether they can be soft-deleted. */
+  private void populateEdit(long personId, Model model) {
+    Person person =
+        personService
+            .findById(personId)
+            .orElseThrow(() -> new IllegalArgumentException("No person with id " + personId));
+    model.addAttribute("person", person);
+    model.addAttribute("removable", !personService.hasNonZeroBalance(personId));
+    model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
+    model.addAttribute("title", person.name() + " · Hauptbuch");
   }
 }
