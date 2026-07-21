@@ -73,7 +73,7 @@ acyclic today. Final adjudication as always by `verify()`.
 
 ---
 
-## 9a — Docs & schema ratification (this slice; no code)
+## 9a — Docs & schema ratification (this slice; no code) ✅ **complete**
 
 Ratify the receipt model into `data-model.md` (§13): `receipt`, `receipt_line`,
 `receipt_line_tag`, the AI Vocabulary table (`category_ai_config`), the
