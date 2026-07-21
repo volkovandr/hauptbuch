@@ -1,7 +1,7 @@
 # Personal Finance Manager — UI: Transaction Register & Entry Dock
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.3
+**Status:** Draft v0.5
 **Date:** 2026-07-11
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
@@ -20,6 +20,14 @@
 > pinning them now would be premature.
 
 **Changelog**
+- **v0.5 (2026-07-21):** Reworked the **direction-arrow rendering** in §2.6. An arrow now always sits
+  on its label's **inner edge — the side facing the Payee** (right of the **Account** label, left of
+  the **Category** label), and the **glyph** (`←`/`→`) alone carries the flow direction — **one
+  uniform rule** for real-account transfer chips and person debt legs alike. Overturns v0.2's
+  person-specific encoding ("arrow *side* carries debt direction, glyph pinned `→`, `←` never used for
+  people"): the row now reads as a continuous **Account → Payee → Category** flow line, with the Payee
+  as the facilitator in the middle. **Purely visual** — debt direction is still the **sign of the
+  running balance** and the **column** a leg occupies; no view-model or posting change.
 - **v0.4 (2026-07-13):** Redesigned **cross-currency splits** (§3.8a, §3.10). A split spans **at most
   two currencies** (funding + spending), chosen **once at the header** with one shared rate — not the
   per-line currency of v0.3. Each line is a **single spending-currency amount**; its account and base
@@ -134,8 +142,9 @@ Left-to-right: **colour spine · Date · Account · Payee · Category · Amount 
 ### 2.6 The Account-vs-Category display rule (transfers and debts)
 
 This is the one genuinely subtle presentation rule. Each transaction is shown through a **primary
-(funding) leg** and its **counterpart legs**, and for per-person debts the **column** and the
-**arrow** are decided by two *independent* questions.
+(funding) leg** and its **counterpart legs**; the **column** each leg occupies and the **direction**
+its arrow points are decided by two *independent* questions. (The *side* an arrow sits on is a fixed
+visual rule, not a third question — see below.)
 
 **Which column does each leg occupy?**
 - **Primary leg → the Account column.** The primary leg moves **one of your own accounts**
@@ -155,25 +164,36 @@ This is the one genuinely subtle presentation rule. Each transaction is shown th
   Cash/Giro/Visa leg, only the person's leg and a category) — the **person's debt leg is the primary**
   (it is the most-negative own leg by default) and occupies the **Account** column.
 
-**Which way does the arrow point?** Independent of the column, set by the flow alone:
-- **`Max →`** = funds came **from** Max (Max is the source); **you owe Max** more.
-- **`→ Max`** = funds went **to** Max (Max is the destination/beneficiary); **Max owes you** more.
-- Equivalently, by the `+ = debit` sign of Max's posting: **debit (+) → `→ Max`**, **credit (−) →
-  `Max →`**.
+**Which side does the arrow sit, and which way does it point?** The row reads **Account → Payee →
+Category**: the Account and Category columns are the money's **source and destination**, and the
+**Payee** between them is the **facilitator** of the flow. So the arrow always sits on each label's
+**inner edge — the side facing the Payee**: the **right** of the **Account** label, the **left** of
+the **Category** label. The **glyph** (`→`/`←`) alone carries the direction — it points the way the
+money travels across the row. Arrows on the two inner edges draw one continuous flow line.
 
-Because column and direction are decided separately, **`Max →` can appear in either column**:
+This side rule is **purely visual** and applies **uniformly** to the two chip kinds that carry an
+arrow — a real-account transfer chip and a person's debt leg — with **no** person-specific
+"side = direction" encoding any more. A plain income/expense category (e.g. `Food`) still shows as a
+**bare name, no arrow** (only a leg that names *an account* — your own or a person's — points
+anywhere). The arrow carries **no** debt semantics: which **column** a leg occupies (source vs
+destination) and the **sign** of the posting already do that (net standing is the sign of the running
+balance, below). Moving an arrow from one side to the other changes legibility, nothing else.
 
-| What happened | Postings (example) | Account column | Category column |
-|---------------|--------------------|----------------|-----------------|
-| You front money for Max, or **lend Max cash** (your cash goes out) | `Cash −10`, `Max-EUR +10` | `Cash` | `→ Max` |
-| You buy for yourself **and** Max | `Cash −31,50`, `Food +21,50`, `Max-EUR +10` | `Cash` | `Food · → Max` |
-| **Max pays for an expense of yours** — you consumed it (no cash of yours moves) | `Food +10`, `Max-EUR −10` | `Max →` | `Food` |
-| **Max lends you cash** (your cash goes in, no expense) | `Cash +10`, `Max-EUR −10` | `Cash` | `Max →` |
+Reading examples — Payee shown between the columns, glyph following the flow:
 
-The key contrast the model now captures: *Max buying your groceries* is an **expense** of yours
-funded by Max → `Max →` in **Account**, `Food` in **Category**. *Max lending you cash* is **not** an
-expense → `Cash` in **Account**, `Max →` in **Category**. Same debt direction (you owe Max), different
-transaction, different display.
+| What happened | Postings (example) | Account | Payee | Category |
+|---------------|--------------------|---------|-------|----------|
+| **Max pays for an expense of yours** — you consumed it, no cash of yours moves (you owe Max) | `Food +10`, `Max-EUR −10` | `Max →` | REWE | `Food` |
+| You buy in cash **for Max**, or **lend Max cash** — your cash goes out (Max owes you) | `Cash −10`, `Max-EUR +10` | `Cash →` | Aldi | `→ Max` |
+| You buy for yourself **and** Max | `Cash −31,50`, `Food +21,50`, `Max-EUR +10` | `Cash →` | Aldi | `Food · → Max` |
+| **Currency exchange**, EUR→CHF — the EUR row | `Cash-EUR −10`, `Cash-CHF +9,50` | `Cash (EUR) →` | | `→ Cash (CHF)` |
+| …its paired CHF row (same transaction, other leg) | *(same)* | `Cash (CHF) ←` | | `← Cash (EUR)` |
+| **Max lends you cash**, withdrawn at your bank — your cash goes in, no expense (you owe Max) | `Cash-EUR +10`, `Max-EUR −10` | `Cash (EUR) ←` | MyBank | `← Max` |
+
+The key contrast the model still captures: *Max buying your groceries* is an **expense** of yours
+funded by Max → Max's leg in **Account**, the category in **Category**. *Max lending you cash* is
+**not** an expense → your cash account in **Account**, Max's leg in **Category**. Same debt direction
+(you owe Max); the **column**, not the arrow, tells the two apart.
 
 Per-person debts still have **no special mechanism** — every line above is just an ordinary posting to
 Max's signed per-currency debt account (data-model §7). The arrows are pure display of leg direction;
