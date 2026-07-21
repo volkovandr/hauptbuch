@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<!--
+  Global htmx error toast (issue 10). Rendered by GlobalHtmxErrorAdvice as the innerHTML of the
+  shell's #app-error slot when an unexpected exception is caught while servicing an htmx request.
+  Deliberately carries no ledger detail — only a generic, reassuring message — since the boundary
+  is a safety net for *unexpected* failures (expected validation is still handled inline by each
+  screen). No bespoke JS (CLAUDE.md §1.6): the toast simply stays until the next swap of #app-error
+  replaces it (a subsequent successful action clears the slot).
+
+  Contract:
+      response body = ~{fragments/app-error :: error} + model attribute `message`, swapped
+      innerHTML into #app-error. The fragment name carries no expression on purpose: the boundary
+      fires on any request path, and Thymeleaf refuses an expression-bearing view name when the
+      request URL looks expression-like — so `message` comes from the model, not the fragment call.
+-->
+<div th:fragment="error" class="app-error__toast">
+  <span class="app-error__text" th:text="${message}">Something went wrong.</span>
+</div>
