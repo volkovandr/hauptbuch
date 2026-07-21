@@ -304,6 +304,30 @@ class RegisterSplitScreenIntegrationTest {
   }
 
   @Test
+  void commitReRendersThePanelWhenaTransferLineTargetsaWrongCurrencyAccount() throws Exception {
+    // Issue 05: a split transfer line whose target account is in a different currency than the
+    // transaction is (correctly) rejected — but it must re-render the panel inline with the message
+    // and leave the register standing, not 500 into an empty swap that blanks the register.
+    long cash = openAccount("Cash", EUR, "500");
+    long usdWallet = openAccount("USD Wallet", "USD", "100");
+
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("lineCategoryId", String.valueOf(usdWallet))
+                .param("lineTransferDirection", "TO")
+                .param("lineAmount", "20")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(containsString("must target a")))
+        // The register survives: its rows body is not swapped away by the error.
+        .andExpect(content().string(not(containsString("id=\"register-rows\""))));
+  }
+
+  @Test
   void editLoadsAnExistingSplitBackIntoThePanel() throws Exception {
     long cash = openAccount("Cash", "500");
     long food = insertCategory("Food", "expense");
