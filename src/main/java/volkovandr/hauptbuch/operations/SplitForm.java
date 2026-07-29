@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.operations;
 
 import java.time.LocalDate;
 import java.util.List;
+import volkovandr.hauptbuch.debts.PersonTarget;
 
 /**
  * The split panel's form fields, bound in one shot (register §3.10, plan stage 7c.2) — the panel's
@@ -20,7 +21,14 @@ import java.util.List;
  *
  * @param transactionId the transaction being edited; {@code null} for a new split (register §3.1)
  * @param date booking date
- * @param accountId the funding account — fixes the split's currency
+ * @param accountId the funding account — fixes the split's currency; {@code null} when {@code
+ *     fundingPersonName} names a person instead, whose leaf does not exist until commit
+ * @param fundingPersonName the <em>funding</em> person's name when the split's Account field's
+ *     {@code for}/{@code by} resolver matched a person (register §3.3/§3.10, plan stage 8b.1/issue
+ *     07) — "Max paid for a whole receipt of mine"; {@code null}/blank for an ordinary account
+ * @param fundingPersonDirection {@code FOR}/{@code BY} alongside {@code fundingPersonName}
+ * @param fundingPersonRevive the revival decision for {@code fundingPersonName}, exactly as {@code
+ *     linePersonRevive} carries it for a per-line attribution
  * @param payeeText the payee text (a picked datalist value or a create-new string); nullable
  * @param note transaction-level note; nullable
  * @param total the reference total the lines subdivide, in the <em>spending</em> currency (German-
@@ -67,6 +75,9 @@ public record SplitForm(
     Long transactionId,
     LocalDate date,
     Long accountId,
+    String fundingPersonName,
+    String fundingPersonDirection,
+    String fundingPersonRevive,
     String payeeText,
     String note,
     String total,
@@ -112,5 +123,31 @@ public record SplitForm(
   /** Null-safe immutable copy of one line's tag-id list (an unresolved line may bind a null). */
   private static List<Long> copyOf(List<Long> ids) {
     return ids == null ? List.of() : List.copyOf(ids);
+  }
+
+  /**
+   * Whether the Account field named a person rather than an account (register §3.3/§3.10, issue 07)
+   * — the funding leg is then a debt leaf provisioned at commit, so there is no {@code accountId}
+   * to read. Mirrors {@code DockEntryForm#hasFundingPerson}.
+   */
+  public boolean hasFundingPerson() {
+    return isPresent(fundingPersonName) && isPresent(fundingPersonDirection);
+  }
+
+  /**
+   * The {@code for}/{@code by} sigil text for the funding person (register §3.3/§3.10, issue 07),
+   * or {@code null} when the Account field named a real account instead — the one place this
+   * conversion lives, shared by {@link SplitPanelAssembler} (the panel's Account field) and {@link
+   * RegisterSplitController} (the Cancel prefill).
+   */
+  public String fundingPersonSigil() {
+    return hasFundingPerson()
+        ? PersonTarget.option(
+            PersonTarget.Direction.valueOf(fundingPersonDirection), fundingPersonName)
+        : null;
+  }
+
+  private static boolean isPresent(String value) {
+    return value != null && !value.isBlank();
   }
 }

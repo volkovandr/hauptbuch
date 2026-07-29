@@ -69,23 +69,16 @@ class RegisterSplitController {
    * Open the split panel from the dock's committed single line (register §3.9→§3.10): the dock's
    * category, amount and header seed one line; the reference total is that line's magnitude, so the
    * panel opens balanced (<code>remaining 0,00 ✓</code>). Swaps the panel over the dock.
+   *
+   * <p>A person-funded dock entry (register §3.3, plan stage 8b.1) carries through unchanged: the
+   * panel's Account field is the same {@code for}/{@code by}-capable datalist the dock's is (issue
+   * 07), so the funding person seeds straight into the header rather than being refused.
    */
   @PostMapping("/register/split")
   String open(
       @ModelAttribute DockEntryForm form,
       @RequestParam(required = false) String categoryText,
       Model model) {
-    // A person funding the whole split is not supported yet (issue 07): the panel's Account is a
-    // real-account <select>, so opening a split from a `by`/`for` dock entry would silently drop
-    // the
-    // person and misbook. Refuse cleanly here rather than substitute a phantom account.
-    if (form.hasFundingPerson()) {
-      return dockRefusal(
-          form,
-          "Splitting a person-funded entry isn't supported yet — enter each line as its own "
-              + "transaction, or fund the split from a real account.",
-          model);
-    }
     // A transfer line carries a direction, not a category type: the dock's committed line may be a
     // transfer to a real own account (register §3.8, plan stage 7d.3), so seed the direction and
     // leave the type blank in that case.
@@ -108,6 +101,9 @@ class RegisterSplitController {
             form.transactionId(),
             form.date(),
             form.accountId(),
+            SplitFormBinder.orEmpty(form.fundingPersonName()),
+            SplitFormBinder.orEmpty(form.fundingPersonDirection()),
+            SplitFormBinder.orEmpty(form.fundingPersonRevive()),
             form.payeeText(),
             form.note(),
             SplitFormBinder.openingTotal(seed.lineAmount(), type),
@@ -211,8 +207,8 @@ class RegisterSplitController {
       HttpServletResponse response) {
     SplitForm form = SplitFormBinder.bind(params);
     RegisterFilter filter = SplitFormBinder.filterFrom(form);
-    if (form.accountId() == null) {
-      return commitError(form, "An account is required", model, response);
+    if (form.accountId() == null && !form.hasFundingPerson()) {
+      return commitError(form, "An account or person is required", model, response);
     }
     try {
       dockSplitService.commit(
@@ -220,6 +216,9 @@ class RegisterSplitController {
               form.transactionId(),
               form.date(),
               form.accountId(),
+              form.fundingPersonName(),
+              form.fundingPersonDirection(),
+              form.fundingPersonRevive(),
               null,
               SplitFormBinder.blankToNull(form.payeeText()),
               form.note(),
@@ -228,9 +227,10 @@ class RegisterSplitController {
               form.baseTotal(),
               form.tagId() == null ? List.of() : form.tagId(),
               SplitFormBinder.linesOf(form)));
-    } catch (IllegalArgumentException | UnbalancedTransactionException e) {
+    } catch (IllegalArgumentException | IllegalStateException | UnbalancedTransactionException e) {
       // UnbalancedTransactionException is the engine's balance-invariant signal (e.g. a phantom
-      // all-zero-base cross-currency split): show it in the panel rather than let it 500 into an
+      // all-zero-base cross-currency split); IllegalStateException is a person-funded entry with no
+      // base currency set (register §3.5). Show it in the panel rather than let it 500 into an
       // empty swap, which reads as a commit that silently did nothing.
       return commitError(form, e.getMessage(), model, response);
     }
@@ -254,12 +254,16 @@ class RegisterSplitController {
     List<String> ids = form.lineCategoryId();
     List<String> texts = form.categoryText();
     List<String> amounts = form.lineAmount();
+    // A person funding leg (register §3.3/§3.10, issue 07) survives Cancel as the same for/by
+    // sigil the dock's own Account field shows, rather than falling back to the dock's default
+    // account and silently dropping the person.
+    String accountEntryText = form.fundingPersonSigil();
     DockEditModel prefill =
         new DockEditModel(
             null,
             form.date(),
             form.accountId(),
-            null, // fundingPersonLabel (splits don't reach a person leg in the dock's edit mode)
+            accountEntryText,
             form.payeeText(),
             amounts.isEmpty() ? null : SplitFormBinder.blankToNull(amounts.get(0)),
             SplitFormBinder.parseLong(ids.isEmpty() ? null : ids.get(0)),
@@ -280,30 +284,6 @@ class RegisterSplitController {
     model.addAttribute("amountFields", dockAmountFieldsService.forAccount(form.accountId()));
     return "fragments/entry-dock :: dock(register=${register}, oob=false, edit=${edit},"
         + " amountFields=${amountFields})";
-  }
-
-  /**
-   * Refuse to open the split, re-rendering the dock (over {@code #entry-dock}, the Split button's
-   * target) in new mode carrying {@code message} — used when the dock is person-funded, which the
-   * split panel cannot yet represent (issue 07). The register stays put; the user re-enters the
-   * lines separately or funds from a real account.
-   */
-  private String dockRefusal(DockEntryForm form, String message, Model model) {
-    RegisterView register = registerService.view(filterFrom(form));
-    model.addAttribute(REGISTER, register);
-    model.addAttribute("entryError", message);
-    model.addAttribute(CURRENCIES, dockAmountFieldsService.currencies());
-    model.addAttribute("amountFields", dockAmountFieldsService.fresh(register));
-    return "fragments/entry-dock :: dock(register=${register}, oob=false, edit=null,"
-        + " amountFields=${amountFields})";
-  }
-
-  private static RegisterFilter filterFrom(DockEntryForm form) {
-    return new RegisterFilter(
-        form.viewAccountId() == null ? List.of() : form.viewAccountId(),
-        form.viewFromDate(),
-        form.viewToDate(),
-        form.viewPayeeId());
   }
 
   /**

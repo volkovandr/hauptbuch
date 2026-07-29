@@ -26,9 +26,21 @@ import java.util.List;
  * balance in base by construction (data-model §6.4, owner-decided 2026-07-13). Null/blank {@code
  * spendingCurrencyCode} is the untouched single-currency split (the funding account's currency).
  *
+ * <p><strong>A person may fund the whole split</strong> (register §3.3/§3.10, issue 07) — "Max paid
+ * for a whole receipt of mine" — mirroring {@link DockCommitService}'s funding-person branch. With
+ * no real account in the transaction, {@code spendingCurrencyCode} becomes the <em>transaction
+ * currency</em>: it sets every leg, so the split is single-currency by construction and is the only
+ * currency source there is, letting a brand-new person be provisioned from the Account field.
+ *
  * @param transactionId the transaction being edited, or {@code null} for a new entry
  * @param date booking date
- * @param accountId the funding (own) account the money moves through — fixes the funding currency
+ * @param accountId the funding (own) account the money moves through — fixes the funding currency;
+ *     {@code null} when {@code fundingPersonName} names a person instead, whose leaf does not exist
+ *     until commit
+ * @param fundingPersonName the <em>funding</em> person's name when the split's Account field named
+ *     a person rather than an account (register §3.3/§3.10, issue 07); {@code null} otherwise
+ * @param fundingPersonDirection {@code FOR}/{@code BY} alongside {@code fundingPersonName}
+ * @param fundingPersonRevive the Restore/Create-new decision for {@code fundingPersonName}
  * @param payeeId a picked existing payee, or null
  * @param payeeText create-new payee text when no existing payee was picked; null/blank otherwise
  * @param note transaction-level note (register §3.7); nullable — the per-line notes live on the
@@ -48,7 +60,10 @@ import java.util.List;
 public record SplitEntry(
     Long transactionId,
     LocalDate date,
-    long accountId,
+    Long accountId,
+    String fundingPersonName,
+    String fundingPersonDirection,
+    String fundingPersonRevive,
     Long payeeId,
     String payeeText,
     String note,

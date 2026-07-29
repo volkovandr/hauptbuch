@@ -109,10 +109,10 @@ class RegisterSplitScreenIntegrationTest {
   }
 
   @Test
-  void openRefusesaPersonFundedDockEntryInsteadOfDroppingThePerson() throws Exception {
-    // A person funding a whole split is not supported yet (issue 07): pressing Split on a `by Max`
-    // entry must refuse cleanly — re-render the dock with a message — not open the panel with a
-    // substituted real account, which silently misbooks.
+  void openSeedsThePanelFromaPersonFundedDockEntryInsteadOfRefusing() throws Exception {
+    // Issue 07: a person funding the whole split used to be refused (the interim block). Pressing
+    // Split on a `by Max` entry now opens the panel with the funding person carried through, not a
+    // substituted real account.
     long food = insertCategory("Food", "expense");
 
     mockMvc
@@ -125,10 +125,17 @@ class RegisterSplitScreenIntegrationTest {
                 .param("categoryId", String.valueOf(food))
                 .param("categoryText", "Food"))
         .andExpect(status().isOk())
-        // The dock comes back (not the split panel) carrying the refusal. (The apostrophe in
-        // "isn't" is HTML-escaped in the rendered text, so match on the unambiguous tail.)
-        .andExpect(content().string(not(containsString("data-split-panel"))))
-        .andExpect(content().string(containsString("supported yet")));
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(not(containsString("supported yet"))))
+        // The Account field shows the sigil, not a substituted real account.
+        .andExpect(content().string(containsString("value=\"by Max\"")))
+        .andExpect(content().string(containsString("name=\"fundingPersonName\"")))
+        .andExpect(content().string(containsString("value=\"Max\"")))
+        // The resolved span shares the dock's id (not a split-specific one): the shared
+        // /register/account/resolve fragment's Restore/Create-new revival buttons hx-target
+        // #entry-account-resolved verbatim, and the two forms are never both in the DOM at once
+        // (both render as #entry-dock), so this is what lets a revival choice work here too.
+        .andExpect(content().string(containsString("id=\"entry-account-resolved\"")));
   }
 
   @Test
@@ -901,6 +908,96 @@ class RegisterSplitScreenIntegrationTest {
     assertThat(legCount(txnId)).isEqualTo(3L);
     assertThat(legSum(txnId)).isEqualByComparingTo("0");
     assertThat(personLegAmount(txnId, "Max")).isEqualByComparingTo("10");
+    // Re-saving reused the existing leaf rather than provisioning a second one.
+    assertThat(personLeafCount("Max")).isEqualTo(1L);
+  }
+
+  // ── a person funds the whole split (register §3.3/§3.10, issue 07) ─────────────
+
+  @Test
+  void personFundedSplitCommitsToaSingleCurrencyTransactionWithTheirLeafOnTheCreditSide()
+      throws Exception {
+    // The issue's worked example: Max buys three lines in a CHF shop, all on his tab. One receipt —
+    // Meat 25 CHF, Milk 9,50 CHF, To Cash 10 CHF — funded by Max. Wanted: Max −44,50 (credit),
+    // Meat +25, Milk +9,50, Cash +10, sum 0, single-currency CHF.
+    long cashChf = openAccount("Cash", "CHF", "0");
+    long meat = insertCategory("Meat", "expense");
+    long milk = insertCategory("Milk", "expense");
+
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("fundingPersonName", "Max")
+                .param("fundingPersonDirection", "BY")
+                .param("spendingCurrencyCode", "CHF")
+                .param(
+                    "lineCategoryId",
+                    String.valueOf(meat),
+                    String.valueOf(milk),
+                    String.valueOf(cashChf))
+                .param("lineCategoryType", "expense", "expense", "")
+                .param("lineTransferDirection", "", "", "TO")
+                .param("lineAmount", "25", "9,50", "10")
+                .param("viewAccountId", String.valueOf(cashChf)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"register-rows\"")));
+
+    long txnId = latestTransactionId();
+    assertThat(spendTransactionCount()).isEqualTo(1L);
+    assertThat(legCount(txnId)).isEqualTo(4L);
+    assertThat(legSum(txnId)).isEqualByComparingTo("0");
+    assertThat(baseAmountSum(txnId)).isEqualByComparingTo("0"); // no leg carries a base amount
+    assertThat(personLegAmount(txnId, "Max")).isEqualByComparingTo("-44.50");
+    assertThat(fundingNative(txnId, cashChf)).isEqualByComparingTo("10");
+  }
+
+  @Test
+  void personFundedSplitReloadsAsTheSigilAndReSaves() throws Exception {
+    // The reload must show `by Max`, never the cosmetic personal.CHF leaf name — and re-saving it
+    // untouched must reproduce the same legs (the same round-trip the per-line person sigil gets).
+    // Two category lines keep this the split shape (>= 3 legs) rather than the simple dock's.
+    long food = insertCategory("Food", "expense");
+    long drinks = insertCategory("Drinks", "expense");
+
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("fundingPersonName", "Max")
+                .param("fundingPersonDirection", "BY")
+                .param("spendingCurrencyCode", "CHF")
+                .param("lineCategoryId", String.valueOf(food), String.valueOf(drinks))
+                .param("lineCategoryType", "expense", "expense")
+                .param("lineAmount", "20", "10"))
+        .andExpect(status().isOk());
+    long txnId = latestTransactionId();
+
+    mockMvc
+        .perform(get("/register/edit/" + txnId))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(containsString("value=\"by Max\"")))
+        .andExpect(content().string(containsString("name=\"fundingPersonDirection\"")))
+        .andExpect(content().string(not(containsString("personal.CHF"))));
+
+    // Re-save the reloaded shape: same transaction, still balanced, still single-currency CHF.
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("transactionId", String.valueOf(txnId))
+                .param("date", SPEND_DAY)
+                .param("fundingPersonName", "Max")
+                .param("fundingPersonDirection", "BY")
+                .param("spendingCurrencyCode", "CHF")
+                .param("lineCategoryId", String.valueOf(food), String.valueOf(drinks))
+                .param("lineCategoryType", "expense", "expense")
+                .param("lineAmount", "20", "10"))
+        .andExpect(status().isOk());
+
+    assertThat(latestTransactionId()).isEqualTo(txnId);
+    assertThat(legCount(txnId)).isEqualTo(3L);
+    assertThat(legSum(txnId)).isEqualByComparingTo("0");
     // Re-saving reused the existing leaf rather than provisioning a second one.
     assertThat(personLeafCount("Max")).isEqualTo(1L);
   }

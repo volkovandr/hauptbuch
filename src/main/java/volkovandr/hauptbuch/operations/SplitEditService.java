@@ -86,6 +86,8 @@ public class SplitEditService {
                         "No live transaction with id " + transactionId + " to edit"));
 
     SplitLegs split = classifySplit(ledgerService.findPostings(transactionId));
+    Optional<String> fundingPerson =
+        personService.personNameForAccount(split.funding().account().accountId());
 
     List<String> categoryText = new ArrayList<>();
     List<String> categoryId = new ArrayList<>();
@@ -115,8 +117,7 @@ public class SplitEditService {
     List<Long> headerTagIds = ledgerService.tagIdsForPosting(split.funding().posting().postingId());
 
     boolean crossCurrency = split.funding().posting().baseAmount() != null;
-    String spendingCurrency =
-        crossCurrency ? split.counterLegs().get(0).account().currencyCode() : null;
+    String spendingCurrency = spendingCurrency(crossCurrency, split, fundingPerson);
     String fundingTotal =
         crossCurrency
             ? MoneyFormat.number(split.funding().posting().amount().abs(), FRACTION_DIGITS)
@@ -136,10 +137,19 @@ public class SplitEditService {
 
     String payeeText =
         txn.payeeId() == null ? null : payeeService.entryValueFor(txn.payeeId()).orElse(null);
+    // A person funding leg reloads as the for/by sigil (register §3.3/§3.10, issue 07), never the
+    // cosmetic personal.<CUR> leaf name — mirroring how a per-line person attribution already
+    // reloads above, and DockEditService's accountEntryText for the simple dock's funding leg.
+    FundingLeg fundingLeg = fundingLeg(split, fundingPerson);
     return new SplitForm(
         txn.transactionId(),
         txn.date(),
-        split.funding().account().accountId(),
+        fundingLeg.accountId(),
+        fundingLeg.personName(),
+        fundingLeg.personDirection(),
+        // A reloaded funding person names an existing person, so no revival decision is in
+        // question.
+        "",
         payeeText,
         txn.note(),
         total,
@@ -163,6 +173,43 @@ public class SplitEditService {
         null,
         null);
   }
+
+  /**
+   * The split's spending currency for the header field (register §3.5/§3.8a/§3.10, issue 07): the
+   * counter legs' own currency when cross-currency, otherwise the funding person's leaf currency —
+   * explicit rather than re-derived from {@link TransactionCurrencyResolver}'s heuristic, since a
+   * person with debts in more than one currency would otherwise reload against the wrong one. A
+   * person-funded split is single-currency by construction ({@link DockSplitService} never lets one
+   * become cross-currency), so {@code crossCurrency} and a funding person are mutually exclusive.
+   * {@code null} for an ordinary single-currency, real-account split.
+   */
+  private static String spendingCurrency(
+      boolean crossCurrency, SplitLegs split, Optional<String> fundingPerson) {
+    if (crossCurrency) {
+      return split.counterLegs().get(0).account().currencyCode();
+    }
+    return fundingPerson.map(name -> split.funding().account().currencyCode()).orElse(null);
+  }
+
+  /**
+   * The funding leg's fields for the reloaded {@link SplitForm} (register §3.3/§3.10, issue 07): an
+   * ordinary account's id, or — when it is a person's debt leaf — no id and the {@code for}/{@code
+   * by} sigil instead, its direction following the leg's own sign (a debit is {@code for}, a credit
+   * {@code by} — the same rule {@link #reloadLine} applies to a counter-leg person).
+   */
+  private static FundingLeg fundingLeg(SplitLegs split, Optional<String> fundingPerson) {
+    if (fundingPerson.isEmpty()) {
+      return new FundingLeg(split.funding().account().accountId(), "", "");
+    }
+    String direction =
+        split.funding().posting().amount().signum() < 0
+            ? PersonTarget.Direction.BY.name()
+            : PersonTarget.Direction.FOR.name();
+    return new FundingLeg(null, fundingPerson.get(), direction);
+  }
+
+  /** The reloaded funding leg: either a real account id, or a person's name + direction sigil. */
+  private record FundingLeg(Long accountId, String personName, String personDirection) {}
 
   /**
    * Reconstruct one counter leg into the fields the panel prints for its line (register §3.10). A
