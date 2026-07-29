@@ -44,9 +44,23 @@
       <!-- Edit mode: the hidden id that turns the commit into an in-place re-thread (§3.1/§3.3). -->
       <input th:if="${panel.transactionId() != null}" type="hidden" name="transactionId" th:value="${panel.transactionId()}" />
 
-      <!-- The active filter, so the commit re-renders exactly the current view (§2.2). -->
-      <th:block th:each="a : ${register.accounts()}">
-        <input th:if="${a.selected()}" type="hidden" name="viewAccountId" th:value="${a.accountId()}" />
+      <!-- The active filter, so the commit re-renders exactly the current view (§2.2).
+
+           Only an EXPLICIT account filter is carried (mirrors the dock's own block). On the
+           default view every option reads as selected, so serialising those would freeze the
+           resolved default set into a real filter — and any account not in the picker (a
+           person's debt leaf, plan stage 8c) would silently drop out of the view on the next
+           commit. An empty selection means "the default set", and must stay empty for the server
+           to re-resolve it. -->
+      <th:block th:if="${!register.filter().accountIds().isEmpty()}">
+        <th:block th:each="a : ${register.accounts()}">
+          <input th:if="${a.selected()}" type="hidden" name="viewAccountId" th:value="${a.accountId()}" />
+        </th:block>
+        <!-- A selected person filter (plan stage 8c) is carried the same way — its leaf id is a
+             real account id, and omitting it would drop the person from the view on commit. -->
+        <th:block th:each="p : ${register.people()}">
+          <input th:if="${p.selected()}" type="hidden" name="viewAccountId" th:value="${p.accountId()}" />
+        </th:block>
       </th:block>
       <input type="hidden" name="viewFromDate" th:value="${register.filter().fromDate()}" />
       <input type="hidden" name="viewToDate" th:value="${register.filter().toDate()}" />

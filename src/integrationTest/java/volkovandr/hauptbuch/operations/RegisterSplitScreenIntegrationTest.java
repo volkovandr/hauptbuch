@@ -423,6 +423,50 @@ class RegisterSplitScreenIntegrationTest {
   }
 
   @Test
+  void editingaSplitPreservesaPersonAccountFilter() throws Exception {
+    // Regression: the split panel's active-filter hidden fields carried only real accounts
+    // (register.accounts()) — the dock's own block was updated to also carry a selected person
+    // (register.people(), plan stage 8c), but the split panel's was never mirrored, so viewing a
+    // person's register and opening/saving any split silently dropped that filter back to "all
+    // accounts".
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food", "expense");
+
+    // A `for Max` line provisions Max's leaf, so the register's people filter has someone to
+    // offer.
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("lineCategoryId", String.valueOf(food), "")
+                .param("lineCategoryType", "expense", "")
+                .param("linePersonName", "", "Max")
+                .param("linePersonDirection", "", "FOR")
+                .param("lineAmount", "20", "10"))
+        .andExpect(status().isOk());
+    long txnId = latestTransactionId();
+    long maxLeaf =
+        jdbcClient
+            .sql(
+                """
+                select ao.account_id from account_owner ao
+                join person p on p.person_id = ao.person_id
+                where p.name = :name
+                """)
+            .param("name", "Max")
+            .query(Long.class)
+            .single();
+
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(maxLeaf)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(
+            content().string(containsString("name=\"viewAccountId\" value=\"" + maxLeaf + "\"")));
+  }
+
+  @Test
   void splitPersistsHeaderTagsOnFundingLegAndLineTagsOnEachCategoryLegThenReloadsThem()
       throws Exception {
     // Header (transaction-level) tag Trip lands on the funding leg; the Food line adds Fuel to the
