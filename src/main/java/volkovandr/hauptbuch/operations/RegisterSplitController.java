@@ -137,8 +137,22 @@ class RegisterSplitController {
    * category (spending) and base amounts: the split seeds its one line in the spending currency and
    * moves the funding/base totals to the header. A same-currency line seeds its funding amount and
    * leaves the header currency fields blank.
+   *
+   * <p>A person-funded dock entry (register §3.3/§3.5, issue 07) has no real account to compare
+   * against, so it is never "cross" in the sense above — the dock's currency selector already
+   * <em>is</em> the transaction currency (mirroring {@link DockCommitService#transactionCurrency}),
+   * and carries straight into the split's header currency field. Dropping it (treating a blank
+   * {@code fundingCurrency} the same as "no override") would silently lose the picked currency and
+   * let the split fall back to the book's base currency instead.
    */
   private SplitSeed seedFromDock(DockEntryForm form) {
+    if (form.hasFundingPerson()) {
+      return new SplitSeed(
+          SplitFormBinder.blankToNull(form.categoryCurrencyCode()),
+          SplitFormBinder.orEmpty(form.amount()),
+          "",
+          "");
+    }
     String fundingCurrency =
         form.accountId() == null
             ? ""
