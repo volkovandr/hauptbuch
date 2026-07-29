@@ -139,6 +139,30 @@ class RegisterSplitScreenIntegrationTest {
   }
 
   @Test
+  void openPreservesThePickedCurrencyForaPersonFundedDockEntry() throws Exception {
+    // Regression: the dock's currency selector IS the transaction currency for a person-funded
+    // entry (register §3.5) — seedFromDock used to compare it against a blank fundingCurrency (no
+    // real account) and always concluded "not cross-currency", discarding the pick and silently
+    // falling back to the book's base currency unless the user re-picked it by hand.
+    long food = insertCategory("Food", "expense");
+
+    mockMvc
+        .perform(
+            post(OPEN_PATH)
+                .param("date", SPEND_DAY)
+                .param("fundingPersonName", "Max")
+                .param("fundingPersonDirection", "BY")
+                .param("categoryCurrencyCode", "USD")
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(food))
+                .param("categoryText", "Food"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(containsString("data-split-cross=\"false\"")))
+        .andExpect(content().string(containsString("data-split-funding-currency=\"USD\"")));
+  }
+
+  @Test
   void commaAmountOnOneLineDoesNotSpawnExtraLines() throws Exception {
     // Regression (fixed UI issue): Spring's list binding split a single "20,50" into ["20","50"],
     // conjuring phantom lines. Reading the raw params keeps the one line intact; add-line then
