@@ -58,31 +58,73 @@
           <input id="split-date" name="date" type="date" class="input" th:value="${panel.date()}" required />
         </div>
 
-        <!-- Account (funding). Changing it may change the funding currency, so it re-renders the
-             whole panel via /register/split/currency (reveals/hides the funding & base totals). -->
+        <!-- Account (funding) — a typed datalist, not a <select> (register §3.3/§3.10, plan stage
+             8b.1, issue 07): a real own account, or a `for <person>`/`by <person>` sigil making
+             that person the funding leg (their leaf provisioned at commit). Resolves through the
+             same /register/account/resolve the dock's Account field uses, so a person — including
+             a brand-new one — is entered here exactly as it is there. -->
         <div class="field">
-          <label class="field__label" for="split-account">Account</label>
-          <select
-            id="split-account"
-            name="accountId"
-            class="input"
-            required
-            hx-post="/register/split/currency"
-            hx-trigger="change"
-            hx-include="closest form"
-            hx-target="#entry-dock"
-            hx-swap="outerHTML"
+          <label
+            class="field__label"
+            for="split-account"
+            title="An account, or a person: type `for Max` (Max owes you) / `by Max` (you owe Max). A person who does not exist yet is created."
+            >Account</label
           >
-            <option
-              th:each="a : ${register.accounts()}"
-              th:value="${a.accountId()}"
-              th:selected="${panel.accountId() != null and panel.accountId() == a.accountId()}"
-              th:text="${a.name() + ' (' + a.currencyCode() + ')'}"
-            >
-              Cash (EUR)
-            </option>
-          </select>
+          <input
+            id="split-account"
+            name="accountText"
+            class="input"
+            list="split-account-options"
+            autocomplete="off"
+            required
+            th:value="${panel.accountEntryText() != null} ? ${panel.accountEntryText()} : ${register.defaultAccountEntryText()}"
+            hx-post="/register/account/resolve"
+            hx-trigger="change"
+            hx-target="#entry-account-resolved"
+            hx-swap="innerHTML"
+          />
+          <datalist id="split-account-options">
+            <option th:each="a : ${register.accounts()}" th:value="${a.entryValue()}"></option>
+            <option th:each="p : ${register.personTargets()}" th:value="${p}"></option>
+          </datalist>
         </div>
+        <!-- The resolved funding leg, swapped in by /register/account/resolve: either the hidden
+             accountId, or the funding person's name/direction (their leaf is provisioned at
+             commit). Pre-filled here on every server round-trip so add/remove-line and error
+             redisplay all keep the current funding leg (the panel form is the single source of
+             truth, per the class note above).
+
+             Shares the dock's #entry-account-resolved id, not a split-specific one: the two forms
+             both render as #entry-dock and are swapped for one another (never both in the DOM at
+             once), and the shared accountResolved fragment's Restore/Create-new revival buttons
+             (entry-dock.html) hx-target that id verbatim — a split-specific id would leave those
+             buttons targeting nothing here. -->
+        <span id="entry-account-resolved">
+          <input type="hidden" name="accountId" th:value="${panel.accountId()}" />
+          <input type="hidden" name="fundingPersonName" th:value="${panel.fundingPersonName()}" />
+          <input
+            type="hidden"
+            name="fundingPersonDirection"
+            th:value="${panel.fundingPersonDirection()}"
+          />
+          <input
+            type="hidden"
+            name="fundingPersonRevive"
+            th:value="${panel.fundingPersonRevive()}"
+          />
+        </span>
+        <!-- Funding-leg reveal: resolving the Account field changes the funding leg/currency, so
+             the whole panel must re-render via /register/split/currency exactly as changing the
+             Currency selector below does (mirrors the dock's account-resolved chain into
+             /register/currency-fields). -->
+        <span
+          hidden
+          hx-post="/register/split/currency"
+          hx-trigger="account-resolved from:body"
+          hx-include="closest form"
+          hx-target="#entry-dock"
+          hx-swap="outerHTML"
+        ></span>
 
         <!-- Spending currency (register §3.5/§3.8a): the one currency the receipt is billed in and
              the lines are entered in. Defaults to the funding account's currency (single-currency

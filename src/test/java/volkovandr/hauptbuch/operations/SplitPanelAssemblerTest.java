@@ -17,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.ledger.TransactionTag;
@@ -39,12 +40,18 @@ class SplitPanelAssemblerTest {
   @Mock private SettingsService settingsService;
   @Mock private LedgerService ledgerService;
 
+  @Mock private PersonService personService;
+
   private SplitPanelAssembler assembler;
 
   @BeforeEach
   void setUp() {
     assembler =
-        new SplitPanelAssembler(accountService, settingsService, new SplitTagPills(ledgerService));
+        new SplitPanelAssembler(
+            accountService,
+            settingsService,
+            new SplitTagPills(ledgerService),
+            new TransactionCurrencyResolver(personService, settingsService));
     lenient().when(accountService.findById(CASH_ID)).thenReturn(Optional.of(account(CASH_ID, EUR)));
     lenient().when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
     lenient().when(ledgerService.labelsForTagIds(any())).thenReturn(Map.of());
@@ -72,6 +79,9 @@ class SplitPanelAssemblerTest {
         null,
         LocalDate.of(2026, 2, 1),
         CASH_ID,
+        null,
+        null,
+        null,
         null,
         null,
         total,
@@ -103,6 +113,9 @@ class SplitPanelAssemblerTest {
         null,
         LocalDate.of(2026, 2, 1),
         CASH_ID,
+        null,
+        null,
+        null,
         null,
         null,
         "0,00",
@@ -209,6 +222,81 @@ class SplitPanelAssemblerTest {
 
     assertThat(panel.netDisplay()).isEqualTo("20,00");
     assertThat(panel.balanced()).isTrue();
+  }
+
+  // ── funding person (register §3.3/§3.10, issue 07) ─────────────────────────────
+
+  @Test
+  void ordinaryAccountShowsItsNameCurrencyLabelAsTheAccountEntryText() {
+    SplitPanel panel = assembler.panel(form("17,00", List.of("expense"), List.of("20")), null);
+
+    assertThat(panel.accountEntryText()).isEqualTo("n (EUR)");
+  }
+
+  @Test
+  void personFundedSplitShowsTheSigilAndTreatsTheCurrencySelectorAsTheTransactionCurrency() {
+    // With no real account, the Currency selector IS the transaction currency (register §3.5): the
+    // split stays single-currency in the person's own debt currency, never revealing the
+    // cross-currency chrome.
+    when(personService.soleDebtCurrency("Max")).thenReturn(Optional.of(CHF));
+
+    SplitForm form = personFundedForm("Max", "BY", null, List.of("expense"), List.of("20"));
+    SplitPanel panel = assembler.panel(form, null);
+
+    assertThat(panel.accountId()).isNull();
+    assertThat(panel.accountEntryText()).isEqualTo("by Max");
+    assertThat(panel.currency().crossCurrency()).isFalse();
+    assertThat(panel.currency().fundingCurrencyCode()).isEqualTo(CHF);
+  }
+
+  @Test
+  void personFundedSplitHonoursAnExplicitCurrencyOverride() {
+    // Overriding the Currency selector still can't make a person-funded split cross-currency: the
+    // override sets the transaction currency, so funding and spending always agree.
+    SplitForm form = personFundedForm("Max", "FOR", USD, List.of("expense"), List.of("20"));
+    SplitPanel panel = assembler.panel(form, null);
+
+    assertThat(panel.currency().crossCurrency()).isFalse();
+    assertThat(panel.currency().fundingCurrencyCode()).isEqualTo(USD);
+    assertThat(panel.currency().spendingCurrencyCode()).isEqualTo(USD);
+  }
+
+  /** A single-line split funded by a person rather than a real account (issue 07). */
+  private static SplitForm personFundedForm(
+      String personName,
+      String personDirection,
+      String spendingCurrency,
+      List<String> types,
+      List<String> amounts) {
+    List<String> blanks = amounts.stream().map(a -> "").toList();
+    return new SplitForm(
+        null,
+        LocalDate.of(2026, 2, 1),
+        null,
+        personName,
+        personDirection,
+        null,
+        null,
+        null,
+        "20,00",
+        spendingCurrency,
+        null,
+        null,
+        blanks,
+        blanks,
+        types,
+        blanks,
+        blanks,
+        blanks,
+        blanks,
+        amounts,
+        blanks,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   @Test

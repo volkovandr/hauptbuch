@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountEntryLabel;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.shared.MoneyFormat;
@@ -42,12 +43,17 @@ class SplitPanelAssembler {
   private final AccountService accountService;
   private final SettingsService settingsService;
   private final SplitTagPills tagPills;
+  private final TransactionCurrencyResolver transactionCurrencyResolver;
 
   SplitPanelAssembler(
-      AccountService accountService, SettingsService settingsService, SplitTagPills tagPills) {
+      AccountService accountService,
+      SettingsService settingsService,
+      SplitTagPills tagPills,
+      TransactionCurrencyResolver transactionCurrencyResolver) {
     this.accountService = accountService;
     this.settingsService = settingsService;
     this.tagPills = tagPills;
+    this.transactionCurrencyResolver = transactionCurrencyResolver;
   }
 
   /** Build the panel view model for the current form state, optionally carrying a message. */
@@ -88,6 +94,10 @@ class SplitPanelAssembler {
         form.transactionId(),
         form.date(),
         form.accountId(),
+        form.fundingPersonName(),
+        form.fundingPersonDirection(),
+        form.fundingPersonRevive(),
+        accountEntryText(form),
         form.payeeText(),
         form.note(),
         MoneyFormat.number(total, FRACTION_DIGITS),
@@ -129,10 +139,7 @@ class SplitPanelAssembler {
    * base-per-spending) derived from the header totals (register §3.8a).
    */
   private CurrencyContext resolveCurrencyContext(SplitForm form) {
-    String funding =
-        form.accountId() == null
-            ? ""
-            : accountService.findById(form.accountId()).map(Account::currencyCode).orElse("");
+    String funding = fundingCurrency(form);
     String spending = blankToNull(form.spendingCurrencyCode());
     boolean cross = spending != null && !funding.isBlank() && !spending.equals(funding);
     if (!cross) {
@@ -163,6 +170,42 @@ class SplitPanelAssembler {
         baseTotal,
         rateSpendingToFunding,
         rateSpendingToBase);
+  }
+
+  /**
+   * The funding leg's currency (register §3.5/§3.10, issue 07): the account's own, or — when the
+   * Account field named a person — the transaction currency, since a debt leaf has no currency of
+   * its own until it is provisioned in one at commit. Mirrors {@link
+   * DockAmountFieldsService#forForm}'s {@code fundingCurrency}, so the layout shown here always
+   * agrees with what {@link DockSplitService} will actually book.
+   */
+  private String fundingCurrency(SplitForm form) {
+    if (form.hasFundingPerson()) {
+      String currency =
+          transactionCurrencyResolver.forFundingPerson(
+              form.fundingPersonName(), form.spendingCurrencyCode());
+      return currency == null ? "" : currency;
+    }
+    if (form.accountId() == null) {
+      return "";
+    }
+    return accountService.findById(form.accountId()).map(Account::currencyCode).orElse("");
+  }
+
+  /**
+   * The value the panel's Account input shows (register §3.3/§3.10, issue 07): the {@code for}/
+   * {@code by} sigil when the Account field resolved to a person, otherwise the ordinary account's
+   * {@code Name (CUR)} label — mirrors {@code DockEditService#accountEntryText}.
+   */
+  private String accountEntryText(SplitForm form) {
+    String sigil = form.fundingPersonSigil();
+    if (sigil != null) {
+      return sigil;
+    }
+    if (form.accountId() == null) {
+      return null;
+    }
+    return accountService.findById(form.accountId()).map(AccountEntryLabel::format).orElse(null);
   }
 
   private static BigDecimal ratio(BigDecimal numerator, BigDecimal denominator) {

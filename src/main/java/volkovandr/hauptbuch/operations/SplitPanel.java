@@ -20,7 +20,15 @@ import volkovandr.hauptbuch.ledger.TransactionTag;
  *
  * @param transactionId the transaction being edited, or {@code null} for a new split
  * @param date booking date
- * @param accountId the funding account
+ * @param accountId the funding account; {@code null} when {@code fundingPersonName} names the
+ *     funding person instead (register §3.3/§3.10, issue 07)
+ * @param fundingPersonName the funding person's name when the Account field named a person rather
+ *     than an account; {@code null}/blank otherwise
+ * @param fundingPersonDirection {@code FOR}/{@code BY} alongside {@code fundingPersonName}
+ * @param fundingPersonRevive the Restore/Create-new decision for {@code fundingPersonName}
+ * @param accountEntryText the value the panel's Account input shows: {@code Name (CUR)} for an
+ *     ordinary account, or the {@code for}/{@code by} sigil when the funding leg is a person —
+ *     mirrors the dock's {@code accountEntryText} (register §3.3, plan stage 8b.1)
  * @param payeeText the payee text to prefill; nullable
  * @param note transaction-level note to prefill; nullable
  * @param total the reference total (German-formatted) the remaining counts against — in the
@@ -44,6 +52,10 @@ public record SplitPanel(
     Long transactionId,
     LocalDate date,
     Long accountId,
+    String fundingPersonName,
+    String fundingPersonDirection,
+    String fundingPersonRevive,
+    String accountEntryText,
     String payeeText,
     String note,
     String total,

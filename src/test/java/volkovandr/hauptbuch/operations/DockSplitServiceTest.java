@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.debts.PersonProvisioningService;
+import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.PostingDraft;
@@ -60,6 +61,7 @@ class DockSplitServiceTest {
   @Mock private LedgerService ledgerService;
   @Mock private SettingsService settingsService;
   @Mock private PersonProvisioningService personProvisioningService;
+  @Mock private PersonService personService;
 
   private DockSplitService dockSplitService;
 
@@ -72,7 +74,8 @@ class DockSplitServiceTest {
             currencyLeafService,
             ledgerService,
             settingsService,
-            personProvisioningService);
+            personProvisioningService,
+            new TransactionCurrencyResolver(personService, settingsService));
   }
 
   private static Account account(long id, String type, String currency) {
@@ -115,7 +118,8 @@ class DockSplitServiceTest {
   private static SplitEntry entry(
       Long txnId, LocalDate date, long accountId, String note, List<SplitLineDraft> lines) {
     return new SplitEntry(
-        txnId, date, accountId, null, null, note, null, null, null, List.of(), lines);
+        txnId, date, accountId, null, null, null, null, null, note, null, null, null, List.of(),
+        lines);
   }
 
   /** A same-currency split entry carrying transaction-level (funding-leg) tags. */
@@ -131,7 +135,35 @@ class DockSplitServiceTest {
         null,
         null,
         null,
+        null,
+        null,
+        null,
         tagIds,
+        lines);
+  }
+
+  /**
+   * A split entry funded by a person rather than a real account (register §3.3/§3.10, issue 07).
+   */
+  private static SplitEntry personFundedEntry(
+      String personName,
+      String personDirection,
+      String spendingCurrencyCode,
+      List<SplitLineDraft> lines) {
+    return new SplitEntry(
+        null,
+        LocalDate.of(2026, 2, 1),
+        null,
+        personName,
+        personDirection,
+        null,
+        null,
+        null,
+        null,
+        spendingCurrencyCode,
+        null,
+        null,
+        List.of(),
         lines);
   }
 
@@ -475,6 +507,89 @@ class DockSplitServiceTest {
     verify(personProvisioningService).ensureLeaf("Max", EUR, true);
   }
 
+  // ── a person funds the whole split (register §3.3/§3.10, issue 07) ─────────────
+
+  @Test
+  void personFundedSplitBooksTheirLeafOnTheCreditSideForAllTheLines() {
+    // The issue's worked example: Max buys three lines in a CHF shop, all on his tab. One receipt:
+    // Meat 25, Milk 9,50, To Cash 10, funded by Max. Wanted: Max −44,50 (credit), Meat +25,
+    // Milk +9,50, Cash +10, sum 0, single-currency CHF.
+    long milkId = 12L;
+    long milkLeafId = 13L;
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, CHF))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, CHF));
+    when(currencyLeafService.resolveCurrencyLeaf(milkId, CHF))
+        .thenReturn(account(milkLeafId, EXPENSE, CHF));
+    when(accountService.findById(CASH_ID))
+        .thenReturn(java.util.Optional.of(account(CASH_ID, "asset", CHF)));
+    when(personProvisioningService.ensureLeaf("Max", CHF, false))
+        .thenReturn(account(MAX_LEAF_ID, "asset", CHF));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(20L);
+
+    dockSplitService.commit(
+        personFundedEntry(
+            "Max",
+            "BY",
+            CHF,
+            List.of(line(FOOD_ID, "25"), line(milkId, "9,50"), transferLine(CASH_ID, "10", "TO"))));
+
+    verify(personProvisioningService).ensureLeaf("Max", CHF, false);
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(legs).hasSize(4);
+    assertThat(leg(legs, MAX_LEAF_ID)).isEqualByComparingTo("-44.50");
+    assertThat(leg(legs, FOOD_LEAF_ID)).isEqualByComparingTo("25");
+    assertThat(leg(legs, milkLeafId)).isEqualByComparingTo("9.50");
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("10");
+    assertThat(sum(legs)).isEqualByComparingTo("0");
+    // No leg carries a base amount: a person-funded split is single-currency by construction.
+    assertThat(legs).allSatisfy(l -> assertThat(l.baseAmount()).isNull());
+  }
+
+  @Test
+  void personFundedSplitProvisionsTheLeafInTheCurrencySelectorsCurrency() {
+    // With no real account, the split's Currency selector supplies the (only) currency — the same
+    // rule the dock's funding-person branch follows (register §3.5).
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, USD))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, USD));
+    when(personProvisioningService.ensureLeaf("Anna", USD, false))
+        .thenReturn(account(ANNA_LEAF_ID, "asset", USD));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(21L);
+
+    dockSplitService.commit(personFundedEntry("Anna", "FOR", USD, List.of(line(FOOD_ID, "20"))));
+
+    verify(personProvisioningService).ensureLeaf("Anna", USD, false);
+  }
+
+  @Test
+  void personFundedSplitFallsBackToTheBaseCurrencyWithNoOverrideOrExistingDebt() {
+    when(personService.soleDebtCurrency("Max")).thenReturn(java.util.Optional.empty());
+    when(settingsService.baseCurrency()).thenReturn(java.util.Optional.of(EUR));
+    foodLeaf();
+    when(personProvisioningService.ensureLeaf("Max", EUR, false))
+        .thenReturn(account(MAX_LEAF_ID, "asset", EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(22L);
+
+    dockSplitService.commit(personFundedEntry("Max", "BY", null, List.of(line(FOOD_ID, "20"))));
+
+    verify(personProvisioningService).ensureLeaf("Max", EUR, false);
+  }
+
+  @Test
+  void personFundedSplitWithNoBaseCurrencySetIsRejected() {
+    when(personService.soleDebtCurrency("Max")).thenReturn(java.util.Optional.empty());
+    when(settingsService.baseCurrency()).thenReturn(java.util.Optional.empty());
+    SplitEntry entry = personFundedEntry("Max", "BY", null, List.of(line(FOOD_ID, "20")));
+
+    assertThatExceptionOfType(IllegalStateException.class)
+        .isThrownBy(() -> dockSplitService.commit(entry))
+        .withMessageContaining("Base currency is not set");
+  }
+
   // ── split transfers (register §3.8, plan stage 7d.3) ───────────────────────────
 
   @Test
@@ -610,6 +725,9 @@ class DockSplitServiceTest {
         null,
         LocalDate.of(2026, 2, 1),
         CARD_ID,
+        null,
+        null,
+        null,
         null,
         null,
         null,

@@ -62,6 +62,7 @@ public class DockSplitService {
   private final LedgerService ledgerService;
   private final SettingsService settingsService;
   private final PersonProvisioningService personProvisioningService;
+  private final TransactionCurrencyResolver transactionCurrencyResolver;
 
   DockSplitService(
       AccountService accountService,
@@ -69,13 +70,15 @@ public class DockSplitService {
       CurrencyLeafService currencyLeafService,
       LedgerService ledgerService,
       SettingsService settingsService,
-      PersonProvisioningService personProvisioningService) {
+      PersonProvisioningService personProvisioningService,
+      TransactionCurrencyResolver transactionCurrencyResolver) {
     this.accountService = accountService;
     this.payeeService = payeeService;
     this.currencyLeafService = currencyLeafService;
     this.ledgerService = ledgerService;
     this.settingsService = settingsService;
     this.personProvisioningService = personProvisioningService;
+    this.transactionCurrencyResolver = transactionCurrencyResolver;
   }
 
   /**
@@ -93,11 +96,7 @@ public class DockSplitService {
     if (entry.lines().isEmpty()) {
       throw new IllegalArgumentException("A split needs at least one line");
     }
-    Account fundingAccount =
-        accountService
-            .findById(entry.accountId())
-            .orElseThrow(
-                () -> new IllegalArgumentException("No account with id " + entry.accountId()));
+    Account fundingAccount = resolveFundingAccount(entry);
 
     String spending = blankToNull(entry.spendingCurrencyCode());
     boolean crossCurrency = spending != null && !spending.equals(fundingAccount.currencyCode());
@@ -114,6 +113,54 @@ public class DockSplitService {
     }
     ledgerService.editTransaction(entry.transactionId(), draft);
     return entry.transactionId();
+  }
+
+  /**
+   * Resolve the entry's <em>funding</em> leg (register §3.3/§3.10, issue 07): normally the picked
+   * own account, but the split's Account field equally accepts a {@code for}/{@code by} sigil —
+   * "Max paid for a whole receipt of mine" — in which case the funding leg is that person's
+   * per-currency debt leaf, auto-provisioned here at commit exactly as {@link
+   * DockCommitService#resolveFundingAccount} does for the simple dock.
+   *
+   * <p>Provisioning it needs a currency, and with no real account in the transaction there is none
+   * to inherit: the <em>transaction currency</em> supplies it (see {@link #transactionCurrency}).
+   * Because the leaf is then created in that currency, the same-vs-cross-currency branch in {@link
+   * #commit} reads it off the funding account as it always did, and needs no special case.
+   */
+  private Account resolveFundingAccount(SplitEntry entry) {
+    if (blankToNull(entry.fundingPersonName()) == null
+        || blankToNull(entry.fundingPersonDirection()) == null) {
+      if (entry.accountId() == null) {
+        throw new IllegalArgumentException("An account or person is required");
+      }
+      return accountService
+          .findById(entry.accountId())
+          .orElseThrow(
+              () -> new IllegalArgumentException("No account with id " + entry.accountId()));
+    }
+    boolean revive = "true".equalsIgnoreCase(blankToNull(entry.fundingPersonRevive()));
+    return personProvisioningService.ensureLeaf(
+        entry.fundingPersonName(), transactionCurrency(entry), revive);
+  }
+
+  /**
+   * The currency to provision the funding person's leaf in (register §3.5/§3.10, issue 07) — needed
+   * only when the funding leg is itself a person, since otherwise the funding account fixes it. The
+   * split's Currency selector ({@code spendingCurrencyCode}) is the only currency source there is
+   * in that case: with no real account, it sets every leg, so the split is single-currency by
+   * construction — the {@code spending}/{@code fundingAccount.currencyCode()} comparison in {@link
+   * #commit} can never disagree, since both trace back to this same value.
+   */
+  private String transactionCurrency(SplitEntry entry) {
+    String currency =
+        transactionCurrencyResolver.forFundingPerson(
+            entry.fundingPersonName(), entry.spendingCurrencyCode());
+    if (currency == null) {
+      throw new IllegalStateException(
+          "Base currency is not set; a person-funded transaction needs it to pick a currency "
+              + "(data-model §3.8)");
+    }
+    return currency;
   }
 
   /**
