@@ -27,18 +27,14 @@
     <main class="capture__main">
       <p class="capture__error" th:if="${error}" th:text="${error}">Something went wrong.</p>
 
-      <!-- Two affordances, each its own form (uploading on selection via the keyboard.js leaf, with
-           the Upload button as the no-JS fallback):
+      <!-- Two affordances, each its own form, uploading the moment a file is chosen (auto-submit via
+           the keyboard.js leaf). The native file control and filename are hidden (CSS) — the label
+           is the whole button:
              • Take a photo — capture="environment" opens the rear camera directly (camera-first).
              • Choose from gallery — no capture attribute, so the browser offers the gallery/files,
                since capture="environment" suppresses that chooser on some phones. -->
       <div class="capture__shoot">
-        <form
-          class="capture__form"
-          method="post"
-          th:action="@{/receipts}"
-          enctype="multipart/form-data"
-        >
+        <form method="post" th:action="@{/receipts}" enctype="multipart/form-data">
           <label class="capture__pick">
             <input
               type="file"
@@ -50,14 +46,8 @@
             />
             <span>Take a photo</span>
           </label>
-          <button type="submit" class="btn capture__upload">Upload</button>
         </form>
-        <form
-          class="capture__form"
-          method="post"
-          th:action="@{/receipts}"
-          enctype="multipart/form-data"
-        >
+        <form method="post" th:action="@{/receipts}" enctype="multipart/form-data">
           <label class="capture__pick capture__pick--gallery">
             <input
               type="file"
@@ -68,7 +58,6 @@
             />
             <span>Choose from gallery</span>
           </label>
-          <button type="submit" class="btn btn--ghost capture__upload">Upload</button>
         </form>
       </div>
 

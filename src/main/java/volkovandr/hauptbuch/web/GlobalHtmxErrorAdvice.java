@@ -3,11 +3,13 @@ package volkovandr.hauptbuch.web;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Global htmx error boundary (issue 10) — the safety net beneath every screen's own inline
@@ -42,6 +44,17 @@ class GlobalHtmxErrorAdvice {
   /** Shown to the user; carries no ledger or exception detail on purpose. */
   private static final String USER_MESSAGE =
       "Something went wrong and your change was not saved. Please try again.";
+
+  /**
+   * A missing static resource (e.g. a browser's automatic {@code /favicon.ico} probe) is a normal
+   * 404, not an application error — answer it quietly rather than routing it through the htmx toast
+   * boundary below, which would wrap and re-throw it and log a spurious warning. Scoped ahead of
+   * the broad {@code Exception} handler because it is the more specific match.
+   */
+  @ExceptionHandler(NoResourceFoundException.class)
+  void handleMissingResource(HttpServletResponse response) throws IOException {
+    response.sendError(HttpServletResponse.SC_NOT_FOUND);
+  }
 
   @ExceptionHandler(Exception.class)
   String handle(

@@ -65,6 +65,13 @@ class GlobalHtmxErrorAdviceIntegrationTest {
   }
 
   @Test
+  void missingStaticResourceAnswersQuietNotFound() throws Exception {
+    // A browser's automatic /favicon.ico probe (no such static resource) must answer as a plain 404
+    // — not get wrapped and re-thrown through the htmx boundary (which logged a spurious warning).
+    mockMvc.perform(get("/favicon.ico")).andExpect(status().isNotFound());
+  }
+
+  @Test
   void theShellCarriesTheErrorSlotOnEveryPage() throws Exception {
     mockMvc
         .perform(get("/"))

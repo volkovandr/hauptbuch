@@ -64,21 +64,13 @@ body.capture {
   margin-bottom: 1.2rem;
 }
 
-.capture__form {
-  display: flex;
-  gap: 0.6rem;
-  align-items: center;
-}
-
 /* A capture affordance: the camera one opens the rear camera (capture="environment"); the gallery
-   one omits capture so the browser's file/gallery chooser appears. */
+   one omits capture so the browser's file/gallery chooser appears. The whole label is the button —
+   its file input's native control and filename text are hidden, since a chosen file auto-uploads. */
 .capture__pick {
-  flex: 1 1 auto;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
   padding: 1.4rem;
   border: 2px dashed var(--rule);
   border-radius: 0.5rem;
@@ -91,8 +83,17 @@ body.capture {
   border-style: dotted;
 }
 
+/* Visually hide the native file input but keep it operable — clicking the wrapping label still
+   opens the picker. Not display:none, so it stays focusable/clickable and accessible. */
 .capture__pick input[type="file"] {
-  max-width: 100%;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
 }
 
 .capture__grid {
