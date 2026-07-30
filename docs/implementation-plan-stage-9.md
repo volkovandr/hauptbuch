@@ -167,6 +167,11 @@ thumbnails sit on disk under the timestamp scheme; thumbnails self-heal.
 - **Cropper.js leaf + pixel pass** (tech-stack §5, the second sanctioned JS leaf): crop · rotate ·
   tilt · grayscale · brightness · contrast, live canvas preview, all client-side; the baked
   **edited image** uploads to `edited_path`. Original never mutated; re-edit restarts from it.
+  **EXIF orientation must be baked into the edited image** (verify Cropper's canvas export is fed
+  the oriented pixels — a known canvas gotcha): the immutable original keeps its landscape-pixels +
+  orientation-tag form (data-model §13.1, ARCH-07), so the edited copy is where "upright" is made
+  physical — the copy 9e sends to the AI. The 9b thumbnail path already proved the raw pixels are
+  sideways without this.
 - **AI note** (§8): freetext field stored on the receipt.
 - **Workflow pane skeleton (§6):** double-click opens the pane; the two navigation axes (receipt
   ◀▶ over the filtered list, stage ▲▼ gated by state) exist with steps ① and the ② placeholder.
@@ -206,7 +211,10 @@ with seeded draft lines — or `failed` with retry.
 - **`ReceiptParser`** (ARCH-03) + `AnthropicReceiptParser` via the official Java SDK: sends the
   edited image + instructions + `aiVocabulary()` + the AI note as the uncached suffix (§8) —
   never ledger contents (reworded ARCH-08). Tight output JSON schema; downscaling already
-  happened client-side (9c). API key from config/env.
+  happened client-side (9c). API key from config/env. **Send the edited bytes verbatim — do not
+  re-encode server-side with `ImageIO`, which drops the EXIF orientation tag** (the 9b thumbnail
+  bug); a sideways image parses worse. If a server-side normalisation of an un-edited original is
+  ever needed, reuse the `ExifOrientation` + `ImageRotation` helpers from 9b.
 - **Background worker:** Analyse → `processing`, HTTP returns immediately; pane greys, htmx polls
   a status fragment (§3.1); worker calls Messages, stores the immutable raw response
   (`parse_raw` — text, format-agnostic: JSON today, possibly TOON), seeds
