@@ -91,13 +91,14 @@
       return;
     }
 
-    // Escape closes an open palette.
+    // Escape closes an open palette, and dismisses the receipt menu/dialog overlays.
     if (event.key === "Escape") {
       const palette = document.querySelector('[data-kbd-palette][data-open="true"]');
       if (palette) {
         event.preventDefault();
         palette.setAttribute("data-open", "false");
       }
+      clearReceiptOverlays();
       return;
     }
 
@@ -359,6 +360,101 @@
     }
   }
 
+  // ── Receipt register selection + context menu (receipt doc §5.2) ─────────────
+  // Multi-select over the receipt list ([data-receipt-list]) and its right-click menu. Selection is
+  // click (single) / shift-click (range from the anchor) / ctrl|cmd-click (toggle); the right-click
+  // menu is a SERVER-rendered fragment (GET /receipts/menu?id=…) positioned at the cursor — this
+  // leaf only supplies selection state and the menu's position, never the action logic. Escape or a
+  // click away dismisses the transient menu/dialog overlays. All driven by data-attributes; remove
+  // this script and the list still renders, only keyboard/mouse selection is lost.
+  const RECEIPT_ROW = "[data-receipt-row]";
+  const RECEIPT_SELECTED = "receipts__row--selected";
+  let receiptAnchor = -1;
+
+  function receiptRows() {
+    return Array.from(document.querySelectorAll(RECEIPT_ROW));
+  }
+
+  function selectedReceiptIds() {
+    return receiptRows()
+      .filter((r) => r.classList.contains(RECEIPT_SELECTED))
+      .map((r) => r.dataset.receiptId);
+  }
+
+  function clearReceiptSelection() {
+    receiptRows().forEach((r) => r.classList.remove(RECEIPT_SELECTED));
+  }
+
+  function onReceiptMouseDown(event) {
+    const row = event.target.closest && event.target.closest(RECEIPT_ROW);
+    if (!row) return;
+    // Left button only (a right-click is handled by the contextmenu path below).
+    if (event.button !== 0) return;
+    const all = receiptRows();
+    const index = all.indexOf(row);
+    if (event.shiftKey && receiptAnchor >= 0) {
+      const lo = Math.min(receiptAnchor, index);
+      const hi = Math.max(receiptAnchor, index);
+      clearReceiptSelection();
+      for (let i = lo; i <= hi; i++) all[i].classList.add(RECEIPT_SELECTED);
+    } else if (event.ctrlKey || event.metaKey) {
+      row.classList.toggle(RECEIPT_SELECTED);
+      receiptAnchor = index;
+    } else {
+      clearReceiptSelection();
+      row.classList.add(RECEIPT_SELECTED);
+      receiptAnchor = index;
+    }
+  }
+
+  function onReceiptContextMenu(event) {
+    const row = event.target.closest && event.target.closest(RECEIPT_ROW);
+    if (!row) return;
+    event.preventDefault();
+    // A right-click on a row outside the current selection selects just that row first.
+    if (!row.classList.contains(RECEIPT_SELECTED)) {
+      clearReceiptSelection();
+      row.classList.add(RECEIPT_SELECTED);
+      receiptAnchor = receiptRows().indexOf(row);
+    }
+    openReceiptMenu(event.pageX, event.pageY, selectedReceiptIds());
+  }
+
+  function openReceiptMenu(x, y, ids) {
+    const mount = document.getElementById("receipt-menu");
+    if (!mount || typeof htmx === "undefined") return;
+    const query = ids.map((id) => "id=" + encodeURIComponent(id)).join("&");
+    mount.style.left = x + "px";
+    mount.style.top = y + "px";
+    htmx.ajax("GET", "/receipts/menu?" + query, {
+      target: "#receipt-menu",
+      swap: "innerHTML",
+    });
+  }
+
+  function clearReceiptOverlays() {
+    ["receipt-menu", "receipt-dialog"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = "";
+    });
+  }
+
+  // Dismiss overlays on a click that is neither inside the menu/dialog nor a fresh right-click.
+  function onReceiptDismissClick(event) {
+    if (event.target.closest && event.target.closest("[data-receipt-dismiss]")) {
+      clearReceiptOverlays();
+      return;
+    }
+    if (
+      event.target.closest &&
+      (event.target.closest("[data-receipt-menu]") ||
+        event.target.closest("[data-receipt-dialog]"))
+    ) {
+      return;
+    }
+    clearReceiptOverlays();
+  }
+
   // ── Select-all on first focus of a numeric field (register UX) ───────────────
   // When focus first lands on a `.num` field that holds a value — via Tab or a click — select its
   // whole contents so typing replaces it (the common case). A further click in an already-focused
@@ -394,6 +490,9 @@
 
   document.addEventListener("keydown", onKeydown);
   document.addEventListener("click", onTagRemoveClick);
+  document.addEventListener("click", onReceiptDismissClick);
+  document.addEventListener("mousedown", onReceiptMouseDown);
+  document.addEventListener("contextmenu", onReceiptContextMenu);
   document.addEventListener("mousedown", onMouseDownSelect);
   document.addEventListener("focusin", onFocusInSelect);
   document.addEventListener("mouseup", onMouseUpSelect);

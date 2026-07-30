@@ -11,3 +11,16 @@ spring:
   # an empty migration set is a valid, no-op state.
   flyway:
     enabled: true
+  # Receipt uploads (stage 9b). The hard cap is re-checked in ReceiptStorage so the rejection
+  # message is ours; the multipart limit sits just above it as a coarse guard.
+  servlet:
+    multipart:
+      max-file-size: 16MB
+      max-request-size: 20MB
+
+# Receipt image storage (ARCH-07, stage 9b). Dev default: a throwaway local directory (git-ignored).
+# The Pi deployment overrides hauptbuch.receipts.storage-root via environment to its data dir; tests
+# point it at a temp directory.
+hauptbuch:
+  receipts:
+    storage-root: ./.local-receipts

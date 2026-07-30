@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!--
+  Mobile capture surface (plan stage 9b, receipt doc §4). A deliberately thin standalone page — NOT
+  the desktop shell: the phone is a capture device, not a finance console. Camera-first shoot (a
+  plain file input with capture="environment"), a thumbnail grid of the last 90 days of the book's
+  own receipts (newest first, a state dot, no financial figures), tap-through to the full-scale
+  original, and instant-delete on `new` tiles only. No bespoke JS (CLAUDE.md §1.6).
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title th:text="${title} ?: 'Capture · Hauptbuch'">Capture · Hauptbuch</title>
+    <link rel="icon" type="image/svg+xml" th:href="@{/favicon.svg}" />
+    <link rel="stylesheet" th:href="@{/css/base.css}" />
+    <link rel="stylesheet" th:href="@{/css/receipts.css}" />
+  </head>
+  <body class="capture">
+    <header class="capture__bar">
+      <span class="capture__brand">Hauptbuch</span>
+      <span class="capture__sub">Capture</span>
+    </header>
+
+    <main class="capture__main">
+      <p class="capture__error" th:if="${error}" th:text="${error}">Something went wrong.</p>
+
+      <!-- Camera-first capture: the file input opens the rear camera on mobile; some Android
+           browsers still offer the gallery, which is accepted (camera-first, not camera-only). -->
+      <form
+        class="capture__shoot"
+        method="post"
+        th:action="@{/receipts}"
+        enctype="multipart/form-data"
+      >
+        <label class="capture__camera">
+          <input
+            type="file"
+            name="image"
+            accept="image/jpeg,image/png"
+            capture="environment"
+            required
+          />
+          <span>Take a photo</span>
+        </label>
+        <button type="submit" class="btn capture__upload">Upload</button>
+      </form>
+
+      <p class="capture__empty muted" th:if="${#lists.isEmpty(receipts)}">
+        No receipts yet. Shoot one above.
+      </p>
+
+      <ul class="capture__grid" th:unless="${#lists.isEmpty(receipts)}">
+        <li class="tile" th:each="r : ${receipts}">
+          <a class="tile__link" th:href="@{/receipts/{id}/image(id=${r.receiptId()})}">
+            <img
+              class="tile__thumb"
+              th:src="@{/receipts/{id}/thumb(id=${r.receiptId()})}"
+              alt="Receipt thumbnail"
+              loading="lazy"
+            />
+            <span class="tile__meta">
+              <span
+                class="state-dot"
+                th:classappend="'state-dot--' + ${r.state()}"
+                th:title="${r.state()}"
+                aria-hidden="true"
+              ></span>
+              <time
+                class="tile__date"
+                th:datetime="${r.capturedAt()}"
+                th:text="${#temporals.format(r.capturedAt(), 'dd.MM. HH:mm')}"
+                >30.07. 14:30</time
+              >
+            </span>
+          </a>
+          <!-- Instant-delete, `new` only (§9b delete ladder, top rung): no confirmation; the row is
+               soft-deleted and its files removed. -->
+          <form
+            class="tile__delete"
+            th:if="${r.state() == 'new'}"
+            method="post"
+            th:action="@{/receipts/capture/{id}/delete(id=${r.receiptId()})}"
+          >
+            <button type="submit" title="Delete" aria-label="Delete receipt">×</button>
+          </form>
+        </li>
+      </ul>
+    </main>
+  </body>
+</html>

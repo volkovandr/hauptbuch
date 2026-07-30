@@ -3,6 +3,8 @@ package volkovandr.hauptbuch.ledger;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  * The landing page (plan stage 5) — the "Hello, %name%" greeting that reads the display name from
@@ -23,9 +25,20 @@ class LandingController {
     this.settingsService = settingsService;
   }
 
-  /** The greeting landing, rendered inside the base layout. */
+  /**
+   * The greeting landing, rendered inside the base layout — except a phone (a {@code Mobi}
+   * User-Agent) is sent straight to the receipt capture surface, since the phone is a capture
+   * device (receipt doc §4, plan stage 9b). {@code /?desktop} is the escape hatch that skips the
+   * redirect.
+   */
   @GetMapping("/")
-  String landing(Model model) {
+  String landing(
+      @RequestHeader(value = "User-Agent", required = false) String userAgent,
+      @RequestParam(value = "desktop", required = false) String desktop,
+      Model model) {
+    if (desktop == null && userAgent != null && userAgent.contains("Mobi")) {
+      return "redirect:/receipts/capture";
+    }
     Settings settings = settingsService.get();
     model.addAttribute("displayName", settings.displayName());
     model.addAttribute("baseCurrencySet", settings.baseCurrency() != null);

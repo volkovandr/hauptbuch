@@ -53,3 +53,6 @@ application-local.properties
 application-local.yml
 application-secret*.properties
 application-secret*.yml
+
+# Receipt image storage (dev local root, stage 9b)
+.local-receipts/
