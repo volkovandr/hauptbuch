@@ -59,13 +59,20 @@ body.capture {
 
 .capture__shoot {
   display: flex;
-  gap: 0.6rem;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.8rem;
   margin-bottom: 1.2rem;
 }
 
-/* The big camera affordance: the file input opens the rear camera (capture="environment"). */
-.capture__camera {
+.capture__form {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+/* A capture affordance: the camera one opens the rear camera (capture="environment"); the gallery
+   one omits capture so the browser's file/gallery chooser appears. */
+.capture__pick {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
@@ -80,7 +87,11 @@ body.capture {
   font-weight: 600;
 }
 
-.capture__camera input[type="file"] {
+.capture__pick--gallery {
+  border-style: dotted;
+}
+
+.capture__pick input[type="file"] {
   max-width: 100%;
 }
 

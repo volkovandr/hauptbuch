@@ -181,11 +181,14 @@ AI sees only the finished, human-cropped image. (Tech-stack §5.2 now records th
 Consistent with the minimal-off-PC-exposure stance (cf. Telegram §5.16): the phone is a **capture
 device**, not a finance console.
 
-- **Camera-first capture.** Shoot → upload raw → lands `new`. A plain HTML file input with
-  `capture="environment"` opens the rear camera directly (no getUserMedia, no bespoke JS leaf);
-  some Android browsers still also offer the gallery, which is accepted — camera-*first*, not
-  camera-*only* (refined stage 9b). JPEG/PNG only, magic-byte validated, 15 MB cap. No parsing, no
-  financial figures shown. Multi-shot in a row is fine.
+- **Camera-first capture.** Shoot → upload raw → lands `new`. Two plain HTML file inputs (refined
+  stage 9b): **Take a photo** carries `capture="environment"` and opens the rear camera directly;
+  **Choose from gallery** omits `capture` so the browser's gallery/file chooser appears (some
+  phones suppress that chooser when `capture` is set — hence a separate affordance rather than
+  camera-*only*). No getUserMedia. Selecting a file **uploads immediately** (auto-submit driven by
+  the existing `keyboard.js` interaction leaf — no *new* leaf; the Upload button is the no-JS
+  fallback). JPEG/PNG only, magic-byte validated, 15 MB cap. No parsing, no financial figures
+  shown. Multi-shot in a row is fine.
 - **Browse** a thumbnail grid of *your own* receipts — **all states, including `committed`** (a
   90-day capture window, newest first), each with a capture date and a small state dot, and
   tap-through to the full-scale original. No parsed amounts, payees, or categories on mobile.
