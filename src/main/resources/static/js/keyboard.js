@@ -32,7 +32,12 @@
  *      the cursor lands where the user types next instead of nowhere (register §3.10).
  *   8. Select-all on first focus of a [.num] field with a value, so typing replaces it; a later
  *      click in the same field positions the caret normally (register entry UX).
- *   9. Nothing else. New shortcuts are added here, by markup convention — never scattered into
+ *   9. Receipt register selection + right-click context menu (receipt doc §5.2); see that section.
+ *  10. Auto-submit a [data-autosubmit] file input's form the moment a file is chosen — the mobile
+ *      capture surface uploads on selection instead of a second Upload tap (receipt doc §4). The
+ *      Upload button remains as the no-JS fallback: remove this script and capture still works, just
+ *      with the extra tap.
+ *  11. Nothing else. New shortcuts are added here, by markup convention — never scattered into
  *      page scripts.
  *
  * It re-scans after htmx swaps so freshly-inserted rows are navigable.
@@ -455,6 +460,20 @@
     clearReceiptOverlays();
   }
 
+  // ── Auto-submit a file input on selection (mobile capture, receipt doc §4) ───
+  // The moment a [data-autosubmit] file input gains a file, submit its form — the phone uploads on
+  // selection, no second Upload tap. Markup-driven and progressive: the form's own Upload button is
+  // the fallback when this leaf is absent.
+  function onAutoSubmitChange(event) {
+    const input = event.target;
+    if (!input.matches || !input.matches("[data-autosubmit]")) return;
+    if (!input.files || input.files.length === 0) return;
+    const form = input.form;
+    if (!form) return;
+    if (form.requestSubmit) form.requestSubmit();
+    else form.submit();
+  }
+
   // ── Select-all on first focus of a numeric field (register UX) ───────────────
   // When focus first lands on a `.num` field that holds a value — via Tab or a click — select its
   // whole contents so typing replaces it (the common case). A further click in an already-focused
@@ -493,6 +512,7 @@
   document.addEventListener("click", onReceiptDismissClick);
   document.addEventListener("mousedown", onReceiptMouseDown);
   document.addEventListener("contextmenu", onReceiptContextMenu);
+  document.addEventListener("change", onAutoSubmitChange);
   document.addEventListener("mousedown", onMouseDownSelect);
   document.addEventListener("focusin", onFocusInSelect);
   document.addEventListener("mouseup", onMouseUpSelect);

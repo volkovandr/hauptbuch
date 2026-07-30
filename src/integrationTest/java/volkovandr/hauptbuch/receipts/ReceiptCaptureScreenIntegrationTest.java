@@ -54,11 +54,14 @@ class ReceiptCaptureScreenIntegrationTest {
   }
 
   @Test
-  void capturePageOffersTheShootButton() throws Exception {
+  void capturePageOffersCameraAndGalleryAffordances() throws Exception {
     mockMvc
         .perform(get(CAPTURE_PATH))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("Take a photo")));
+        .andExpect(content().string(containsString("Take a photo")))
+        .andExpect(content().string(containsString("Choose from gallery")))
+        // Camera-first: only the camera input forces the rear camera.
+        .andExpect(content().string(containsString("capture=\"environment\"")));
   }
 
   @Test

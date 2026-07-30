@@ -14,6 +14,9 @@
     <link rel="icon" type="image/svg+xml" th:href="@{/favicon.svg}" />
     <link rel="stylesheet" th:href="@{/css/base.css}" />
     <link rel="stylesheet" th:href="@{/css/receipts.css}" />
+    <!-- The keyboard/interaction leaf (CLAUDE.md §1.6): here it only wires auto-submit-on-select so
+         a chosen photo uploads without a second tap. Remove it and the Upload button still works. -->
+    <script th:src="@{/js/keyboard.js}" defer></script>
   </head>
   <body class="capture">
     <header class="capture__bar">
@@ -24,26 +27,50 @@
     <main class="capture__main">
       <p class="capture__error" th:if="${error}" th:text="${error}">Something went wrong.</p>
 
-      <!-- Camera-first capture: the file input opens the rear camera on mobile; some Android
-           browsers still offer the gallery, which is accepted (camera-first, not camera-only). -->
-      <form
-        class="capture__shoot"
-        method="post"
-        th:action="@{/receipts}"
-        enctype="multipart/form-data"
-      >
-        <label class="capture__camera">
-          <input
-            type="file"
-            name="image"
-            accept="image/jpeg,image/png"
-            capture="environment"
-            required
-          />
-          <span>Take a photo</span>
-        </label>
-        <button type="submit" class="btn capture__upload">Upload</button>
-      </form>
+      <!-- Two affordances, each its own form (uploading on selection via the keyboard.js leaf, with
+           the Upload button as the no-JS fallback):
+             • Take a photo — capture="environment" opens the rear camera directly (camera-first).
+             • Choose from gallery — no capture attribute, so the browser offers the gallery/files,
+               since capture="environment" suppresses that chooser on some phones. -->
+      <div class="capture__shoot">
+        <form
+          class="capture__form"
+          method="post"
+          th:action="@{/receipts}"
+          enctype="multipart/form-data"
+        >
+          <label class="capture__pick">
+            <input
+              type="file"
+              name="image"
+              accept="image/jpeg,image/png"
+              capture="environment"
+              required
+              data-autosubmit
+            />
+            <span>Take a photo</span>
+          </label>
+          <button type="submit" class="btn capture__upload">Upload</button>
+        </form>
+        <form
+          class="capture__form"
+          method="post"
+          th:action="@{/receipts}"
+          enctype="multipart/form-data"
+        >
+          <label class="capture__pick capture__pick--gallery">
+            <input
+              type="file"
+              name="image"
+              accept="image/jpeg,image/png"
+              required
+              data-autosubmit
+            />
+            <span>Choose from gallery</span>
+          </label>
+          <button type="submit" class="btn btn--ghost capture__upload">Upload</button>
+        </form>
+      </div>
 
       <p class="capture__empty muted" th:if="${#lists.isEmpty(receipts)}">
         No receipts yet. Shoot one above.
