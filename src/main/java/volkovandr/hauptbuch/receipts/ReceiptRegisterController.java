@@ -7,6 +7,8 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import volkovandr.hauptbuch.web.NavItem;
 
 /**
@@ -49,6 +51,20 @@ class ReceiptRegisterController {
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", "Receipts · Hauptbuch");
     return VIEW;
+  }
+
+  /**
+   * Upload a scan from the PC (source = pc): store it, then redirect back to the register (PRG). A
+   * bad format / oversize upload redirects with the rejection message shown on the register.
+   */
+  @PostMapping("/receipts/upload")
+  String upload(@RequestParam("image") MultipartFile image, RedirectAttributes redirectAttributes) {
+    try {
+      receiptService.capture(ReceiptUploads.bytesOf(image), ReceiptService.SOURCE_PC);
+    } catch (ReceiptFormatException e) {
+      redirectAttributes.addFlashAttribute("uploadError", e.getMessage());
+    }
+    return "redirect:" + BASE_PATH;
   }
 
   /**

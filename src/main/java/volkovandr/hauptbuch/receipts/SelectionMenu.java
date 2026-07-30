@@ -30,4 +30,21 @@ public record SelectionMenu(int total, int deletable, int discardable, boolean a
   public int skipped() {
     return total - deletable;
   }
+
+  /**
+   * The deletable count as a labelled, correctly-pluralised phrase, e.g. "1 receipt" / "3
+   * receipts".
+   */
+  public String deletableLabel() {
+    return countLabel(deletable);
+  }
+
+  /** The discardable count as a labelled, correctly-pluralised phrase. */
+  public String discardableLabel() {
+    return countLabel(discardable);
+  }
+
+  private static String countLabel(int count) {
+    return count + (count == 1 ? " receipt" : " receipts");
+  }
 }

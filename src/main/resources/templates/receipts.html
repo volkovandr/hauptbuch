@@ -16,6 +16,30 @@
   th:replace="~{layout :: page(~{:: content})}"
 >
   <main class="content" th:fragment="content">
+    <div class="receipt-toolbar">
+      <!-- Upload a scan from the PC (source = pc): a plain multipart form, auto-submitting on
+           selection via the keyboard.js leaf, redirecting back here (PRG). -->
+      <form
+        class="receipt-upload"
+        method="post"
+        th:action="@{/receipts/upload}"
+        enctype="multipart/form-data"
+      >
+        <label class="btn">
+          <input
+            type="file"
+            name="image"
+            accept="image/jpeg,image/png"
+            required
+            data-autosubmit
+            hidden
+          />
+          Upload a scan
+        </label>
+      </form>
+      <p class="receipt-upload__error" th:if="${uploadError}" th:text="${uploadError}">error</p>
+    </div>
+
     <form class="receipt-filter" method="get" th:action="@{/receipts}">
       <div class="field">
         <label class="field__label" for="state">State</label>
@@ -57,6 +81,11 @@
         No receipts in this view. Capture one on your phone, or widen the filter.
       </p>
 
+      <p class="receipt-list__hint muted" th:unless="${#lists.isEmpty(receipts)}">
+        Click a scan to view it full size. Select rows (Shift/Ctrl-click for many) and right-click
+        for actions.
+      </p>
+
       <table class="receipts" th:unless="${#lists.isEmpty(receipts)}">
         <thead>
           <tr>
@@ -80,12 +109,21 @@
             tabindex="-1"
           >
             <td class="receipts__thumb">
-              <img
-                class="receipts__thumb-img"
-                th:src="@{/receipts/{id}/thumb(id=${r.receiptId()})}"
-                alt="Receipt thumbnail"
-                loading="lazy"
-              />
+              <!-- The scan opens full size in a new tab (the workflow pane arrives at 9c). The
+                   keyboard.js leaf skips row-selection when the click lands on this link. -->
+              <a
+                th:href="@{/receipts/{id}/image(id=${r.receiptId()})}"
+                target="_blank"
+                rel="noopener"
+                title="View full size"
+              >
+                <img
+                  class="receipts__thumb-img"
+                  th:src="@{/receipts/{id}/thumb(id=${r.receiptId()})}"
+                  alt="Receipt scan"
+                  loading="lazy"
+                />
+              </a>
             </td>
             <td class="receipts__captured num" th:text="${#temporals.format(r.capturedAt(), 'yyyy-MM-dd HH:mm')}">
               2026-07-30 14:30
@@ -131,7 +169,7 @@
           hx-include="[data-receipt-menu], [name='state'], [name='range']"
           hx-target="#receipt-list"
           hx-swap="outerHTML"
-          th:text="'Delete ' + ${menu.deletable()}"
+          th:text="'Delete ' + ${menu.deletableLabel()}"
         >
           Delete
         </button>
@@ -143,7 +181,7 @@
           hx-include="[data-receipt-menu]"
           hx-target="#receipt-dialog"
           hx-swap="innerHTML"
-          th:text="'Delete ' + ${menu.deletable()} + '…'"
+          th:text="'Delete ' + ${menu.deletableLabel()} + '…'"
         >
           Delete…
         </button>
@@ -155,16 +193,21 @@
           hx-include="[data-receipt-menu], [name='state'], [name='range']"
           hx-target="#receipt-list"
           hx-swap="outerHTML"
-          th:attr="hx-confirm='Discard ' + ${menu.discardable()} + ' receipt(s)?'"
-          th:text="'Discard ' + ${menu.discardable()}"
+          th:attr="hx-confirm='Discard ' + ${menu.discardableLabel()} + '?'"
+          th:text="'Discard ' + ${menu.discardableLabel()}"
         >
           Discard
         </button>
       </li>
     </ul>
     <p class="receipt-menu__skip muted" th:if="${menu.skipped() > 0}"
-       th:text="|${menu.skipped()} of ${menu.total()} committed — skipped|">
-      1 of 3 committed — skipped
+       th:text="|${menu.skipped()} of ${menu.total()} selected were committed — skipped|">
+      1 of 3 selected were committed — skipped
+    </p>
+    <!-- What the two actions mean (the counts read as amounts, not IDs). -->
+    <p class="receipt-menu__help muted" th:unless="${menu.total() == 0}">
+      <strong>Delete</strong> removes the scan and its record.
+      <strong>Discard</strong> keeps it, marked not-to-be-booked.
     </p>
   </div>
 
@@ -172,7 +215,7 @@
   <div th:fragment="deleteDialog(ids, menu)" class="receipt-dialog" data-receipt-dialog>
     <input type="hidden" name="id" th:each="i : ${ids}" th:value="${i}" />
     <p class="receipt-dialog__prompt"
-       th:text="'Delete ' + ${menu.deletable()} + ' receipt(s). Keep the image files, or remove them too?'">
+       th:text="'Delete ' + ${menu.deletableLabel()} + '. Keep the image files, or remove them too?'">
       Delete 2 receipts. Keep the image files, or remove them too?
     </p>
     <div class="receipt-dialog__actions">

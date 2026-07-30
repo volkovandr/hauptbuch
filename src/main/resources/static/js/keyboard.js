@@ -395,6 +395,8 @@
     if (!row) return;
     // Left button only (a right-click is handled by the contextmenu path below).
     if (event.button !== 0) return;
+    // A click on a link inside the row (the thumbnail → full-size view) navigates, not selects.
+    if (event.target.closest("a")) return;
     const all = receiptRows();
     const index = all.indexOf(row);
     if (event.shiftKey && receiptAnchor >= 0) {
