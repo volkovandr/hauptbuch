@@ -468,7 +468,18 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
   from stage 7a until missed.
 - **Receipt follow-ons:** duplicate detection at confirm (merchant+date+total) + link-to-existing
   transaction with the Q-RX-2 push-splits question (receipt doc §6.4) — deferred from stage 9;
-  shares the stage-13 matcher, so lands with or after statements.
+  shares the stage-13 matcher, so lands with or after statements. **PDF ingestion** for receipts —
+  a real need (Android document scanners emit PDFs); stage 9b accepts JPEG/PNG only and rejects
+  PDFs with a clear message. **Disk-reclaim purge / undelete** — soft-deleted receipt rows keep
+  `deleted_at` but there is no UI to undelete or to sweep orphaned image files off the Pi (stage 9b
+  removes files only on the `new`/delete-files paths). **Mobile grid filtering/sorting** — the
+  phone grid is a fixed 90-day, newest-first, all-states list; controls to filter or re-sort it are
+  deferred (stage 9b). **Receipt register search + column re-sort** — the §5.2 fuzzy search
+  (merchant + AI note + line text) and re-sortable columns arrive with the first parsed data
+  (9c/9e), not in the 9b skeleton.
+- **Auth / LAN-open stance:** the app is unauthenticated and open on the LAN; receipts (capture
+  surface, image serving) do not change this. Minimal auth is tracked under *Ops & hardening* below
+  (ARCH-04) and is the prerequisite for any non-localhost exposure.
 - **Currency follow-ons:** ECB rate-feed automation (§1.2 — the engine is already multi-currency;
   this only automates rate lookup/proposal).
 - **Recurring & subscriptions:** recurring templates generating `pending_review` transactions

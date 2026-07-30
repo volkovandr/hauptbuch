@@ -76,7 +76,7 @@ broader* exposure discussed there. See NFR-09.
 | ARCH-04 | Minimal authentication (single login) to avoid open LAN access. | Should |
 | ARCH-05 | Optional HTTPS via reverse proxy for access beyond localhost. | Should |
 | ARCH-06 | Exchange rates from a configurable feed (lookup only); cached; manual override always possible. | Should |
-| ARCH-07 | **Receipt scans / statements on the Pi filesystem**, retained and linked to transactions; partitioned per profile (§5.14). | Must |
+| ARCH-07 | **Receipt scans / statements on the Pi filesystem**, retained and linked to transactions; partitioned per profile (§5.14). Immutable means the original is **never edited in place** (the edited image is a separate derivative) — it does **not** forbid *deleting* a dead scan wholesale, which the receipt delete ladder does (stage 9b). | Must |
 | ARCH-08 | AI calls send only the document + parsing instructions — never transactions, balances, or other ledger contents. The operator-curated **AI Vocabulary** (category names/aliases and per-category guidance notes the operator chooses to write — data-model §13.3; hidden categories are never sent) is part of the parsing instructions. | Must |
 | ARCH-09 | **Format-agnostic ingestion** via a canonical internal representation; all importers target it; importers added as needed without touching the core. | Must |
 | ARCH-10 | **Profile = separate PostgreSQL database** (§5.14), selected via configuration; no cross-profile mixing. | Should |

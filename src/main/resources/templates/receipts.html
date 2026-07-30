@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<!--
+  PC receipt register (plan stage 9b, receipt doc §5): the dense, thin-row list of receipts. State
+  is the primary filter (default work queue); a capture-date-range filter bounds the list (incl. an
+  "everything" option); rows are ordered captured-ascending (oldest first = backlog order).
+
+  The full §5.1 column set is rendered now with the parsed columns (merchant/total/account/txn)
+  simply blank — a stable layout so 9e adds data, not template churn. Selection (click / shift-click
+  range / ctrl-click toggle) and the right-click context menu (§5.2) live in the keyboard.js leaf and
+  drive the delete ladder + discard; both action surfaces re-render the #receipt-list fragment in
+  place (htmx), clearing the transient menu/dialog overlays out-of-band.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <form class="receipt-filter" method="get" th:action="@{/receipts}">
+      <div class="field">
+        <label class="field__label" for="state">State</label>
+        <select id="state" name="state" class="input">
+          <option value="queue" th:selected="${stateFilter == 'queue'}">Work queue</option>
+          <option
+            th:each="s : ${states}"
+            th:value="${s}"
+            th:selected="${stateFilter == s}"
+            th:text="${#strings.capitalize(#strings.replace(s, '_', ' '))}"
+          >
+            New
+          </option>
+          <option value="all" th:selected="${stateFilter == 'all'}">Everything</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field__label" for="range">Captured</label>
+        <select id="range" name="range" class="input">
+          <option value="d90" th:selected="${rangeFilter == 'd90'}">Last 90 days</option>
+          <option value="y1" th:selected="${rangeFilter == 'y1'}">Last year</option>
+          <option value="all" th:selected="${rangeFilter == 'all'}">Everything</option>
+        </select>
+      </div>
+      <p class="actions">
+        <button type="submit" class="btn">Apply</button>
+      </p>
+    </form>
+
+    <!-- The list fragment (reused verbatim by the action re-renders). Carries the transient menu /
+         dialog mounts out-of-band so any action clears open overlays as it repaints the list. -->
+    <div th:replace="~{receipts :: list(receipts=${receipts})}"></div>
+  </main>
+
+  <!-- ── List fragment ──────────────────────────────────────────────────────── -->
+  <th:block th:fragment="list(receipts)">
+    <div id="receipt-list" class="receipt-list">
+      <p class="muted" th:if="${#lists.isEmpty(receipts)}" id="receipt-empty">
+        No receipts in this view. Capture one on your phone, or widen the filter.
+      </p>
+
+      <table class="receipts" th:unless="${#lists.isEmpty(receipts)}">
+        <thead>
+          <tr>
+            <th scope="col" class="receipts__thumb">Scan</th>
+            <th scope="col">Captured</th>
+            <th scope="col">State</th>
+            <th scope="col">Merchant</th>
+            <th scope="col" class="num">Total</th>
+            <th scope="col">Account</th>
+            <th scope="col" class="receipts__txn"><span class="visually-hidden">Transaction</span>🔗</th>
+            <th scope="col" class="receipts__status"><span class="visually-hidden">Status</span></th>
+          </tr>
+        </thead>
+        <tbody id="receipt-rows" data-kbd-list data-receipt-list>
+          <tr
+            class="receipts__row"
+            th:each="r : ${receipts}"
+            data-kbd-row
+            data-receipt-row
+            th:attr="data-receipt-id=${r.receiptId()},data-receipt-state=${r.state()}"
+            tabindex="-1"
+          >
+            <td class="receipts__thumb">
+              <img
+                class="receipts__thumb-img"
+                th:src="@{/receipts/{id}/thumb(id=${r.receiptId()})}"
+                alt="Receipt thumbnail"
+                loading="lazy"
+              />
+            </td>
+            <td class="receipts__captured num" th:text="${#temporals.format(r.capturedAt(), 'yyyy-MM-dd HH:mm')}">
+              2026-07-30 14:30
+            </td>
+            <td class="receipts__state">
+              <span
+                class="rstate"
+                th:classappend="'rstate--' + ${r.state()}"
+                th:text="${#strings.capitalize(#strings.replace(r.state(), '_', ' '))}"
+                >New</span
+              >
+            </td>
+            <!-- Parsed columns: blank until 9e seeds them. -->
+            <td class="receipts__merchant" th:text="${r.merchantText()}"></td>
+            <td class="receipts__total num" th:text="${r.totalAmount()}"></td>
+            <td class="receipts__account"></td>
+            <td class="receipts__txn"></td>
+            <td class="receipts__status">
+              <span class="rstatus" th:if="${r.aiNote() != null}" title="AI note attached" aria-hidden="true">✎</span>
+              <span class="rstatus" th:if="${r.state() == 'failed'}" title="Analysis failed" aria-hidden="true">⚠</span>
+              <span class="rstatus" th:if="${r.batchId() != null}" title="Batch member" aria-hidden="true">⌗</span>
+              <span class="rstatus" th:if="${r.state() == 'discarded'}" title="Discarded" aria-hidden="true">⊘</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- Transient overlay mounts, cleared on every list re-render (out-of-band). -->
+    <div id="receipt-menu" class="receipt-menu-mount" hx-swap-oob="true"></div>
+    <div id="receipt-dialog" hx-swap-oob="true"></div>
+  </th:block>
+
+  <!-- ── Context menu fragment (§5.2) ───────────────────────────────────────── -->
+  <div th:fragment="menu(ids, menu)" class="receipt-menu" data-receipt-menu>
+    <input type="hidden" name="id" th:each="i : ${ids}" th:value="${i}" />
+    <p class="receipt-menu__none muted" th:if="${menu.total() == 0}">Nothing selected.</p>
+    <ul class="receipt-menu__actions" th:unless="${menu.total() == 0}">
+      <li th:if="${menu.instantDelete()}">
+        <button
+          type="button"
+          hx-post="/receipts/delete"
+          hx-vals='{"removeFiles": true}'
+          hx-include="[data-receipt-menu], [name='state'], [name='range']"
+          hx-target="#receipt-list"
+          hx-swap="outerHTML"
+          th:text="'Delete ' + ${menu.deletable()}"
+        >
+          Delete
+        </button>
+      </li>
+      <li th:if="${menu.fileChoiceDelete()}">
+        <button
+          type="button"
+          hx-get="/receipts/delete-dialog"
+          hx-include="[data-receipt-menu]"
+          hx-target="#receipt-dialog"
+          hx-swap="innerHTML"
+          th:text="'Delete ' + ${menu.deletable()} + '…'"
+        >
+          Delete…
+        </button>
+      </li>
+      <li th:if="${menu.discardable() > 0}">
+        <button
+          type="button"
+          hx-post="/receipts/discard"
+          hx-include="[data-receipt-menu], [name='state'], [name='range']"
+          hx-target="#receipt-list"
+          hx-swap="outerHTML"
+          th:attr="hx-confirm='Discard ' + ${menu.discardable()} + ' receipt(s)?'"
+          th:text="'Discard ' + ${menu.discardable()}"
+        >
+          Discard
+        </button>
+      </li>
+    </ul>
+    <p class="receipt-menu__skip muted" th:if="${menu.skipped() > 0}"
+       th:text="|${menu.skipped()} of ${menu.total()} committed — skipped|">
+      1 of 3 committed — skipped
+    </p>
+  </div>
+
+  <!-- ── Keep / delete files dialog (§9b delete ladder, middle rung) ─────────── -->
+  <div th:fragment="deleteDialog(ids, menu)" class="receipt-dialog" data-receipt-dialog>
+    <input type="hidden" name="id" th:each="i : ${ids}" th:value="${i}" />
+    <p class="receipt-dialog__prompt"
+       th:text="'Delete ' + ${menu.deletable()} + ' receipt(s). Keep the image files, or remove them too?'">
+      Delete 2 receipts. Keep the image files, or remove them too?
+    </p>
+    <div class="receipt-dialog__actions">
+      <button
+        type="button"
+        class="btn"
+        hx-post="/receipts/delete"
+        hx-vals='{"removeFiles": false}'
+        hx-include="[data-receipt-dialog], [name='state'], [name='range']"
+        hx-target="#receipt-list"
+        hx-swap="outerHTML"
+      >
+        Keep files
+      </button>
+      <button
+        type="button"
+        class="btn btn--danger"
+        hx-post="/receipts/delete"
+        hx-vals='{"removeFiles": true}'
+        hx-include="[data-receipt-dialog], [name='state'], [name='range']"
+        hx-target="#receipt-list"
+        hx-swap="outerHTML"
+      >
+        Delete files too
+      </button>
+      <!-- Dismiss is handled by the keyboard.js leaf (also Escape / click-away): it clears the
+           transient menu + dialog mounts. No page-scoped JS. -->
+      <button type="button" class="btn btn--ghost" data-receipt-dismiss>Cancel</button>
+    </div>
+  </div>
+</html>

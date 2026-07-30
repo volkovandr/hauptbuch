@@ -181,13 +181,19 @@ AI sees only the finished, human-cropped image. (Tech-stack §5.2 now records th
 Consistent with the minimal-off-PC-exposure stance (cf. Telegram §5.16): the phone is a **capture
 device**, not a finance console.
 
-- **Camera-only capture.** Live camera → shoot → upload raw → lands `new`. (No gallery/file
-  picker; no parsing; no financial figures shown.) Multi-shot in a row is fine.
-- **Browse** a thumbnail grid of *your own* receipts — at least the **uncommitted queue**, with a
-  capture date and a small state dot. No parsed amounts, payees, or categories on mobile.
-- **Delete** is limited to **uncommitted** receipts (`new` / `pre_processed` / `failed` /
-  `discarded`). A `committed` receipt backs a transaction (ARCH-07 link); unlinking/discarding it
-  is a **PC** concern, so it is not deletable from the phone.
+- **Camera-first capture.** Shoot → upload raw → lands `new`. A plain HTML file input with
+  `capture="environment"` opens the rear camera directly (no getUserMedia, no bespoke JS leaf);
+  some Android browsers still also offer the gallery, which is accepted — camera-*first*, not
+  camera-*only* (refined stage 9b). JPEG/PNG only, magic-byte validated, 15 MB cap. No parsing, no
+  financial figures shown. Multi-shot in a row is fine.
+- **Browse** a thumbnail grid of *your own* receipts — **all states, including `committed`** (a
+  90-day capture window, newest first), each with a capture date and a small state dot, and
+  tap-through to the full-scale original. No parsed amounts, payees, or categories on mobile.
+  (Widened from "the uncommitted queue" at stage 9b — the phone is a viewer of what it captured;
+  sorting/filtering controls and any transaction detail stay a PC/backlog concern.)
+- **Delete** is narrowed to **`new`** scans only — an instant, no-confirmation removal of a bad
+  shot (row soft-deleted, files removed). Every other state's deletion (the keep/delete-files
+  choice, and a `committed` receipt's transaction-aware dialog) is a **PC** concern, off the phone.
 
 > Rationale: precise cropping and full transaction detail belong on the PC (tech-stack §5.3 makes
 > "capture on phone, edit on PC" the **default**, not a fallback). The phone just feeds the queue.
