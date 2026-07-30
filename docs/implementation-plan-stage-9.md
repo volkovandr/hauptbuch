@@ -137,6 +137,16 @@ and can be deleted or discarded — the full storage and lifecycle plumbing, no 
   a **server-rendered fragment** listing actions valid for the selection (9e/9h just add rows).
   No rubber-band, no select-all. Invalid-state members of a selection are skipped with a count
   (§5.2). Multi-delete/discard confirmations show the count.
+- **Added from on-device testing (post-implementation, within 9b's spirit):** an **"Upload a
+  scan"** control on the PC register (source `pc`, auto-submitting like the mobile capture inputs);
+  the register **thumbnail links to the full-size original** (new tab; the workflow pane is 9c);
+  the context menu labels its counts as **"N receipt(s)"** with a one-line Delete-vs-Discard
+  explanation; and the mobile capture surface uploads **on selection** (no Upload button) via a
+  small `[data-autosubmit]` hook in the `keyboard.js` leaf, with both a camera (`capture`) and a
+  gallery (no `capture`) affordance. **Thumbnail EXIF orientation is honoured** (`ExifOrientation`
+  reads the tag `ImageIO` drops; `ImageRotation` bakes it in) so camera portraits aren't rotated.
+  The `/favicon.ico` probe is answered as a quiet 404 rather than routed through the htmx error
+  boundary.
 - **No auth** (app-wide LAN-open stance, unchanged by receipts; recorded once in the backlog).
 - **Doc corrections land with this slice:** §4 mobile scope, the ARCH-07 file-deletion nuance,
   backlog entries (PDF ingestion, disk-reclaim purge / undelete, mobile filtering, auth stance).

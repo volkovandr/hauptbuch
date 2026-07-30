@@ -189,10 +189,13 @@ public class ReceiptStorage {
    */
   private static void writeThumbnail(byte[] source, Path dest) {
     try {
-      BufferedImage original = ImageIO.read(new ByteArrayInputStream(source));
-      if (original == null) {
+      BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(source));
+      if (decoded == null) {
         throw new ReceiptFormatException("That image could not be read as a JPEG or PNG.");
       }
+      // Bake in the camera's EXIF orientation (ImageIO.read drops it) so the thumbnail is upright.
+      BufferedImage original =
+          ImageRotation.applyExifOrientation(decoded, ExifOrientation.of(source));
       int w = original.getWidth();
       int h = original.getHeight();
       double scale = Math.min(1.0, (double) THUMB_MAX_DIM / Math.max(w, h));

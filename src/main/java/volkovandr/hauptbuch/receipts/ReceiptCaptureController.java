@@ -1,8 +1,6 @@
 package volkovandr.hauptbuch.receipts;
 
 import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -50,7 +48,7 @@ class ReceiptCaptureController {
   String upload(
       @RequestParam("image") MultipartFile image, Model model, HttpServletResponse response) {
     try {
-      receiptService.capture(bytesOf(image), ReceiptService.SOURCE_MOBILE);
+      receiptService.capture(ReceiptUploads.bytesOf(image), ReceiptService.SOURCE_MOBILE);
     } catch (ReceiptFormatException e) {
       response.setStatus(HttpStatus.BAD_REQUEST.value());
       model.addAttribute("error", e.getMessage());
@@ -73,16 +71,5 @@ class ReceiptCaptureController {
         .filter(r -> ReceiptState.deletesInstantly(r.state()))
         .ifPresent(r -> receiptService.delete(id, true));
     return REDIRECT_TO_CAPTURE;
-  }
-
-  private static byte[] bytesOf(MultipartFile image) {
-    if (image == null || image.isEmpty()) {
-      throw new ReceiptFormatException("No photo was attached — take a shot and try again.");
-    }
-    try {
-      return image.getBytes();
-    } catch (IOException e) {
-      throw new UncheckedIOException("Failed to read the uploaded image", e);
-    }
   }
 }

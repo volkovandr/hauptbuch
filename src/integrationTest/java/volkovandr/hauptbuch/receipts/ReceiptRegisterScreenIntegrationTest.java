@@ -93,8 +93,46 @@ class ReceiptRegisterScreenIntegrationTest {
     mockMvc
         .perform(get("/receipts/menu").param(ID, String.valueOf(id)))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("Delete 1")))
-        .andExpect(content().string(containsString("Discard 1")));
+        // Counts read as amounts, not IDs: singular "receipt", and the two actions are explained.
+        .andExpect(content().string(containsString("Delete 1 receipt")))
+        .andExpect(content().string(containsString("Discard 1 receipt")))
+        .andExpect(content().string(containsString("not-to-be-booked")));
+  }
+
+  @Test
+  void contextMenuPluralisesTheCounts() throws Exception {
+    long one = upload();
+    long two = upload();
+
+    mockMvc
+        .perform(
+            get("/receipts/menu").param(ID, String.valueOf(one)).param(ID, String.valueOf(two)))
+        .andExpect(content().string(containsString("Delete 2 receipts")));
+  }
+
+  @Test
+  void registerLinksTheThumbnailToTheFullImage() throws Exception {
+    long id = upload();
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("/receipts/" + id + "/image")));
+  }
+
+  @Test
+  void pcUploadStoresReceiptTaggedPcAndRedirects() throws Exception {
+    mockMvc
+        .perform(multipart("/receipts/upload").file(jpegPart()))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl(RECEIPTS_PATH));
+
+    String source =
+        jdbcClient
+            .sql("select source from receipt order by receipt_id desc limit 1")
+            .query(String.class)
+            .single();
+    assertThat(source).isEqualTo("pc");
   }
 
   @Test
@@ -175,7 +213,7 @@ class ReceiptRegisterScreenIntegrationTest {
             get("/receipts/menu")
                 .param(ID, String.valueOf(fresh))
                 .param(ID, String.valueOf(committed)))
-        .andExpect(content().string(containsString("1 of 2 committed")));
+        .andExpect(content().string(containsString("1 of 2 selected were committed")));
   }
 
   @Test
