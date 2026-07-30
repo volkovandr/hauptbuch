@@ -83,7 +83,7 @@ plan's stages 9–12 into the merged stage entry pointing here.
 
 **Done when:** the four docs agree with this plan and the owner confirms.
 
-## 9b — Walking skeleton: capture → register → delete
+## 9b — Walking skeleton: capture → register → delete ✅ **complete** (owner-confirmed 2026-07-30)
 
 **Goal:** a photo taken on the phone lands as a `new` receipt visible in the PC receipt register,
 and can be deleted or discarded — the full storage and lifecycle plumbing, no image editing yet.
