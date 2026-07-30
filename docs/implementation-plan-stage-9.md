@@ -88,23 +88,67 @@ plan's stages 9–12 into the merged stage entry pointing here.
 **Goal:** a photo taken on the phone lands as a `new` receipt visible in the PC receipt register,
 and can be deleted or discarded — the full storage and lifecycle plumbing, no image editing yet.
 
-- **Migration:** `receipt` table (V9).
-- **`ReceiptStorage`** (ARCH-07): store the immutable original under the configured Pi data
-  directory; path scheme decided here (per-profile partition); serve originals/thumbnails via a
-  controller endpoint. The abstraction hides the filesystem so tests can use a temp dir.
-- **Capture:** mobile camera-only surface (camera → shoot → raw upload → `new`; multi-shot; no
-  figures — §4) and a plain PC upload; `source` recorded.
-- **Receipt register (§5):** thin-row list — thumbnail · captured · state · (parsed columns blank)
-  — state as primary filter (default: work queue = everything except `committed` & `discarded`),
-  captured-ascending order, last-90-days default range. Selection + context menu with **Delete**
-  and **Discard** only (Process/Re-analyse arrive at 9e/9h).
-- **Transitions live here:** capture→`new`; `discarded` (any non-committed); soft-delete
-  (uncommitted only from mobile, per §4).
-- **Tests:** integration round-trips for the repository; MockMvc acceptance for upload, register
-  rendering, filter, delete/discard; storage unit tests against a temp dir.
+**Decisions grilled & settled 2026-07-30:**
 
-**Done when:** phone-captured receipts appear in the register, filter by state, and can be
-discarded/deleted; originals sit immutably on disk.
+- **Migration:** the full ratified `receipt` table (V9, data-model §13.1), complete state enum —
+  later slices consume it progressively.
+- **Formats:** JPEG + PNG only, validated by magic bytes (not client content type), 15 MB
+  multipart cap. **PDF ingestion → backlog** (real need: Android document scans produce PDFs) —
+  rejected with a clear message until then.
+- **`ReceiptStorage`** (ARCH-07): storage **root from profile-specific config** (prod = Pi data
+  dir, dev = throwaway local dir, tests = temp dir); DB stores **root-relative** paths.
+  Layout: `originals/<yyyy>/<MM>/<yyyyMMdd-HHmmssSSS>.<ext>` (timestamp name; on collision append
+  `-2`, `-3`, …); `edited/` (9c) and `thumbs/` mirror the same stem. Thumbnails: ~320 px JPEG,
+  generated eagerly at upload **and self-healing at serve time** (missing file → regenerate from
+  edited-else-original and store) — deleting the `thumbs/` tree is the sanctioned way to force
+  regeneration after a style/size change.
+- **Capture = plain HTML file input** (`accept` JPEG/PNG, `capture="environment"`): native camera
+  opens directly — **camera-first, not strictly camera-only** (some Android browsers still offer
+  the gallery; accepted). No getUserMedia, no new JS leaf.
+- **Mobile surface `/receipts/capture`** — one standalone page (not the desktop shell): capture
+  button · thumbnail grid of **all states incl. `committed`** (captured **descending**, state dot,
+  no financial figures, hard-bounded to last 90 days — plain constant, maybe a setting later) ·
+  tap-through to the full-scale original (native browser zoom) · delete on `new` tiles only.
+  Sorting/filtering controls, transaction details on mobile → backlog. §4 is updated accordingly
+  ("at least the uncommitted queue" already permits the extension).
+- **Root redirect:** `/` with a `Mobi` User-Agent → 302 to `/receipts/capture`; `/?desktop`
+  escape hatch skips it. Desktop falls through to the landing page.
+- **The delete ladder** (by state at delete time; row is always soft-deleted — `deleted_at`;
+  no undelete UI, backlog if ever):
+
+  | State | Where | Interaction | Files |
+  |---|---|---|---|
+  | `new` | mobile + PC | instant, no confirmation | **removed** (original + thumb) |
+  | other non-committed | PC only | modal: keep files / delete files / cancel | per choice |
+  | `committed` | PC only | 5-way modal (void ± files / unlink ± files / cancel) — **9g** | per choice |
+
+  `processing` is deletable immediately — the user never waits out an AI call; the worker
+  tolerates soft-deleted rows (contract lands in 9e). File deletion is recorded against ARCH-07:
+  immutable means *never edited in place*; wholesale removal of a dead scan is allowed per the
+  ladder. The keep/delete-files modal is a server-rendered fragment (three-way — `hx-confirm`
+  can't express it); **Discard** (any non-committed) uses plain `hx-confirm`.
+- **PC register at `/receipts`** + shell nav entry: full §5.1 column set rendered with the parsed
+  columns simply blank (stable layout, no 9e template churn); state filter (default work queue =
+  everything except `committed` & `discarded`); **date-range filter incl. an "everything"
+  option**; captured-ascending. **No search box** (everything it searches is blank until 9c/9e —
+  it arrives with the first data it can find); column re-sorting deferred likewise.
+- **Selection + context menu, full machinery now:** click / shift-click range / ctrl-click toggle
+  + right-click menu, living in `keyboard.js` (the sanctioned interaction leaf); menu entries are
+  a **server-rendered fragment** listing actions valid for the selection (9e/9h just add rows).
+  No rubber-band, no select-all. Invalid-state members of a selection are skipped with a count
+  (§5.2). Multi-delete/discard confirmations show the count.
+- **No auth** (app-wide LAN-open stance, unchanged by receipts; recorded once in the backlog).
+- **Doc corrections land with this slice:** §4 mobile scope, the ARCH-07 file-deletion nuance,
+  backlog entries (PDF ingestion, disk-reclaim purge / undelete, mobile filtering, auth stance).
+- **Tests:** integration round-trips for the repository; MockMvc acceptance for upload (incl.
+  magic-byte rejection), register rendering, filters, the delete ladder + discard, mobile grid,
+  root redirect; storage unit tests (path scheme, collision suffix, thumbnail self-heal) against
+  a temp dir.
+
+**Done when:** a phone at the Pi's root URL lands on capture, shoots multi-shot, sees the grid,
+taps to full-scale, instant-deletes a bad `new` shot (files gone); the PC register lists and
+filters receipts, discard works, delete shows the keep/remove-files dialog; originals +
+thumbnails sit on disk under the timestamp scheme; thumbnails self-heal.
 
 ## 9c — Pre-process: crop leaf + AI note
 
@@ -162,7 +206,9 @@ with seeded draft lines — or `failed` with retry.
   line** — German supermarket cashback — seeds as a transfer line targeting the marked cash
   account), fills the
   denormalised header columns, detects the account (cash marker / last-4), flips `processed` —
-  or `failed` (Retry → `pre_processed`, Discard).
+  or `failed` (Retry → `pre_processed`, Discard). **Soft-delete tolerance (9b's delete ladder):**
+  a receipt deleted mid-flight stays deletable without waiting; the worker, finding the row
+  soft-deleted on completion, quietly abandons the result.
 - **Tests:** parser behind a fake in unit tier (prompt assembly, seeding, resolution fallbacks,
   failure paths); integration round-trips for `receipt_line`; MockMvc for analyse/poll/retry. No
   live-API test in the suites.
@@ -204,6 +250,9 @@ without leaving the pane.
 - **Reopen / re-enter:** reopen = `committed` → `processed`, transaction untouched; re-enter =
   soft-delete the old transaction (postings with it), materialise anew, repoint the link. No
   drift check.
+- **Committed-delete dialog (9b's delete ladder, last rung):** deleting a `committed` receipt
+  offers a 5-way choice — void the transaction ± delete files, or keep the transaction unlinked
+  ± delete files, or cancel; the receipt row is soft-deleted (or just unlinked) per choice.
 - **Tests:** unit for the materialisation shape (sum-to-zero by construction, leaf routing,
   funding leg); MockMvc acceptance capture→…→commit as the money-critical flow (replacing the
   retired Playwright smoke); integration for the link queries; reopen/re-enter acceptance incl.
@@ -232,7 +281,6 @@ individually reviewable, failures isolated per receipt.
 
 ## Open items intentionally left to their slice
 
-- Exact Pi path scheme + thumbnail strategy — 9b.
 - Prompt wording, output JSON schema, model id (floor ≥ Sonnet 4.6, NFR-09), Haiku→Sonnet
   escalation — 9e; escalation may be dropped if the floor model is cheap enough in practice.
 - Polling cadence / SSE swap (T-RX-1) — 9e, only if polling grates.
