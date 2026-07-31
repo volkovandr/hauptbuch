@@ -5,21 +5,23 @@
  *
  * DESIGN CONTRACT (read before touching): like the keyboard leaf, this is an ISOLATED, markup-driven
  * component — not a framework, never imported elsewhere. All image work is client-side (the Pi does
- * no image math): crop · rotate · tilt · grayscale · brightness · contrast, previewed live on the
- * canvas and BAKED into a JPEG on Save. It attaches to a single [data-receipt-process] page via
- * data-attributes; remove this script (and cropper.min.js) and the read views + Discard/Delete
- * forms still work — only the in-page editor is lost.
+ * no image math): crop · rotate · tilt · skew · grayscale · brightness · contrast, previewed live on
+ * the canvas and BAKED into a JPEG on Save. It attaches to a single [data-receipt-process] page via
+ * data-attributes; remove this script (and cropper.min.js) and the read views + Discard/Delete forms
+ * still work — only the in-page editor is lost.
  *
  * The flow (receipt doc §6.1):
  *   • "Prepare for analysis" / "Edit" (data-receipt-edit-start) enters edit mode: the read view and
  *     the common chrome are hidden, the Cropper editor form is shown, and — for a re-edit — the
- *     saved recipe (crop/rotation/tilt/filters) is replayed onto the ORIGINAL image.
- *   • The tools drive Cropper (rotate/tilt) and a CSS filter (grayscale/brightness/contrast) for a
- *     live preview.
+ *     saved recipe (crop/rotation/tilt/skew/filters) is replayed onto the ORIGINAL image.
+ *   • Rotation is RELATIVE (cropper.rotate(±90) for the buttons, a delta for the tilt slider) so it
+ *     composes on top of the EXIF orientation Cropper applied — never snapping back to 0.
+ *   • Skew is a vertical shear: previewed by shearing the whole Cropper composite, baked as a
+ *     post-crop canvas shear. Crop first, then skew (the shear throws off pointer math while non-0).
  *   • Save always bakes (even zero adjustments — the edited copy is where EXIF-upright is made
- *     physical): the cropped canvas is redrawn through the same filter, downscaled so its long edge
- *     is ≤ 1568 px (never upscaled), exported as JPEG q≈0.9, and posted together with the recipe
- *     JSON and the AI note as one multipart form (native navigation follows the redirect).
+ *     physical): the cropped canvas is redrawn through the filter and shear, downscaled so its long
+ *     edge is ≤ 1568 px (never upscaled), exported as JPEG q≈0.9, and posted with the recipe JSON
+ *     and the AI note as one multipart form (native navigation follows the redirect).
  *   • Cancel restores the read view (confirm-guarded when there are unsaved changes).
  */
 (function () {
@@ -27,6 +29,7 @@
 
   var LONG_EDGE_CAP = 1568; // The Anthropic API downscales beyond this anyway (receipt doc §6.1).
   var JPEG_QUALITY = 0.9;
+  var INITIAL_CROP_AREA = 0.25; // A small central box to drag out from, not the full frame (§6.1).
 
   var root = document.querySelector("[data-receipt-process]");
   var form = root && root.querySelector("[data-receipt-edit]");
@@ -43,6 +46,7 @@
 
   var tools = {
     tilt: form.querySelector("[data-crop-tilt]"),
+    skew: form.querySelector("[data-crop-skew]"),
     brightness: form.querySelector("[data-crop-brightness]"),
     contrast: form.querySelector("[data-crop-contrast]"),
     grayscale: form.querySelector("[data-crop-grayscale]"),
@@ -50,7 +54,8 @@
 
   var cropper = null;
   var dirty = false;
-  var rotation = 0; // The 90° steps from the rotate buttons; tilt is the fine slider on top.
+  // Tilt is an ABSOLUTE slider but Cropper.rotate is relative, so we apply the delta since last move.
+  var prevTilt = 0;
 
   // The saved recipe to replay on a re-edit (absent/blank for a fresh `new` receipt).
   var savedRecipe = parseRecipe(form.getAttribute("data-receipt-recipe"));
@@ -64,6 +69,7 @@
     }
   }
 
+  // ── Filter + skew preview ────────────────────────────────────────────────────
   function filterString() {
     return (
       "grayscale(" +
@@ -84,6 +90,10 @@
     stage.style.setProperty("--receipt-filter", filterString());
   }
 
+  function applySkewPreview() {
+    stage.style.setProperty("--receipt-skew", (Number(tools.skew.value) || 0) + "deg");
+  }
+
   /** Show the "downscaled for the AI" note when the crop's long edge exceeds the cap. */
   function showDownscaleNote(width, height) {
     if (!downscaleNote) return;
@@ -91,8 +101,8 @@
     downscaleNote.toggleAttribute("hidden", longest <= LONG_EDGE_CAP);
   }
 
-  function applyRotation() {
-    if (cropper) cropper.rotateTo(rotation + Number(tools.tilt.value || 0));
+  function rotateBy(degrees) {
+    if (cropper && degrees) cropper.rotate(degrees);
   }
 
   function markDirty() {
@@ -107,7 +117,7 @@
 
     cropper = new Cropper(img, {
       viewMode: 1,
-      autoCropArea: 1,
+      autoCropArea: INITIAL_CROP_AREA,
       checkOrientation: true, // Bake in EXIF orientation — feed Cropper upright pixels (9b guard).
       background: true,
       responsive: true,
@@ -118,20 +128,22 @@
       },
       ready: function () {
         if (savedRecipe) replay(savedRecipe);
-        else applyFilterPreview();
+        applyFilterPreview();
+        applySkewPreview();
       },
     });
   }
 
   function replay(recipe) {
-    rotation = Number(recipe.rotation) || 0;
-    if (typeof recipe.tilt === "number") tools.tilt.value = recipe.tilt;
+    prevTilt = Number(recipe.tilt) || 0;
+    tools.tilt.value = prevTilt;
+    tools.skew.value = Number(recipe.skew) || 0;
     if (typeof recipe.brightness === "number") tools.brightness.value = recipe.brightness;
     if (typeof recipe.contrast === "number") tools.contrast.value = recipe.contrast;
     tools.grayscale.checked = Boolean(recipe.grayscale);
-    applyRotation();
+    // setData restores the absolute rotation (EXIF + coarse + tilt, all folded into crop.rotate) and
+    // the crop box — so no separate rotate call is needed on replay.
     if (recipe.crop) cropper.setData(recipe.crop);
-    applyFilterPreview();
   }
 
   function cancelEdit() {
@@ -150,7 +162,7 @@
     dirty = false;
   }
 
-  // ── Save: bake the edited JPEG and submit ───────────────────────────────────
+  // ── Save: bake the edited JPEG (crop → filter → shear) and submit ────────────
   function save() {
     if (!cropper) return;
     var cropped = cropper.getCroppedCanvas();
@@ -161,11 +173,20 @@
     var outWidth = Math.max(1, Math.round(cropped.width * scale));
     var outHeight = Math.max(1, Math.round(cropped.height * scale));
 
+    // Vertical shear: y' = y + shear·x (origin at the left edge, matching the CSS skewY preview).
+    var shear = Math.tan(((Number(tools.skew.value) || 0) * Math.PI) / 180);
+    var extra = Math.abs(shear) * outWidth;
+
     var out = document.createElement("canvas");
     out.width = outWidth;
-    out.height = outHeight;
+    out.height = Math.ceil(outHeight + extra);
     var ctx = out.getContext("2d");
+    // White ground so the triangular gaps the shear opens aren't black in the (alpha-less) JPEG.
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, out.width, out.height);
     ctx.filter = filterString(); // Bake the same filters the preview showed.
+    ctx.translate(0, shear < 0 ? extra : 0);
+    ctx.transform(1, shear, 0, 1, 0, 0);
     ctx.drawImage(cropped, 0, 0, outWidth, outHeight);
 
     out.toBlob(
@@ -186,10 +207,12 @@
   }
 
   function currentRecipe() {
+    // `crop.rotate` already carries the full rotation (EXIF + buttons + tilt); tilt/skew are stored
+    // so the sliders and the shear can be replayed onto the original.
     return {
       crop: cropper.getData(true),
-      rotation: rotation,
       tilt: Number(tools.tilt.value || 0),
+      skew: Number(tools.skew.value || 0),
       brightness: Number(tools.brightness.value || 100),
       contrast: Number(tools.contrast.value || 100),
       grayscale: tools.grayscale.checked,
@@ -210,17 +233,21 @@
     save();
   });
   on(form, "click", "[data-crop-rotate-left]", function () {
-    rotation = (rotation - 90) % 360;
-    applyRotation();
+    rotateBy(-90);
     markDirty();
   });
   on(form, "click", "[data-crop-rotate-right]", function () {
-    rotation = (rotation + 90) % 360;
-    applyRotation();
+    rotateBy(90);
     markDirty();
   });
   on(form, "input", "[data-crop-tilt]", function () {
-    applyRotation();
+    var value = Number(tools.tilt.value || 0);
+    rotateBy(value - prevTilt); // Apply only the change, so the 90° steps are preserved.
+    prevTilt = value;
+    markDirty();
+  });
+  on(form, "input", "[data-crop-skew]", function () {
+    applySkewPreview();
     markDirty();
   });
   on(form, "input", "[data-crop-brightness], [data-crop-contrast]", function () {
@@ -232,14 +259,15 @@
     markDirty();
   });
   on(form, "click", "[data-crop-reset]", function () {
-    rotation = 0;
+    if (cropper) cropper.reset(); // Back to the EXIF-upright orientation + central crop box.
+    prevTilt = 0;
     tools.tilt.value = 0;
+    tools.skew.value = 0;
     tools.brightness.value = 100;
     tools.contrast.value = 100;
     tools.grayscale.checked = false;
-    if (cropper) cropper.reset();
-    applyRotation();
     applyFilterPreview();
+    applySkewPreview();
     markDirty();
   });
   // Editing the AI note counts as an unsaved change too.

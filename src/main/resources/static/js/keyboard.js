@@ -34,9 +34,10 @@
  *      click in the same field positions the caret normally (register entry UX).
  *   9. Receipt register selection + right-click context menu (receipt doc §5.2); double-click (or
  *      Enter) a row opens its processing screen. On the processing screen itself (receipt doc §6):
- *      ↑/↓ walk the filtered list, Esc is Back (read) / Cancel (edit), Delete opens the dialog. This
- *      leaf only maps keys/clicks onto server-rendered buttons; the Cropper edit mode is owned by
- *      the receipt-editor.js leaf.
+ *      ↑/↓ walk the filtered list, Backspace/Esc is Back (read) / Esc is Cancel (edit), Delete opens
+ *      the dialog. Backspace is offered because the browser eats Esc to exit fullscreen. This leaf
+ *      only maps keys/clicks onto server-rendered buttons; the Cropper edit mode is owned by the
+ *      receipt-editor.js leaf.
  *  10. Auto-submit a [data-autosubmit] file input's form the moment a file is chosen — the mobile
  *      capture surface uploads on selection instead of a second Upload tap (receipt doc §4). The
  *      Upload button remains as the no-JS fallback: remove this script and capture still works, just
@@ -130,8 +131,9 @@
       return;
     }
 
-    // Processing screen (receipt doc §6): ↑/↓ walk the filtered list, Delete opens the dialog — but
-    // only in read mode, and never while typing into a field (a slider/textarea keeps the key).
+    // Processing screen (receipt doc §6): ↑/↓ walk the filtered list, Backspace goes Back, Delete
+    // opens the dialog — but only in read mode, and never while typing (a slider/textarea keeps the
+    // key). Backspace is offered alongside Esc because the browser also eats Esc to leave fullscreen.
     if (receiptProcess() && !receiptEditActive() && !isTyping(event.target)) {
       if (event.key === "ArrowUp") {
         event.preventDefault();
@@ -141,6 +143,11 @@
       if (event.key === "ArrowDown") {
         event.preventDefault();
         clickIfPresent("[data-receipt-next]");
+        return;
+      }
+      if (event.key === "Backspace") {
+        event.preventDefault();
+        clickIfPresent("[data-receipt-back]");
         return;
       }
       if (event.key === "Delete") {

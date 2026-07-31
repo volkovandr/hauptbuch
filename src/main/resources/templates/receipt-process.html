@@ -7,7 +7,7 @@
   views for the downstream states (a placeholder card stands in for them for now).
 
   Image editing is 100% client-side (tech-stack §5): the Cropper.js leaf (cropper.min.js) plus the
-  receipt-editor.js component drive crop/rotate/tilt/filters and bake the edited JPEG the AI
+  receipt-editor.js component drive crop/rotate/tilt/skew/filters and bake the edited JPEG the AI
   receives. Both are scoped to THIS page (loaded at the foot of the content), so they never weigh on
   other screens; remove them and the read views + Discard/Delete forms still work — only the in-page
   editor is lost. Keyboard nav (↑/↓ prev/next, Esc back/cancel, Delete) lives in the keyboard.js leaf.
@@ -32,6 +32,7 @@
         class="btn btn--ghost"
         th:href="@{/receipts(state=${stateFilter},range=${rangeFilter})}"
         data-receipt-back
+        title="Back to the register (Backspace or Esc)"
         >← Back</a
       >
       <span class="receipt-process__nav">
@@ -166,6 +167,10 @@
             <label class="receipt-edit__slider"
               >Tilt
               <input type="range" min="-15" max="15" step="0.5" value="0" data-crop-tilt />
+            </label>
+            <label class="receipt-edit__slider"
+              >Skew
+              <input type="range" min="-15" max="15" step="0.5" value="0" data-crop-skew />
             </label>
             <label class="receipt-edit__slider"
               >Brightness
