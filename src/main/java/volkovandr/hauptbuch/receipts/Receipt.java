@@ -12,7 +12,8 @@ import java.time.OffsetDateTime;
  * <p>{@code state} and {@code deletedAt} are orthogonal: {@code state} tracks where the scan sits
  * in the workflow (see {@link ReceiptState}); {@code deletedAt} is the reversible soft-delete axis.
  * All the parsed header fields ({@code merchantText} … {@code accountId}) stay null until the AI
- * runs (9e); at 9b a receipt is only ever {@code new} (or {@code discarded}) with an image on disk.
+ * runs (9e); a {@code new} receipt has only its original scan on disk, a {@code pre_processed} one
+ * also its edited derivative (9c).
  *
  * @param receiptId surrogate PK; null for a not-yet-persisted receipt
  * @param state one of {@link ReceiptState}'s values
@@ -20,6 +21,8 @@ import java.time.OffsetDateTime;
  * @param source how it arrived: {@code mobile}, {@code pc}, or {@code telegram}
  * @param originalPath root-relative path to the raw scan; never mutated (ARCH-07)
  * @param editedPath root-relative path to the derived, pre-processed image (9c); null until then
+ * @param editRecipe client-side edit parameters as JSON (crop/rotation/tilt/filters, 9c), saved
+ *     with the bake and replayed onto the original on re-edit; null until the first Save
  * @param aiNote per-receipt prompt guidance (9c); null until entered
  * @param batchId Batches API id while processing (9h); null in single mode
  * @param parseRaw raw AI response retained for audit (9e); null until analysed
@@ -38,6 +41,7 @@ public record Receipt(
     String source,
     String originalPath,
     String editedPath,
+    String editRecipe,
     String aiNote,
     String batchId,
     String parseRaw,

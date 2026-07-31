@@ -2,31 +2,24 @@ package volkovandr.hauptbuch.receipts;
 
 /**
  * Which actions the right-click context menu offers for a register selection (§5.2), and the counts
- * that drive the "N of M were not …" skip notes. Members in an invalid state for an action are
- * skipped, never blocked.
+ * that drive the "N of M were committed — skipped" note. Members in an invalid state for an action
+ * are skipped, never blocked.
+ *
+ * <p>On PC, delete <em>always</em> routes through the 3-way keep/delete-files dialog — {@code new}
+ * included (2026-07-31) — so there is a single delete affordance, not the instant/dialog split of
+ * 9b. The {@code discarded} state was retired the same day, so there is no Discard action either.
  *
  * @param total how many live receipts are selected
  * @param deletable how many are deletable through the ladder (every non-committed state)
- * @param discardable how many can be discarded (every non-committed state)
- * @param allDeletableNew whether every deletable member is {@code new} — the whole selection then
- *     deletes instantly with files removed; otherwise deletion routes through the keep/delete-files
- *     dialog
  */
-public record SelectionMenu(int total, int deletable, int discardable, boolean allDeletableNew) {
+public record SelectionMenu(int total, int deletable) {
 
-  /**
-   * Delete removes files with no dialog: there is something to delete and it is all {@code new}.
-   */
-  public boolean instantDelete() {
-    return deletable > 0 && allDeletableNew;
+  /** Whether the selection has anything the delete dialog can act on. */
+  public boolean canDelete() {
+    return deletable > 0;
   }
 
-  /** Delete routes through the keep/delete-files dialog: deletable members that aren't all new. */
-  public boolean fileChoiceDelete() {
-    return deletable > 0 && !allDeletableNew;
-  }
-
-  /** How many selected members are committed — skipped by delete/discard (the 9g dialog's job). */
+  /** How many selected members are committed — skipped by delete (the 9g dialog's job). */
   public int skipped() {
     return total - deletable;
   }
@@ -36,15 +29,6 @@ public record SelectionMenu(int total, int deletable, int discardable, boolean a
    * receipts".
    */
   public String deletableLabel() {
-    return countLabel(deletable);
-  }
-
-  /** The discardable count as a labelled, correctly-pluralised phrase. */
-  public String discardableLabel() {
-    return countLabel(discardable);
-  }
-
-  private static String countLabel(int count) {
-    return count + (count == 1 ? " receipt" : " receipts");
+    return deletable + (deletable == 1 ? " receipt" : " receipts");
   }
 }

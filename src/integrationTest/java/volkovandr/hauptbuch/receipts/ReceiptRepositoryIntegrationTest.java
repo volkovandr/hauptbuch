@@ -56,15 +56,41 @@ class ReceiptRepositoryIntegrationTest {
   }
 
   @Test
-  void updateStateMovesTheReceipt() {
+  void savePreProcessRecordsTheEditAndMovesToPreProcessed() {
     Receipt r = receiptRepository.insertCaptured("pc", "originals/2026/07/a.jpg");
 
-    receiptRepository.updateState(r.receiptId(), "discarded");
+    receiptRepository.savePreProcess(
+        r.receiptId(), "edited/2026/07/a.jpg", "{\"rotate\":90}", "this is fuel");
 
     assertThat(receiptRepository.findById(r.receiptId()))
         .get()
-        .extracting(Receipt::state)
-        .isEqualTo("discarded");
+        .satisfies(
+            saved -> {
+              assertThat(saved.state()).isEqualTo("pre_processed");
+              assertThat(saved.editedPath()).isEqualTo("edited/2026/07/a.jpg");
+              assertThat(saved.editRecipe()).isEqualTo("{\"rotate\":90}");
+              assertThat(saved.aiNote()).isEqualTo("this is fuel");
+            });
+  }
+
+  @Test
+  void discardEditsClearsTheEditButKeepsTheAiNoteAndReturnsToNew() {
+    Receipt r = receiptRepository.insertCaptured("pc", "originals/2026/07/a.jpg");
+    receiptRepository.savePreProcess(
+        r.receiptId(), "edited/2026/07/a.jpg", "{\"rotate\":90}", "this is fuel");
+
+    receiptRepository.discardEdits(r.receiptId());
+
+    assertThat(receiptRepository.findById(r.receiptId()))
+        .get()
+        .satisfies(
+            saved -> {
+              assertThat(saved.state()).isEqualTo("new");
+              assertThat(saved.editedPath()).isNull();
+              assertThat(saved.editRecipe()).isNull();
+              // The AI note survives the stage-undo — it describes the receipt, not the pixels.
+              assertThat(saved.aiNote()).isEqualTo("this is fuel");
+            });
   }
 
   @Test
@@ -128,7 +154,11 @@ class ReceiptRepositoryIntegrationTest {
   /** Insert a receipt in a given state at "now", returning its id. */
   private long capturedWithState(String state) {
     Receipt r = receiptRepository.insertCaptured("pc", "originals/2026/07/x.jpg");
-    receiptRepository.updateState(r.receiptId(), state);
+    jdbcClient
+        .sql("update receipt set state = :state where receipt_id = :id")
+        .param("state", state)
+        .param("id", r.receiptId())
+        .update();
     return r.receiptId();
   }
 

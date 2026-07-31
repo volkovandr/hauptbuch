@@ -111,11 +111,42 @@ public class ReceiptRepository {
         .update();
   }
 
-  /** Move a live receipt to a new lifecycle state (e.g. discard → {@code discarded}). */
-  public void updateState(long receiptId, String state) {
+  /**
+   * Save a pre-process edit (9c): record the edited image path, its edit recipe, and the AI note,
+   * and move the receipt to {@code pre_processed}. Called on both first edit and re-edit (the
+   * edited file is overwritten in place on disk; here the columns are simply rewritten).
+   */
+  public void savePreProcess(long receiptId, String editedPath, String editRecipe, String aiNote) {
     jdbcClient
-        .sql("update receipt set state = :state where receipt_id = :id and deleted_at is null")
-        .param("state", state)
+        .sql(
+            """
+            update receipt
+               set edited_path = :editedPath,
+                   edit_recipe = :editRecipe,
+                   ai_note = :aiNote,
+                   state = 'pre_processed'
+             where receipt_id = :id and deleted_at is null
+            """)
+        .param("editedPath", editedPath)
+        .param("editRecipe", editRecipe)
+        .param("aiNote", aiNote)
+        .param("id", receiptId)
+        .update();
+  }
+
+  /**
+   * Discard a receipt's pre-process edits (9c stage-undo): clear the edited image path and recipe
+   * and move back to {@code new}. The {@code ai_note} is deliberately <em>kept</em> — it describes
+   * the receipt, not the pixels (receipt doc §6.1).
+   */
+  public void discardEdits(long receiptId) {
+    jdbcClient
+        .sql(
+            """
+            update receipt
+               set edited_path = null, edit_recipe = null, state = 'new'
+             where receipt_id = :id and deleted_at is null
+            """)
         .param("id", receiptId)
         .update();
   }

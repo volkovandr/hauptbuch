@@ -38,7 +38,11 @@ class ReceiptStorageTest {
   }
 
   private static byte[] image(String format) {
-    BufferedImage img = new BufferedImage(200, 120, BufferedImage.TYPE_INT_RGB);
+    return image(format, 200, 120);
+  }
+
+  private static byte[] image(String format, int width, int height) {
+    BufferedImage img = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     try {
       ImageIO.write(img, format, out);
@@ -131,6 +135,65 @@ class ReceiptStorageTest {
 
     assertThat(regenerated).isNotEmpty();
     assertThat(Files.exists(thumb)).isTrue();
+  }
+
+  @Test
+  void storeEditedWritesTheEditedTreeAndRegeneratesTheThumbnail(@TempDir Path root) {
+    ReceiptStorage storage = storageAt(root);
+    String original = storage.storeOriginal(image("jpg"));
+
+    String edited = storage.storeEdited(original, image("jpg"));
+
+    // Same stem under edited/, always .jpg (the bake is JPEG).
+    assertThat(edited).isEqualTo("edited/2026/07/20260730-143022123.jpg");
+    assertThat(Files.exists(root.resolve(edited))).isTrue();
+    // The preview reflects the edit: the thumbnail (same stem under thumbs/) is regenerated.
+    assertThat(Files.exists(root.resolve("thumbs/2026/07/20260730-143022123.jpg"))).isTrue();
+  }
+
+  @Test
+  void storeEditedOverwritesInPlaceOnReEdit(@TempDir Path root) {
+    ReceiptStorage storage = storageAt(root);
+    String original = storage.storeOriginal(image("jpg"));
+
+    String first = storage.storeEdited(original, image("jpg"));
+    // A visibly different JPEG payload (different dimensions ⇒ different bytes) proves the
+    // overwrite.
+    byte[] reEdited = image("jpg", 80, 80);
+    String second = storage.storeEdited(original, reEdited);
+
+    // Re-edit reuses the same path (overwrite in place), not a new suffixed file.
+    assertThat(second).isEqualTo(first);
+    assertThat(storage.readImage(second)).isEqualTo(reEdited);
+  }
+
+  @Test
+  void storeEditedRejectsNonJpegBytes(@TempDir Path root) {
+    ReceiptStorage storage = storageAt(root);
+    String original = storage.storeOriginal(image("jpg"));
+
+    assertThatThrownBy(() -> storage.storeEdited(original, image("png")))
+        .isInstanceOf(ReceiptFormatException.class)
+        .hasMessageContaining("JPEG");
+  }
+
+  @Test
+  void discardEditedRemovesTheEditedFileAndRegeneratesTheThumbnailFromTheOriginal(
+      @TempDir Path root) {
+    ReceiptStorage storage = storageAt(root);
+    String original = storage.storeOriginal(image("jpg"));
+    String edited = storage.storeEdited(original, image("jpg"));
+    Path editedFile = root.resolve(edited);
+    assertThat(Files.exists(editedFile)).isTrue();
+
+    storage.discardEdited(original, edited);
+
+    assertThat(Files.exists(editedFile)).isFalse();
+    // The thumbnail is regenerated (from the original) — still present, original untouched.
+    assertThat(Files.exists(root.resolve("thumbs/2026/07/20260730-143022123.jpg"))).isTrue();
+    assertThat(Files.exists(root.resolve(original))).isTrue();
+    // Idempotent: discarding again (edited already gone) is a no-op, not an error.
+    storage.discardEdited(original, edited);
   }
 
   @Test

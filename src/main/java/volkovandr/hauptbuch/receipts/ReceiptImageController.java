@@ -30,12 +30,24 @@ class ReceiptImageController {
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
-  /** The full-scale original scan — the mobile tap-through and PC detail image. */
+  /** The full-scale original scan — the mobile tap-through and PC editor source (recipe replay). */
   @GetMapping("/receipts/{id}/image")
   ResponseEntity<byte[]> original(@PathVariable long id) {
     return receiptService
         .findById(id)
         .flatMap(receipt -> receiptService.originalBytes(id).map(bytes -> serve(receipt, bytes)))
+        .orElseGet(() -> ResponseEntity.notFound().build());
+  }
+
+  /**
+   * The full-scale edited image — the exact JPEG bytes the AI receives (§6.1), shown on the {@code
+   * pre_processed} processing view. A 404 while a receipt has no edited image yet.
+   */
+  @GetMapping("/receipts/{id}/edited")
+  ResponseEntity<byte[]> edited(@PathVariable long id) {
+    return receiptService
+        .editedBytes(id)
+        .map(bytes -> image(bytes, MediaType.IMAGE_JPEG))
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
 

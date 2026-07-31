@@ -32,7 +32,11 @@
  *      the cursor lands where the user types next instead of nowhere (register §3.10).
  *   8. Select-all on first focus of a [.num] field with a value, so typing replaces it; a later
  *      click in the same field positions the caret normally (register entry UX).
- *   9. Receipt register selection + right-click context menu (receipt doc §5.2); see that section.
+ *   9. Receipt register selection + right-click context menu (receipt doc §5.2); double-click (or
+ *      Enter) a row opens its processing screen. On the processing screen itself (receipt doc §6):
+ *      ↑/↓ walk the filtered list, Esc is Back (read) / Cancel (edit), Delete opens the dialog. This
+ *      leaf only maps keys/clicks onto server-rendered buttons; the Cropper edit mode is owned by
+ *      the receipt-editor.js leaf.
  *  10. Auto-submit a [data-autosubmit] file input's form the moment a file is chosen — the mobile
  *      capture surface uploads on selection instead of a second Upload tap (receipt doc §4). The
  *      Upload button remains as the no-JS fallback: remove this script and capture still works, just
@@ -69,9 +73,16 @@
     row.focus();
   }
 
-  /** Activate a row: prefer an inner link/button, else click the row itself. */
+  /**
+   * Activate a row. A receipt row opens its processing screen (data-receipt-open); otherwise prefer
+   * an inner link/button, else click the row itself.
+   */
   function activate(row) {
     if (!row) return;
+    if (row.dataset && row.dataset.receiptOpen) {
+      window.location.href = row.dataset.receiptOpen;
+      return;
+    }
     const target = row.querySelector("a, button") || row;
     target.click();
   }
@@ -96,15 +107,47 @@
       return;
     }
 
-    // Escape closes an open palette, and dismisses the receipt menu/dialog overlays.
+    // Escape closes an open palette, dismisses the receipt menu/dialog overlays, and on the
+    // processing screen doubles as Back (read mode) or Cancel (edit mode) — receipt doc §6.
     if (event.key === "Escape") {
       const palette = document.querySelector('[data-kbd-palette][data-open="true"]');
       if (palette) {
         event.preventDefault();
         palette.setAttribute("data-open", "false");
+        return;
+      }
+      // A dialog overlay open? Dismiss it first, before any Back/Cancel navigation.
+      if (anyReceiptOverlayOpen()) {
+        clearReceiptOverlays();
+        return;
+      }
+      if (receiptProcess()) {
+        event.preventDefault();
+        clickIfPresent(receiptEditActive() ? "[data-receipt-cancel]" : "[data-receipt-back]");
+        return;
       }
       clearReceiptOverlays();
       return;
+    }
+
+    // Processing screen (receipt doc §6): ↑/↓ walk the filtered list, Delete opens the dialog — but
+    // only in read mode, and never while typing into a field (a slider/textarea keeps the key).
+    if (receiptProcess() && !receiptEditActive() && !isTyping(event.target)) {
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        clickIfPresent("[data-receipt-prev]");
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        clickIfPresent("[data-receipt-next]");
+        return;
+      }
+      if (event.key === "Delete") {
+        event.preventDefault();
+        clickIfPresent("[data-receipt-delete]");
+        return;
+      }
     }
 
     // Tag chip field (register §3.6): Enter commits the typed chip, Backspace on the empty input
@@ -414,6 +457,15 @@
     }
   }
 
+  // Double-click a receipt row → open its processing screen (receipt doc §5). A double-click on the
+  // thumbnail link is left to the link (full-size image in a new tab).
+  function onReceiptDblClick(event) {
+    const row = event.target.closest && event.target.closest(RECEIPT_ROW);
+    if (!row || !row.dataset.receiptOpen) return;
+    if (event.target.closest("a")) return;
+    window.location.href = row.dataset.receiptOpen;
+  }
+
   function onReceiptContextMenu(event) {
     const row = event.target.closest && event.target.closest(RECEIPT_ROW);
     if (!row) return;
@@ -444,6 +496,37 @@
       const el = document.getElementById(id);
       if (el) el.innerHTML = "";
     });
+  }
+
+  function anyReceiptOverlayOpen() {
+    return ["receipt-menu", "receipt-dialog"].some((id) => {
+      const el = document.getElementById(id);
+      return el && el.innerHTML.trim() !== "";
+    });
+  }
+
+  // ── Processing screen navigation (receipt doc §6) ────────────────────────────
+  // The screen renders prev/next/back/delete buttons and (for pre-processable states) the Cropper
+  // editor. This leaf only maps keys onto those buttons — the editor component (receipt-editor.js)
+  // owns the edit mode itself. All no-ops off the processing screen.
+  function receiptProcess() {
+    return document.querySelector("[data-receipt-process]");
+  }
+
+  /** Whether the Cropper edit view is showing (its form is un-hidden by the editor component). */
+  function receiptEditActive() {
+    const edit = document.querySelector("[data-receipt-edit]");
+    return Boolean(edit) && !edit.hasAttribute("hidden");
+  }
+
+  function clickIfPresent(selector) {
+    const el = document.querySelector(selector);
+    if (el) el.click();
+  }
+
+  function isTyping(target) {
+    const tag = (target && target.tagName ? target.tagName : "").toLowerCase();
+    return tag === "input" || tag === "textarea" || tag === "select";
   }
 
   // Dismiss overlays on a click that is neither inside the menu/dialog nor a fresh right-click.
@@ -513,6 +596,7 @@
   document.addEventListener("click", onTagRemoveClick);
   document.addEventListener("click", onReceiptDismissClick);
   document.addEventListener("mousedown", onReceiptMouseDown);
+  document.addEventListener("dblclick", onReceiptDblClick);
   document.addEventListener("contextmenu", onReceiptContextMenu);
   document.addEventListener("change", onAutoSubmitChange);
   document.addEventListener("mousedown", onMouseDownSelect);
