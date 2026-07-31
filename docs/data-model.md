@@ -1,8 +1,8 @@
 # Hauptbuch — Core Data Model
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.7
-**Date:** 2026-07-21
+**Status:** Draft v0.8
+**Date:** 2026-07-31
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1)
@@ -17,6 +17,13 @@
 > attachments, and holdings are deliberately **not modeled here yet** — see §12.
 
 **Changelog**
+- **v0.8 (2026-07-31):** Stage-9c grilling round. **`receipt.state` loses `discarded`** — the
+  state is retired (receipt doc v0.4 §2.1): "seen, chose not to book" is covered by soft-delete
+  with files kept; "Discard" now means the processing screen's stage-undo. **`edit_recipe` added**
+  to `receipt`: the client-side edit parameters (crop/rotation/tilt/filters, JSON) saved with the
+  baked image and replayed onto the immutable original on re-edit. New invariant: any state past
+  `new` implies `edited_path` + `edit_recipe` are set (Save always bakes — the edited copy is
+  where EXIF-upright is made physical).
 - **v0.7 (2026-07-21):** **Receipts ratified** (§13) from the provisional sketch in
   `ui-receipt-processing.md` §9, closing the deferred "Attachments" item for receipts (statements
   remain deferred, §12). Adds `receipt`, `receipt_line`, `receipt_line_tag` (mirroring
@@ -828,11 +835,14 @@ create table receipt (
   receipt_id     bigint generated always as identity primary key,
   state          text not null default 'new'
                  check (state in ('new','pre_processed','processing',
-                                  'processed','committed','discarded','failed')),
+                                  'processed','committed','failed')),
   captured_at    timestamptz not null default now(),
   source         text not null check (source in ('mobile','pc','telegram')),
   original_path  text not null,           -- raw scan on the Pi; NEVER mutated (ARCH-07)
   edited_path    text,                    -- derived, post-preprocess image actually sent to the AI
+  edit_recipe    text,                    -- client-side edit parameters (crop/rotation/tilt/filter
+                                          -- values, JSON) saved with the bake; replayed onto the
+                                          -- original when the user re-edits (receipt doc §6.1)
   ai_note        text,                    -- per-receipt prompt guidance (receipt doc §8)
   batch_id       text,                    -- Batches API id while processing (NULL for single mode)
   parse_raw      text,                    -- raw AI response, retained immutable (audit). text, not
@@ -852,9 +862,14 @@ create table receipt (
 ```
 
 - **`state` and `deleted_at` are orthogonal**, exactly as `lifecycle`⊥`deleted_at` on
-  `transaction`: `discarded` = "looked and chose not to book" (kept for the record); deleted =
-  "remove this row."
-- **Transaction is born at confirm**, never at parse — a receipt may die (delete/discard) without
+  `transaction`. There is **no `discarded` state** (retired 2026-07-31): "looked and chose not to
+  book" is a **soft-delete with files kept** — the row keeps its record, the images stay on disk.
+- **Past `new`, the edited image exists**: every state except `new` implies `edited_path` and
+  `edit_recipe` are non-null — Save **always bakes**, even with zero adjustments, because the
+  original keeps its raw pixels + EXIF orientation tag (ARCH-07) and the edited copy is where
+  "upright" is made physical (the bytes the AI receives). *Discard edits* (`pre_processed` →
+  `new`) clears both; `ai_note` survives it.
+- **Transaction is born at confirm**, never at parse — a receipt may die (delete) without
   ever touching the ledger.
 
 ### 13.2 `receipt_line` — the editable working copy
