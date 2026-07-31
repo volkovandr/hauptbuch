@@ -64,9 +64,12 @@
         th:text="${#strings.capitalize(#strings.replace(receipt.state(), '_', ' '))}"
         >New</span
       >
+      <!-- Delete is the 3-way keep/delete-files rung for any NON-committed state; a committed
+           receipt's deletion is the transaction-aware 5-way dialog (§7/9g), so no button here. -->
       <button
         class="btn btn--danger"
         type="button"
+        th:if="${receipt.state() != 'committed'}"
         data-receipt-delete
         th:attr="hx-get=@{/receipts/{id}/delete-confirm(id=${receipt.receiptId()},state=${stateFilter},range=${rangeFilter})}"
         hx-target="#receipt-dialog"

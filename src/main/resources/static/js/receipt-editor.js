@@ -84,6 +84,13 @@
     stage.style.setProperty("--receipt-filter", filterString());
   }
 
+  /** Show the "downscaled for the AI" note when the crop's long edge exceeds the cap. */
+  function showDownscaleNote(width, height) {
+    if (!downscaleNote) return;
+    var longest = Math.max(width || 0, height || 0);
+    downscaleNote.toggleAttribute("hidden", longest <= LONG_EDGE_CAP);
+  }
+
   function applyRotation() {
     if (cropper) cropper.rotateTo(rotation + Number(tools.tilt.value || 0));
   }
@@ -104,6 +111,11 @@
       checkOrientation: true, // Bake in EXIF orientation — feed Cropper upright pixels (9b guard).
       background: true,
       responsive: true,
+      // Live "will be downscaled" note: the crop box's own pixels tell us the bake's long edge, so
+      // the user sees it while adjusting (a post-save note would vanish on the redirect).
+      crop: function (event) {
+        showDownscaleNote(event.detail.width, event.detail.height);
+      },
       ready: function () {
         if (savedRecipe) replay(savedRecipe);
         else applyFilterPreview();
@@ -155,8 +167,6 @@
     var ctx = out.getContext("2d");
     ctx.filter = filterString(); // Bake the same filters the preview showed.
     ctx.drawImage(cropped, 0, 0, outWidth, outHeight);
-
-    if (downscaleNote) downscaleNote.toggleAttribute("hidden", scale === 1);
 
     out.toBlob(
       function (blob) {

@@ -14,7 +14,7 @@ import volkovandr.hauptbuch.web.NavItem;
  * The PC receipt register (§5, plan stage 9b): the dense list of receipts with a state filter
  * (default work queue), a capture-date-range filter (incl. an "everything" option), captured
  * ascending. The parsed columns render blank until 9e — a stable layout now, no template churn
- * later. Selection + the right-click context menu (§5.2) drive the delete ladder and discard.
+ * later. Selection + the right-click context menu (§5.2) drive the delete ladder.
  *
  * <p>Lives in {@code receipts}: the feature module owns its screen (CLAUDE.md §3). Actions
  * re-render the list fragment in place (htmx); no full navigation, so the selection surface stays
@@ -27,9 +27,6 @@ class ReceiptRegisterController {
   private static final String VIEW = "receipts";
   private static final String LIST_FRAGMENT = "receipts :: list(receipts=${receipts})";
 
-  private static final String STATE_QUEUE = ReceiptFilters.STATE_QUEUE;
-  private static final String RANGE_90D = ReceiptFilters.RANGE_90D;
-
   private final ReceiptService receiptService;
 
   ReceiptRegisterController(ReceiptService receiptService) {
@@ -39,8 +36,8 @@ class ReceiptRegisterController {
   /** The register page, filtered by state and capture-date range. */
   @GetMapping(BASE_PATH)
   String register(
-      @RequestParam(required = false, defaultValue = STATE_QUEUE) String state,
-      @RequestParam(required = false, defaultValue = RANGE_90D) String range,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
       Model model) {
     populateList(model, state, range);
     model.addAttribute("states", ReceiptState.ALL);
@@ -74,8 +71,8 @@ class ReceiptRegisterController {
   }
 
   /**
-   * The keep-files / delete-files dialog (the middle rung of the ladder, §9b) for a non-committed,
-   * non-{@code new} selection — a three-way choice htmx's {@code hx-confirm} can't express.
+   * The keep-files / delete-files dialog (§5.2) for any non-committed selection — {@code new}
+   * included on PC (2026-07-31) — a three-way choice htmx's {@code hx-confirm} can't express.
    */
   @GetMapping("/receipts/delete-dialog")
   String deleteDialog(@RequestParam(name = "id", required = false) List<Long> ids, Model model) {
@@ -88,8 +85,8 @@ class ReceiptRegisterController {
   String delete(
       @RequestParam(name = "id", required = false) List<Long> ids,
       @RequestParam(required = false, defaultValue = "false") boolean removeFiles,
-      @RequestParam(required = false, defaultValue = STATE_QUEUE) String state,
-      @RequestParam(required = false, defaultValue = RANGE_90D) String range,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
       Model model) {
     receiptService.deleteSelection(nullSafe(ids), removeFiles);
     populateList(model, state, range);

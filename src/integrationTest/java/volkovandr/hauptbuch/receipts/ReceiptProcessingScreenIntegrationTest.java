@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.receipts;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -122,6 +123,22 @@ class ReceiptProcessingScreenIntegrationTest {
     assertThat(columnOf(id, "edited_path")).isNull();
     // The AI note survives the stage-undo.
     assertThat(columnOf(id, "ai_note")).isEqualTo("this is fuel");
+  }
+
+  @Test
+  void committedReceiptScreenHidesTheDeleteButton() throws Exception {
+    long id = upload();
+    jdbcClient
+        .sql("update receipt set state = 'committed' where receipt_id = :id")
+        .param("id", id)
+        .update();
+
+    // A committed receipt's deletion is the transaction-aware 5-way dialog (§7/9g), not this rung —
+    // so the processing screen offers no Delete button (which would 500 on the ladder path).
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("data-receipt-delete"))));
   }
 
   @Test
