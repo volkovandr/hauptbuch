@@ -97,6 +97,9 @@ class ReceiptRegisterScreenIntegrationTest {
         // The count reads as an amount, not IDs: singular "receipt".
         .andExpect(content().string(containsString("Delete 1 receipt")))
         .andExpect(content().string(containsString("/receipts/delete-dialog")))
+        // A single selection also offers "View image" → the full-size scan.
+        .andExpect(content().string(containsString("View image")))
+        .andExpect(content().string(containsString("/receipts/" + id + "/image")))
         // The `discarded` state is retired: no Discard action.
         .andExpect(content().string(not(containsString("Discard"))));
   }
@@ -113,13 +116,17 @@ class ReceiptRegisterScreenIntegrationTest {
   }
 
   @Test
-  void registerLinksTheThumbnailToTheFullImage() throws Exception {
+  void registerRowShowsThumbnailAndOpensTheProcessingScreen() throws Exception {
     long id = upload();
 
     mockMvc
         .perform(get(RECEIPTS_PATH))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("/receipts/" + id + "/image")));
+        // The thumbnail is a plain preview (no full-image link — that moved to the menu, so it no
+        // longer competes with the row's double-click).
+        .andExpect(content().string(containsString("/receipts/" + id + "/thumb")))
+        // Double-click opens the processing screen; the row carries its URL for the keyboard leaf.
+        .andExpect(content().string(containsString("data-receipt-open=\"/receipts/" + id + "\"")));
   }
 
   @Test

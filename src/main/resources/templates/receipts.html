@@ -82,8 +82,8 @@
       </p>
 
       <p class="receipt-list__hint muted" th:unless="${#lists.isEmpty(receipts)}">
-        Double-click a row to open it. Click a scan to view it full size. Select rows
-        (Shift/Ctrl-click for many) and right-click for actions.
+        Double-click a row to open it. Select rows (Shift/Ctrl-click for many) and right-click for
+        actions (incl. View image).
       </p>
 
       <table class="receipts" th:unless="${#lists.isEmpty(receipts)}">
@@ -109,22 +109,15 @@
             tabindex="-1"
           >
             <td class="receipts__thumb">
-              <!-- The thumbnail opens the raw scan full size in a new tab; double-click (or Enter) on
-                   the row opens the processing screen (§6), wired in the keyboard.js leaf. The leaf
-                   skips row-selection when the click lands on this link. -->
-              <a
-                th:href="@{/receipts/{id}/image(id=${r.receiptId()})}"
-                target="_blank"
-                rel="noopener"
-                title="View full size"
-              >
-                <img
-                  class="receipts__thumb-img"
-                  th:src="@{/receipts/{id}/thumb(id=${r.receiptId()})}"
-                  alt="Receipt scan"
-                  loading="lazy"
-                />
-              </a>
+              <!-- Just a preview: single-click selects the row, double-click (or Enter) opens the
+                   processing screen (§6, keyboard.js leaf). Viewing the full image full-size is the
+                   context menu's "View image" (no click-target conflict with double-click). -->
+              <img
+                class="receipts__thumb-img"
+                th:src="@{/receipts/{id}/thumb(id=${r.receiptId()})}"
+                alt="Receipt scan"
+                loading="lazy"
+              />
             </td>
             <td class="receipts__captured num" th:text="${#temporals.format(r.capturedAt(), 'yyyy-MM-dd HH:mm')}">
               2026-07-30 14:30
@@ -163,6 +156,15 @@
     <input type="hidden" name="id" th:each="i : ${ids}" th:value="${i}" />
     <p class="receipt-menu__none muted" th:if="${menu.total() == 0}">Nothing selected.</p>
     <ul class="receipt-menu__actions" th:unless="${menu.total() == 0}">
+      <!-- View the full-size scan in a new tab — single selection only (one image at a time). -->
+      <li th:if="${ids.size() == 1}">
+        <a
+          th:href="@{/receipts/{id}/image(id=${ids[0]})}"
+          target="_blank"
+          rel="noopener"
+          >View image</a
+        >
+      </li>
       <li th:if="${menu.canDelete()}">
         <button
           type="button"
