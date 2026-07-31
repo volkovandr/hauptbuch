@@ -1,8 +1,8 @@
 # Personal Finance Manager — UI: Receipt Processing & Receipt Register
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.3
-**Date:** 2026-07-21
+**Status:** Draft v0.4
+**Date:** 2026-07-31
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
@@ -22,6 +22,18 @@
 > The **exact keyboard state machine** is deferred to implementation, as in the register doc.
 
 **Changelog**
+- **v0.4 (2026-07-31):** Stage-9c grilling round (owner-confirmed). **The ▲▼ stage axis is
+  retired**: the workflow pane becomes the **processing screen** — one view per *state*, at its own
+  URL, with every transition (forward or backward) an explicit named button, never auto-triggered
+  (§2.2, §6). **The `discarded` state is retired** (§2.1): "seen, chose not to book" is covered by
+  **Delete + keep files** (soft-deleted row, files retained); "Discard" now means **stage-undo**
+  (e.g. *Discard edits*: `pre_processed` → `new`). Delete on PC always asks the 3-way
+  keep/delete-files question, for `new` receipts too; the mobile grid keeps its instant × on `new`
+  tiles. Pre-process mechanics settled: Save **always bakes** the edited image (EXIF-upright made
+  physical; JPEG q≈0.9, long edge capped at 1568 px with a visible downscale note) and stores an
+  **edit recipe** (crop/rotation/tilt/filter JSON) replayed onto the original on re-edit; the AI
+  note is saved by the same Save and **survives** *Discard edits*. Keyboard: ↑/↓ walk the filtered
+  list, Esc = back (read mode) / guarded Cancel (edit mode).
 - **v0.3 (2026-07-21):** Stage-9 planning round (grilled & owner-confirmed; build sequence in
   `implementation-plan-stage-9.md`). **Schema ratified** into `data-model.md` §13 — that doc is now
   authoritative for the entities; §9 below is historical. **Duplicate detection +
@@ -78,7 +90,7 @@ From the requirements (§5.7), the tech-stack (§5 image handling, §4 htmx), an
   category §3.5, tags §3.6, beneficiary/sign rules §3.8). Receipts are simply a *second front door*
   onto the same uniform posting model; none of the workflow's conveniences are new model concepts.
 - **The transaction register stays clean.** Because transactions are born only at **confirm**
-  (§6.4), a receipt that is abandoned, re-scanned, or discarded never leaves a pending row behind.
+  (§6.4), a receipt that is abandoned, deleted, or re-scanned never leaves a pending row behind.
 
 ---
 
@@ -91,22 +103,23 @@ data-model keeps `lifecycle` and `deleted_at` orthogonal on `transaction` (§3.5
 
 | State | Meaning | Reachable from |
 |-------|---------|----------------|
-| `new` | Raw scan captured; **not yet pre-processed**. | (capture) |
-| `pre_processed` | Image cleaned + optional AI note set; **queued, not yet analysed**. | `new`, re-edit |
+| `new` | Raw scan captured; **not yet pre-processed**. | (capture); **Discard edits** from `pre_processed` |
+| `pre_processed` | Image cleaned + optional AI note set; **queued, not yet analysed**. | `new` (Save), re-edit |
 | `processing` | Submitted to the AI (single or batch); awaiting result. **Grey/locked.** | `pre_processed` |
 | `processed` | Parse returned; working draft lines seeded; **under post-process review**. | `processing`; **reopen** from `committed` (§7) |
 | `committed` | Confirmed; a transaction was created (or an existing one linked) and is attached. May be **reopened** for re-entry. | `processed` |
-| `discarded` | Deliberately **not** entered (junk / true duplicate). Terminal; **not** deleted. | any non-committed |
-| `failed` | AI errored or returned nothing usable. Retry (→ `pre_processed`) or discard. | `processing` |
+| `failed` | AI errored or returned nothing usable. Retry (→ `pre_processed`) or delete. | `processing` |
 
 - **`deleted_at` is a separate, orthogonal column** (soft delete), exactly as on `transaction`.
-  `discarded` ≠ deleted: *discarded* is "I looked and chose not to book it" (kept for the record);
-  *deleted* is "remove this row." Folding them would lose the distinction the audit trail needs.
-- **`discarded` vs `deleted` vs re-scan.** Your stated workflow — "too many errors, I'd rather
-  delete and re-scan" — is a **delete** (the scan was no good). *Discard* is for a fine scan you
-  decide not to book (a duplicate you caught, a junk photo).
+- **There is no `discarded` state** (retired 2026-07-31, 9c grilling; it existed in v0.1–v0.3 as
+  "seen, deliberately not booked, kept visible"). That need is covered by **Delete + keep files**:
+  the row is soft-deleted (invisible; undelete UI is backlog-on-need), the image files stay on disk
+  for investigation. **"Discard" now means stage-undo** — the explicit backward transitions of the
+  processing screen (*Discard edits*, later *discard the AI result*), not a terminal verdict.
+- **Delete vs re-scan.** "Too many errors, I'd rather delete and re-scan" — that is a **delete**
+  (the scan was no good). On PC, delete always asks: delete files / keep files / cancel.
 
-### 2.2 UI **workflow step** (what the detail pane shows; the prev/next-**stage** buttons)
+### 2.2 UI: one screen per state (the ▲▼ stage axis is retired)
 
 ```
   ① Pre-process  →  ② Process  →  ③ Post-process  →  ④ Confirm
@@ -115,15 +128,19 @@ data-model keeps `lifecycle` and `deleted_at` orthogonal on `transaction` (§3.5
                                        split toolkit)        → transaction)
 ```
 
-The **step** you may view is **gated by state**: you cannot open Post-process before the receipt
-is `processed`. Steps ① and ④ are *actions you take*; ② is mostly *a wait* (the analyse button
-lives at the boundary ①→②). Navigating "next stage" past ① on a `pre_processed` receipt does **not**
-auto-analyse — it just shows the Process step with its **Analyse** button (per the mandatory-then-
-deferred rule, §3.2).
+The pipeline above survives as the *conceptual* order, but the UI does **not** navigate "steps"
+independently of state (the two-axis grid of v0.1–v0.3 is retired, 2026-07-31). The **processing
+screen** (§6) renders **one view per state**, and every state transition — forward *or* backward —
+is an **explicit, named button**; nothing fires automatically. `new` shows *Prepare for analysis*;
+`pre_processed` shows the result plus *Analyse*; and so on. Artifacts of earlier stages (edited
+image, AI note, later the draft lines) are simply visible on the later screens — no separate
+"view the previous step" navigation is needed.
 
-**Backward navigation is allowed.** From Post-process you may step back to Pre-process to re-crop
-or change the AI note and **re-analyse**; this **overwrites** the parse and re-seeds the draft
-lines, so it asks for confirmation if you have already edited items. (This is the remediation loop.)
+**Backward transitions are the undo ladder** ("discard the work of a stage"): *Discard edits*
+(`pre_processed` → `new`, removing the edited image + recipe — the AI note survives), and later
+"discard the AI result" (`processed` → `pre_processed`, 9e). Going back to re-crop or change the
+AI note and **re-analyse** **overwrites** the parse and re-seeds the draft lines, so it asks for
+confirmation if you have already edited items. (This is the remediation loop.)
 
 ---
 
@@ -205,8 +222,8 @@ device**, not a finance console.
 
 ## 5. PC — the receipt register (the list)
 
-Same **dense master-detail** shape as the transaction register: a thin-row list, and a detail pane
-(here the **workflow pane**, §6) that opens on **double-click**. State is the **primary filter**.
+Same **dense list** shape as the transaction register: thin rows, state as the **primary filter**;
+**double-click** opens the **processing screen** (§6) at its own URL.
 
 ### 5.1 Columns
 
@@ -220,58 +237,83 @@ Left-to-right: **thumbnail · captured · state · merchant · total · account 
   `12,90`; non-base carries its symbol/ISO — register doc §2.9).
 - **🔗 txn** — present once `committed`; click = **jump to the transaction register**, pre-selected
   and loaded in the dock (§7).
-- **status** — small icons: AI note attached ✎, failed ⚠, batch-member ⌗, discarded ⊘.
+- **status** — small icons: AI note attached ✎, failed ⚠, batch-member ⌗.
 
 ### 5.2 Filter, order, search, select
 
 | Aspect | Default | Notes |
 |--------|---------|-------|
-| State | **everything except `committed` & `discarded`** | i.e. "the work queue." One click to show committed/all. |
+| State | **everything except `committed`** | i.e. "the work queue." One click to show committed/all. |
 | Date range | **Last 90 days** of captures | Keeps the list bounded (tech-stack §4.2); widen as needed. |
 | Order | **Captured, ascending** | Oldest first = natural backlog order. Re-sortable by any column. |
 | Search | across merchant + AI note + parsed line text | Fuzzy, like the payee key (register §3.4). |
 | Select | **shift-click / ctrl-click** ranges & sets | Multi-select feeds the right-click menu. |
 
 **Right-click (context) menu** on a selection: **Process** (batch-analyse all `pre_processed` in
-the selection), **Discard**, **Delete**, **Re-analyse**. Single-receipt double-click opens the
-workflow pane (§6). Items in the selection that aren't in a valid state for an action are skipped
-with a count ("3 of 5 were not ready to process").
+the selection), **Delete** (always the 3-way keep/delete-files dialog on PC, `new` included —
+2026-07-31; there is no Discard entry, §2.1), **Re-analyse**. Single-receipt double-click opens
+the processing screen (§6). Items in the selection that aren't in a valid state for an action are
+skipped with a count ("3 of 5 were not ready to process").
 
 ---
 
-## 6. PC — the workflow pane (the detail surface)
+## 6. PC — the processing screen (the detail surface)
 
-Opens on double-click; the list stays reachable. **Two independent navigation axes** — this is the
-"two sets of buttons":
+Opens on double-click, at its **own URL, in the same tab**, carrying the register's current
+filter + order so navigation walks the same list the register shows (this also keeps the door
+open for a future side-by-side embed). The screen renders **one view per state** (§2.2); common
+chrome on every view:
 
-- **Receipt axis** ◀ prev / next ▶ — steps the selection through the **filtered, ordered list**,
-  loading each receipt into the pane at its current step. This is the "work through the pile"
-  motion; it does not change which *step* you're on if the next receipt supports it.
-- **Stage axis** ▲ prev / next ▼ — moves through the **workflow steps** (§2.2) of the *current*
-  receipt, gated by state.
+- **↑ prev / ↓ next receipt** — steps through the **filtered, ordered list** (keys match the
+  vertical list; also buttons). This is the "work through the pile" motion.
+- **Back** (button, or **Esc** in read mode) — returns to the register.
+- **Delete** — the 3-way keep/delete-files dialog (PC delete always asks, any non-committed
+  state; the `committed` 5-way rung is §7/9g). After a delete: land on the **next** receipt,
+  else the previous, else back to the list. The **Delete key** opens the same dialog.
+- **State-transition buttons** are per-view, explicit, and **never fire automatically** (§2.2).
 
-Mental model: **receipts horizontal, stages vertical** — a 2-D grid you walk with two button pairs.
+### 6.1 Pre-process (the `new` and `pre_processed` views)
 
-### 6.1 Step ① Pre-process
+Image work is client-side only (tech-stack §5); the Pi does no image math.
 
-Client-side only (tech-stack §5). The pane shows the image with the Cropper.js leaf and a small
-controls strip:
+**The `new` view** shows the original image and **Prepare for analysis** (plus the AI note, §8,
+read-only if one survives from discarded edits). *Prepare for analysis* enters **edit mode**:
 
-- **crop · rotate · tilt(straighten) · grayscale · brightness · contrast** — live canvas preview;
-  a final pixel pass bakes the **edited image** (the artifact sent to the AI). All **manual** — no
-  AI in the image step (§3.2). The **original is never mutated**; any bad edit is recoverable by
-  re-editing from the original.
-- **AI note** (§8) — a freetext field travelling with this receipt into the prompt.
+- The Cropper.js leaf appears — **crop · rotate · tilt(straighten) · grayscale · brightness ·
+  contrast**, live canvas preview — and the **AI note** field becomes editable. Navigation and
+  Delete disappear; **Save / Cancel** appear (Esc = Cancel, confirm-guarded).
+- **Save** bakes the edited image — **always, even with zero adjustments**: the immutable original
+  keeps its raw pixels + EXIF orientation tag, so the edited copy is where "upright" is made
+  physical (the copy the AI receives, data-model §13.1). The bake is **JPEG q≈0.9, long edge
+  capped at 1568 px** (never upscaled; beyond that the Anthropic API downscales anyway, so larger
+  is pure waste) — when downscaling actually occurred, the UI says so. One request saves the
+  edited image, the **AI note**, and the **edit recipe** (crop box / rotation / tilt / filter
+  values as JSON, data-model §13.1); the thumbnail regenerates from the edited image; state →
+  `pre_processed`. All **manual** — no AI in the image step (§3.2); the **original is never
+  mutated**.
+- **Cancel** discards the in-progress edits and returns to the `new` view.
 
-Finishing pre-process sets `pre_processed`. It does **not** analyse (§3.2) — you move on, or, when
-ready, trigger analysis (single Analyse here, or select-and-Process from the register).
+**The `pre_processed` view** shows the result read-only — the **edited image** (exactly the bytes
+the AI will receive; click for full size) and the AI note — plus:
 
-### 6.2 Step ② Process
+- **Edit** — re-enters edit mode: the **recipe is replayed onto the original** (Cropper restored
+  to the saved crop/rotation/filters), the note pre-filled; Save overwrites the edited file in
+  place and regenerates the thumbnail. Browsing ↑/↓ past `pre_processed` receipts does **not**
+  boot the editor or replay anything — it just shows the stored edited image.
+- **Discard edits** — the stage-undo (§2.2): back to `new`, edited image + recipe removed,
+  thumbnail regenerated from the original. **The AI note survives** — it describes the receipt
+  ("this is fuel"), not the pixels.
+- **Analyse** — the ①→② action (disabled placeholder until 9e).
+
+Saving does **not** analyse (§3.2) — you move on, or, when ready, trigger analysis (Analyse here,
+or select-and-Process from the register).
+
+### 6.2 Process (the `processing` and `failed` views)
 
 Mostly the **Analyse** action + the wait. **Analyse** (single) submits this receipt via the
-Messages API; or this receipt is part of a register batch. State → `processing`; the pane greys and
-you may navigate away (§3.1). On return: `processed`, and the pane advances to Post-process.
-`failed` lands here with a **Retry** (→ Pre-process) and **Discard**.
+Messages API; or this receipt is part of a register batch. State → `processing`; the screen greys
+and you may navigate away (§3.1). On return: `processed`, whose view is Post-process (§6.3).
+The `failed` view offers **Retry** (→ `pre_processed`) — or Delete, as everywhere.
 
 ### 6.3 Step ③ Post-process (the heart of it)
 
@@ -331,7 +373,7 @@ you may navigate away (§3.1). On return: `processed`, and the pane advances to 
   - **Create a new transaction anyway**, or
   - **Link this receipt to existing transaction #N** — offered **only if #N has no receipt yet**
     (receipt ↔ transaction is **1:0..1**, §7). If #N already has a receipt, this is a *true*
-    duplicate → suggest **Discard**.
+    duplicate → suggest **Delete + keep files** (§2.1).
 - **Create new** (or no dup): **materialise** the draft `receipt_line`s into a `transaction` + its
   `posting`s — items as expense, transfer (real-account target, e.g. cashback → Cash), or
   beneficiary (person-debt) legs, the paying account as the −total funding leg —
@@ -348,11 +390,11 @@ you may navigate away (§3.1). On return: `processed`, and the pane advances to 
 - **Cardinality 1:0..1.** A receipt has at most one transaction (its committed result, or one it
   was linked to); a transaction has **at most one** receipt. Your dup "link only if no existing
   receipt" requires exactly this.
-- **Receipt is born without a transaction** and may die without one (delete / discard) — the whole
+- **Receipt is born without a transaction** and may die without one (delete) — the whole
   point of confirm-time creation (keeps the register clean).
 - **Jump both ways.** From a `committed` receipt → **Open transaction** (register, scrolled +
   selected + loaded in the dock). From the register, the **receipt paperclip** (register §2.10)
-  opens the receipt in this workflow pane.
+  opens the receipt in the processing screen.
 - **Reopen & re-enter (added 2026-07-21).** A `committed` receipt may be **reopened** — state back
   to `processed`, the transaction untouched until re-confirm — its draft lines re-edited, and
   **re-entered**: the old transaction is **soft-deleted** (postings with it; soft-delete *is* the
@@ -365,8 +407,9 @@ you may navigate away (§3.1). On return: `processed`, and the pane advances to 
 
 ## 8. The per-receipt AI note
 
-A freetext, set at **Pre-process** (§6.1), stored on the receipt (`receipt.ai_note`) and sent with
-the image to steer the parse in confusing cases. Two kinds you described:
+A freetext, set at **Pre-process** (§6.1, saved by the same Save as the image; it **survives**
+*Discard edits*), stored on the receipt (`receipt.ai_note`) and sent with the image to steer the
+parse in confusing cases. Two kinds you described:
 
 - **Supply what the receipt omits** — a bare credit-card slip with no detail: *"this is fuel"* → the
   AI emits a single **Fuel** item for the whole total with the right category. (The note can carry
@@ -449,7 +492,7 @@ create table receipt_line (
 
 | Area | Decision | Rejected / alternative | Why |
 |------|----------|------------------------|-----|
-| Backbone | Stored **state** (filter) distinct from UI **workflow step** (pane) | One merged enum | Mirrors `lifecycle`⊥`deleted_at`; the list filters on state, the pane shows a step. |
+| Backbone | Stored **state** drives both the list filter and the processing-screen view | A separate UI "step" axis (v0.1–v0.3) | State and view can never disagree; `deleted_at` stays orthogonal (2026-07-31). |
 | Modes | **Both** — single (Messages, sync-feeling) + batch (Batches, async, −50 %) | Batch-only | Batch can't do live side-by-side; single is for "now". |
 | Why batch | **Cost** (−50 %) | "saves tokens" | Token tricks apply to both modes; the discount is the async price. |
 | Async UX | Grey + lock + **navigate away**; htmx poll for completion | Block the UI on parse | Lets you pre-process the next receipt while one is in flight. |
@@ -459,8 +502,10 @@ create table receipt_line (
 | Transaction creation | **At confirm** | At parse (pending row) | Keeps the transaction register clean; free delete/re-scan. |
 | Receipt↔txn | **1:0..1** | 1:N | Dup "link only if no existing receipt" requires it. |
 | Mobile | Camera capture + browse + delete-if-uncommitted; **no figures** | Full mobile workflow | Phone is a capture device; precise work is PC (tech-stack §5.3). |
-| Register | Dense master-detail; **state is primary filter** | Separate list & workflow screens | One surface; matches the transaction register pattern. |
-| Navigation | Two axes — **receipt** ◀▶ and **stage** ▲▼ | One next/back | The "two button sets"; receipts × stages grid. |
+| Register | Dense list, **state is primary filter**; double-click → processing screen at its **own URL** | In-page detail pane / overlay | Back/refresh stay sane; leaves room for a future side-by-side embed (2026-07-31). |
+| Navigation | **One view per state**; ↑/↓ walk the filtered list; every transition an explicit button | Two-axis receipts × stages grid (v0.1–v0.3) | The grid navigated "steps" state couldn't disagree with anyway; explicit buttons, nothing automatic (2026-07-31). |
+| Discarded | **State retired**; Delete always asks keep/delete files; "Discard" = stage-undo | Terminal `discarded` state (v0.1–v0.3) | Delete + keep files covers "seen, not booked"; undo-per-stage matches the owner's mental model (2026-07-31). |
+| Edit persistence | **Edit recipe** (JSON) saved with the bake; replayed on re-edit | Bake-only (pixels are the record) | A note-only tweak must not cost the crop; recipe makes edits reproducible (2026-07-31). |
 | Post-process | Image left, **full split toolkit** right (cat+tags+benef+note) | Category-only correction | "Full transaction detail, same as the register." |
 | Parse check | **`remaining 0,00 ✓`** reuses the split invariant | Trust the AI total | Catches mis-sums/missed lines before commit. |
 | Tax | Plain line by default; **redistribute** helper (pro-rata, deletes Tax line) | Model a tax field | "Tax never matters" as a concept; both styles must be possible. |

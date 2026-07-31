@@ -160,33 +160,57 @@ taps to full-scale, instant-deletes a bad `new` shot (files gone); the PC regist
 filters receipts, discard works, delete shows the keep/remove-files dialog; originals +
 thumbnails sit on disk under the timestamp scheme; thumbnails self-heal.
 
-## 9c — Pre-process: crop leaf + AI note
+## 9c — Pre-process: the processing screen, crop leaf + AI note
 
 **Goal:** a `new` receipt can be cleaned and annotated, becoming `pre_processed`.
 
-- **Cropper.js leaf + pixel pass** (tech-stack §5, the second sanctioned JS leaf): crop · rotate ·
-  tilt · grayscale · brightness · contrast, live canvas preview, all client-side; the baked
-  **edited image** uploads to `edited_path`. Original never mutated; re-edit restarts from it.
-  **EXIF orientation must be baked into the edited image** (verify Cropper's canvas export is fed
-  the oriented pixels — a known canvas gotcha): the immutable original keeps its landscape-pixels +
-  orientation-tag form (data-model §13.1, ARCH-07), so the edited copy is where "upright" is made
-  physical — the copy 9e sends to the AI. The 9b thumbnail path already proved the raw pixels are
-  sideways without this.
-- **AI note** (§8): freetext field stored on the receipt.
-- **Workflow pane skeleton (§6):** double-click opens the pane; the two navigation axes (receipt
-  ◀▶ over the filtered list, stage ▲▼ gated by state) exist with steps ① and the ② placeholder.
-- **Tests:** MockMvc for the pane, the edited-image upload, and the state flip; the JS leaf itself
-  stays untested per the standing rule (no browser tier).
+**Decisions grilled & settled 2026-07-31** (receipt doc updated to v0.4, data-model to v0.8):
+
+- **The processing screen replaces the workflow pane.** Own URL, same tab, carrying the
+  register's filter + order (leaves room for a future side-by-side embed); **one view per state**,
+  every transition an explicit named button, never automatic — **the ▲▼ stage axis is retired**
+  (§2.2). Common chrome: ↑/↓ prev/next receipt over the filtered list, Back/Esc to the register,
+  Delete. After a delete: next receipt, else previous, else the list.
+- **The `discarded` state is retired** (§2.1). V10 drops it from the state check; the register
+  loses the 9b **Discard** context-menu entry and its filter option (work queue = everything
+  except `committed`); "Discard" now means **stage-undo**. "Seen, not booked" = Delete + keep
+  files. Soft-delete visibility / undelete stays backlog-on-explicit-need.
+- **Delete ladder revised (supersedes 9b's `new` rung on PC):** PC delete always asks the 3-way
+  keep/delete-files dialog, `new` included (register + processing screen; Delete key too); the
+  mobile grid keeps its instant × on `new` tiles (the frictionless-reshoot flow).
+- **Cropper.js v1.6.x**, vendored as UMD + CSS next to `htmx.min.js` (the second sanctioned JS
+  leaf): crop · rotate · tilt · grayscale · brightness · contrast, live canvas preview, all
+  client-side.
+- **The `new` view:** original image + **Prepare for analysis** → edit mode (nav/Delete hidden;
+  Save / Cancel, Esc = guarded Cancel). **Save always bakes** — even with zero adjustments —
+  because the edited copy is where EXIF-upright is made physical (the 9b guard: feed Cropper the
+  oriented pixels; the original keeps its raw-pixels + orientation-tag form, ARCH-07). Bake =
+  **JPEG q≈0.9, long edge capped at 1568 px** (never upscaled; the API downscales beyond that
+  anyway), with a visible note when downscaling occurred. One POST saves edited image + **AI
+  note** (§8) + **edit recipe** (crop/rotation/tilt/filter JSON → new `edit_recipe` column);
+  thumbnail regenerates from the edited image; → `pre_processed`.
+- **The `pre_processed` view:** read-only edited image (the exact bytes the AI will get;
+  full-size view) + note; **Edit** (recipe replayed onto the original, Save overwrites in place);
+  **Discard edits** (→ `new`, edited file + recipe removed, thumb from original — **the AI note
+  survives**); a **disabled Analyse placeholder** (9e). Browsing ↑/↓ never boots the editor.
+- **Migration V10:** add `receipt.edit_recipe`, drop `discarded` from the state check
+  (9d's migration shifts to **V11**, 9e's to **V12**).
+- **Keyboard** (in the `keyboard.js` leaf, per the stage-7 rule): ↑/↓ navigate, Esc
+  back / guarded cancel, Delete key opens the dialog.
+- **Tests:** MockMvc for the per-state views, the save round-trip (multipart edited image + note
+  + recipe), discard-edits, the revised delete ladder and menu/filter changes; storage unit tests
+  for edited-file overwrite + thumbnail regeneration; the JS leaf itself stays untested per the
+  standing rule (no browser tier).
 
 **Done when:** a receipt can be cropped/cleaned/annotated on the PC and lands `pre_processed`,
-re-editable from the original.
+re-editable with its recipe replayed; `discarded` is gone from schema and UI.
 
 ## 9d — The AI Vocabulary (`categories` module)
 
 **Goal:** the curated projection exists and is editable — testable end-to-end without any AI call.
 
 - **Migration:** `category_ai_config` (visible flag + alias + per-category `ai_note`, at most one
-  row per category node) — V10.
+  row per category node) — V11.
 - **Public API:** `aiVocabulary()` — the AI-facing tree (aliases applied, hidden pruned, notes
   attached); `resolveTerm(text)` — AI answer → category account (unknown → empty). Tag resolution
   by name is the same module's API (tags live in `categories`).
@@ -206,7 +230,7 @@ category-edit.
 with seeded draft lines — or `failed` with retry.
 
 - **Migration:** `receipt_line` + `receipt_line_tag` + `account.card_last4` /
-  `account.cash_account` — V11. Detection fields join the account-edit screen (`accounts`
+  `account.cash_account` — V12. Detection fields join the account-edit screen (`accounts`
   module).
 - **`ReceiptParser`** (ARCH-03) + `AnthropicReceiptParser` via the official Java SDK: sends the
   edited image + instructions + `aiVocabulary()` + the AI note as the uncached suffix (§8) —
@@ -224,7 +248,8 @@ with seeded draft lines — or `failed` with retry.
   line** — German supermarket cashback — seeds as a transfer line targeting the marked cash
   account), fills the
   denormalised header columns, detects the account (cash marker / last-4), flips `processed` —
-  or `failed` (Retry → `pre_processed`, Discard). **Soft-delete tolerance (9b's delete ladder):**
+  or `failed` (Retry → `pre_processed`, or Delete — `discarded` retired in 9c).
+  **Soft-delete tolerance (9b's delete ladder):**
   a receipt deleted mid-flight stays deletable without waiting; the worker, finding the row
   soft-deleted on completion, quietly abandons the result.
 - **Tests:** parser behind a fake in unit tier (prompt assembly, seeding, resolution fallbacks,
