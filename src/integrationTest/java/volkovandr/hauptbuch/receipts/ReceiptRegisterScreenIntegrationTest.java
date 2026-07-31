@@ -33,8 +33,8 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 /**
  * Integration tier (§1.5): the PC receipt register and its actions driven through the controller
  * against real Postgres and a temp storage root — rendering, the state filter, the context menu and
- * keep/delete-files dialog fragments, the delete ladder, discard, committed-skip, and the mobile
- * root redirect. The stage's PC acceptance surface (§9b).
+ * keep/delete-files dialog fragments, the delete ladder, committed-skip, and the mobile root
+ * redirect. The 9c menu always offers the 3-way delete dialog (no instant rung, no Discard).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -87,16 +87,18 @@ class ReceiptRegisterScreenIntegrationTest {
   }
 
   @Test
-  void contextMenuOffersDeleteAndDiscardForNewSelection() throws Exception {
+  void contextMenuOffersTheDeleteDialogForNewSelection() throws Exception {
     long id = upload();
 
     mockMvc
         .perform(get("/receipts/menu").param(ID, String.valueOf(id)))
         .andExpect(status().isOk())
-        // Counts read as amounts, not IDs: singular "receipt", and the two actions are explained.
+        // A single Delete… action that opens the 3-way dialog — `new` included (2026-07-31).
+        // The count reads as an amount, not IDs: singular "receipt".
         .andExpect(content().string(containsString("Delete 1 receipt")))
-        .andExpect(content().string(containsString("Discard 1 receipt")))
-        .andExpect(content().string(containsString("not-to-be-booked")));
+        .andExpect(content().string(containsString("/receipts/delete-dialog")))
+        // The `discarded` state is retired: no Discard action.
+        .andExpect(content().string(not(containsString("Discard"))));
   }
 
   @Test
@@ -136,11 +138,12 @@ class ReceiptRegisterScreenIntegrationTest {
   }
 
   @Test
-  void instantDeleteOfNewReceiptRemovesItsFiles() throws Exception {
+  void deleteFilesTooRemovesTheRowAndItsFiles() throws Exception {
     long id = upload();
     String path = originalPath(id);
     assertThat(Files.exists(STORAGE_ROOT.resolve(path))).isTrue();
 
+    // The dialog's "Delete files too" choice: soft-delete the row and remove the files.
     mockMvc
         .perform(post(DELETE_PATH).param(ID, String.valueOf(id)).param(REMOVE_FILES, "true"))
         .andExpect(status().isOk());
@@ -169,18 +172,6 @@ class ReceiptRegisterScreenIntegrationTest {
     assertThat(isLive(id)).isFalse();
     // Files kept per the choice.
     assertThat(Files.exists(STORAGE_ROOT.resolve(path))).isTrue();
-  }
-
-  @Test
-  void discardMovesReceiptToDiscardedButKeepsItLive() throws Exception {
-    long id = upload();
-
-    mockMvc
-        .perform(post("/receipts/discard").param(ID, String.valueOf(id)))
-        .andExpect(status().isOk());
-
-    assertThat(state(id)).isEqualTo("discarded");
-    assertThat(isLive(id)).isTrue();
   }
 
   @Test
@@ -257,14 +248,6 @@ class ReceiptRegisterScreenIntegrationTest {
         .param("state", state)
         .param(ID, id)
         .update();
-  }
-
-  private String state(long id) {
-    return jdbcClient
-        .sql("select state from receipt where receipt_id = :id")
-        .param(ID, id)
-        .query(String.class)
-        .single();
   }
 
   private String originalPath(long id) {

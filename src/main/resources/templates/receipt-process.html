@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<!--
+  PC processing screen (plan stage 9c, receipt doc §6): the per-receipt detail surface, at its own
+  URL in the same tab, carrying the register's filter + order. ONE view per state (§2.2); every
+  transition is an explicit, named button — nothing fires automatically. This slice (9c) fills in
+  the two pre-process views (`new` and `pre_processed`); later slices add the post-process / confirm
+  views for the downstream states (a placeholder card stands in for them for now).
+
+  Image editing is 100% client-side (tech-stack §5): the Cropper.js leaf (cropper.min.js) plus the
+  receipt-editor.js component drive crop/rotate/tilt/filters and bake the edited JPEG the AI
+  receives. Both are scoped to THIS page (loaded at the foot of the content), so they never weigh on
+  other screens; remove them and the read views + Discard/Delete forms still work — only the in-page
+  editor is lost. Keyboard nav (↑/↓ prev/next, Esc back/cancel, Delete) lives in the keyboard.js leaf.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main
+    class="content receipt-process"
+    th:fragment="content"
+    data-receipt-process
+    th:attr="data-receipt-id=${receipt.receiptId()},data-receipt-state=${receipt.state()}"
+  >
+    <!-- A rejected Save (e.g. a mangled edited upload) redirects back with the reason shown here. -->
+    <p class="warning" th:if="${editError}" th:text="${editError}">Could not save the edit.</p>
+
+    <!-- ── Common chrome: prev / next, back, state, delete (hidden while editing) ── -->
+    <div class="receipt-process__chrome" data-receipt-chrome>
+      <a
+        class="btn btn--ghost"
+        th:href="@{/receipts(state=${stateFilter},range=${rangeFilter})}"
+        data-receipt-back
+        >← Back</a
+      >
+      <span class="receipt-process__nav">
+        <a
+          class="btn"
+          th:if="${neighbours.prev() != null}"
+          th:href="@{/receipts/{id}(id=${neighbours.prev()},state=${stateFilter},range=${rangeFilter})}"
+          data-receipt-prev
+          title="Previous receipt (↑)"
+          >↑ Prev</a
+        >
+        <span class="btn is-disabled" th:unless="${neighbours.prev() != null}" aria-disabled="true"
+          >↑ Prev</span
+        >
+        <a
+          class="btn"
+          th:if="${neighbours.next() != null}"
+          th:href="@{/receipts/{id}(id=${neighbours.next()},state=${stateFilter},range=${rangeFilter})}"
+          data-receipt-next
+          title="Next receipt (↓)"
+          >↓ Next</a
+        >
+        <span class="btn is-disabled" th:unless="${neighbours.next() != null}" aria-disabled="true"
+          >↓ Next</span
+        >
+      </span>
+      <span
+        class="rstate"
+        th:classappend="'rstate--' + ${receipt.state()}"
+        th:text="${#strings.capitalize(#strings.replace(receipt.state(), '_', ' '))}"
+        >New</span
+      >
+      <button
+        class="btn btn--danger"
+        type="button"
+        data-receipt-delete
+        th:attr="hx-get=@{/receipts/{id}/delete-confirm(id=${receipt.receiptId()},state=${stateFilter},range=${rangeFilter})}"
+        hx-target="#receipt-dialog"
+        hx-swap="innerHTML"
+      >
+        Delete
+      </button>
+    </div>
+
+    <!-- ── The pre-process views: `new` and `pre_processed` (§6.1) ─────────────── -->
+    <th:block th:if="${receipt.state() == 'new' or receipt.state() == 'pre_processed'}">
+      <!-- READ view (image + note + the state's transition buttons) -->
+      <section
+        class="receipt-process__read"
+        data-receipt-read
+        th:with="imageUrl=${receipt.state() == 'pre_processed'}
+                   ? @{/receipts/{id}/edited(id=${receipt.receiptId()})}
+                   : @{/receipts/{id}/image(id=${receipt.receiptId()})}"
+      >
+        <figure class="receipt-process__image">
+          <a th:href="${imageUrl}" target="_blank" rel="noopener" title="View full size">
+            <img th:src="${imageUrl}" alt="Receipt scan" />
+          </a>
+        </figure>
+
+        <div class="receipt-process__side">
+          <p
+            class="receipt-process__note"
+            th:if="${receipt.aiNote() != null}"
+            th:text="${receipt.aiNote()}"
+          >
+            this is fuel
+          </p>
+
+          <!-- `new`: nothing baked yet → the one action is to prepare it. -->
+          <div class="receipt-process__actions" th:if="${receipt.state() == 'new'}">
+            <button type="button" class="btn" data-receipt-edit-start>Prepare for analysis</button>
+          </div>
+
+          <!-- `pre_processed`: re-edit, discard the edits, or (later) analyse. -->
+          <div class="receipt-process__actions" th:if="${receipt.state() == 'pre_processed'}">
+            <button type="button" class="btn" data-receipt-edit-start>Edit</button>
+            <form
+              method="post"
+              th:action="@{/receipts/{id}/discard-edits(id=${receipt.receiptId()})}"
+            >
+              <input type="hidden" name="state" th:value="${stateFilter}" />
+              <input type="hidden" name="range" th:value="${rangeFilter}" />
+              <!-- A low-stakes stage-undo: the AI note survives and a re-edit replays the recipe,
+                   so no confirmation (a plain full-navigation POST — no page-scoped JS). -->
+              <button type="submit" class="btn btn--ghost">Discard edits</button>
+            </form>
+            <button type="button" class="btn" disabled title="Analysis arrives in a later step">
+              Analyse
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- EDIT view: the Cropper.js editor + AI note, submitted as one multipart Save. The recipe
+           (if any) is replayed onto the original by receipt-editor.js. Hidden until edit mode. -->
+      <form
+        class="receipt-edit"
+        data-receipt-edit
+        hidden
+        method="post"
+        enctype="multipart/form-data"
+        th:action="@{/receipts/{id}/pre-process(id=${receipt.receiptId()})}"
+        th:attr="data-receipt-recipe=${receipt.editRecipe()}"
+        data-receipt-save-form
+      >
+        <input type="hidden" name="state" th:value="${stateFilter}" />
+        <input type="hidden" name="range" th:value="${rangeFilter}" />
+        <!-- Filled in by the component just before submit: the edit recipe JSON and the baked JPEG. -->
+        <input type="hidden" name="editRecipe" data-receipt-recipe-field />
+        <input type="file" name="image" accept="image/jpeg" hidden data-receipt-image-field />
+
+        <div class="receipt-edit__stage">
+          <img
+            data-receipt-cropper
+            th:src="@{/receipts/{id}/image(id=${receipt.receiptId()})}"
+            alt="Editing receipt scan"
+          />
+        </div>
+
+        <div class="receipt-edit__panel">
+          <div class="receipt-edit__tools" role="group" aria-label="Image adjustments">
+            <button type="button" class="btn btn--ghost" data-crop-rotate-left title="Rotate left">
+              ⟲ Left
+            </button>
+            <button type="button" class="btn btn--ghost" data-crop-rotate-right title="Rotate right">
+              ⟳ Right
+            </button>
+            <label class="receipt-edit__slider"
+              >Tilt
+              <input type="range" min="-15" max="15" step="0.5" value="0" data-crop-tilt />
+            </label>
+            <label class="receipt-edit__slider"
+              >Brightness
+              <input type="range" min="50" max="150" step="1" value="100" data-crop-brightness />
+            </label>
+            <label class="receipt-edit__slider"
+              >Contrast
+              <input type="range" min="50" max="150" step="1" value="100" data-crop-contrast />
+            </label>
+            <label class="receipt-edit__toggle"
+              ><input type="checkbox" data-crop-grayscale /> Grayscale</label
+            >
+            <button type="button" class="btn btn--ghost" data-crop-reset title="Reset adjustments">
+              Reset
+            </button>
+          </div>
+
+          <label class="receipt-edit__note"
+            >AI note (optional — steers the parse, e.g. "this is fuel")
+            <textarea name="aiNote" rows="3" data-receipt-ainote th:text="${receipt.aiNote()}"></textarea>
+          </label>
+
+          <p class="receipt-edit__downscale muted" data-receipt-downscale hidden>
+            Downscaled for the AI (long edge capped at 1568&nbsp;px).
+          </p>
+
+          <div class="receipt-edit__actions">
+            <button type="button" class="btn" data-receipt-save>Save</button>
+            <button type="button" class="btn btn--ghost" data-receipt-cancel>Cancel</button>
+          </div>
+        </div>
+      </form>
+    </th:block>
+
+    <!-- ── Downstream states: post-process / confirm views land in 9e–9g ───────── -->
+    <section
+      class="receipt-process__placeholder"
+      th:unless="${receipt.state() == 'new' or receipt.state() == 'pre_processed'}"
+    >
+      <figure class="receipt-process__image">
+        <a
+          th:href="@{/receipts/{id}/edited(id=${receipt.receiptId()})}"
+          target="_blank"
+          rel="noopener"
+        >
+          <img th:src="@{/receipts/{id}/thumb(id=${receipt.receiptId()})}" alt="Receipt scan" />
+        </a>
+      </figure>
+      <p class="muted">
+        This receipt is
+        <strong th:text="${#strings.replace(receipt.state(), '_', ' ')}">processing</strong>.
+        Its review and confirm screens arrive in a later step.
+      </p>
+    </section>
+
+    <!-- Transient dialog mount (the 3-way delete confirm), cleared by the keyboard.js overlay leaf. -->
+    <div id="receipt-dialog"></div>
+
+    <!-- Page-scoped JS leaves (§1.6): Cropper.js library, then the editor component that drives it.
+         Both no-op if the page has no editor. Loaded here so no other screen pays for them. -->
+    <link rel="stylesheet" th:href="@{/css/cropper.min.css}" />
+    <script th:src="@{/js/cropper.min.js}"></script>
+    <script th:src="@{/js/receipt-editor.js}"></script>
+  </main>
+
+  <!-- ── The 3-way keep/delete-files dialog (receipt doc §6), full-navigation POSTs ── -->
+  <div th:fragment="deleteDialog" class="receipt-dialog" data-receipt-dialog>
+    <p class="receipt-dialog__prompt">
+      Delete this receipt. Keep the image files, or remove them too?
+    </p>
+    <div class="receipt-dialog__actions">
+      <form method="post" th:action="@{/receipts/{id}/delete(id=${id})}">
+        <input type="hidden" name="state" th:value="${stateFilter}" />
+        <input type="hidden" name="range" th:value="${rangeFilter}" />
+        <input type="hidden" name="removeFiles" value="false" />
+        <button type="submit" class="btn">Keep files</button>
+      </form>
+      <form method="post" th:action="@{/receipts/{id}/delete(id=${id})}">
+        <input type="hidden" name="state" th:value="${stateFilter}" />
+        <input type="hidden" name="range" th:value="${rangeFilter}" />
+        <input type="hidden" name="removeFiles" value="true" />
+        <button type="submit" class="btn btn--danger">Delete files too</button>
+      </form>
+      <button type="button" class="btn btn--ghost" data-receipt-dismiss>Cancel</button>
+    </div>
+  </div>
+</html>

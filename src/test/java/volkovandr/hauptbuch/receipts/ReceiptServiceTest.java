@@ -3,7 +3,6 @@ package volkovandr.hauptbuch.receipts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -29,18 +28,24 @@ import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
 class ReceiptServiceTest {
 
   private static final String ORIGINAL = "originals/2026/07/20260730-143022123.jpg";
+  private static final String EDITED = "edited/2026/07/20260730-143022123.jpg";
 
   @Mock ReceiptRepository receiptRepository;
   @Mock ReceiptStorage receiptStorage;
   @InjectMocks ReceiptService service;
 
   private Receipt receiptInState(String state) {
+    return receipt(7L, state, null);
+  }
+
+  private Receipt receipt(long id, String state, String editedPath) {
     return new Receipt(
-        7L,
+        id,
         state,
         OffsetDateTime.now(),
         "mobile",
         ORIGINAL,
+        editedPath,
         null,
         null,
         null,
@@ -104,21 +109,82 @@ class ReceiptServiceTest {
   }
 
   @Test
-  void discardMovesNonCommittedReceiptToDiscarded() {
+  void preProcessStoresTheEditedImageThenSavesTheRow() {
+    byte[] edited = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1};
     when(receiptRepository.findById(7L)).thenReturn(Optional.of(receiptInState("new")));
+    when(receiptStorage.storeEdited(ORIGINAL, edited)).thenReturn(EDITED);
 
-    service.discard(7L);
+    service.preProcess(7L, edited, "{\"rotate\":90}", "this is fuel");
 
-    verify(receiptRepository).updateState(7L, "discarded");
+    verify(receiptStorage).storeEdited(ORIGINAL, edited);
+    verify(receiptRepository).savePreProcess(7L, EDITED, "{\"rotate\":90}", "this is fuel");
   }
 
   @Test
-  void discardRefusesCommittedReceipt() {
-    when(receiptRepository.findById(7L)).thenReturn(Optional.of(receiptInState("committed")));
+  void preProcessFromPreProcessedReEditsInPlace() {
+    byte[] edited = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1};
+    when(receiptRepository.findById(7L))
+        .thenReturn(Optional.of(receipt(7L, "pre_processed", EDITED)));
+    when(receiptStorage.storeEdited(ORIGINAL, edited)).thenReturn(EDITED);
 
-    assertThatThrownBy(() -> service.discard(7L)).isInstanceOf(IllegalStateException.class);
+    service.preProcess(7L, edited, "{}", "  ");
 
-    verify(receiptRepository, never()).updateState(eq(7L), eq("discarded"));
+    // A blank AI note is normalised to null.
+    verify(receiptRepository).savePreProcess(7L, EDITED, "{}", null);
+  }
+
+  @Test
+  void preProcessRefusesProcessedReceipt() {
+    byte[] edited = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1};
+    when(receiptRepository.findById(7L)).thenReturn(Optional.of(receiptInState("processed")));
+
+    assertThatThrownBy(() -> service.preProcess(7L, edited, "{}", null))
+        .isInstanceOf(IllegalStateException.class);
+
+    verifyNoInteractions(receiptStorage);
+  }
+
+  @Test
+  void discardEditsRemovesTheEditedImageThenClearsTheRow() {
+    when(receiptRepository.findById(7L))
+        .thenReturn(Optional.of(receipt(7L, "pre_processed", EDITED)));
+
+    service.discardEdits(7L);
+
+    verify(receiptStorage).discardEdited(ORIGINAL, EDITED);
+    verify(receiptRepository).discardEdits(7L);
+  }
+
+  @Test
+  void discardEditsRefusesReceiptWithoutEdits() {
+    when(receiptRepository.findById(7L)).thenReturn(Optional.of(receiptInState("new")));
+
+    assertThatThrownBy(() -> service.discardEdits(7L)).isInstanceOf(IllegalStateException.class);
+
+    verify(receiptRepository, never()).discardEdits(7L);
+  }
+
+  @Test
+  void neighboursReturnsThePreviousAndNextInTheFilteredList() {
+    when(receiptRepository.findForRegister(any(), any()))
+        .thenReturn(
+            List.of(receipt(1L, "new", null), receipt(2L, "new", null), receipt(3L, "new", null)));
+
+    ReceiptNeighbours neighbours = service.neighbours(2L, List.of("new"), null);
+
+    assertThat(neighbours.prev()).isEqualTo(1L);
+    assertThat(neighbours.next()).isEqualTo(3L);
+  }
+
+  @Test
+  void neighboursAreNullAtTheEndsAndWhenAbsent() {
+    when(receiptRepository.findForRegister(any(), any()))
+        .thenReturn(List.of(receipt(1L, "new", null), receipt(2L, "new", null)));
+
+    assertThat(service.neighbours(1L, List.of("new"), null).prev()).isNull();
+    assertThat(service.neighbours(2L, List.of("new"), null).next()).isNull();
+    // A receipt not in the filtered set has no neighbours.
+    assertThat(service.neighbours(99L, List.of("new"), null)).isEqualTo(ReceiptNeighbours.NONE);
   }
 
   @Test

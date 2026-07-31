@@ -1,6 +1,5 @@
 package volkovandr.hauptbuch.receipts;
 
-import java.time.LocalDate;
 import java.util.List;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -28,11 +27,8 @@ class ReceiptRegisterController {
   private static final String VIEW = "receipts";
   private static final String LIST_FRAGMENT = "receipts :: list(receipts=${receipts})";
 
-  private static final String STATE_QUEUE = "queue";
-  private static final String STATE_ALL = "all";
-  private static final String RANGE_90D = "d90";
-  private static final String RANGE_1Y = "y1";
-  private static final String RANGE_ALL = "all";
+  private static final String STATE_QUEUE = ReceiptFilters.STATE_QUEUE;
+  private static final String RANGE_90D = ReceiptFilters.RANGE_90D;
 
   private final ReceiptService receiptService;
 
@@ -100,18 +96,6 @@ class ReceiptRegisterController {
     return LIST_FRAGMENT;
   }
 
-  /** Discard a selection (non-committed members); re-renders the list. */
-  @PostMapping("/receipts/discard")
-  String discard(
-      @RequestParam(name = "id", required = false) List<Long> ids,
-      @RequestParam(required = false, defaultValue = STATE_QUEUE) String state,
-      @RequestParam(required = false, defaultValue = RANGE_90D) String range,
-      Model model) {
-    receiptService.discardSelection(nullSafe(ids));
-    populateList(model, state, range);
-    return LIST_FRAGMENT;
-  }
-
   /**
    * Put a selection and its computed context-menu actions into the model (menu + dialog share it).
    */
@@ -129,28 +113,11 @@ class ReceiptRegisterController {
    * Resolve the filter and load the list rows into the model (shared by the page and re-renders).
    */
   private void populateList(Model model, String state, String range) {
-    model.addAttribute("receipts", receiptService.forRegister(statesFor(state), rangeFrom(range)));
+    model.addAttribute(
+        "receipts",
+        receiptService.forRegister(
+            ReceiptFilters.statesFor(state), ReceiptFilters.rangeFrom(range)));
     model.addAttribute("stateFilter", state);
     model.addAttribute("rangeFilter", range);
-  }
-
-  /** The state filter's state set: the work queue, everything, or a single named state. */
-  private static List<String> statesFor(String state) {
-    if (STATE_ALL.equals(state)) {
-      return ReceiptState.ALL;
-    }
-    if (ReceiptState.isValid(state)) {
-      return List.of(state);
-    }
-    return ReceiptState.WORK_QUEUE;
-  }
-
-  /** The date-range filter's lower bound: last 90 days (default), last year, or unbounded. */
-  private static LocalDate rangeFrom(String range) {
-    return switch (range) {
-      case RANGE_ALL -> null;
-      case RANGE_1Y -> LocalDate.now().minusYears(1);
-      default -> LocalDate.now().minusDays(90);
-    };
   }
 }

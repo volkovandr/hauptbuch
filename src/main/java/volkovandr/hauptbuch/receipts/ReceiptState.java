@@ -29,26 +29,23 @@ public final class ReceiptState {
   /** Booked: backs a transaction (9g). */
   public static final String COMMITTED = "committed";
 
-  /** Looked at and deliberately not booked — kept for the record (orthogonal to soft-delete). */
-  public static final String DISCARDED = "discarded";
-
   /** The AI call failed; retryable (9e). */
   public static final String FAILED = "failed";
 
   /** Every valid state, in lifecycle order. */
   public static final List<String> ALL =
-      List.of(NEW, PRE_PROCESSED, PROCESSING, PROCESSED, COMMITTED, DISCARDED, FAILED);
+      List.of(NEW, PRE_PROCESSED, PROCESSING, PROCESSED, COMMITTED, FAILED);
 
   /**
-   * The register's default "work queue": everything except the two terminal states (§5.2). A
-   * committed receipt backs a transaction; a discarded one was set aside on purpose — neither is
-   * outstanding work.
+   * The register's default "work queue": everything except {@code committed} (§5.2). A committed
+   * receipt backs a transaction — it is not outstanding work. ({@code discarded} was retired
+   * 2026-07-31; "seen, not booked" is now a soft-delete with files kept, so it never appears.)
    */
   public static final List<String> WORK_QUEUE =
       List.of(NEW, PRE_PROCESSED, PROCESSING, PROCESSED, FAILED);
 
-  private static final Set<String> NON_COMMITTED =
-      Set.of(NEW, PRE_PROCESSED, PROCESSING, PROCESSED, DISCARDED, FAILED);
+  /** The states the pre-process editor may be entered from and saved back to (receipt doc §6.1). */
+  private static final Set<String> PRE_PROCESSABLE = Set.of(NEW, PRE_PROCESSED);
 
   private ReceiptState() {}
 
@@ -59,15 +56,19 @@ public final class ReceiptState {
 
   /**
    * Whether a receipt in this state deletes instantly with its files removed and no confirmation —
-   * the top rung of the delete ladder (9b), available on both mobile and PC. Only a {@code new}
-   * scan: nothing downstream depends on it yet, so a bad shot is discarded outright.
+   * the top rung of the delete ladder, retained on <em>mobile</em> only (§4). Only a {@code new}
+   * scan: nothing downstream depends on it yet, so a bad shot is dropped outright. On PC the delete
+   * always asks the 3-way keep/delete-files dialog, {@code new} included (§5.2, 2026-07-31).
    */
   public static boolean deletesInstantly(String state) {
     return NEW.equals(state);
   }
 
-  /** Whether a receipt in this state may be discarded (any non-committed state). */
-  public static boolean canDiscard(String state) {
-    return NON_COMMITTED.contains(state);
+  /**
+   * Whether the pre-process editor applies to this state: only {@code new} (first edit) and {@code
+   * pre_processed} (re-edit, recipe replayed). Past that the image is locked for the AI (§6.1).
+   */
+  public static boolean isPreProcessable(String state) {
+    return PRE_PROCESSABLE.contains(state);
   }
 }

@@ -82,8 +82,8 @@
       </p>
 
       <p class="receipt-list__hint muted" th:unless="${#lists.isEmpty(receipts)}">
-        Click a scan to view it full size. Select rows (Shift/Ctrl-click for many) and right-click
-        for actions.
+        Double-click a row to open it. Click a scan to view it full size. Select rows
+        (Shift/Ctrl-click for many) and right-click for actions.
       </p>
 
       <table class="receipts" th:unless="${#lists.isEmpty(receipts)}">
@@ -105,12 +105,13 @@
             th:each="r : ${receipts}"
             data-kbd-row
             data-receipt-row
-            th:attr="data-receipt-id=${r.receiptId()},data-receipt-state=${r.state()}"
+            th:attr="data-receipt-id=${r.receiptId()},data-receipt-state=${r.state()},data-receipt-open=@{/receipts/{id}(id=${r.receiptId()})}"
             tabindex="-1"
           >
             <td class="receipts__thumb">
-              <!-- The scan opens full size in a new tab (the workflow pane arrives at 9c). The
-                   keyboard.js leaf skips row-selection when the click lands on this link. -->
+              <!-- The thumbnail opens the raw scan full size in a new tab; double-click (or Enter) on
+                   the row opens the processing screen (§6), wired in the keyboard.js leaf. The leaf
+                   skips row-selection when the click lands on this link. -->
               <a
                 th:href="@{/receipts/{id}/image(id=${r.receiptId()})}"
                 target="_blank"
@@ -145,7 +146,6 @@
               <span class="rstatus" th:if="${r.aiNote() != null}" title="AI note attached" aria-hidden="true">✎</span>
               <span class="rstatus" th:if="${r.state() == 'failed'}" title="Analysis failed" aria-hidden="true">⚠</span>
               <span class="rstatus" th:if="${r.batchId() != null}" title="Batch member" aria-hidden="true">⌗</span>
-              <span class="rstatus" th:if="${r.state() == 'discarded'}" title="Discarded" aria-hidden="true">⊘</span>
             </td>
           </tr>
         </tbody>
@@ -157,24 +157,13 @@
   </th:block>
 
   <!-- ── Context menu fragment (§5.2) ───────────────────────────────────────── -->
+  <!-- PC delete always asks the 3-way keep/delete-files dialog, `new` included (2026-07-31): a
+       single Delete… action, no instant rung and no Discard (the `discarded` state is retired). -->
   <div th:fragment="menu(ids, menu)" class="receipt-menu" data-receipt-menu>
     <input type="hidden" name="id" th:each="i : ${ids}" th:value="${i}" />
     <p class="receipt-menu__none muted" th:if="${menu.total() == 0}">Nothing selected.</p>
     <ul class="receipt-menu__actions" th:unless="${menu.total() == 0}">
-      <li th:if="${menu.instantDelete()}">
-        <button
-          type="button"
-          hx-post="/receipts/delete"
-          hx-vals='{"removeFiles": true}'
-          hx-include="[data-receipt-menu], [name='state'], [name='range']"
-          hx-target="#receipt-list"
-          hx-swap="outerHTML"
-          th:text="'Delete ' + ${menu.deletableLabel()}"
-        >
-          Delete
-        </button>
-      </li>
-      <li th:if="${menu.fileChoiceDelete()}">
+      <li th:if="${menu.canDelete()}">
         <button
           type="button"
           hx-get="/receipts/delete-dialog"
@@ -186,28 +175,15 @@
           Delete…
         </button>
       </li>
-      <li th:if="${menu.discardable() > 0}">
-        <button
-          type="button"
-          hx-post="/receipts/discard"
-          hx-include="[data-receipt-menu], [name='state'], [name='range']"
-          hx-target="#receipt-list"
-          hx-swap="outerHTML"
-          th:attr="hx-confirm='Discard ' + ${menu.discardableLabel()} + '?'"
-          th:text="'Discard ' + ${menu.discardableLabel()}"
-        >
-          Discard
-        </button>
-      </li>
     </ul>
     <p class="receipt-menu__skip muted" th:if="${menu.skipped() > 0}"
        th:text="|${menu.skipped()} of ${menu.total()} selected were committed — skipped|">
       1 of 3 selected were committed — skipped
     </p>
-    <!-- What the two actions mean (the counts read as amounts, not IDs). -->
-    <p class="receipt-menu__help muted" th:unless="${menu.total() == 0}">
-      <strong>Delete</strong> removes the scan and its record.
-      <strong>Discard</strong> keeps it, marked not-to-be-booked.
+    <!-- What Delete means (the count reads as an amount, not IDs); the dialog then asks about files. -->
+    <p class="receipt-menu__help muted" th:if="${menu.canDelete()}">
+      <strong>Delete</strong> removes the record; the next step asks whether to remove the image
+      files too, or keep them (e.g. "seen, chose not to book").
     </p>
   </div>
 
