@@ -27,6 +27,7 @@
       <ul class="acct-list" th:unless="${#lists.isEmpty(incomeCategories)}">
         <li
           th:each="n : ${incomeCategories}"
+          th:with="ann=${aiAnnotations.get(n.account().accountId())}"
           class="acct"
           th:classappend="${n.depth() > 0} ? 'acct--child'"
           th:style="${n.depth() > 0} ? |--depth: ${n.depth()}|"
@@ -37,6 +38,28 @@
             th:text="${n.account().name()}"
             >Salary</a
           >
+          <span th:if="${ann != null}" class="ai-ann">
+            <span
+              th:if="${ann.deviates()}"
+              class="ai-chip"
+              th:classappend="${ann.setHere()} ? 'ai-chip--set' : 'ai-chip--inherited'"
+              th:text="${'AI: ' + (ann.visible() ? 'visible' : 'hidden')
+                        + (ann.setHere() ? '' : ' (via ' + ann.viaName() + ')')}"
+              >AI: hidden</span
+            >
+            <span
+              th:if="${ann.alias() != null}"
+              class="ai-alias"
+              th:text="${'→ “' + ann.alias() + '”'}"
+              >→ “Wages”</span
+            >
+            <span
+              th:if="${ann.note() != null}"
+              class="ai-note-glyph"
+              th:title="${ann.note()}"
+              >&#9998;</span
+            >
+          </span>
         </li>
       </ul>
 
@@ -45,6 +68,7 @@
       <ul class="acct-list" th:unless="${#lists.isEmpty(expenseCategories)}">
         <li
           th:each="n : ${expenseCategories}"
+          th:with="ann=${aiAnnotations.get(n.account().accountId())}"
           class="acct"
           th:classappend="${n.depth() > 0} ? 'acct--child'"
           th:style="${n.depth() > 0} ? |--depth: ${n.depth()}|"
@@ -55,6 +79,28 @@
             th:text="${n.account().name()}"
             >Food</a
           >
+          <span th:if="${ann != null}" class="ai-ann">
+            <span
+              th:if="${ann.deviates()}"
+              class="ai-chip"
+              th:classappend="${ann.setHere()} ? 'ai-chip--set' : 'ai-chip--inherited'"
+              th:text="${'AI: ' + (ann.visible() ? 'visible' : 'hidden')
+                        + (ann.setHere() ? '' : ' (via ' + ann.viaName() + ')')}"
+              >AI: hidden</span
+            >
+            <span
+              th:if="${ann.alias() != null}"
+              class="ai-alias"
+              th:text="${'→ “' + ann.alias() + '”'}"
+              >→ “Groceries”</span
+            >
+            <span
+              th:if="${ann.note() != null}"
+              class="ai-note-glyph"
+              th:title="${ann.note()}"
+              >&#9998;</span
+            >
+          </span>
         </li>
       </ul>
     </section>

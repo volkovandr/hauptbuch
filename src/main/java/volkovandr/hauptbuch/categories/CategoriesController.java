@@ -37,6 +37,11 @@ class CategoriesController {
   private static final String INCOME = "income";
   private static final String EXPENSE = "expense";
 
+  /** The AI-parsing visibility radio values (stage 9d): anything else is the inherit tri-state. */
+  private static final String VISIBLE_YES = "true";
+
+  private static final String VISIBLE_NO = "false";
+
   /** Model keys for the {@code categoryResolved} fragment, shared by both resolve branches. */
   private static final String RESOLVED_ID = "categoryId";
 
@@ -77,16 +82,19 @@ class CategoriesController {
   private final AccountService accountService;
   private final TagService tagService;
   private final PersonResolutionService personResolutionService;
+  private final AiVocabularyService aiVocabularyService;
 
   CategoriesController(
       CategoryService categoryService,
       AccountService accountService,
       TagService tagService,
-      PersonResolutionService personResolutionService) {
+      PersonResolutionService personResolutionService,
+      AiVocabularyService aiVocabularyService) {
     this.categoryService = categoryService;
     this.accountService = accountService;
     this.tagService = tagService;
     this.personResolutionService = personResolutionService;
+    this.aiVocabularyService = aiVocabularyService;
   }
 
   /** The category list plus the create-category form. */
@@ -101,6 +109,9 @@ class CategoriesController {
         categories.stream().filter(n -> EXPENSE.equals(n.account().type())).toList());
     model.addAttribute("incomeParentOptions", categoryService.parentOptions(INCOME));
     model.addAttribute("expenseParentOptions", categoryService.parentOptions(EXPENSE));
+    // The AI-vocabulary annotations, keyed by account id — present only for rows the operator has
+    // curated (a visibility deviation, an alias, or a note), so the list stays clean (stage 9d).
+    model.addAttribute("aiAnnotations", aiVocabularyService.annotations());
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", "Categories · Hauptbuch");
     return LIST_VIEW;
@@ -347,6 +358,7 @@ class CategoriesController {
             .orElseThrow(() -> new IllegalArgumentException("No category with id " + accountId));
     model.addAttribute("category", category);
     model.addAttribute("deleteTargets", categoryService.deleteTargetOptions(accountId));
+    model.addAttribute("aiConfig", aiVocabularyService.editModel(accountId));
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", category.name() + " · Hauptbuch");
     return EDIT_VIEW;
@@ -357,6 +369,43 @@ class CategoriesController {
   String renameCategory(@PathVariable long accountId, @RequestParam String name) {
     categoryService.renameCategory(accountId, name);
     return REDIRECT_TO_LIST;
+  }
+
+  /**
+   * Save the category's AI-vocabulary config (data-model §13.3, plan stage 9d): the visibility
+   * tri-state ({@code visible} = {@code true} / {@code false} / {@code inherit}), the alias, and
+   * the AI note. Returning everything to default deletes the row (handled in the service). Its own
+   * POST, separate from rename, so each section saves independently; redirects back to the edit
+   * page so the operator sees the saved state (unlike rename, which returns to the list).
+   *
+   * @throws IllegalArgumentException if the id is not a category this screen manages
+   */
+  @PostMapping("/categories/{accountId}/ai")
+  String saveAiConfig(
+      @PathVariable long accountId,
+      @RequestParam String visible,
+      @RequestParam(required = false) String alias,
+      @RequestParam(required = false) String aiNote) {
+    categoryService
+        .findById(accountId)
+        .orElseThrow(() -> new IllegalArgumentException("No category with id " + accountId));
+    aiVocabularyService.saveConfig(accountId, parseVisibility(visible).orElse(null), alias, aiNote);
+    return REDIRECT_TO_LIST + "/" + accountId;
+  }
+
+  /**
+   * Map the visibility radio to the tri-state: {@code true}/{@code false} to that flag, anything
+   * else (the "inherit" radio) to empty. Returns an {@link Optional} rather than a nullable {@code
+   * Boolean} so there is no Boolean-returning method that yields {@code null}.
+   */
+  private static Optional<Boolean> parseVisibility(String visible) {
+    if (VISIBLE_YES.equals(visible)) {
+      return Optional.of(Boolean.TRUE);
+    }
+    if (VISIBLE_NO.equals(visible)) {
+      return Optional.of(Boolean.FALSE);
+    }
+    return Optional.empty();
   }
 
   /**

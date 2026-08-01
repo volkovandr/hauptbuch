@@ -45,6 +45,67 @@
     </section>
 
     <section class="panel">
+      <p class="eyebrow">AI parsing</p>
+      <h2>Receipt vocabulary</h2>
+      <p class="muted">
+        How the receipt parser sees this category. It never sees your balances — only the name (or
+        the alias below), whether the category is offered at all, and the note.
+      </p>
+      <form
+        method="post"
+        th:action="@{/categories/{id}/ai(id=${category.accountId()})}"
+        class="form"
+      >
+        <div class="field">
+          <span class="field__label">Visibility</span>
+          <label class="radio-row">
+            <input type="radio" name="visible" value="true"
+                   th:checked="${aiConfig.visible() != null and aiConfig.visible()}" />
+            <span>Visible — always offered to the parser</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="visible" value="false"
+                   th:checked="${aiConfig.visible() != null and !aiConfig.visible()}" />
+            <span>Hidden — never offered</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="visible" value="inherit"
+                   th:checked="${aiConfig.visible() == null}" />
+            <span
+              th:text="${'Inherit — currently: ' + (aiConfig.inheritedVisible() ? 'visible' : 'hidden')
+                        + ' (' + aiConfig.inheritedSource() + ')'}"
+              >Inherit — currently: visible (the type default)</span
+            >
+          </label>
+        </div>
+        <div class="field">
+          <label class="field__label" for="alias">Alias</label>
+          <input
+            id="alias"
+            name="alias"
+            type="text"
+            class="input"
+            th:value="${aiConfig.alias()}"
+            autocomplete="off"
+          />
+          <p class="muted">The name shown to the parser instead of the real one. Leave blank to use the real name.</p>
+        </div>
+        <div class="field">
+          <label class="field__label" for="aiNote">AI note</label>
+          <textarea id="aiNote" name="aiNote" class="input" rows="3"
+                    th:text="${aiConfig.note()}"></textarea>
+          <p class="muted">
+            Per-category guidance for the parser, e.g. “diesel → tag Car:Audi” or “M&amp;Ms → for
+            Bobby”. Only names you write here are ever sent.
+          </p>
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Save AI settings</button>
+        </p>
+      </form>
+    </section>
+
+    <section class="panel">
       <p class="eyebrow">Danger</p>
       <h2>Delete this category</h2>
       <p class="muted">

@@ -11,6 +11,7 @@ import volkovandr.hauptbuch.accounts.AccountNode;
 import volkovandr.hauptbuch.accounts.AccountPath;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.accounts.ReservedNamePrefix;
+import volkovandr.hauptbuch.categories.repository.CategoryAiConfigRepository;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.operations.DeletionService;
 import volkovandr.hauptbuch.operations.SubdivisionResult;
@@ -46,16 +47,19 @@ public class CategoryService {
   private final SettingsService settingsService;
   private final SubdivisionService subdivisionService;
   private final DeletionService deletionService;
+  private final CategoryAiConfigRepository categoryAiConfigRepository;
 
   CategoryService(
       AccountService accountService,
       SettingsService settingsService,
       SubdivisionService subdivisionService,
-      DeletionService deletionService) {
+      DeletionService deletionService,
+      CategoryAiConfigRepository categoryAiConfigRepository) {
     this.accountService = accountService;
     this.settingsService = settingsService;
     this.subdivisionService = subdivisionService;
     this.deletionService = deletionService;
+    this.categoryAiConfigRepository = categoryAiConfigRepository;
   }
 
   /** Find a category by id. */
@@ -297,7 +301,12 @@ public class CategoryService {
   @Transactional
   public void deleteCategory(long accountId, long targetLeafId) {
     requireManageable(accountId);
+    // Capture the subtree before the deletion soft-deletes it (findSubtreeAccountIds is scoped to
+    // live rows), so the AI-vocabulary config rows for the whole subtree can be swept with it
+    // (data-model §13.3). The reassignment target keeps its own config — it survives the deletion.
+    List<Long> subtree = accountService.findSubtreeAccountIds(accountId);
     deletionService.deleteCategory(accountId, targetLeafId);
+    categoryAiConfigRepository.deleteByAccountIds(subtree);
   }
 
   private void validateDraft(CategoryDraft draft) {

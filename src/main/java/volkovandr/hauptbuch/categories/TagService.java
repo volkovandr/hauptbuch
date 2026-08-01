@@ -54,6 +54,34 @@ public class TagService {
    */
   @Transactional
   public Optional<ResolvedChip> resolveChip(String chip) {
+    return walkSegments(chip, true);
+  }
+
+  /**
+   * Resolve a tag echo from the AI parser to an <em>existing</em> tag, <strong>without creating
+   * anything</strong> (data-model §13.3, plan stage 9d). The AI emits a tag only when a
+   * per-category note instructs it, echoing the name the note itself supplied — a suggestion, never
+   * a creation — so this is the non-creating sibling of {@link #resolveChip}: the full {@code
+   * Parent:Child} path must already exist (each segment reused case-insensitively under the running
+   * parent); any missing segment resolves to empty and the seeding silently drops the echo.
+   *
+   * @param chip the AI's echoed {@code Parent:Child} path
+   * @return the existing leaf tag id and its canonical label, or empty if the path is blank or any
+   *     segment does not exist
+   */
+  public Optional<ResolvedChip> resolveExistingChip(String chip) {
+    return walkSegments(chip, false);
+  }
+
+  /**
+   * Walk a {@code Parent:Child} chip segment by segment, reusing an existing tag of that name
+   * (case-insensitive) under the running parent. When a segment does not exist, {@code create}
+   * decides the difference between the two public methods: {@code true} inserts the missing level
+   * (the entry dock's resolve-or-create), {@code false} abandons the whole chip as unresolved (the
+   * AI echo's non-creating lookup). The deepest segment's id is the one a posting is tagged with;
+   * the label is composed from the stored (canonical) spellings.
+   */
+  private Optional<ResolvedChip> walkSegments(String chip, boolean create) {
     if (chip == null || chip.isBlank()) {
       return Optional.empty();
     }
@@ -70,9 +98,11 @@ public class TagService {
         deepest = existing.get().tagId();
         // Reuse the stored spelling so `car` displays as the canonical `Car`.
         canonicalPath.add(existing.get().name());
-      } else {
+      } else if (create) {
         deepest = tagRepository.insert(name, parentId);
         canonicalPath.add(name);
+      } else {
+        return Optional.empty(); // a missing segment → no match, nothing created
       }
       parentId = deepest;
     }

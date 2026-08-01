@@ -19,6 +19,7 @@ import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
 import volkovandr.hauptbuch.accounts.AccountPath;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.categories.repository.CategoryAiConfigRepository;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.operations.DeletionService;
 import volkovandr.hauptbuch.operations.SubdivisionResult;
@@ -53,13 +54,19 @@ class CategoryServiceTest {
   @Mock private SettingsService settingsService;
   @Mock private SubdivisionService subdivisionService;
   @Mock private DeletionService deletionService;
+  @Mock private CategoryAiConfigRepository categoryAiConfigRepository;
 
   private CategoryService categoryService;
 
   @BeforeEach
   void setUp() {
     categoryService =
-        new CategoryService(accountService, settingsService, subdivisionService, deletionService);
+        new CategoryService(
+            accountService,
+            settingsService,
+            subdivisionService,
+            deletionService,
+            categoryAiConfigRepository);
   }
 
   private static Account account(long id, String name, String type, Long parentId) {
@@ -232,13 +239,16 @@ class CategoryServiceTest {
   }
 
   @Test
-  void deleteDelegatesToDeletionServiceForManageableCategory() {
+  void deleteDelegatesToDeletionServiceAndSweepsSubtreeAiConfig() {
     when(accountService.findById(FOOD_ID))
         .thenReturn(Optional.of(account(FOOD_ID, FOOD, EXPENSE, null)));
+    when(accountService.findSubtreeAccountIds(FOOD_ID)).thenReturn(List.of(FOOD_ID, MILK_ID));
 
     categoryService.deleteCategory(FOOD_ID, MILK_ID);
 
     verify(deletionService).deleteCategory(FOOD_ID, MILK_ID);
+    // The whole subtree's AI-vocabulary config rows are removed with it (data-model §13.3).
+    verify(categoryAiConfigRepository).deleteByAccountIds(List.of(FOOD_ID, MILK_ID));
   }
 
   @Test

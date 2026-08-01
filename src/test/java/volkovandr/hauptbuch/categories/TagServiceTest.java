@@ -118,4 +118,38 @@ class TagServiceTest {
     assertThat(tagService.resolveChip(":")).isEmpty();
     verify(tagRepository, never()).insert(any(), any());
   }
+
+  // ── resolveExistingChip (AI echoes: non-creating, plan stage 9d) ────────────
+
+  @Test
+  void resolvesAnExistingFullPathWithoutCreatingAnything() {
+    when(tagRepository.findByNameAndParent("car", null))
+        .thenReturn(Optional.of(tag(3, "Car", null)));
+    when(tagRepository.findByNameAndParent("passat", 3L))
+        .thenReturn(Optional.of(tag(4, "Passat", 3L)));
+
+    ResolvedChip chip = tagService.resolveExistingChip(" car : passat ").orElseThrow();
+
+    assertThat(chip.tagId()).isEqualTo(4L);
+    assertThat(chip.label()).isEqualTo("Car:Passat");
+    verify(tagRepository, never()).insert(any(), any());
+  }
+
+  @Test
+  void resolvesEmptyWhenAnySegmentDoesNotExistAndCreatesNothing() {
+    // Car exists, but Passat under it does not — the echo drops rather than forking a new tag.
+    when(tagRepository.findByNameAndParent("Car", null))
+        .thenReturn(Optional.of(tag(3, "Car", null)));
+    when(tagRepository.findByNameAndParent("Passat", 3L)).thenReturn(Optional.empty());
+
+    assertThat(tagService.resolveExistingChip("Car:Passat")).isEmpty();
+    verify(tagRepository, never()).insert(any(), any());
+  }
+
+  @Test
+  void resolveExistingIsEmptyForBlankInput() {
+    assertThat(tagService.resolveExistingChip(null)).isEmpty();
+    assertThat(tagService.resolveExistingChip("  ")).isEmpty();
+    verify(tagRepository, never()).insert(any(), any());
+  }
 }
