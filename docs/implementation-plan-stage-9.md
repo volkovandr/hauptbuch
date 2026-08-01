@@ -160,7 +160,7 @@ taps to full-scale, instant-deletes a bad `new` shot (files gone); the PC regist
 filters receipts, discard works, delete shows the keep/remove-files dialog; originals +
 thumbnails sit on disk under the timestamp scheme; thumbnails self-heal.
 
-## 9c — Pre-process: the processing screen, crop leaf + AI note
+## 9c — Pre-process: the processing screen, crop leaf + AI note ✅ **complete** (owner-confirmed 2026-08-01)
 
 **Goal:** a `new` receipt can be cleaned and annotated, becoming `pre_processed`.
 
