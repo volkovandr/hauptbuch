@@ -210,3 +210,58 @@
   align-items: center;
   gap: 0.35rem;
 }
+
+/* ── AI Vocabulary annotations on the categories list (stage 9d) ──────────
+   Shown only for curated rows (a visibility deviation, an alias, or a note), so the eye lands on
+   the few steered categories rather than a wall of defaults (data-model §13.3). */
+.ai-ann {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-left: 0.6rem;
+  font-size: 0.75rem;
+}
+
+/* The visibility-deviation chip. Solid ink when the flag is set on this very row; muted when it is
+   inherited from an ancestor (which the chip then names). */
+.ai-chip {
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--rule);
+}
+
+.ai-chip--set {
+  color: var(--green-ink);
+  border-color: var(--green-ink);
+  background: var(--green-wash);
+}
+
+.ai-chip--inherited {
+  color: var(--ink-soft);
+  border-style: dashed;
+}
+
+.ai-alias {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* The note marker — a pencil glyph carrying the note's full text as its native tooltip. */
+.ai-note-glyph {
+  color: var(--green-ink);
+  cursor: help;
+}
+
+/* ── AI parsing section on the category edit page (stage 9d) ──────────────── */
+.radio-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+}
+
+.radio-row__hint {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
