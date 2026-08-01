@@ -209,17 +209,39 @@ re-editable with its recipe replayed; `discarded` is gone from schema and UI.
 
 **Goal:** the curated projection exists and is editable — testable end-to-end without any AI call.
 
-- **Migration:** `category_ai_config` (visible flag + alias + per-category `ai_note`, at most one
-  row per category node) — V11.
-- **Public API:** `aiVocabulary()` — the AI-facing tree (aliases applied, hidden pruned, notes
-  attached); `resolveTerm(text)` — AI answer → category account (unknown → empty). Tag resolution
-  by name is the same module's API (tags live in `categories`).
-- **Consistency:** category rename keeps config (it attaches by `account_id`); merge/subdivide
-  (existing `categories`/`operations` logic) reassigns or re-parents config rows with the node.
-- **Editor:** "AI parsing" section on category-edit — visible toggle, alias field, AI-note
-  textarea. Defaults (no rows) = visible under the real name, no note; zero config to start.
-- **Tests:** `sqlLogicTest` for the vocabulary projection query (aliases, hidden subtrees, notes,
-  resolution incl. case handling); integration round-trips + MockMvc for the editor.
+**Decisions grilled & settled 2026-08-01** (data-model updated to v0.9, §13.3):
+
+- **Both types project** (receipts carry income lines: deposit returns, discounts, payback), with
+  opposite defaults — **expense visible, income hidden**.
+- **Visibility is a per-node tri-state:** `true` / `false` / `null` = inherit the nearest set
+  ancestor, else the type default. No propagation writes — a group toggle touches no child rows;
+  an explicit override survives later group edits; "back to inherit" is an explicit choice. A
+  group's flag is an inheritance lever, not a mask (an overridden-visible leaf under a hidden
+  group still projects, full path included); leafless groups are pruned.
+- **Migration V11:** `category_ai_config` per data-model §13.3 — `visible` **nullable** (the
+  tri-state), `alias`, `ai_note`, unique per `account_id`; absence of a row = inherit everything.
+- **Public API:** `aiVocabulary()` — the AI-facing tree (effective names at every level — a group
+  alias renames its children's paths; hidden pruned, notes attached); `resolveTerm(text)` —
+  **leaves-only**, case-insensitive, effective path first then unique bare effective leaf name;
+  group / hidden / real-name-of-aliased / ambiguous / unknown → empty (→ uncategorised). The 9e
+  prompt instructs: no fitting leaf → no category, never a near-miss. **Tag resolution** for AI
+  echoes: a new non-creating lookup beside `resolveChip` — full `Parent:Child` path only,
+  case-insensitive, any missing segment → empty.
+- **Consistency:** rename automatic (attaches by `account_id`); subdivision leaves the row on the
+  now-group parent, children inherit; deletion removes the subtree's config rows
+  (`DeletionService`), the reassignment target untouched. (No category merge exists yet.)
+- **Editor:** "AI parsing" section on category-edit — three radios where **Inherit spells out the
+  effective result and its source** ("Inherit — currently: visible (via parent 'Food')"), alias
+  field, AI-note textarea; own POST, upsert, all-default deletes the row, redirect back to the
+  edit page.
+- **List display (deviations only):** a categories-list row is annotated only when its effective
+  visibility differs from the type default — "AI: hidden/visible", solid *(set here)* vs muted
+  *(via ⟨ancestor⟩)* — or it carries an alias (`→ "Groceries"`) / a note (glyph, full text as
+  native tooltip). Default rows stay clean, so the eye lands on the curated spots.
+- **Tests:** `sqlLogicTest` for the projection/resolution SQL (inheritance chains, type defaults,
+  aliased paths, hidden pruning, ambiguity, case handling — the same effective-visibility logic
+  feeds the list annotations); integration round-trips for the config repository; MockMvc for the
+  editor section and list annotations.
 
 **Done when:** the vocabulary renders and resolves per the crafted scenarios and is editable from
 category-edit.
