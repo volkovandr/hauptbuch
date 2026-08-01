@@ -212,45 +212,23 @@
 }
 
 /* ── AI Vocabulary annotations on the categories list (stage 9d) ──────────
-   Shown only for curated rows (a visibility deviation, an alias, or a note), so the eye lands on
-   the few steered categories rather than a wall of defaults (data-model §13.3). */
+   Shown only for curated rows (a visibility deviation, or — when the category is visible to the AI
+   — an alias or note), so the eye lands on the few steered categories rather than a wall of
+   defaults (data-model §13.3). */
 .ai-ann {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: 0.15rem 0.9rem;
   margin-left: 0.6rem;
   font-size: 0.75rem;
 }
 
-/* The visibility-deviation chip. Solid ink when the flag is set on this very row; muted when it is
-   inherited from an ancestor (which the chip then names). */
-.ai-chip {
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  padding: 0.05rem 0.35rem;
-  border: 1px solid var(--rule);
-}
-
-.ai-chip--set {
-  color: var(--green-ink);
-  border-color: var(--green-ink);
-  background: var(--green-wash);
-}
-
-.ai-chip--inherited {
-  color: var(--ink-soft);
-  border-style: dashed;
-}
-
-.ai-alias {
+/* Every annotation reads as a quiet inline label — the visibility, the alias, the note — never a
+   button; the wording ("AI: hidden (via Food)", "AI alias: …", "AI note: …") carries the meaning. */
+.ai-tag {
   color: var(--ink-soft);
   font-style: italic;
-}
-
-/* The note marker — a pencil glyph carrying the note's full text as its native tooltip. */
-.ai-note-glyph {
-  color: var(--green-ink);
-  cursor: help;
 }
 
 /* ── AI parsing section on the category edit page (stage 9d) ──────────────── */

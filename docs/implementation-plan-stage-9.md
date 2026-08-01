@@ -233,11 +233,13 @@ re-editable with its recipe replayed; `discarded` is gone from schema and UI.
 - **Editor:** "AI parsing" section on category-edit — three radios where **Inherit spells out the
   effective result and its source** ("Inherit — currently: visible (via parent 'Food')"), alias
   field, AI-note textarea; own POST, upsert, all-default deletes the row, redirect back to the
-  edit page.
-- **List display (deviations only):** a categories-list row is annotated only when its effective
-  visibility differs from the type default — "AI: hidden/visible", solid *(set here)* vs muted
-  *(via ⟨ancestor⟩)* — or it carries an alias (`→ "Groceries"`) / a note (glyph, full text as
-  native tooltip). Default rows stay clean, so the eye lands on the curated spots.
+  categories list (owner call — the saved deviation is visible there as a list annotation).
+- **List display (deviations only):** annotations render as quiet inline labels (not chips) — a
+  visibility deviation from the type default shows "AI: hidden/visible" (inherited ones append
+  "(via ⟨ancestor⟩)"); and, **only while the category is visible to the AI**, an alias shows
+  "AI alias: ⟨text⟩" and a note shows "AI note: ⟨text⟩" in full (notes are short). A hidden
+  category's alias/note never reach the parser, so they are not surfaced. Default rows stay clean,
+  so the eye lands on the curated spots.
 - **Tests:** `sqlLogicTest` for the projection/resolution SQL (inheritance chains, type defaults,
   aliased paths, hidden pruning, ambiguity, case handling — the same effective-visibility logic
   feeds the list annotations); integration round-trips for the config repository; MockMvc for the
