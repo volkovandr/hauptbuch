@@ -29,7 +29,7 @@
     <!-- ── Common chrome: prev / next, back, state, delete (hidden while editing) ── -->
     <div class="receipt-process__chrome" data-receipt-chrome>
       <a
-        class="btn btn--ghost"
+        class="btn"
         th:href="@{/receipts(state=${stateFilter},range=${rangeFilter})}"
         data-receipt-back
         title="Back to the register (Backspace or Esc)"
@@ -121,7 +121,7 @@
               <input type="hidden" name="range" th:value="${rangeFilter}" />
               <!-- A low-stakes stage-undo: the AI note survives and a re-edit replays the recipe,
                    so no confirmation (a plain full-navigation POST — no page-scoped JS). -->
-              <button type="submit" class="btn btn--ghost">Discard edits</button>
+              <button type="submit" class="btn">Discard edits</button>
             </form>
             <button type="button" class="btn" disabled title="Analysis arrives in a later step">
               Analyse
@@ -166,11 +166,11 @@
             </button>
             <label class="receipt-edit__slider"
               >Tilt
-              <input type="range" min="-15" max="15" step="0.5" value="0" data-crop-tilt />
+              <input type="range" min="-45" max="45" step="0.1" value="0" data-crop-tilt />
             </label>
             <label class="receipt-edit__slider"
               >Skew
-              <input type="range" min="-15" max="15" step="0.5" value="0" data-crop-skew />
+              <input type="range" min="-10" max="10" step="0.1" value="0" data-crop-skew />
             </label>
             <label class="receipt-edit__slider"
               >Brightness

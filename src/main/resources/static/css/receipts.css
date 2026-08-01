@@ -473,7 +473,7 @@ table.receipts tbody td {
 }
 
 .receipt-edit__tools {
-  display: flex;
+  /*display: flex;*/
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
