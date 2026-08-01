@@ -251,37 +251,63 @@ category-edit.
 ## 9e — Analyse (single): worker, parser, seeding
 
 **Goal:** one `pre_processed` receipt goes through the Messages API and comes back `processed`
-with seeded draft lines — or `failed` with retry.
+with seeded draft lines — or `failed` with retry. Decisions below grilled & settled 2026-08-01.
 
-- **Migration:** `receipt_line` + `receipt_line_tag` + `account.card_last4` /
-  `account.cash_account` — V12. Detection fields join the account-edit screen (`accounts`
-  module).
-- **`ReceiptParser`** (ARCH-03) + `AnthropicReceiptParser` via the official Java SDK: sends the
-  edited image + instructions + `aiVocabulary()` + the AI note as the uncached suffix (§8) —
-  never ledger contents (reworded ARCH-08). Tight output JSON schema; downscaling already
-  happened client-side (9c). API key from config/env. **Send the edited bytes verbatim — do not
+- **Migration — V12:** `receipt_line` + `receipt_line_tag` + `account.card_last4` /
+  `account.cash_account`, **plus** the receipt header/telemetry extension (`receipt_time`,
+  `merchant_city`, `merchant_country`, `receipt_number`, `parse_error`, the four token counts,
+  `parse_cost`) and the settings AI section (`ai_model`, `ai_api_key`, four per-MTok price
+  rates) — data-model §13.1/§3.8. Detection fields join the account-edit screen (`accounts`
+  module); the AI settings join the Settings screen (`ledger` module).
+- **Output format is TOON**, not JSON (owner call: Sonnet 5 emits it natively; 30–60 % fewer
+  output tokens). Decoded with `dev.toonformat:jtoon` (Maven Central, MIT, Java 17);
+  `parse_raw` stores the raw TOON verbatim. Shape: `merchant{name,city,country}`,
+  `transaction{date,time,account,totalAmount,currency,receiptNumber}`,
+  `items[]{name,quantity,unitPrice,totalPrice,category,tags,beneficiary,transfer}` —
+  `category` echoes a full effective path from the vocabulary (or stays empty: "no fitting
+  leaf → no category"); `tags`/`beneficiary` are note-instructed echoes only; `transfer`
+  carries the word `cash` or a card's printed last-4 (supermarket cashback *and* ATM
+  cash-in/out slips), resolved through the same §13.4 detection as the paying account —
+  unresolved values seed a targetless transfer line for post-process.
+- **`ReceiptParser`** (ARCH-03) + `AnthropicReceiptParser` via the official Java SDK. Prompt =
+  `[system: instructions + vocabulary + TOON skeleton with one worked text example]`
+  `[user: image + ai_note]` — never ledger contents (reworded ARCH-08). The vocabulary renders
+  flat: `Income:` / `Expense:` headers, one effective leaf path per line (`Food - Sweets`),
+  notes appended after an em-dash, a group's note on a group line above its leaves. No image
+  few-shots. **No `cache_control` in 9e** — sporadic single parses never hit the 5-minute TTL
+  and a cache write costs +25 %; the breakpoint lands with 9h, where a batch genuinely shares
+  the prefix. The prefix/suffix *ordering* discipline (§8) is kept now so it can. Model id from
+  `settings.ai_model` (default `claude-sonnet-5`); the Haiku→Sonnet escalation ladder is
+  **dropped**. API key: `settings.ai_api_key` first, `ANTHROPIC_API_KEY` env as fallback —
+  write-only masked field on the Settings screen (NFR-04 amended; data-model §3.8).
+  Downscaling already happened client-side (9c). **Send the edited bytes verbatim — do not
   re-encode server-side with `ImageIO`, which drops the EXIF orientation tag** (the 9b thumbnail
   bug); a sideways image parses worse. If a server-side normalisation of an un-edited original is
   ever needed, reuse the `ExifOrientation` + `ImageRotation` helpers from 9b.
 - **Background worker:** Analyse → `processing`, HTTP returns immediately; pane greys, htmx polls
-  a status fragment (§3.1); worker calls Messages, stores the immutable raw response
-  (`parse_raw` — text, format-agnostic: JSON today, possibly TOON), seeds
-  `receipt_line`s (term → category via `resolveTerm`, unresolved → uncategorised;
-  note-instructed tag/beneficiary echoes resolved case-insensitively via `categories`/`debts`,
-  unresolved silently dropped — suggestions, never creations; a recognised **cash-withdrawal
-  line** — German supermarket cashback — seeds as a transfer line targeting the marked cash
-  account), fills the
-  denormalised header columns, detects the account (cash marker / last-4), flips `processed` —
-  or `failed` (Retry → `pre_processed`, or Delete — `discarded` retired in 9c).
-  **Soft-delete tolerance (9b's delete ladder):**
+  a status fragment (§3.1, 2 s cadence); a dedicated single-thread executor calls Messages,
+  stores `parse_raw`, records the usage token counts and the **frozen** `parse_cost` (settings
+  rates × counts, USD, never recomputed on a rate edit), seeds `receipt_line`s and the
+  denormalised header, detects the account (cash marker / last-4), flips `processed` — or
+  `failed` with the reason in `parse_error` (Retry → `pre_processed`, or Delete). **Seeding is
+  lenient:** anything that decodes is seeded — missing header fields stay null, `resolveTerm`
+  misses seed uncategorised, unresolved tag/beneficiary echoes are silently dropped
+  (suggestions, never creations), even zero items still flips `processed`; post-process (9f) is
+  the fixing surface. Only an undecodable response or a transport error fails; whatever body
+  came back is still kept in `parse_raw`. `description` = item name (quantity folded in as
+  `2× …` when > 1); `amount` = `totalPrice`; quantity/unitPrice otherwise live only in
+  `parse_raw`. **Startup sweep:** on boot, single-mode `processing` rows (`batch_id` null, not
+  soft-deleted) flip to `failed` — the worker thread died with the JVM; batch rows are exempt
+  (9h's poller resumes them). **Soft-delete tolerance (9b's delete ladder):**
   a receipt deleted mid-flight stays deletable without waiting; the worker, finding the row
   soft-deleted on completion, quietly abandons the result.
-- **Tests:** parser behind a fake in unit tier (prompt assembly, seeding, resolution fallbacks,
-  failure paths); integration round-trips for `receipt_line`; MockMvc for analyse/poll/retry. No
-  live-API test in the suites.
+- **Tests:** parser behind a fake in unit tier (prompt assembly, TOON decode + lenient seeding,
+  resolution fallbacks, cost arithmetic, failure paths, startup sweep); integration round-trips
+  for `receipt_line` and the new columns; MockMvc for analyse/poll/retry. No live-API test in
+  the suites.
 
 **Done when:** a real receipt analysed end-to-end (manually, against the live API) seeds correct
-draft lines; all suites green without network.
+draft lines with token counts and cost recorded; all suites green without network.
 
 ## 9f — Post-process: the full split toolkit
 
@@ -348,8 +374,8 @@ individually reviewable, failures isolated per receipt.
 
 ## Open items intentionally left to their slice
 
-- Prompt wording, output JSON schema, model id (floor ≥ Sonnet 4.6, NFR-09), Haiku→Sonnet
-  escalation — 9e; escalation may be dropped if the floor model is cheap enough in practice.
-- Polling cadence / SSE swap (T-RX-1) — 9e, only if polling grates.
+- SSE swap for the status poll (T-RX-1) — later, only if the 2 s polling grates. (Prompt
+  wording, TOON schema, model id, and the dropped escalation ladder were settled in the
+  2026-08-01 grilling — see §9e.)
 - Keyboard map of the workflow pane — piecewise per slice, in the `keyboard.js` leaf, per the
   stage-7 rule.

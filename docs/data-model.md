@@ -1,10 +1,10 @@
 # Hauptbuch — Core Data Model
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.9
+**Status:** Draft v0.10
 **Date:** 2026-08-01
 **Owner:** volkovandr
-**Companion to:** `requirements.md` (v0.4),
+**Companion to:** `requirements.md` (v0.6),
 `tech-stack.md` (v0.1)
 
 > This document records the **core data model** — accounts, transactions, postings, currency,
@@ -17,6 +17,15 @@
 > attachments, and holdings are deliberately **not modeled here yet** — see §12.
 
 **Changelog**
+- **v0.10 (2026-08-01):** Stage-9e grilling round. **`parse_raw` format settled: TOON** (was
+  "JSON today, possibly TOON"). `receipt` gains the parsed-header extension (`receipt_time`,
+  `merchant_city`, `merchant_country`, `receipt_number`) and **parse telemetry** (`parse_error`,
+  four token counts, `parse_cost` — frozen at analyse time, never recomputed). **`settings`
+  gains the AI section** (§3.8): `ai_model`, `ai_api_key` (in the DB by owner decision —
+  amending NFR-04's "never plaintext in DB" for this one secret; write-only masked UI, env
+  fallback, `pg_dump` caveat), and four per-MTok price rates. §13.4: the parser's `transfer`
+  field carries `cash` or a card last-4 and resolves through the same detection as the paying
+  account (covers ATM slips, not just supermarket cashback).
 - **v0.9 (2026-08-01):** Stage-9d grilling round — the AI Vocabulary (§13.3) sharpened before
   build. **`visible` becomes a nullable tri-state** (`true` always / `false` hidden / `null` =
   inherit the nearest set ancestor, else the type default: **expense visible, income hidden** —
@@ -334,7 +343,15 @@ create table exchange_rate (
 create table settings (
   settings_id   smallint primary key default 1 check (settings_id = 1),  -- single-row guard
   base_currency text references currency(currency_code),  -- write-once; NULL until first-run set
-  display_name  text                                      -- the "Hello, %name%" greeting
+  display_name  text,                                     -- the "Hello, %name%" greeting
+
+  -- AI parsing (stage 9e; receipt doc §3, data-model §13):
+  ai_model              text,           -- Anthropic model id; default claude-sonnet-5
+  ai_api_key            text,           -- the one DB-stored secret (see below); NULL = env only
+  ai_price_in           numeric(12,6),  -- price per million input tokens (USD)
+  ai_price_out          numeric(12,6),  -- per million output tokens
+  ai_price_cache_write  numeric(12,6),  -- per million cache-write tokens
+  ai_price_cache_read   numeric(12,6)   -- per million cache-read tokens
   -- future global settings land here as typed columns (legibility > key/value bag)
 );
 ```
@@ -352,6 +369,20 @@ create table settings (
   invariant (§8, T-DM-2).
 - **`display_name`** backs the "Hello, %name%" greeting; freely editable. The base-currency UI is
   read-only once locked.
+- **The AI section (stage 9e, owner decision 2026-08-01).** `ai_model` picks the Messages-API
+  model (default `claude-sonnet-5`; the price rates are "for the currently configured model" —
+  switching models means re-entering them by hand; deliberately no per-model price table for what
+  is realistically 1–2 rows). The four rates are **per million tokens, in USD** (Anthropic's
+  billing currency); a receipt's `parse_cost` is computed from them **at analyse time and frozen**
+  (§13.1) — a later rate edit never rewrites history.
+- **`ai_api_key` is the one secret that lives in the DB**, a deliberate amendment of NFR-04's
+  "never plaintext in DB" (requirements v0.6): on a single-user Pi the database sits on the same
+  disk as any env file, and the Settings page makes rotation a UI action instead of a restart.
+  Mitigations: the Settings screen **never renders the stored key back** — a write-only field
+  whose display shows only "set (…last4)"; the key is never logged; resolution order is **DB
+  first, `ANTHROPIC_API_KEY` env as fallback** (bootstrap/tests). Accepted residual risk, stated
+  here on purpose: **a `pg_dump` contains the key — guard your backups** (they travel further
+  than the host disk). DB credentials and any other secret stay in config/env as before.
 
 > **Why base currency moved out of config and into the DB.** It is a *property of the book*, not of
 > the deployment: it must travel with a `pg_dump`, survive a restore, and be per-profile (each
@@ -853,13 +884,30 @@ create table receipt (
   ai_note        text,                    -- per-receipt prompt guidance (receipt doc §8)
   batch_id       text,                    -- Batches API id while processing (NULL for single mode)
   parse_raw      text,                    -- raw AI response, retained immutable (audit). text, not
-                                          -- jsonb: the model may return malformed output, and the
-                                          -- response format is not settled (JSON today, possibly
-                                          -- TOON) — the column stores whatever came back, verbatim
+                                          -- jsonb: the response format is TOON (settled 2026-08-01,
+                                          -- decoded app-side with jtoon), and the model may return
+                                          -- malformed output — the column stores whatever came
+                                          -- back, verbatim
+
+  -- parse telemetry (stage 9e; written once by the analyse worker):
+  parse_error         text,               -- why the parse failed (API/transport error, undecodable
+                                          -- TOON); NULL on success
+  tokens_in           int,                -- the API usage block, recorded per parse:
+  tokens_out          int,                --   input / output /
+  tokens_cache_write  int,                --   cache-write /
+  tokens_cache_read   int,                --   cache-read token counts
+  parse_cost          numeric(12,6),      -- USD, computed from the settings rates (§3.8) at
+                                          -- analyse time and FROZEN — never recomputed on a
+                                          -- later rate edit (the base_amount stance, §6.2)
 
   -- denormalised parsed header (register list / filter / search; blank until processed):
-  merchant_text  text,
-  receipt_date   date,
+  merchant_text    text,
+  merchant_city    text,
+  merchant_country text,
+  receipt_date     date,
+  receipt_time     time,                  -- as printed; no zone (the receipt has none)
+  receipt_number   text,                  -- the printed receipt identifier (Beleg-Nr.); audit,
+                                          -- and a natural key if duplicate detection ever lands
   total_amount   numeric(19,4),
   currency_code  text references currency(currency_code),
   account_id     bigint references account(account_id),   -- detected/picked paying account
@@ -990,6 +1038,13 @@ The cash marker serves double duty: a **cash-withdrawal line** on the receipt (G
 cashback, *Bargeldauszahlung*) is recognised by the parser and seeded as a **transfer line**
 targeting the marked cash account — `EC-card −50 / Cash +50` inside the same transaction. No
 marked cash account → the line seeds without a target and the operator picks.
+
+The parse schema carries this as the per-item **`transfer` field** (settled 2026-08-01): the
+model fills it with the word `cash` or a card's printed last-4 — the same signal vocabulary as
+the paying-account line, resolved through the same lookup (last-4 → `card_last4` match, `cash` →
+the marked cash account, unresolved → targetless transfer line for post-process). Real account
+names are never sent to or echoed by the model (ARCH-08). The symmetry covers **ATM slips** in
+both directions: a withdrawal is `card → cash`, a deposit `cash → card`.
 
 ```sql
 alter table account add column card_last4   text;                            -- card slips: '1234'

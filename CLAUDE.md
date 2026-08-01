@@ -58,7 +58,9 @@ outranks cleverness, brevity, and raw capability every time. Concretely:
    other ledger contents** (ARCH-08). The one sanctioned addition is the **AI Vocabulary**
    (data-model §13.3): the operator-curated projection of the category taxonomy (aliases, hidden
    categories excluded, per-category guidance notes) counts as parsing instructions — nothing else
-   from the DB does. Secrets (AI keys, DB creds) come from config/env, never hardcoded, never committed.
+   from the DB does. Secrets (DB creds etc.) come from config/env, never hardcoded, never committed —
+   with **one sanctioned exception** (NFR-04, amended 2026-08-01): the Anthropic API key lives in the
+   `settings` row (write-only masked UI, never logged, `ANTHROPIC_API_KEY` env fallback; data-model §3.8).
 9. **`./gradlew check` is the completion gate — it must be fully green before any step is done.**
    `check` runs the three test suites *and* every quality tool: **Checkstyle, PMD, SpotBugs,
    Spotless, and JaCoCo coverage verification.** Never call a step complete on a red gate, and

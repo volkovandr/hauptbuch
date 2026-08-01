@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.33
-**Date:** 2026-08-31
+**Status:** Draft v0.34
+**Date:** 2026-08-01
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md` (the five authoritative design docs)
@@ -23,6 +23,12 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.34 (2026-08-01):** **9e grilled & planned** (owner-confirmed; not yet implemented). Scope
+  changes: output format settled as **TOON** (jtoon dependency); `receipt` gains a parsed-header
+  extension + parse telemetry (token counts, frozen USD cost); **`settings` gains the AI section**
+  — model id, the API key (**overturning NFR-04's "never plaintext in DB"** for this one secret,
+  requirements v0.6), and four token-price rates, all on the Settings screen. Details in the
+  sub-plan §9e; entities in data-model v0.10 (§3.8, §13.1, §13.4).
 - **v0.33 (2026-08-01):** **9d complete** (owner-confirmed) — the AI Vocabulary shipped.
 - **v0.32 (2026-08-01):** **9c complete** (owner-confirmed) — receipt pre-processing shipped.
 - **v0.31 (2026-07-31):** **9c grilled & planned** (owner-confirmed; not yet implemented). Two
