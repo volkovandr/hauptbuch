@@ -375,8 +375,8 @@ class CategoriesController {
    * Save the category's AI-vocabulary config (data-model §13.3, plan stage 9d): the visibility
    * tri-state ({@code visible} = {@code true} / {@code false} / {@code inherit}), the alias, and
    * the AI note. Returning everything to default deletes the row (handled in the service). Its own
-   * POST, separate from rename, so each section saves independently; redirects back to the edit
-   * page so the operator sees the saved state (unlike rename, which returns to the list).
+   * POST, separate from rename, so each section saves independently; redirects back to the
+   * categories list (like rename does), where the saved deviation shows as a list annotation.
    *
    * @throws IllegalArgumentException if the id is not a category this screen manages
    */
@@ -390,7 +390,7 @@ class CategoriesController {
         .findById(accountId)
         .orElseThrow(() -> new IllegalArgumentException("No category with id " + accountId));
     aiVocabularyService.saveConfig(accountId, parseVisibility(visible).orElse(null), alias, aiNote);
-    return REDIRECT_TO_LIST + "/" + accountId;
+    return REDIRECT_TO_LIST;
   }
 
   /**

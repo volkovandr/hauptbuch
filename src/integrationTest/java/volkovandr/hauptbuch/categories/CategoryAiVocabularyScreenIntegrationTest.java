@@ -69,7 +69,7 @@ class CategoryAiVocabularyScreenIntegrationTest {
   }
 
   @Test
-  void savingAnOverrideUpsertsTheRowAndRedirectsBackToTheEditPage() throws Exception {
+  void savingAnOverrideUpsertsTheRowAndRedirectsToTheList() throws Exception {
     long foodId = insertCategory("Food", "expense", null);
 
     mockMvc
@@ -79,7 +79,7 @@ class CategoryAiVocabularyScreenIntegrationTest {
                 .param("alias", "Groceries")
                 .param("aiNote", "M&Ms → for Bobby"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/categories/" + foodId));
+        .andExpect(redirectedUrl("/categories"));
 
     CategoryAiConfig saved = configRepository.findByAccountId(foodId).orElseThrow();
     assertThat(saved.visible()).isFalse();
@@ -120,15 +120,34 @@ class CategoryAiVocabularyScreenIntegrationTest {
   }
 
   @Test
-  void categoriesListShowsAliasAnnotationWithoutDeviation() throws Exception {
-    long salaryId = insertCategory("Salary", "income", null);
-    configRepository.upsert(salaryId, null, "Wages", null); // income already hidden by default
+  void categoriesListShowsAliasAndNoteForVisibleCategory() throws Exception {
+    long foodId = insertCategory("Food", "expense", null); // expense is visible by default
+    configRepository.upsert(foodId, null, "Groceries", "diesel → tag Car:Audi");
 
     mockMvc
         .perform(get("/categories"))
         .andExpect(status().isOk())
         .andExpect(
             content()
-                .string(allOf(containsString("→ “Wages”"), not(containsString("AI: hidden")))));
+                .string(
+                    allOf(
+                        containsString("AI alias: Groceries"),
+                        containsString("AI note: diesel → tag Car:Audi"),
+                        // Visible and on its default → no visibility label.
+                        not(containsString("AI: ")))));
+  }
+
+  @Test
+  void categoriesListHidesAliasAndNoteForHiddenCategory() throws Exception {
+    long salaryId = insertCategory("Salary", "income", null); // income is hidden by default
+    configRepository.upsert(salaryId, null, "Wages", "some note");
+
+    // A hidden category's alias/note never reach the AI, so they are not surfaced on the list.
+    mockMvc
+        .perform(get("/categories"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(allOf(not(containsString("AI alias:")), not(containsString("AI note:")))));
   }
 }

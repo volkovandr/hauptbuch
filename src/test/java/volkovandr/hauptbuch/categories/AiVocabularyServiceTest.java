@@ -169,7 +169,7 @@ class AiVocabularyServiceTest {
   // ── annotations() ─────────────────────────────────────────────────────────
 
   @Test
-  void annotatesOnlyDeviationsAliasesAndNotes() {
+  void annotatesDeviationsAndVisibleAliasesButNotHiddenOnes() {
     projection(
         // Plain default expense leaf → no annotation.
         row(1, EXPENSE, null, true, true, null, null, null, "Rent"),
@@ -177,8 +177,10 @@ class AiVocabularyServiceTest {
         row(2, EXPENSE, null, false, false, 2L, null, null, "Food"),
         // Child inherits the hidden group → deviation via 'Food'.
         row(3, EXPENSE, 2L, true, false, 2L, null, null, "Food - Milk"),
-        // Income set to its own default (hidden) but carrying an alias → annotated for the alias.
-        row(4, INCOME, null, true, false, 4L, "Wages", null, "Wages"));
+        // Visible expense leaf with an alias → annotated for the alias (no deviation).
+        row(4, EXPENSE, null, true, true, null, "Groceries", null, "Groceries"),
+        // Hidden income leaf with an alias → the alias never reaches the AI, so NOT annotated.
+        row(5, INCOME, null, true, false, null, "Wages", null, "Wages"));
 
     Map<Long, CategoryAiAnnotation> annotations = service.annotations();
 
@@ -189,9 +191,11 @@ class AiVocabularyServiceTest {
     assertThat(annotations.get(3L).deviates()).isTrue();
     assertThat(annotations.get(3L).setHere()).isFalse();
     assertThat(annotations.get(3L).viaName()).isEqualTo("Food");
-    // Income default is hidden and the flag agrees → no deviation, but the alias still shows.
+    // Visible alias shows; deviation is false.
     assertThat(annotations.get(4L).deviates()).isFalse();
-    assertThat(annotations.get(4L).alias()).isEqualTo("Wages");
+    assertThat(annotations.get(4L).alias()).isEqualTo("Groceries");
+    // Hidden category with only an alias → suppressed entirely.
+    assertThat(annotations).doesNotContainKey(5L);
   }
 
   // ── editModel() ───────────────────────────────────────────────────────────

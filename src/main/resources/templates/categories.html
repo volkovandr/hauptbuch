@@ -41,23 +41,22 @@
           <span th:if="${ann != null}" class="ai-ann">
             <span
               th:if="${ann.deviates()}"
-              class="ai-chip"
-              th:classappend="${ann.setHere()} ? 'ai-chip--set' : 'ai-chip--inherited'"
+              class="ai-tag"
               th:text="${'AI: ' + (ann.visible() ? 'visible' : 'hidden')
                         + (ann.setHere() ? '' : ' (via ' + ann.viaName() + ')')}"
               >AI: hidden</span
             >
             <span
-              th:if="${ann.alias() != null}"
-              class="ai-alias"
-              th:text="${'→ “' + ann.alias() + '”'}"
-              >→ “Wages”</span
+              th:if="${ann.visible() and ann.alias() != null}"
+              class="ai-tag"
+              th:text="${'AI alias: ' + ann.alias()}"
+              >AI alias: Wages</span
             >
             <span
-              th:if="${ann.note() != null}"
-              class="ai-note-glyph"
-              th:title="${ann.note()}"
-              >&#9998;</span
+              th:if="${ann.visible() and ann.note() != null}"
+              class="ai-tag"
+              th:text="${'AI note: ' + ann.note()}"
+              >AI note: …</span
             >
           </span>
         </li>
@@ -82,23 +81,22 @@
           <span th:if="${ann != null}" class="ai-ann">
             <span
               th:if="${ann.deviates()}"
-              class="ai-chip"
-              th:classappend="${ann.setHere()} ? 'ai-chip--set' : 'ai-chip--inherited'"
+              class="ai-tag"
               th:text="${'AI: ' + (ann.visible() ? 'visible' : 'hidden')
                         + (ann.setHere() ? '' : ' (via ' + ann.viaName() + ')')}"
               >AI: hidden</span
             >
             <span
-              th:if="${ann.alias() != null}"
-              class="ai-alias"
-              th:text="${'→ “' + ann.alias() + '”'}"
-              >→ “Groceries”</span
+              th:if="${ann.visible() and ann.alias() != null}"
+              class="ai-tag"
+              th:text="${'AI alias: ' + ann.alias()}"
+              >AI alias: Groceries</span
             >
             <span
-              th:if="${ann.note() != null}"
-              class="ai-note-glyph"
-              th:title="${ann.note()}"
-              >&#9998;</span
+              th:if="${ann.visible() and ann.note() != null}"
+              class="ai-tag"
+              th:text="${'AI note: ' + ann.note()}"
+              >AI note: …</span
             >
           </span>
         </li>
