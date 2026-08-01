@@ -1,8 +1,8 @@
 # Hauptbuch — Core Data Model
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.8
-**Date:** 2026-07-31
+**Status:** Draft v0.9
+**Date:** 2026-08-01
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1)
@@ -17,6 +17,13 @@
 > attachments, and holdings are deliberately **not modeled here yet** — see §12.
 
 **Changelog**
+- **v0.9 (2026-08-01):** Stage-9d grilling round — the AI Vocabulary (§13.3) sharpened before
+  build. **`visible` becomes a nullable tri-state** (`true` always / `false` hidden / `null` =
+  inherit the nearest set ancestor, else the type default: **expense visible, income hidden** —
+  income appears on receipts too: deposit returns, discounts, payback). Resolution is **leaves
+  only** and matches the **effective path** (aliases applied at every level) first, then a unique
+  bare effective leaf name; hidden nodes and the real names of aliased nodes never resolve. Tag
+  echoes resolve by full `Parent:Child` path only, non-creating.
 - **v0.8 (2026-07-31):** Stage-9c grilling round. **`receipt.state` loses `discarded`** — the
   state is retired (receipt doc v0.4 §2.1): "seen, chose not to book" is covered by soft-delete
   with files kept; "Discard" now means the processing screen's stage-undo. **`edit_recipe` added**
@@ -921,26 +928,45 @@ create table receipt_line_tag (
 
 The parser must suggest categories from *your* taxonomy, but AI calls may never carry ledger
 contents (ARCH-08). Resolution: the AI sees only an **operator-curated projection** — per
-category node an *alias* (shown to the AI instead of the real name), a *hide* flag (excluded
-entirely, e.g. sensitive categories), and a freetext **AI note**: guidance injected into the
-prompt next to the category, steering how items under it are handled. Examples (the owner's own):
-on `Car - Fuel` — *"diesel → tag Car:Audi; gasoline → tag Car:Skoda; bought outside Germany → tag
-Vacation"*; on `Food - Sweets` — *"M&Ms and Haribo bears → for Bobby"*. The note is the
-per-category sibling of the per-receipt `receipt.ai_note`.
+category node an *alias* (shown to the AI instead of the real name), a tri-state *visible* flag,
+and a freetext **AI note**: guidance injected into the prompt next to the category, steering how
+items under it are handled. Examples (the owner's own): on `Car - Fuel` — *"diesel → tag
+Car:Audi; gasoline → tag Car:Skoda; bought outside Germany → tag Vacation"*; on `Food - Sweets` —
+*"M&Ms and Haribo bears → for Bobby"*. The note is the per-category sibling of the per-receipt
+`receipt.ai_note`.
+
+**Both types project** — receipts carry income lines too (bottle-deposit returns, discounts,
+payback/cashback items) — but with opposite defaults: **expense visible, income hidden**.
+**Visibility is a per-node tri-state** (grilled 2026-08-01): `true` = always visible, `false` =
+hidden, `null` = inherit. Effective visibility = the node's own flag if set, else the **nearest
+ancestor with a set flag**, else the type default. There are **no propagation writes**: toggling
+a group touches no child rows (row-less descendants follow it by inheritance), an explicit leaf
+override survives later group edits, and "back to inherit" is an explicit choice. A group's flag
+is an inheritance lever, **not a mask** — a leaf overridden visible under a hidden group still
+projects, with its full path; groups left without a single visible leaf are pruned.
+
+**Resolution is leaves-only** (semantic leaves — currency leaves stay invisible, §6.5). Every
+node projects under its **effective name** (alias if set, else the real name) at every level, so
+a group alias renames its children's paths; the AI echoes the effective `Parent - Child` path and
+is instructed to assign **no category** when no leaf fits — never a near-miss, never a group.
+`resolveTerm` matches case-insensitively: exact effective path first, then a *unique* bare
+effective leaf name; a group, hidden node, real name of an aliased node, ambiguous name, or
+unknown term resolves **empty** → the line seeds uncategorised.
 
 The note is also how the operator steers per-line **tags** and **beneficiaries**: the AI emits
 them **only when a note instructs it**, echoing names the note itself supplied — no tag or person
 list is ever sent (the note is operator-authored disclosure, within ARCH-08). At seeding, every
 AI answer is resolved case-insensitively against the live entity — category term → category, tag
-name → tag, person name → person — and **silently dropped when nothing matches**: suggestions,
-never creations (unresolved category → uncategorised).
+name → tag (full `Parent:Child` path only, non-creating), person name → person — and **silently
+dropped when nothing matches**: suggestions, never creations (unresolved category →
+uncategorised).
 
 ```sql
--- at most one config row per category node; absence = visible under the real name, no note
+-- at most one config row per category node; absence = inherit everything, no alias, no note
 create table category_ai_config (
   category_ai_config_id bigint generated always as identity primary key,
   account_id bigint not null references account(account_id),
-  visible    boolean not null default true,
+  visible    boolean,   -- true always / false hidden / null = inherit (ancestor, else type default)
   alias      text,      -- what the AI sees instead of the real name
   ai_note    text,      -- per-category prompt guidance (mirrors receipt.ai_note)
   unique (account_id)
@@ -949,7 +975,9 @@ create table category_ai_config (
 
 Ownership by `categories` is deliberate: rename/merge/subdivide must keep the vocabulary
 consistent, and that module owns keep-the-taxonomy-consistent logic (tags live there too, so tag
-resolution is the same module's API; person resolution is `debts`' public API). Consumers
+resolution is the same module's API; person resolution is `debts`' public API). Config attaches
+by `account_id`, so **rename** is automatic; **subdivision** leaves the row on the now-group
+parent (children inherit it); **deletion** removes the subtree's config rows with it. Consumers
 (`receipts`) use public APIs only (`aiVocabulary()`, `resolveTerm()`).
 
 ### 13.4 Paying-account detection
