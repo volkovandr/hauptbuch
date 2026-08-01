@@ -1,8 +1,8 @@
 # Hauptbuch — Requirements Document
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.5
-**Date:** 2026-07-21
+**Status:** Draft v0.6
+**Date:** 2026-08-01
 **Owner:** volkovandr
 **Type:** Self-hosted, single-user, web-based personal finance application
 
@@ -11,6 +11,10 @@
 > Priorities use MoSCoW: **Must**, **Should**, **Could**, **Won't (this version)**.
 
 **Changelog**
+- **v0.6 (2026-08-01):** **NFR-04 amended** (stage-9e grilling): the Anthropic API key becomes
+  the one secret stored in the DB (`settings` row, Settings-page managed, write-only masked UI,
+  env fallback) — rationale and mitigations in data-model §3.8. All other secrets stay in
+  config/env.
 - **v0.5 (2026-07-21):** **ARCH-08 clarified** for receipt parsing (stage 9): the prohibition is on
   financial facts (transactions, balances, ledger contents); the operator-curated **AI Vocabulary**
   — the projection of the category taxonomy the operator chooses to expose (aliases, hidden
@@ -342,7 +346,7 @@ everything, and allow full disabling. See Q11.
 | NFR-01 | **Keyboard-first** (desktop): command palette (Ctrl/Cmd-K), keyboard nav, rapid keyboard-only entry, in-app shortcut docs. | Must |
 | NFR-02 | Responsive on a Pi for a single user (snappy, virtualized lists) and usable on mobile (§5.15). | Should |
 | NFR-03 | **Backups**: documented PostgreSQL backup/restore; one-click data + attachments export; per-profile. | Must |
-| NFR-04 | **Security**: login required; secrets (AI keys, DB creds, Telegram token, MCP auth) in config/env, never plaintext in DB; attachments access-controlled. | Should |
+| NFR-04 | **Security**: login required; secrets (DB creds, Telegram token, MCP auth) in config/env; attachments access-controlled. **One sanctioned exception** (owner, 2026-08-01): the Anthropic API key lives in the `settings` row for UI-managed rotation — write-only masked field, never logged, env fallback; a `pg_dump` therefore contains it (guard backups). See data-model §3.8. | Should |
 | NFR-05 | **Portability**: full open-format export; no lock-in. | Should |
 | NFR-06 | **Reliability**: reversible/tested migrations; no silent data loss; idempotent imports; reversible bulk operations. | Must |
 | NFR-07 | **Observability**: clear logs for AI parsing, reconciliation, and agent-initiated operations. | Should |
