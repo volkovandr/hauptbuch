@@ -1,7 +1,7 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.32
+**Status:** Draft v0.33
 **Date:** 2026-08-31
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
@@ -23,6 +23,7 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.33 (2026-08-01):** **9d complete** (owner-confirmed) — the AI Vocabulary shipped.
 - **v0.32 (2026-08-01):** **9c complete** (owner-confirmed) — receipt pre-processing shipped.
 - **v0.31 (2026-07-31):** **9c grilled & planned** (owner-confirmed; not yet implemented). Two
   design decisions overturn v0.1–v0.3 of the receipt doc (now v0.4): the workflow pane's **▲▼
@@ -448,7 +449,7 @@ summary folded back). Eight ordered sub-stages, each green and owner-confirmed:
 - **9c — Pre-process.** ✅ The per-state **processing screen** (own URL; the ▲▼ stage axis and the
   `discarded` state retired), Cropper.js leaf + pixel pass (manual only), always-baked
   `edited_path` + replayable `edit_recipe`, the AI note.
-- **9d — AI Vocabulary.** The curated taxonomy projection in `categories` (alias / hide /
+- **9d — AI Vocabulary.** ✅ The curated taxonomy projection in `categories` (alias / hide /
   per-category AI note) + category-edit UI; `aiVocabulary()` / `resolveTerm()`.
 - **9e — Analyse (single).** `ReceiptParser` + Anthropic Java SDK (Messages), background worker,
   htmx polling, immutable `parse_raw`, draft-line seeding, account detection (config on account).

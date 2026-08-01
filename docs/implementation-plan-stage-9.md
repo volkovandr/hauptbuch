@@ -205,7 +205,7 @@ thumbnails sit on disk under the timestamp scheme; thumbnails self-heal.
 **Done when:** a receipt can be cropped/cleaned/annotated on the PC and lands `pre_processed`,
 re-editable with its recipe replayed; `discarded` is gone from schema and UI.
 
-## 9d — The AI Vocabulary (`categories` module)
+## 9d — The AI Vocabulary (`categories` module) ✅ **complete** (owner-confirmed 2026-08-01)
 
 **Goal:** the curated projection exists and is editable — testable end-to-end without any AI call.
 
