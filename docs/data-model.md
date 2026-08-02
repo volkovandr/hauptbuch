@@ -1,8 +1,8 @@
 # Hauptbuch — Core Data Model
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.10
-**Date:** 2026-08-01
+**Status:** Draft v0.11
+**Date:** 2026-08-02
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.6),
 `tech-stack.md` (v0.1)
@@ -17,6 +17,14 @@
 > attachments, and holdings are deliberately **not modeled here yet** — see §12.
 
 **Changelog**
+- **v0.11 (2026-08-02):** Stage-9f grilling round (post-process). `receipt` gains **`payee_id`**
+  (the reviewed header's payee — the picker's create-new creates the payee at Save; the register's
+  merchant text stays the parse fact). `receipt_line` gains **`ai_target_text`**: the AI's raw
+  target term — an unresolvable category echo *or* the transfer signal (`cash` / a last-4) —
+  surfaced as the post-process ghost hint instead of re-decoding `parse_raw`. Review edits never
+  change state: `processed` = the to-review pile, `committed` = reviewed; saved-but-unconfirmed is
+  interrupted work, deliberately unmarked. Cross-currency receipt commits (receipt currency ≠
+  paying-account currency) are **deferred**: Save warns, Confirm blocks until they match.
 - **v0.10 (2026-08-01):** Stage-9e grilling round. **`parse_raw` format settled: TOON** (was
   "JSON today, possibly TOON"). `receipt` gains the parsed-header extension (`receipt_time`,
   `merchant_city`, `merchant_country`, `receipt_number`) and **parse telemetry** (`parse_error`,
@@ -917,6 +925,9 @@ create table receipt (
   total_amount   numeric(19,4),
   currency_code  text references currency(currency_code),
   account_id     bigint references account(account_id),   -- detected/picked paying account
+  payee_id       bigint references payee(payee_id),       -- reviewed header payee (stage 9f);
+                                          -- prefilled from merchant_text in the picker, persisted
+                                          -- at Save — merchant_text stays the immutable parse fact
   transaction_id bigint references transaction(transaction_id),  -- NULL until committed
   deleted_at     timestamptz                              -- orthogonal soft-delete (§3.5)
 );
@@ -951,6 +962,11 @@ create table receipt_line (
   person_id       bigint references person(person_id),    -- set ⇒ beneficiary leg: a transfer into
                                             -- the person's per-currency debt leaf (§7) — a debt
                                             -- increase, no expense booked
+  ai_target_text  text,                     -- the AI's raw target term (stage 9f): an unresolved
+                                            -- category echo, or the transfer signal rendered as
+                                            -- e.g. 'transfer: cash' / 'transfer: card •1234' —
+                                            -- the post-process ghost hint (and provenance tooltip)
+                                            -- without re-decoding parse_raw
   note            text,
   sort_order      int
 );
