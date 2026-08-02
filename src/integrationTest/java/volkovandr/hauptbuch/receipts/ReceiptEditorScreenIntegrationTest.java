@@ -61,7 +61,29 @@ class ReceiptEditorScreenIntegrationTest {
         .andExpect(content().string(Matchers.containsString("id=\"receipt-editor\"")))
         .andExpect(content().string(Matchers.containsString("data-split-line")))
         .andExpect(content().string(Matchers.containsString("Diesel")))
-        .andExpect(content().string(Matchers.containsString("Fuel")));
+        .andExpect(content().string(Matchers.containsString("Fuel")))
+        // The header currency picker must render its options (else it is an empty <select required>
+        // that blocks Save) — the seeded EUR currency is one.
+        .andExpect(content().string(Matchers.containsString("value=\"EUR\"")))
+        // The first line's tag resolve must read its OWN tagText slot: the receipts editor has no
+        // header tag input, so line 0 is index 0 (a header-1-based index reads an empty slot and
+        // silently drops the chip).
+        .andExpect(
+            content()
+                .string(
+                    Matchers.containsString(
+                        "&quot;fieldName&quot;:&quot;lineTag0&quot;,&quot;index&quot;:0")));
+  }
+
+  @Test
+  void prefillsThePayeeWithMerchantNameCityAndCountry() throws Exception {
+    long pay = account("Cash", "asset", "EUR");
+    long id = receiptWithMerchant(pay, "Rewe", "Dortmund", "Germany");
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(Matchers.containsString("Rewe - Dortmund - Germany")));
   }
 
   @Test
@@ -209,6 +231,25 @@ class ReceiptEditorScreenIntegrationTest {
         .param("accountId", accountId)
         .param("total", total == null ? null : new BigDecimal(total))
         .param("currency", currency)
+        .query(Long.class)
+        .single();
+  }
+
+  private long receiptWithMerchant(long accountId, String merchant, String city, String country) {
+    return jdbcClient
+        .sql(
+            """
+            insert into receipt (state, source, original_path, edited_path, edit_recipe,
+                                 account_id, currency_code, merchant_text, merchant_city,
+                                 merchant_country)
+            values ('processed', 'pc', 'originals/a.jpg', 'edited/a.jpg', '{}',
+                    :accountId, 'EUR', :merchant, :city, :country)
+            returning receipt_id
+            """)
+        .param("accountId", accountId)
+        .param("merchant", merchant)
+        .param("city", city)
+        .param("country", country)
         .query(Long.class)
         .single();
   }
