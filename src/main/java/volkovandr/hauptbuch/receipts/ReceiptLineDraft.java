@@ -16,6 +16,9 @@ import java.util.List;
  * @param note a free-text note, or null
  * @param sortOrder the line's position
  * @param tagIds the resolved leaf tag ids for this line (possibly empty)
+ * @param aiTargetText the AI's raw target term kept for provenance (data-model §13.2): the category
+ *     echo, or the transfer signal as {@code transfer: cash} / {@code transfer: card •1234}; null
+ *     when the AI named no target
  */
 public record ReceiptLineDraft(
     String description,
@@ -24,7 +27,8 @@ public record ReceiptLineDraft(
     Long personId,
     String note,
     int sortOrder,
-    List<Long> tagIds) {
+    List<Long> tagIds,
+    String aiTargetText) {
 
   /** Defensive copy of the tag ids (the house pattern for record lists). */
   public ReceiptLineDraft {

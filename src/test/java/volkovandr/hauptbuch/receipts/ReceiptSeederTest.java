@@ -205,6 +205,72 @@ class ReceiptSeederTest {
   }
 
   @Test
+  void keepsCashTransferSignalAsAiTargetText() {
+    when(payingAccountDetector.detect("cash")).thenReturn(Optional.of(account(9L)));
+
+    ParsedReceipt parsed =
+        new ParsedReceipt(
+            null,
+            null,
+            List.of(
+                new ParsedItem(
+                    "Cashback", null, null, new BigDecimal("50"), "", null, null, "cash")));
+
+    assertThat(seeder().seed(parsed).lines().get(0).aiTargetText()).isEqualTo("transfer: cash");
+  }
+
+  @Test
+  void keepsCardTransferSignalAsAiTargetText() {
+    when(payingAccountDetector.detect(any())).thenReturn(Optional.empty());
+
+    ParsedReceipt parsed =
+        new ParsedReceipt(
+            null,
+            null,
+            List.of(
+                new ParsedItem("ATM", null, null, new BigDecimal("100"), "", null, null, "1234")));
+
+    ReceiptLineDraft line = seeder().seed(parsed).lines().get(0);
+    assertThat(line.accountId()).isNull(); // unresolved transfer stays targetless
+    assertThat(line.aiTargetText()).isEqualTo("transfer: card •1234");
+  }
+
+  @Test
+  void keepsCategoryEchoAsAiTargetTextEvenWhenResolved() {
+    when(aiVocabularyService.resolveTerm("Food - Sweets")).thenReturn(OptionalLong.of(42L));
+
+    ParsedReceipt parsed =
+        new ParsedReceipt(
+            null,
+            null,
+            List.of(
+                new ParsedItem(
+                    "Haribo",
+                    null,
+                    null,
+                    new BigDecimal("2.50"),
+                    "Food - Sweets",
+                    null,
+                    null,
+                    null)));
+
+    ReceiptLineDraft line = seeder().seed(parsed).lines().get(0);
+    assertThat(line.accountId()).isEqualTo(42L);
+    assertThat(line.aiTargetText()).isEqualTo("Food - Sweets");
+  }
+
+  @Test
+  void aiTargetTextIsNullWhenNoTargetNamed() {
+    ParsedReceipt parsed =
+        new ParsedReceipt(
+            null,
+            null,
+            List.of(new ParsedItem("Loose", null, null, BigDecimal.ONE, "", null, null, null)));
+
+    assertThat(seeder().seed(parsed).lines().get(0).aiTargetText()).isNull();
+  }
+
+  @Test
   void badDateAndTimeStayNull() {
     ParsedReceipt parsed =
         new ParsedReceipt(

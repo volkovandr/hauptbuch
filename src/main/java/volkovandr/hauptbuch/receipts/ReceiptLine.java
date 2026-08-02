@@ -16,6 +16,9 @@ import java.math.BigDecimal;
  * @param personId set ⇒ a beneficiary leg into the person's debt leaf
  * @param note a free-text note, or null
  * @param sortOrder the line's position among the receipt's lines
+ * @param aiTargetText the AI's raw target term (an unresolved category echo, or a transfer signal
+ *     as {@code transfer: cash} / {@code transfer: card •1234}); null when the AI named no target.
+ *     Rendered as a grey hint on an unresolved line and a provenance tooltip on a resolved one (9f)
  */
 public record ReceiptLine(
     Long receiptLineId,
@@ -25,4 +28,5 @@ public record ReceiptLine(
     Long accountId,
     Long personId,
     String note,
-    Integer sortOrder) {}
+    Integer sortOrder,
+    String aiTargetText) {}

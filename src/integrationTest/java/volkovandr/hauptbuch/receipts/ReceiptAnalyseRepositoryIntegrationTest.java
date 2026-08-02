@@ -137,7 +137,14 @@ class ReceiptAnalyseRepositoryIntegrationTest {
         receiptLineRepository.insert(
             id,
             new ReceiptLineDraft(
-                "2× Bread", new BigDecimal("1.40"), null, null, null, 0, List.of()));
+                "2× Bread",
+                new BigDecimal("1.40"),
+                null,
+                null,
+                null,
+                0,
+                List.of(),
+                "Food - Bread"));
     receiptLineRepository.insertTag(lineId, seedTag("Groceries"));
 
     List<ReceiptLine> lines = receiptLineRepository.findByReceiptId(id);
@@ -145,6 +152,7 @@ class ReceiptAnalyseRepositoryIntegrationTest {
     assertThat(lines).hasSize(1);
     assertThat(lines.get(0).description()).isEqualTo("2× Bread");
     assertThat(lines.get(0).amount()).isEqualByComparingTo("1.40");
+    assertThat(lines.get(0).aiTargetText()).isEqualTo("Food - Bread");
     assertThat(receiptLineRepository.findTagIds(lineId)).hasSize(1);
   }
 
@@ -153,7 +161,7 @@ class ReceiptAnalyseRepositoryIntegrationTest {
     long id = preProcessed();
     long lineId =
         receiptLineRepository.insert(
-            id, new ReceiptLineDraft("X", BigDecimal.ONE, null, null, null, 0, List.of()));
+            id, new ReceiptLineDraft("X", BigDecimal.ONE, null, null, null, 0, List.of(), null));
     receiptLineRepository.insertTag(lineId, seedTag("T"));
 
     receiptLineRepository.deleteByReceiptId(id);
