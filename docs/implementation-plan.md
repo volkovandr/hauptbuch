@@ -1,7 +1,7 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.36
+**Status:** Draft v0.37
 **Date:** 2026-08-02
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
@@ -23,6 +23,8 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.37 (2026-08-02):** **9f complete** (owner-confirmed) — the post-process split toolkit
+  shipped. Next: 9g (confirm/link/reopen).
 - **v0.36 (2026-08-02):** **9f grilled & planned** (owner-confirmed; not yet implemented).
   Review is draft-editing only — Save never changes state (`committed` is the reviewed state;
   no reviewed-marker). Entity changes (V14, data-model v0.11): `receipt.payee_id`,
@@ -468,9 +470,9 @@ summary folded back). Eight ordered sub-stages, each green and owner-confirmed:
   `edited_path` + replayable `edit_recipe`, the AI note.
 - **9d — AI Vocabulary.** ✅ The curated taxonomy projection in `categories` (alias / hide /
   per-category AI note) + category-edit UI; `aiVocabulary()` / `resolveTerm()`.
-- **9e — Analyse (single).** `ReceiptParser` + Anthropic Java SDK (Messages), background worker,
+- **9e — Analyse (single).** ✅ `ReceiptParser` + Anthropic Java SDK (Messages), background worker,
   htmx polling, immutable `parse_raw`, draft-line seeding, account detection (config on account).
-- **9f — Post-process.** Image left, full split toolkit right; `remaining 0,00 ✓`; redistribute-tax.
+- **9f — Post-process.** ✅ Image left, full split toolkit right; `remaining 0,00 ✓`; redistribute-tax.
 - **9g — Confirm & reopen.** Confirm-time transaction creation via `operations`; 1:0..1 link, jump
   both ways; reopen/re-enter (soft-delete + re-book). MockMvc acceptance for the money flow.
 - **9h — Batch.** Multi-select → one Batches API request (−50 %), poller, per-receipt distribution.
