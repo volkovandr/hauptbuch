@@ -333,8 +333,9 @@ detail. Decisions below grilled & settled 2026-08-02 (data-model to v0.11).
   create-new; `merchant_text` stays the parse fact) and `receipt_line.ai_target_text` (the AI's
   raw target term — unresolved category echo, or the transfer signal stored as
   `transfer: cash` / `transfer: card •1234`). The 9e seeder now populates it.
-- **Header:** date · payee (picker text **prefilled from `merchant_text`** — case-insensitive
-  exact match pre-selects, else create-new is one Enter away; nothing persists until Save) ·
+- **Header:** date · payee (picker text **prefilled from the parsed merchant as `name - city -
+  country`** so every recognised part carries over, not just the name — case-insensitive exact
+  match pre-selects, else create-new is one Enter away; nothing persists until Save) ·
   account (detected pre-filled, always changeable) · currency · **editable total**
   (mis-read totals are fixable; persists to `total_amount`). `remaining = total − Σ lines`,
   live; null total → neutral "no total" hint instead of ✓/⚠. **Currency ≠ account currency

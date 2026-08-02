@@ -91,6 +91,12 @@ settle-up, and merge. These were consciously left out:
 * **Debts over MCP** — expose the people/debts read + settle operations through the MCP server (with
   the rest of the MCP surface, a later stage).
 
+## Receipts page
+
+* When editing a transaction that has a lot of items, would be nice to have a feature to add a tag to all items at once instead of adding them one by one.
+  Normally I would ask AI to do that in the notes, but what if I forgot to add the note, and re-parsing the receipt now? It's too expensive for long receipts.
+* Analyzed receipts cannot be re-analyzed. Next to the Save button we should have a "revert-analysis" button that would discard the analysis and return the receipt into the pre-analysed state.
+
 ## General UX improvements
 
 * In the various pages instead of "Back to..." links we should have a "Cancel" button. This makes the UX more consistent.
