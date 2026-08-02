@@ -267,134 +267,14 @@
            A line's Category change resolves through /categories/resolve into THIS line's hidden id +
            type (parameterised fieldName/typeFieldName), swapped into #line-<i>-resolved. -->
       <ol class="split-lines" data-split-lines>
-        <li class="split-line" th:each="line : ${panel.lines()}" data-split-line>
-          <div class="field field--split-category">
-            <label
-              class="field__label"
-              th:for="'split-cat-' + ${line.index()}"
-              title="Food, or Food - Milk to create a leaf. To → Account / From ← Account transfers. for Max / by Max attributes this line to a person (data-model §7)."
-              >Category</label
-            >
-            <input
-              th:id="'split-cat-' + ${line.index()}"
-              name="categoryText"
-              class="input"
-              list="split-category-options"
-              autocomplete="off"
-              placeholder="Category"
-              th:value="${line.categoryText()}"
-              hx-post="/categories/resolve"
-              hx-trigger="change"
-              hx-swap="innerHTML"
-              th:attr="hx-target='#line-' + ${line.index()} + '-resolved',
-                       hx-vals=|{&quot;fieldName&quot;:&quot;lineCategoryId&quot;,&quot;typeFieldName&quot;:&quot;lineCategoryType&quot;,&quot;directionFieldName&quot;:&quot;lineTransferDirection&quot;,&quot;personFieldPrefix&quot;:&quot;line&quot;,&quot;index&quot;:${line.index()}}|"
-            />
-          </div>
-          <div class="field field--amount">
-            <label class="field__label" th:for="'split-amt-' + ${line.index()}">
-              <span th:if="${!panel.currency().crossCurrency()}">Amount</span>
-              <span th:if="${panel.currency().crossCurrency()}" th:text="'Amount (' + ${panel.currency().spendingCurrencyCode()} + ')'">Amount (USD)</span>
-            </label>
-            <input
-              th:id="'split-amt-' + ${line.index()}"
-              name="lineAmount"
-              class="input num"
-              inputmode="decimal"
-              autocomplete="off"
-              placeholder="20,00"
-              th:value="${line.amount()}"
-              data-split-amount
-            />
-          </div>
-          <!-- The line's derived funding/base equivalents, read-only (register §3.8a/§3.10). Shown
-               only when cross-currency; the base equivalent only when neither leg is the base. The
-               keyboard.js leaf refreshes these live from the header's shared rate as the user types. -->
-          <span class="split-line__derived muted" th:if="${panel.currency().crossCurrency()}">
-            ≈ <span data-split-account-cell th:text="${line.accountAmount()}">66,67</span>
-            <span th:text="${panel.currency().fundingCurrencyCode()}">CHF</span>
-            <th:block th:if="${panel.currency().neitherIsBase()}">
-              · <span data-split-base-cell th:text="${line.baseAmount()}">63,33</span>
-              <span th:text="${panel.currency().baseCurrencyCode()}">EUR</span>
-            </th:block>
-          </span>
-          <div class="field field--split-note">
-            <label class="field__label" th:for="'split-note-' + ${line.index()}">Note</label>
-            <input
-              th:id="'split-note-' + ${line.index()}"
-              name="lineNote"
-              class="input"
-              autocomplete="off"
-              th:value="${line.note()}"
-            />
-          </div>
-          <!-- Per-line tags (register §3.6, plan stage 7e.3): the line's own chips, pre-filled with
-               the inherited transaction-level tags (visible + removable here), plus any this line
-               adds. Each pill carries a hidden `lineTag{index}` id the commit submits; the resolve
-               call names THIS line's target + field so the shared endpoint serves every line. -->
-          <div class="field field--tags" data-tag-field>
-            <label class="field__label" th:for="'split-line-' + ${line.index()} + '-tags'">Tags</label>
-            <div class="chips">
-              <span
-                th:id="'split-line-' + ${line.index()} + '-tag-chips'"
-                class="chips__list"
-                data-tag-chips
-              >
-                <th:block th:each="t : ${line.tags()}">
-                  <th:block
-                    th:replace="~{fragments/entry-dock :: tagChip(tagId=${t.tagId()}, tagLabel=${t.label()}, fieldName='lineTag' + ${line.index()})}"
-                  ></th:block>
-                </th:block>
-              </span>
-              <input
-                th:id="'split-line-' + ${line.index()} + '-tags'"
-                name="tagText"
-                class="input chips__input"
-                list="split-tag-options"
-                autocomplete="off"
-                placeholder="Fuel"
-                data-tag-input
-                hx-post="/categories/tags/resolve"
-                hx-trigger="tag-commit"
-                hx-include="closest form"
-                hx-swap="beforeend"
-                th:attr="hx-target='#split-line-' + ${line.index()} + '-tag-chips',
-                         hx-vals=|{&quot;fieldName&quot;:&quot;lineTag${line.index()}&quot;,&quot;index&quot;:${line.index() + 1}}|"
-              />
-            </div>
-          </div>
-          <button
-            type="button"
-            class="btn btn--ghost split-line__remove"
-            title="Remove line"
-            name="index"
-            th:value="${line.index()}"
-            hx-post="/register/split/remove-line"
-            hx-include="closest form"
-            hx-target="#entry-dock"
-            hx-swap="outerHTML"
-          >
-            ✕
-          </button>
-          <!-- This line's resolved category id + type + transfer direction + person attribution
-               (hidden), filled by /categories/resolve. The type feeds the live signed-sum readout;
-               the direction signs a transfer line, which has no category type (register §3.8, plan
-               stage 7d.3), and the person direction does the same for a `for`/`by` line (register
-               §3.5, plan stage 8b.2) — whose person is carried by NAME, its debt leaf provisioned at
-               commit. Every line emits all of them (blank for a category) so the aligned line arrays
-               stay aligned across a per-line re-resolve. -->
-          <span
-            th:id="'line-' + ${line.index()} + '-resolved'"
-            class="split-line__resolved"
-            data-counterpart-resolved
-          >
-            <input type="hidden" name="lineCategoryId" th:value="${line.categoryId()}" />
-            <input type="hidden" name="lineCategoryType" th:value="${line.categoryType()}" />
-            <input type="hidden" name="lineTransferDirection" th:value="${line.transferDirection()}" />
-            <input type="hidden" name="linePersonName" th:value="${line.personName()}" />
-            <input type="hidden" name="linePersonDirection" th:value="${line.personDirection()}" />
-            <input type="hidden" name="linePersonRevive" th:value="${line.personRevive()}" />
-          </span>
-        </li>
+        <!-- Each row is the shared line-editor core (plan §9f), also rendered by the receipts
+             post-process surface. The register passes no ghost and no redistribute action; its
+             remove-line and re-render target are its own (#entry-dock). -->
+        <th:block th:each="line : ${panel.lines()}">
+          <th:block
+            th:replace="~{fragments/line-editor :: line(line=${line}, currency=${panel.currency()}, removeUrl='/register/split/remove-line', redistributeUrl=null, panelTarget='#entry-dock', categoryOptionsId='split-category-options', tagOptionsId='split-tag-options', ghost=null)}"
+          ></th:block>
+        </th:block>
       </ol>
 
       <!-- Categories plus the transfer targets (register §3.5, plan stage 7d.3) and the person
