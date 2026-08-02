@@ -1,10 +1,12 @@
 package volkovandr.hauptbuch.ledger;
 
+import java.math.BigDecimal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import volkovandr.hauptbuch.shared.MoneyFormat;
 
 /**
  * The settings screen (plan stage 5) — the smallest real screen and the first-run base-currency
@@ -58,11 +60,66 @@ class SettingsController {
     return VIEW;
   }
 
+  /** Save the AI model id (data-model §3.8) — the model the receipt parser calls. */
+  @PostMapping("/settings/ai-model")
+  String saveAiModel(@RequestParam(required = false) String aiModel, Model model) {
+    settingsService.setAiModel(aiModel);
+    populate(model);
+    return VIEW;
+  }
+
+  /**
+   * Save (or clear) the DB-stored API key — write-only (data-model §3.8): a blank value with {@code
+   * clear} unset leaves the stored key untouched, so re-saving the page never wipes it.
+   */
+  @PostMapping("/settings/ai-key")
+  String saveAiKey(
+      @RequestParam(required = false) String aiApiKey,
+      @RequestParam(required = false, defaultValue = "false") boolean clear,
+      Model model) {
+    settingsService.setAiApiKey(aiApiKey, clear);
+    populate(model);
+    return VIEW;
+  }
+
+  /**
+   * Save the four per-million-token USD price rates a parse's frozen cost is computed from. The
+   * fields are plain text parsed leniently through {@link MoneyFormat#parse} — the same
+   * both-separators tolerance the register's amount inputs have (owner feedback 2026-08-02), so
+   * {@code 2,00} and {@code 2.00} both work rather than a comma throwing a 400. A blank or
+   * unparseable field clears that rate.
+   */
+  @PostMapping("/settings/ai-prices")
+  String saveAiPrices(
+      @RequestParam(required = false) String priceIn,
+      @RequestParam(required = false) String priceOut,
+      @RequestParam(required = false) String priceCacheWrite,
+      @RequestParam(required = false) String priceCacheRead,
+      Model model) {
+    settingsService.setAiPrices(
+        price(priceIn), price(priceOut), price(priceCacheWrite), price(priceCacheRead));
+    populate(model);
+    return VIEW;
+  }
+
+  /** Parse a price field leniently (blank or unparseable ⇒ null, which clears the stored rate). */
+  private static BigDecimal price(String input) {
+    if (input == null || input.isBlank()) {
+      return null;
+    }
+    try {
+      return MoneyFormat.parse(input);
+    } catch (NumberFormatException e) {
+      return null;
+    }
+  }
+
   private void populate(Model model) {
     Settings settings = settingsService.get();
     model.addAttribute("settings", settings);
     model.addAttribute("baseCurrencyLocked", settings.baseCurrency() != null);
     model.addAttribute("currencies", settingsService.availableCurrencies());
+    model.addAttribute("ai", settingsService.aiSettingsView());
     model.addAttribute("nav", volkovandr.hauptbuch.web.NavItem.sectionsFor("/settings"));
     model.addAttribute("title", "Settings · Hauptbuch");
   }

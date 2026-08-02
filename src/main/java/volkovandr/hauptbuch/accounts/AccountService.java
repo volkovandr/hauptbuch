@@ -64,6 +64,29 @@ public class AccountService {
     return accountRepository.findById(accountId);
   }
 
+  /** The paying-account detection config of one account (data-model §13.4), for the edit screen. */
+  public Optional<AccountDetection> detectionOf(long accountId) {
+    return accountRepository.findDetection(accountId);
+  }
+
+  /**
+   * Save an account's paying-account detection config (data-model §13.4, stage 9e): the card last-4
+   * and the cash-account marker. A blank last-4 normalises to null (no card detection); the marker
+   * is stored as given. Gated to the accounts screen's managed types, like the other edits.
+   *
+   * @throws IllegalArgumentException if the account is not one the screen manages, or the last-4 is
+   *     present but not exactly four digits
+   */
+  @Transactional
+  public void updateDetection(long accountId, String cardLast4, boolean cashAccount) {
+    requireManageable(accountId);
+    String normalized = cardLast4 == null || cardLast4.isBlank() ? null : cardLast4.strip();
+    if (normalized != null && !normalized.matches("\\d{4}")) {
+      throw new IllegalArgumentException("Card last-4 must be exactly four digits");
+    }
+    accountRepository.updateDetection(accountId, normalized, cashAccount);
+  }
+
   /**
    * Resolve a system leaf by its parent's name and the leaf's currency (e.g. the {@code Opening
    * Balances} leaf for EUR). The seed (V2) creates exactly one such leaf per currency under the

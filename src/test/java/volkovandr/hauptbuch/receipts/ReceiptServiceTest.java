@@ -31,6 +31,7 @@ class ReceiptServiceTest {
   private static final String EDITED = "edited/2026/07/20260730-143022123.jpg";
 
   @Mock ReceiptRepository receiptRepository;
+  @Mock volkovandr.hauptbuch.receipts.repository.ReceiptLineRepository receiptLineRepository;
   @Mock ReceiptStorage receiptStorage;
   @InjectMocks ReceiptService service;
 
@@ -47,6 +48,17 @@ class ReceiptServiceTest {
         ORIGINAL,
         editedPath,
         null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        // 9e telemetry + header (parseError … receiptNumber)
         null,
         null,
         null,

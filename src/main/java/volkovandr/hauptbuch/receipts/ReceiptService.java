@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import volkovandr.hauptbuch.receipts.repository.ReceiptLineRepository;
 import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
 
 /**
@@ -33,10 +34,15 @@ public class ReceiptService {
   static final int MOBILE_WINDOW_DAYS = 90;
 
   private final ReceiptRepository receiptRepository;
+  private final ReceiptLineRepository receiptLineRepository;
   private final ReceiptStorage receiptStorage;
 
-  ReceiptService(ReceiptRepository receiptRepository, ReceiptStorage receiptStorage) {
+  ReceiptService(
+      ReceiptRepository receiptRepository,
+      ReceiptLineRepository receiptLineRepository,
+      ReceiptStorage receiptStorage) {
     this.receiptRepository = receiptRepository;
+    this.receiptLineRepository = receiptLineRepository;
     this.receiptStorage = receiptStorage;
   }
 
@@ -55,6 +61,13 @@ public class ReceiptService {
   /** A live receipt by id, or empty. */
   public Optional<Receipt> findById(long receiptId) {
     return receiptRepository.findById(receiptId);
+  }
+
+  /**
+   * The seeded draft lines of a receipt, in sort order (data-model §13.2) — the 9e/9f review input.
+   */
+  public List<ReceiptLine> linesOf(long receiptId) {
+    return receiptLineRepository.findByReceiptId(receiptId);
   }
 
   /**

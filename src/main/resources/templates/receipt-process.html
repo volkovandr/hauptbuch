@@ -123,9 +123,12 @@
                    so no confirmation (a plain full-navigation POST — no page-scoped JS). -->
               <button type="submit" class="btn">Discard edits</button>
             </form>
-            <button type="button" class="btn" disabled title="Analysis arrives in a later step">
-              Analyse
-            </button>
+            <!-- Hand the baked image to the AI worker; the screen then greys and polls (§3.1). -->
+            <form method="post" th:action="@{/receipts/{id}/analyse(id=${receipt.receiptId()})}">
+              <input type="hidden" name="state" th:value="${stateFilter}" />
+              <input type="hidden" name="range" th:value="${rangeFilter}" />
+              <button type="submit" class="btn">Analyse</button>
+            </form>
           </div>
         </div>
       </section>
@@ -205,25 +208,120 @@
       </form>
     </th:block>
 
-    <!-- ── Downstream states: post-process / confirm views land in 9e–9g ───────── -->
-    <section
-      class="receipt-process__placeholder"
-      th:unless="${receipt.state() == 'new' or receipt.state() == 'pre_processed'}"
-    >
+    <!-- ── processing: greyed image + htmx status poll (§3.1) ───────────────────── -->
+    <section class="receipt-process__read" th:if="${receipt.state() == 'processing'}">
+      <figure class="receipt-process__image is-processing">
+        <img th:src="@{/receipts/{id}/edited(id=${receipt.receiptId()})}" alt="Receipt scan" />
+      </figure>
+      <div class="receipt-process__side">
+        <!-- Polls /status every 2 s; on completion the endpoint returns HX-Refresh to reload. -->
+        <div th:replace="~{:: statusPoll}"></div>
+      </div>
+    </section>
+
+    <!-- ── processed: seeded draft + parse telemetry (full review is 9f) ─────────── -->
+    <section class="receipt-process__read" th:if="${receipt.state() == 'processed'}">
       <figure class="receipt-process__image">
-        <a
-          th:href="@{/receipts/{id}/edited(id=${receipt.receiptId()})}"
-          target="_blank"
-          rel="noopener"
-        >
-          <img th:src="@{/receipts/{id}/thumb(id=${receipt.receiptId()})}" alt="Receipt scan" />
+        <a th:href="@{/receipts/{id}/edited(id=${receipt.receiptId()})}" target="_blank" rel="noopener">
+          <img th:src="@{/receipts/{id}/edited(id=${receipt.receiptId()})}" alt="Receipt scan" />
         </a>
       </figure>
-      <p class="muted">
-        This receipt is
-        <strong th:text="${#strings.replace(receipt.state(), '_', ' ')}">processing</strong>.
-        Its review and confirm screens arrive in a later step.
-      </p>
+      <div class="receipt-process__side">
+        <dl class="receipt-summary">
+          <dt>Merchant</dt>
+          <dd th:text="${receipt.merchantDisplay()} ?: '—'">Total Tankstelle - Berlin - Germany</dd>
+          <dt>Date</dt>
+          <dd th:text="${receipt.receiptDate()} ?: '—'">2026-07-21</dd>
+          <dt>Total</dt>
+          <dd class="num">
+            <span th:text="${receipt.totalAmount() != null} ? ${receipt.totalAmount()} + ' ' + (${receipt.currencyCode()} ?: '') : '—'">45,67</span>
+            <!-- Owner feedback: a green tick when the seeded item amounts sum to the total, a yellow
+                 warning when they don't; nothing when there is no total or no lines to check. -->
+            <span
+              th:if="${sumStatus != null}"
+              th:classappend="'receipt-summatch--' + ${sumStatus}"
+              class="receipt-summatch"
+              th:title="${sumStatus == 'ok'} ? 'Item amounts sum to the total' : 'Item amounts do not sum to the total'"
+              th:text="${sumStatus == 'ok'} ? '✓' : '⚠'"
+              >✓</span
+            >
+          </dd>
+        </dl>
+
+        <table class="receipt-lines" th:if="${!lines.isEmpty()}">
+          <thead>
+            <tr><th>Item</th><th class="num">Amount</th></tr>
+          </thead>
+          <tbody>
+            <tr th:each="line : ${lines}">
+              <td th:text="${line.description()}">Diesel Fuel</td>
+              <td class="num" th:text="${line.amount()}">42,14</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="muted" th:if="${lines.isEmpty()}">No line items were parsed.</p>
+
+        <p class="receipt-telemetry muted">
+          Parsed with
+          <span class="num" th:text="${receipt.tokensIn()} ?: 0">1200</span> in /
+          <span class="num" th:text="${receipt.tokensOut()} ?: 0">300</span> out tokens<span
+            th:if="${receipt.parseCost() != null}"> · $<span class="num" th:text="${receipt.parseCost()}">0.006</span></span
+          >.
+        </p>
+
+        <div class="receipt-process__actions">
+          <button type="button" class="btn" disabled title="The full review surface arrives in a later step">
+            Review &amp; confirm
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── failed: the reason + Retry (§3.1) ────────────────────────────────────── -->
+    <section class="receipt-process__read" th:if="${receipt.state() == 'failed'}">
+      <figure class="receipt-process__image">
+        <img th:src="@{/receipts/{id}/edited(id=${receipt.receiptId()})}" alt="Receipt scan" />
+      </figure>
+      <div class="receipt-process__side">
+        <p class="warning" th:text="${receipt.parseError()} ?: 'The parse failed.'">
+          Could not decode the parser response.
+        </p>
+        <div class="receipt-process__actions">
+          <!-- Retry re-runs the whole AI request (a fresh, billed parse). -->
+          <form method="post" th:action="@{/receipts/{id}/retry(id=${receipt.receiptId()})}">
+            <input type="hidden" name="state" th:value="${stateFilter}" />
+            <input type="hidden" name="range" th:value="${rangeFilter}" />
+            <button type="submit" class="btn">Retry</button>
+          </form>
+        </div>
+
+        <!-- Details: reveal the returned AI text and edit it in place, then re-parse WITHOUT another
+             API call (owner feedback 2026-08-02) — cheaper than re-prompting when the model just
+             emitted slightly-malformed TOON (e.g. an unquoted comma). Pure <details>, no JS. -->
+        <details class="receipt-details">
+          <summary>Details — edit the AI response and re-parse</summary>
+          <p class="muted">
+            The parser's returned text is below. Fix it (for example, double-quote a value that
+            contains a comma) and re-parse your edited text — no new request is sent to the model.
+          </p>
+          <form method="post" th:action="@{/receipts/{id}/reparse(id=${receipt.receiptId()})}">
+            <input type="hidden" name="state" th:value="${stateFilter}" />
+            <input type="hidden" name="range" th:value="${rangeFilter}" />
+            <textarea
+              name="rawText"
+              rows="16"
+              class="input ai-prompt-preview"
+              th:text="${receipt.parseRaw()}"
+            ></textarea>
+            <p class="actions"><button type="submit" class="btn">Parse my edited text</button></p>
+          </form>
+        </details>
+      </div>
+    </section>
+
+    <!-- ── committed: the confirm/link views land in 9g ─────────────────────────── -->
+    <section class="receipt-process__placeholder" th:if="${receipt.state() == 'committed'}">
+      <p class="muted">This receipt is committed. Its confirm and link screens arrive in a later step.</p>
     </section>
 
     <!-- Transient dialog mount (the 3-way delete confirm), cleared by the keyboard.js overlay leaf. -->
@@ -257,4 +355,20 @@
       <button type="button" class="btn btn--ghost" data-receipt-dismiss>Cancel</button>
     </div>
   </div>
+
+  <!-- ── The analyse status poll (§3.1): keeps checking every 2 s while processing ── -->
+  <div
+    th:fragment="statusPoll"
+    class="receipt-status"
+    data-receipt-status
+    th:attr="hx-get=@{/receipts/{id}/status(id=${id},state=${stateFilter},range=${rangeFilter})}"
+    hx-trigger="every 2s"
+    hx-swap="outerHTML"
+  >
+    <span class="receipt-status__spinner" aria-hidden="true"></span>
+    Analysing the receipt… this stays open; the page refreshes itself when it is done.
+  </div>
+
+  <!-- Returned once the parse lands; the endpoint also sets HX-Refresh so the page reloads. -->
+  <div th:fragment="statusDone" class="receipt-status" data-receipt-status-done></div>
 </html>

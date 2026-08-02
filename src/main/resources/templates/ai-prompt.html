@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!--
+  Receipt-parser prompt editor (stage 9e, owner feedback 2026-08-02). The operator edits the system
+  prompt's INSTRUCTIONS here; the category list is injected automatically at parse time and shown
+  read-only below so the operator can see exactly what the model is told. Reached from the Settings
+  screen's AI section. Standard server-rendered form POSTs re-render this page; no bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content ledger" th:fragment="content">
+    <p>
+      <a class="btn btn--ghost" th:href="@{/settings}">← Settings</a>
+    </p>
+
+    <section class="panel">
+      <p class="eyebrow">Parse prompt</p>
+      <p class="muted">
+        The instructions the receipt parser is sent, ahead of the category list below. Edit freely —
+        it is stored with the book and reused on every parse.
+        <span th:if="${isCustom}">A custom prompt is in effect.</span>
+        <span th:unless="${isCustom}">The built-in default is in effect.</span>
+      </p>
+
+      <form method="post" th:action="@{/receipts/ai-prompt}" class="form">
+        <div class="field">
+          <label class="field__label" for="instructions">Instructions</label>
+          <textarea
+            id="instructions"
+            name="instructions"
+            rows="22"
+            class="input"
+            style="font-family: var(--font-num); white-space: pre; overflow-wrap: normal; overflow-x: auto;"
+            th:text="${instructions}"
+          ></textarea>
+        </div>
+        <label class="receipt-edit__toggle">
+          <input type="checkbox" name="reset" value="true" /> Reset to the built-in default (discards
+          the custom prompt)
+        </label>
+        <p class="actions"><button type="submit" class="btn">Save prompt</button></p>
+      </form>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Categories (read-only — as the AI sees them)</p>
+      <p class="muted">
+        Injected after the instructions on every parse, generated from the AI Vocabulary. Curate it
+        on the categories screens, not here.
+      </p>
+      <pre class="ai-prompt-preview" th:text="${categoriesPreview}">Categories:
+Income:
+Expense:
+- Food - Sweets</pre>
+    </section>
+  </main>
+</html>

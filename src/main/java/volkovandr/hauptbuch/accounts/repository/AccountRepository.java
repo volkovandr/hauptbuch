@@ -7,6 +7,7 @@ import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountDetection;
 import volkovandr.hauptbuch.accounts.AccountNode;
 
 /**
@@ -295,6 +296,64 @@ public class AccountRepository {
         .param(PERSON_LEAF, account.personLeaf())
         .query(Long.class)
         .single();
+  }
+
+  /**
+   * The live account whose card last-4 matches (data-model §13.4) — the paying account a card
+   * slip's printed digits seed. Empty when no account carries that last-4, or (defensively) more
+   * than one does — an ambiguous match is refused rather than guessed, and the operator picks.
+   */
+  public Optional<Account> findByCardLast4(String cardLast4) {
+    List<Account> matches =
+        jdbcClient
+            .sql(
+                SELECT_ACCOUNT_COLUMNS
+                    + "from account where card_last4 = :cardLast4 and deleted_at is null")
+            .param("cardLast4", cardLast4)
+            .query(Account.class)
+            .list();
+    return matches.size() == 1 ? Optional.of(matches.get(0)) : Optional.empty();
+  }
+
+  /**
+   * The live account marked as the cash account (data-model §13.4) — where a {@code Bar}/cash line,
+   * and a recognised cash-withdrawal/deposit transfer, resolve. Empty when none is marked or (a
+   * misconfiguration) more than one is, in which case the operator picks.
+   */
+  public Optional<Account> findCashAccount() {
+    List<Account> matches =
+        jdbcClient
+            .sql(SELECT_ACCOUNT_COLUMNS + "from account where cash_account and deleted_at is null")
+            .query(Account.class)
+            .list();
+    return matches.size() == 1 ? Optional.of(matches.get(0)) : Optional.empty();
+  }
+
+  /** The detection config of one account, for the account-edit screen (data-model §13.4). */
+  public Optional<AccountDetection> findDetection(long accountId) {
+    return jdbcClient
+        .sql("select card_last4, cash_account from account where account_id = :accountId")
+        .param(ACCOUNT_ID, accountId)
+        .query(AccountDetection.class)
+        .optional();
+  }
+
+  /**
+   * Update the paying-account detection config (data-model §13.4): the card last-4 and the
+   * cash-account marker, edited on the account-edit screen (stage 9e).
+   */
+  public int updateDetection(long accountId, String cardLast4, boolean cashAccount) {
+    return jdbcClient
+        .sql(
+            """
+            update account
+            set card_last4 = :cardLast4, cash_account = :cashAccount
+            where account_id = :accountId
+            """)
+        .param("cardLast4", cardLast4)
+        .param("cashAccount", cashAccount)
+        .param(ACCOUNT_ID, accountId)
+        .update();
   }
 
   /** Update the freely-editable fields: display name and stored hue. */

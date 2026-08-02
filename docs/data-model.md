@@ -351,7 +351,8 @@ create table settings (
   ai_price_in           numeric(12,6),  -- price per million input tokens (USD)
   ai_price_out          numeric(12,6),  -- per million output tokens
   ai_price_cache_write  numeric(12,6),  -- per million cache-write tokens
-  ai_price_cache_read   numeric(12,6)   -- per million cache-read tokens
+  ai_price_cache_read   numeric(12,6),  -- per million cache-read tokens
+  ai_system_prompt      text            -- operator-edited parser instructions; NULL = built-in default
   -- future global settings land here as typed columns (legibility > key/value bag)
 );
 ```
@@ -375,6 +376,11 @@ create table settings (
   is realistically 1–2 rows). The four rates are **per million tokens, in USD** (Anthropic's
   billing currency); a receipt's `parse_cost` is computed from them **at analyse time and frozen**
   (§13.1) — a later rate edit never rewrites history.
+- **`ai_system_prompt` is the operator-editable parser instructions** (owner feedback 2026-08-02).
+  `NULL` means the built-in default (shipped in `ReceiptPromptBuilder`); a stored value replaces the
+  *instructions* only — the category list is always regenerated from the AI Vocabulary and appended,
+  so ARCH-08 still holds (parsing instructions + curated vocabulary, never ledger content, §13.3).
+  Edited on a receipts-owned screen that also shows the injected category list read-only.
 - **`ai_api_key` is the one secret that lives in the DB**, a deliberate amendment of NFR-04's
   "never plaintext in DB" (requirements v0.6): on a single-user Pi the database sits on the same
   disk as any env file, and the Settings page makes rotation a UI action instead of a restart.
