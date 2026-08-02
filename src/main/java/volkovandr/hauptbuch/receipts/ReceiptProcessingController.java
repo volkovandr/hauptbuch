@@ -2,7 +2,9 @@ package volkovandr.hauptbuch.receipts;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,6 +13,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import volkovandr.hauptbuch.accounts.AccountPath;
+import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.web.NavItem;
 
 /**
@@ -33,17 +37,28 @@ class ReceiptProcessingController {
   private static final String STATE = "state";
   private static final String RANGE = "range";
 
+  /**
+   * Category leaves both project into the AI Vocabulary and back a receipt line (data-model §6.5).
+   */
+  private static final List<String> CATEGORY_TYPES = List.of("income", "expense");
+
+  /** The Parent - Child path separator, shared with the register's category picker. */
+  private static final String PATH_SEPARATOR = " - ";
+
   private final ReceiptService receiptService;
   private final ReceiptAnalyser receiptAnalyser;
   private final ReceiptAnalysisService receiptAnalysisService;
+  private final AccountService accountService;
 
   ReceiptProcessingController(
       ReceiptService receiptService,
       ReceiptAnalyser receiptAnalyser,
-      ReceiptAnalysisService receiptAnalysisService) {
+      ReceiptAnalysisService receiptAnalysisService,
+      AccountService accountService) {
     this.receiptService = receiptService;
     this.receiptAnalyser = receiptAnalyser;
     this.receiptAnalysisService = receiptAnalysisService;
+    this.accountService = accountService;
   }
 
   /**
@@ -65,6 +80,7 @@ class ReceiptProcessingController {
               model.addAttribute("receipt", receipt);
               model.addAttribute("lines", lines);
               model.addAttribute("sumStatus", sumStatus(lines, receipt.totalAmount()));
+              model.addAttribute("categoryLabels", categoryLabels(receipt.state()));
               model.addAttribute(
                   "neighbours",
                   receiptService.neighbours(
@@ -248,6 +264,24 @@ class ReceiptProcessingController {
       }
     }
     return sum.compareTo(total) == 0 ? "ok" : "warn";
+  }
+
+  /**
+   * A {@code category-leaf account id → "Parent - Child" path} map for labelling the processed
+   * view's line table (owner feedback 2026-08-02). Keyed by the same semantic leaf id {@code
+   * resolveTerm} seeds onto a line, so a category line renders its recognised path; a transfer or
+   * beneficiary line (whose target is not a category leaf) simply has no entry and shows a dash.
+   * Empty for any non-{@code processed} state, which has no line table.
+   */
+  private Map<Long, String> categoryLabels(String state) {
+    Map<Long, String> labels = new HashMap<>();
+    if (ReceiptState.PROCESSED.equals(state)) {
+      for (AccountPath path :
+          accountService.findPostableLeafPaths(CATEGORY_TYPES, PATH_SEPARATOR)) {
+        labels.put(path.accountId(), path.path());
+      }
+    }
+    return labels;
   }
 
   /** Redirect back to a receipt's processing screen, preserving the carried filter + order. */

@@ -12,7 +12,7 @@
 >
   <main class="content ledger" th:fragment="content">
     <p>
-      <a class="btn btn--ghost" th:href="@{/settings}">← Settings</a>
+      <a class="btn" th:href="@{/settings}">← Settings</a>
     </p>
 
     <section class="panel">
@@ -24,7 +24,7 @@
         <span th:unless="${isCustom}">The built-in default is in effect.</span>
       </p>
 
-      <form method="post" th:action="@{/receipts/ai-prompt}" class="form">
+      <form method="post" th:action="@{/receipts/ai-prompt}" class="form" style="max-width: 90%">
         <div class="field">
           <label class="field__label" for="instructions">Instructions</label>
           <textarea
@@ -32,7 +32,7 @@
             name="instructions"
             rows="22"
             class="input"
-            style="font-family: var(--font-num); white-space: pre; overflow-wrap: normal; overflow-x: auto;"
+            style="font-family: var(--font-num); white-space: pre-wrap; overflow-wrap: normal; overflow-x: auto;"
             th:text="${instructions}"
           ></textarea>
         </div>

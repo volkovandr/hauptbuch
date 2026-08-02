@@ -138,7 +138,9 @@ class ReceiptAnalyseScreenIntegrationTest {
         .perform(get("/receipts/" + id))
         .andExpect(status().isOk())
         .andExpect(content().string(Matchers.containsString("Total Tankstelle - Berlin - Germany")))
-        .andExpect(content().string(Matchers.containsString("receipt-summatch--ok")));
+        .andExpect(content().string(Matchers.containsString("receipt-summatch--ok")))
+        // The line table now carries a Category column (owner feedback 2026-08-02).
+        .andExpect(content().string(Matchers.containsString("Category")));
   }
 
   @Test

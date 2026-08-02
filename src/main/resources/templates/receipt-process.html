@@ -220,7 +220,11 @@
     </section>
 
     <!-- ── processed: seeded draft + parse telemetry (full review is 9f) ─────────── -->
-    <section class="receipt-process__read" th:if="${receipt.state() == 'processed'}">
+    <!-- Wider data column (owner feedback): image ~40%, seeded data ~60%. -->
+    <section
+      class="receipt-process__read receipt-process__read--data"
+      th:if="${receipt.state() == 'processed'}"
+    >
       <figure class="receipt-process__image">
         <a th:href="@{/receipts/{id}/edited(id=${receipt.receiptId()})}" target="_blank" rel="noopener">
           <img th:src="@{/receipts/{id}/edited(id=${receipt.receiptId()})}" alt="Receipt scan" />
@@ -250,11 +254,17 @@
 
         <table class="receipt-lines" th:if="${!lines.isEmpty()}">
           <thead>
-            <tr><th>Item</th><th class="num">Amount</th></tr>
+            <tr><th>Item</th><th>Category</th><th class="num">Amount</th></tr>
           </thead>
           <tbody>
             <tr th:each="line : ${lines}">
               <td th:text="${line.description()}">Diesel Fuel</td>
+              <td
+                class="muted"
+                th:text="${line.accountId() != null ? categoryLabels.get(line.accountId()) : null} ?: '—'"
+              >
+                Car - Fuel
+              </td>
               <td class="num" th:text="${line.amount()}">42,14</td>
             </tr>
           </tbody>

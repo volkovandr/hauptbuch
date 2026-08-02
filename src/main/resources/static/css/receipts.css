@@ -517,6 +517,9 @@ table.receipts tbody td {
 .receipt-summatch {
   margin-left: 0.4rem;
   font-weight: 700;
+  font-size: 1.4rem;
+  line-height: 1;
+  vertical-align: -0.15em;
 }
 
 .receipt-summatch--ok {
@@ -539,4 +542,50 @@ table.receipts tbody td {
   background: var(--paper-edge);
   color: var(--ink);
   white-space: pre;
+}
+
+/* ── Processed view (owner feedback 2026-08-02): give the seeded data the room, not the image.
+   Image column ~40 %, data ~60 %, so the parsed detail + line table (now with a Category column)
+   isn't crammed next to a tall receipt with a gulf of empty space between them. ─────────────── */
+.receipt-process__read--data {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+}
+
+/* Merchant / Date / Total as label-then-value on one line each (no dt-over-dd stacking). */
+.receipt-summary {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.2rem 0.9rem;
+  margin: 0;
+  align-items: baseline;
+}
+
+.receipt-summary dt {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.receipt-summary dd {
+  margin: 0;
+}
+
+/* The seeded line table fills the wider data column. */
+.receipt-lines {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.receipt-lines th,
+.receipt-lines td {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--feint);
+  text-align: left;
+}
+
+.receipt-lines .num {
+  text-align: right;
+  white-space: nowrap;
 }
