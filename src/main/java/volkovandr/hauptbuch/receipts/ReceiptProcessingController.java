@@ -1,20 +1,18 @@
 package volkovandr.hauptbuch.receipts;
 
 import jakarta.servlet.http.HttpServletResponse;
-import java.math.BigDecimal;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
-import volkovandr.hauptbuch.accounts.AccountPath;
-import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.ledger.RegisterFilter;
+import volkovandr.hauptbuch.ledger.RegisterService;
 import volkovandr.hauptbuch.web.NavItem;
 
 /**
@@ -34,31 +32,27 @@ class ReceiptProcessingController {
 
   private static final String BASE_PATH = "/receipts";
   private static final String VIEW = "receipt-process";
+  private static final String EDITOR = VIEW + " :: editor";
   private static final String STATE = "state";
   private static final String RANGE = "range";
-
-  /**
-   * Category leaves both project into the AI Vocabulary and back a receipt line (data-model §6.5).
-   */
-  private static final List<String> CATEGORY_TYPES = List.of("income", "expense");
-
-  /** The Parent - Child path separator, shared with the register's category picker. */
-  private static final String PATH_SEPARATOR = " - ";
 
   private final ReceiptService receiptService;
   private final ReceiptAnalyser receiptAnalyser;
   private final ReceiptAnalysisService receiptAnalysisService;
-  private final AccountService accountService;
+  private final ReceiptEditorService receiptEditorService;
+  private final RegisterService registerService;
 
   ReceiptProcessingController(
       ReceiptService receiptService,
       ReceiptAnalyser receiptAnalyser,
       ReceiptAnalysisService receiptAnalysisService,
-      AccountService accountService) {
+      ReceiptEditorService receiptEditorService,
+      RegisterService registerService) {
     this.receiptService = receiptService;
     this.receiptAnalyser = receiptAnalyser;
     this.receiptAnalysisService = receiptAnalysisService;
-    this.accountService = accountService;
+    this.receiptEditorService = receiptEditorService;
+    this.registerService = registerService;
   }
 
   /**
@@ -75,12 +69,12 @@ class ReceiptProcessingController {
         .findById(id)
         .map(
             receipt -> {
-              List<ReceiptLine> lines = receiptService.linesOf(id);
               model.addAttribute("id", id);
               model.addAttribute("receipt", receipt);
-              model.addAttribute("lines", lines);
-              model.addAttribute("sumStatus", sumStatus(lines, receipt.totalAmount()));
-              model.addAttribute("categoryLabels", categoryLabels(receipt.state()));
+              if (ReceiptState.PROCESSED.equals(receipt.state())) {
+                addEditor(
+                    id, receiptEditorService.seed(receipt, receiptService.linesOf(id)), model);
+              }
               model.addAttribute(
                   "neighbours",
                   receiptService.neighbours(
@@ -247,41 +241,83 @@ class ReceiptProcessingController {
     return redirectToScreen(landing, state, range, redirectAttributes);
   }
 
+  // ── Post-process editor round-trips (plan §9f) ──────────────────────────────
+
   /**
-   * The seeded-lines-vs-total check for the processed view's badge (owner feedback 2026-08-02):
-   * {@code "ok"} (green tick) when the line amounts sum to the parsed total, {@code "warn"} (yellow
-   * warning) when they diverge, or null (no badge) when there is no total to check against or no
-   * lines were parsed.
+   * Add a blank draft line to the editor (§9f) — its amount defaults to "the rest" (total −
+   * allocated). Re-renders the whole editor form from the unsaved state; nothing is persisted until
+   * Save.
    */
-  private static String sumStatus(List<ReceiptLine> lines, BigDecimal total) {
-    if (total == null || lines.isEmpty()) {
-      return null;
-    }
-    BigDecimal sum = BigDecimal.ZERO;
-    for (ReceiptLine line : lines) {
-      if (line.amount() != null) {
-        sum = sum.add(line.amount());
-      }
-    }
-    return sum.compareTo(total) == 0 ? "ok" : "warn";
+  @PostMapping("/receipts/{id}/lines/add-line")
+  String addLine(
+      @PathVariable long id, @RequestParam MultiValueMap<String, String> params, Model model) {
+    return renderEditor(id, receiptEditorService.addLine(ReceiptEditorForm.bind(params)), model);
   }
 
   /**
-   * A {@code category-leaf account id → "Parent - Child" path} map for labelling the processed
-   * view's line table (owner feedback 2026-08-02). Keyed by the same semantic leaf id {@code
-   * resolveTerm} seeds onto a line, so a category line renders its recognised path; a transfer or
-   * beneficiary line (whose target is not a category leaf) simply has no entry and shows a dash.
-   * Empty for any non-{@code processed} state, which has no line table.
+   * Remove a draft line from the editor (§9f). Re-renders the whole editor from the unsaved state.
    */
-  private Map<Long, String> categoryLabels(String state) {
-    Map<Long, String> labels = new HashMap<>();
-    if (ReceiptState.PROCESSED.equals(state)) {
-      for (AccountPath path :
-          accountService.findPostableLeafPaths(CATEGORY_TYPES, PATH_SEPARATOR)) {
-        labels.put(path.accountId(), path.path());
-      }
+  @PostMapping("/receipts/{id}/lines/remove-line")
+  String removeLine(
+      @PathVariable long id,
+      @RequestParam int index,
+      @RequestParam MultiValueMap<String, String> params,
+      Model model) {
+    return renderEditor(
+        id, receiptEditorService.removeLine(ReceiptEditorForm.bind(params), index), model);
+  }
+
+  /**
+   * Redistribute a draft line over the others and drop it (§9f) — the per-line ⇄ action. A refusal
+   * (nothing can absorb the amount) re-renders the unchanged editor with the reason shown.
+   */
+  @PostMapping("/receipts/{id}/lines/redistribute")
+  String redistribute(
+      @PathVariable long id,
+      @RequestParam int index,
+      @RequestParam MultiValueMap<String, String> params,
+      Model model) {
+    ReceiptEditorForm form = ReceiptEditorForm.bind(params);
+    try {
+      return renderEditor(id, receiptEditorService.redistribute(form, index), model);
+    } catch (LineRedistribution.RedistributeRefusedException e) {
+      model.addAttribute("editorError", e.getMessage());
+      return renderEditor(id, form, model);
     }
-    return labels;
+  }
+
+  /**
+   * Save the reviewed draft (§9f): delete-and-reinsert the lines and persist the header. The
+   * receipt stays {@code processed} — Save reviews the draft, it does not advance the state ({@code
+   * committed} is 9g's Confirm). Re-renders the editor from the freshly persisted state.
+   */
+  @PostMapping("/receipts/{id}/lines/save")
+  String save(
+      @PathVariable long id, @RequestParam MultiValueMap<String, String> params, Model model) {
+    receiptEditorService.save(id, ReceiptEditorForm.bind(params));
+    return receiptService
+        .findById(id)
+        .map(
+            receipt -> {
+              model.addAttribute("editorSaved", true);
+              return renderEditor(
+                  id, receiptEditorService.seed(receipt, receiptService.linesOf(id)), model);
+            })
+        .orElse(EDITOR);
+  }
+
+  /** Render the editor fragment from a bound form (the add/remove/redistribute round-trips). */
+  private String renderEditor(long id, ReceiptEditorForm form, Model model) {
+    addEditor(id, form, model);
+    return EDITOR;
+  }
+
+  /** Put the assembled editor + the shared register datalists on the model. */
+  private void addEditor(long id, ReceiptEditorForm form, Model model) {
+    model.addAttribute("id", id);
+    model.addAttribute("editor", receiptEditorService.panel(form));
+    model.addAttribute(
+        "register", registerService.view(new RegisterFilter(List.of(), null, null, null)));
   }
 
   /** Redirect back to a receipt's processing screen, preserving the carried filter + order. */

@@ -27,9 +27,22 @@
   <body>
     <li
       class="split-line"
-      th:fragment="line(line, currency, removeUrl, redistributeUrl, panelTarget, categoryOptionsId, tagOptionsId, ghost)"
+      th:fragment="line(line, currency, removeUrl, redistributeUrl, panelTarget, categoryOptionsId, tagOptionsId, ghost, description)"
       data-split-line
     >
+      <!-- Item name (receipts only, plan §9f): the parsed line description, editable. The register
+           split has no per-line description, so it passes description=null and this is not rendered. -->
+      <div class="field field--split-description" th:if="${description != null}">
+        <label class="field__label" th:for="'split-desc-' + ${line.index()}">Item</label>
+        <input
+          th:id="'split-desc-' + ${line.index()}"
+          name="lineDescription"
+          class="input"
+          autocomplete="off"
+          placeholder="Item"
+          th:value="${description}"
+        />
+      </div>
       <div class="field field--split-category">
         <label
           class="field__label"

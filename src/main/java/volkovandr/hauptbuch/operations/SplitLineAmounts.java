@@ -21,8 +21,12 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
  * signs it: {@code TO} is an outflow (like an expense), {@code FROM} an inflow (like income). A
  * <em>person</em> line ({@code for}/{@code by}, register §3.5, plan stage 8b.2) is the same shape:
  * {@code FOR} is an outflow, {@code BY} an inflow.
+ *
+ * <p>{@link #lenientContribution} is {@code public} so the receipts post-process surface (plan §9f)
+ * derives its live-remaining readout from the identical mixed-split rule as the register's split
+ * panel — the same reason the two share the line-editor fragment (no second sign convention, §0).
  */
-final class SplitLineAmounts {
+public final class SplitLineAmounts {
 
   private static final String INCOME = "income";
 
@@ -81,7 +85,11 @@ final class SplitLineAmounts {
    * unparseable text, so the panel renders sensibly before a line is complete. The commit path
    * re-derives the same numbers strictly.
    */
-  static BigDecimal lenientContribution(
+  // The four args are the shared line-editor fragment's field contract (amount + the three sign
+  // sources), not an ad-hoc list; a container would only re-name the same four with no added
+  // clarity, and would churn both surfaces that pass them straight from the form.
+  @SuppressWarnings("PMD.UseObjectForClearerAPI")
+  public static BigDecimal lenientContribution(
       String amount, String type, String transferDirection, String personDirection) {
     if (isBlank(amount)) {
       return BigDecimal.ZERO;
@@ -112,7 +120,7 @@ final class SplitLineAmounts {
    * the simple dock's sign resolution, there is no direction <em>override</em> here — the category
    * type (or transfer direction) decides direction, and the sign is only the storno.
    */
-  static BigDecimal parseSignedAmount(String amountText) {
+  public static BigDecimal parseSignedAmount(String amountText) {
     if (amountText == null || amountText.isBlank()) {
       throw new IllegalArgumentException("A line amount is required");
     }

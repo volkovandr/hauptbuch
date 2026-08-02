@@ -219,8 +219,10 @@
       </div>
     </section>
 
-    <!-- ── processed: seeded draft + parse telemetry (full review is 9f) ─────────── -->
-    <!-- Wider data column (owner feedback): image ~40%, seeded data ~60%. -->
+    <!-- ── processed: the post-process editor (plan §9f) — image left, editable detail right ── -->
+    <!-- Wider data column (owner feedback): image ~40%, editable data ~60%. The editor form is
+         re-rendered on its own (add/remove/redistribute/Save swap #receipt-editor); the parse
+         telemetry sits outside it, below, unchanged by line edits. -->
     <section
       class="receipt-process__read receipt-process__read--data"
       th:if="${receipt.state() == 'processed'}"
@@ -231,45 +233,7 @@
         </a>
       </figure>
       <div class="receipt-process__side">
-        <dl class="receipt-summary">
-          <dt>Merchant</dt>
-          <dd th:text="${receipt.merchantDisplay()} ?: '—'">Total Tankstelle - Berlin - Germany</dd>
-          <dt>Date</dt>
-          <dd th:text="${receipt.receiptDate()} ?: '—'">2026-07-21</dd>
-          <dt>Total</dt>
-          <dd class="num">
-            <span th:text="${receipt.totalAmount() != null} ? ${receipt.totalAmount()} + ' ' + (${receipt.currencyCode()} ?: '') : '—'">45,67</span>
-            <!-- Owner feedback: a green tick when the seeded item amounts sum to the total, a yellow
-                 warning when they don't; nothing when there is no total or no lines to check. -->
-            <span
-              th:if="${sumStatus != null}"
-              th:classappend="'receipt-summatch--' + ${sumStatus}"
-              class="receipt-summatch"
-              th:title="${sumStatus == 'ok'} ? 'Item amounts sum to the total' : 'Item amounts do not sum to the total'"
-              th:text="${sumStatus == 'ok'} ? '✓' : '⚠'"
-              >✓</span
-            >
-          </dd>
-        </dl>
-
-        <table class="receipt-lines" th:if="${!lines.isEmpty()}">
-          <thead>
-            <tr><th>Item</th><th>Category</th><th class="num">Amount</th></tr>
-          </thead>
-          <tbody>
-            <tr th:each="line : ${lines}">
-              <td th:text="${line.description()}">Diesel Fuel</td>
-              <td
-                class="muted"
-                th:text="${line.accountId() != null ? categoryLabels.get(line.accountId()) : null} ?: '—'"
-              >
-                Car - Fuel
-              </td>
-              <td class="num" th:text="${line.amount()}">42,14</td>
-            </tr>
-          </tbody>
-        </table>
-        <p class="muted" th:if="${lines.isEmpty()}">No line items were parsed.</p>
+        <div th:replace="~{:: editor}"></div>
 
         <p class="receipt-telemetry muted">
           Parsed with
@@ -278,13 +242,43 @@
             th:if="${receipt.parseCost() != null}"> · $<span class="num" th:text="${receipt.parseCost()}">0.006</span></span
           >.
         </p>
-
-        <div class="receipt-process__actions">
-          <button type="button" class="btn" disabled title="The full review surface arrives in a later step">
-            Review &amp; confirm
-          </button>
-        </div>
       </div>
+
+      <!-- Dirty guard (plan §9f, the 9c-style undo protection): a page-scoped leaf (CLAUDE.md §1.6)
+           that warns before ↑/↓/Back or an unload discards unsaved editor changes. Save (its swap
+           carries the `data-receipt-editor-saved` marker) clears the flag; an add/remove/
+           redistribute round-trip leaves it set (those are unsaved draft changes). Remove this and
+           the surface still works — the server never autosaves; navigation just stops warning. -->
+      <script th:inline="none">
+        (function () {
+          var editor = document.getElementById("receipt-editor");
+          if (!editor) return;
+          var dirty = false;
+          document.body.addEventListener("input", function (e) {
+            if (e.target.closest("#receipt-editor")) dirty = true;
+          });
+          document.body.addEventListener("htmx:afterSwap", function (e) {
+            if (e.target && e.target.id === "receipt-editor") {
+              dirty = !e.target.querySelector("[data-receipt-editor-saved]");
+            }
+          });
+          function guard(e) {
+            if (dirty && !window.confirm("Discard your unsaved changes to this receipt?")) {
+              e.preventDefault();
+            }
+          }
+          ["[data-receipt-prev]", "[data-receipt-next]", "[data-receipt-back]"].forEach(function (sel) {
+            var el = document.querySelector(sel);
+            if (el) el.addEventListener("click", guard);
+          });
+          window.addEventListener("beforeunload", function (e) {
+            if (dirty) {
+              e.preventDefault();
+              e.returnValue = "";
+            }
+          });
+        })();
+      </script>
     </section>
 
     <!-- ── failed: the reason + Retry (§3.1) ────────────────────────────────────── -->
@@ -381,4 +375,167 @@
 
   <!-- Returned once the parse lands; the endpoint also sets HX-Refresh so the page reloads. -->
   <div th:fragment="statusDone" class="receipt-status" data-receipt-status-done></div>
+
+  <!-- ── The post-process editor (plan §9f) ──────────────────────────────────────────────────────
+    The receipts wrapper around the shared line-editor core. Its own header (date · payee · paying
+    account · currency · editable total) and Save/Add/⇄ round-trips post to /receipts/{id}/lines/*;
+    each re-render swaps this whole form (#receipt-editor). The per-line rows are the SAME fragment
+    the register's split panel renders, so the keyboard.js data-split-* live-remaining readout comes
+    free (CLAUDE.md §1.6). Single-currency only this slice: data-split-cross is always false and the
+    cross-currency chrome never shows (a cross-currency receipt commit is backlogged, plan §14). -->
+  <form
+    th:fragment="editor"
+    id="receipt-editor"
+    class="entry-dock entry-dock--split receipt-editor"
+    data-split-panel
+    data-receipt-editor
+    method="post"
+    data-split-cross="false"
+    data-split-rate-funding="0"
+    data-split-rate-base="0"
+    hx-target="#receipt-editor"
+    hx-swap="outerHTML"
+    th:attr="data-split-funding-currency=${editor.currency().spendingCurrencyCode()},
+             action=@{/receipts/{id}/lines/save(id=${id})},
+             hx-post=@{/receipts/{id}/lines/save(id=${id})}"
+  >
+    <p class="entry-dock__title eyebrow">✎ Review receipt</p>
+
+    <div class="entry-dock__fields">
+      <div class="field">
+        <label class="field__label" for="receipt-date">Date</label>
+        <input
+          id="receipt-date"
+          name="date"
+          type="date"
+          class="input"
+          th:value="${editor.date()}"
+        />
+      </div>
+
+      <!-- Payee — a typed datalist prefilled from the parsed merchant on first open; the create-new
+           parser and the existing-payee match are the register's (register §3.4). Nothing persists
+           until Save, when /receipts/{id}/lines/save resolves it (creating a payee if new). -->
+      <div class="field">
+        <label class="field__label" for="receipt-payee">Payee</label>
+        <input
+          id="receipt-payee"
+          name="payeeText"
+          class="input"
+          list="receipt-payee-options"
+          autocomplete="off"
+          placeholder="Rewe - Dortmund - Germany"
+          th:value="${editor.payeeText()}"
+        />
+        <datalist id="receipt-payee-options">
+          <option th:each="p : ${register.payees()}" th:value="${p.entryValue()}"></option>
+        </datalist>
+      </div>
+
+      <!-- The paying account (detected, always changeable). A plain select of the real accounts —
+           the receipt's funding leg is an own account, never a person sigil (beneficiaries are a
+           per-line attribution, not the header). -->
+      <div class="field">
+        <label class="field__label" for="receipt-account">Account</label>
+        <select id="receipt-account" name="accountId" class="input">
+          <option
+            th:each="a : ${register.accounts()}"
+            th:value="${a.accountId()}"
+            th:text="${a.entryValue()}"
+            th:selected="${a.accountId() == editor.accountId()}"
+          ></option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="receipt-currency">Currency</label>
+        <div
+          th:replace="~{fragments/currency-picker :: picker('receipt-currency', 'currencyCode', ${editor.currency().spendingCurrencyCode()}, false)}"
+        ></div>
+      </div>
+      <div th:replace="~{fragments/currency-picker :: dialogMount('receipt-currency')}"></div>
+
+      <!-- The receipt total (editable — a mis-read total is fixable). remaining counts against it. -->
+      <div class="field field--amount">
+        <label class="field__label" for="receipt-total">Total</label>
+        <input
+          id="receipt-total"
+          name="total"
+          class="input num"
+          inputmode="decimal"
+          autocomplete="off"
+          placeholder="20,00"
+          th:value="${editor.total()}"
+          th:attr="data-split-total=${editor.total()}"
+          data-split-total-input
+        />
+      </div>
+    </div>
+
+    <!-- The chosen currency differs from the paying account's — warned here, never blocked (9g's
+         Confirm hard-blocks); a cross-currency receipt commit is backlogged (plan §14). -->
+    <p class="warning" th:if="${editor.currencyMismatch()}">
+      The chosen currency differs from the paying account's — you can still save the draft.
+    </p>
+
+    <ol class="split-lines" data-split-lines>
+      <th:block th:each="l : ${editor.lines()}">
+        <th:block
+          th:replace="~{fragments/line-editor :: line(line=${l.view()}, currency=${editor.currency()}, removeUrl=@{/receipts/{id}/lines/remove-line(id=${id})}, redistributeUrl=@{/receipts/{id}/lines/redistribute(id=${id})}, panelTarget='#receipt-editor', categoryOptionsId='receipt-category-options', tagOptionsId='receipt-tag-options', ghost=${l.ghost()}, description=${l.description()})}"
+        ></th:block>
+      </th:block>
+    </ol>
+
+    <!-- Categories + the per-line transfer targets and person targets (a receipt line may be a
+         cashback transfer or a beneficiary attribution) + existing tags — the same datalists the
+         register offers, built from the shared register view. -->
+    <datalist id="receipt-category-options">
+      <option th:each="c : ${register.categories()}" th:value="${c.name()}"></option>
+      <option th:each="t : ${register.transferTargets()}" th:value="${t}"></option>
+      <option th:each="p : ${register.personTargets()}" th:value="${p}"></option>
+    </datalist>
+    <datalist id="receipt-tag-options">
+      <option th:each="tl : ${register.tagOptions()}" th:value="${tl}"></option>
+    </datalist>
+
+    <p class="actions">
+      <button
+        type="button"
+        class="btn btn--ghost"
+        hx-include="closest form"
+        hx-target="#receipt-editor"
+        hx-swap="outerHTML"
+        th:attr="hx-post=@{/receipts/{id}/lines/add-line(id=${id})}"
+      >
+        ＋ Add line
+      </button>
+    </p>
+
+    <!-- Live readout (plan §9f): remaining = total − Σ lines. keyboard.js recomputes it live from
+         data-split-*; the server value here is authoritative on each round-trip. A null total shows
+         a neutral "no total" hint instead of ✓/⚠. -->
+    <div class="entry-dock__status split-status">
+      <span
+        class="split-status__remaining"
+        data-split-remaining
+        th:classappend="${editor.balanced()} ? 'is-balanced'"
+      >
+        remaining <span data-split-remaining-value th:text="${editor.remaining()}">0,00</span>
+        <span
+          data-split-remaining-check
+          aria-hidden="true"
+          th:attr="style=${editor.balanced() and editor.status() != 'none'} ? '' : 'display:none'"
+          >✓</span
+        >
+      </span>
+      <span class="split-status__hint muted" th:if="${editor.status() == 'none'}">no total set</span>
+    </div>
+
+    <p class="actions">
+      <button type="submit" class="btn" data-split-save>Save</button>
+    </p>
+
+    <p class="entry-dock__note muted" th:if="${editorSaved}" data-receipt-editor-saved>Saved.</p>
+    <p class="entry-dock__error warning" th:if="${editorError}" th:text="${editorError}"></p>
+  </form>
 </html>
