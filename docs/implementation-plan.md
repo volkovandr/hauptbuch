@@ -23,6 +23,10 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.35 (2026-08-02):** **9e complete** (owner-confirmed) — single-receipt analyse shipped. Scope
+  addition from owner feedback: the receipt-parser **system prompt is operator-editable** (new
+  `settings.ai_system_prompt`, V13; NULL = built-in default), edited on a receipts-owned screen that
+  also shows the injected category list read-only — still parsing-instructions only (ARCH-08).
 - **v0.34 (2026-08-01):** **9e grilled & planned** (owner-confirmed; not yet implemented). Scope
   changes: output format settled as **TOON** (jtoon dependency); `receipt` gains a parsed-header
   extension + parse telemetry (token counts, frozen USD cost); **`settings` gains the AI section**
