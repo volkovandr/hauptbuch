@@ -114,7 +114,26 @@ public class ReceiptSeeder {
         beneficiary(item),
         null,
         sortOrder,
-        tags(item));
+        tags(item),
+        aiTargetText(item));
+  }
+
+  /**
+   * The AI's raw target term, kept for the post-process ghost hint / provenance tooltip (data-model
+   * §13.2). A transfer signal renders as {@code transfer: cash} / {@code transfer: card •1234} —
+   * the text that marks a targetless transfer line for what it is even when its account did not
+   * resolve; otherwise the echoed category path verbatim (resolved or not); null when the AI named
+   * neither.
+   */
+  private static String aiTargetText(ParsedItem item) {
+    if (item.transfer() != null && !item.transfer().isBlank()) {
+      String signal = item.transfer().strip();
+      return "cash".equalsIgnoreCase(signal) ? "transfer: cash" : "transfer: card •" + signal;
+    }
+    if (item.category() != null && !item.category().isBlank()) {
+      return item.category().strip();
+    }
+    return null;
   }
 
   /** The item name, with a quantity greater than one folded in as {@code N× …}. */

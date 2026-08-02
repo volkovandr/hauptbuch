@@ -39,6 +39,7 @@ class ReceiptTest {
         city,
         country,
         null,
+        null,
         null);
   }
 

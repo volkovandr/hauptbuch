@@ -31,9 +31,11 @@ public class ReceiptLineRepository {
         .sql(
             """
             insert into receipt_line
-              (receipt_id, description, amount, account_id, person_id, note, sort_order)
+              (receipt_id, description, amount, account_id, person_id, note, sort_order,
+               ai_target_text)
             values
-              (:receiptId, :description, :amount, :accountId, :personId, :note, :sortOrder)
+              (:receiptId, :description, :amount, :accountId, :personId, :note, :sortOrder,
+               :aiTargetText)
             returning receipt_line_id
             """)
         .param(RECEIPT_ID, receiptId)
@@ -43,6 +45,7 @@ public class ReceiptLineRepository {
         .param("personId", draft.personId())
         .param("note", draft.note())
         .param("sortOrder", draft.sortOrder())
+        .param("aiTargetText", draft.aiTargetText())
         .query(Long.class)
         .single();
   }
@@ -67,7 +70,7 @@ public class ReceiptLineRepository {
         .sql(
             """
             select receipt_line_id, receipt_id, description, amount, account_id,
-                   person_id, note, sort_order
+                   person_id, note, sort_order, ai_target_text
             from receipt_line
             where receipt_id = :receiptId
             order by sort_order, receipt_line_id

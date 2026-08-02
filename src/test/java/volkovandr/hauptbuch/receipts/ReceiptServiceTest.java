@@ -68,6 +68,7 @@ class ReceiptServiceTest {
         null,
         null,
         null,
+        null,
         null);
   }
 

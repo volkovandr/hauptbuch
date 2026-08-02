@@ -45,6 +45,8 @@ import java.time.OffsetDateTime;
  * @param merchantCountry parsed merchant country (9e); null until processed
  * @param receiptTime parsed printed time, no zone (9e); null until processed
  * @param receiptNumber parsed printed receipt/Beleg number (9e); null until processed
+ * @param payeeId the header payee the operator picks or creates at post-process Save (9f); null
+ *     until then ({@code merchantText} stays the parse fact)
  */
 public record Receipt(
     Long receiptId,
@@ -73,7 +75,8 @@ public record Receipt(
     String merchantCity,
     String merchantCountry,
     LocalTime receiptTime,
-    String receiptNumber) {
+    String receiptNumber,
+    Long payeeId) {
 
   /** The image path actually shown: the edited derivative when present, else the raw original. */
   public String displayPath() {
