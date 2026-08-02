@@ -35,6 +35,7 @@ class ReceiptProcessingController {
   private static final String EDITOR = VIEW + " :: editor";
   private static final String STATE = "state";
   private static final String RANGE = "range";
+  private static final String REDIRECT_REGISTER = "redirect:" + BASE_PATH;
 
   private final ReceiptService receiptService;
   private final ReceiptAnalyser receiptAnalyser;
@@ -85,7 +86,7 @@ class ReceiptProcessingController {
               model.addAttribute("title", "Receipt · Hauptbuch");
               return VIEW;
             })
-        .orElse("redirect:" + BASE_PATH);
+        .orElse(REDIRECT_REGISTER);
   }
 
   /**
@@ -236,7 +237,7 @@ class ReceiptProcessingController {
     if (landing == null) {
       redirectAttributes.addAttribute(STATE, state);
       redirectAttributes.addAttribute(RANGE, range);
-      return "redirect:" + BASE_PATH;
+      return REDIRECT_REGISTER;
     }
     return redirectToScreen(landing, state, range, redirectAttributes);
   }
@@ -289,7 +290,9 @@ class ReceiptProcessingController {
   /**
    * Save the reviewed draft (§9f): delete-and-reinsert the lines and persist the header. The
    * receipt stays {@code processed} — Save reviews the draft, it does not advance the state ({@code
-   * committed} is 9g's Confirm). Re-renders the editor from the freshly persisted state.
+   * committed} is 9g's Confirm). Re-renders the editor from the freshly persisted state; a receipt
+   * that vanished mid-save (a concurrent delete) redirects to the register rather than rendering an
+   * editor with no model.
    */
   @PostMapping("/receipts/{id}/lines/save")
   String save(
@@ -303,7 +306,7 @@ class ReceiptProcessingController {
               return renderEditor(
                   id, receiptEditorService.seed(receipt, receiptService.linesOf(id)), model);
             })
-        .orElse(EDITOR);
+        .orElse(REDIRECT_REGISTER);
   }
 
   /** Render the editor fragment from a bound form (the add/remove/redistribute round-trips). */
@@ -325,6 +328,6 @@ class ReceiptProcessingController {
       long id, String state, String range, RedirectAttributes redirectAttributes) {
     redirectAttributes.addAttribute(STATE, state);
     redirectAttributes.addAttribute(RANGE, range);
-    return "redirect:" + BASE_PATH + "/" + id;
+    return REDIRECT_REGISTER + "/" + id;
   }
 }

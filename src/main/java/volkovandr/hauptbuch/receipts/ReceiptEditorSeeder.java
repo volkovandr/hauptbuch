@@ -70,10 +70,12 @@ class ReceiptEditorSeeder {
 
   private String payeeText(Receipt receipt) {
     if (receipt.payeeId() != null) {
-      return payeeService.entryValueFor(receipt.payeeId()).orElse(orEmpty(receipt.merchantText()));
+      return payeeService
+          .entryValueFor(receipt.payeeId())
+          .orElse(ReceiptEditorText.orEmpty(receipt.merchantText()));
     }
     // First open: the payee picker prefills from the parsed merchant (nothing persists until Save).
-    return orEmpty(receipt.merchantText());
+    return ReceiptEditorText.orEmpty(receipt.merchantText());
   }
 
   private String headerCurrency(Receipt receipt) {
@@ -89,7 +91,7 @@ class ReceiptEditorSeeder {
   private WorkingLine seedLine(ReceiptLine line, Map<Long, String> paths) {
     WorkingLine base =
         new WorkingLine(
-            orEmpty(line.description()),
+            ReceiptEditorText.orEmpty(line.description()),
             "",
             "",
             "",
@@ -98,8 +100,8 @@ class ReceiptEditorSeeder {
             "",
             "",
             MoneyFormat.number(line.amount(), FRACTION_DIGITS),
-            orEmpty(line.note()),
-            orEmpty(line.aiTargetText()),
+            ReceiptEditorText.orEmpty(line.note()),
+            ReceiptEditorText.orEmpty(line.aiTargetText()),
             receiptLineRepository.findTagIds(line.receiptLineId()));
     if (line.personId() != null) {
       String name = personService.findById(line.personId()).map(Person::name).orElse("");
@@ -133,9 +135,5 @@ class ReceiptEditorSeeder {
       paths.put(path.accountId(), path.path());
     }
     return paths;
-  }
-
-  private static String orEmpty(String value) {
-    return value == null ? "" : value;
   }
 }
