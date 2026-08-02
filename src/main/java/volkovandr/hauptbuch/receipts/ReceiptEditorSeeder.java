@@ -69,13 +69,15 @@ class ReceiptEditorSeeder {
   }
 
   private String payeeText(Receipt receipt) {
+    // The parsed merchant as a payee reads — name - city - country — so every part the AI saw
+    // prefills, not just the name (owner feedback 2026-08-02). The register's payee format is the
+    // same, so Save resolves it without the operator retyping the city/country.
+    String merchant = ReceiptEditorText.orEmpty(receipt.merchantDisplay());
     if (receipt.payeeId() != null) {
-      return payeeService
-          .entryValueFor(receipt.payeeId())
-          .orElse(ReceiptEditorText.orEmpty(receipt.merchantText()));
+      return payeeService.entryValueFor(receipt.payeeId()).orElse(merchant);
     }
     // First open: the payee picker prefills from the parsed merchant (nothing persists until Save).
-    return ReceiptEditorText.orEmpty(receipt.merchantText());
+    return merchant;
   }
 
   private String headerCurrency(Receipt receipt) {

@@ -272,7 +272,7 @@
              remove-line and re-render target are its own (#entry-dock). -->
         <th:block th:each="line : ${panel.lines()}">
           <th:block
-            th:replace="~{fragments/line-editor :: line(line=${line}, currency=${panel.currency()}, removeUrl='/register/split/remove-line', redistributeUrl=null, panelTarget='#entry-dock', categoryOptionsId='split-category-options', tagOptionsId='split-tag-options', ghost=null, description=null)}"
+            th:replace="~{fragments/line-editor :: line(line=${line}, currency=${panel.currency()}, removeUrl='/register/split/remove-line', redistributeUrl=null, panelTarget='#entry-dock', categoryOptionsId='split-category-options', tagOptionsId='split-tag-options', ghost=null, description=null, tagIndexBase=1)}"
           ></th:block>
         </th:block>
       </ol>

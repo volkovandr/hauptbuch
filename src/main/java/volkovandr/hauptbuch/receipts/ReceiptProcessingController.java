@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import volkovandr.hauptbuch.ledger.CurrencyService;
 import volkovandr.hauptbuch.ledger.RegisterFilter;
 import volkovandr.hauptbuch.ledger.RegisterService;
 import volkovandr.hauptbuch.web.NavItem;
@@ -42,18 +43,21 @@ class ReceiptProcessingController {
   private final ReceiptAnalysisService receiptAnalysisService;
   private final ReceiptEditorService receiptEditorService;
   private final RegisterService registerService;
+  private final CurrencyService currencyService;
 
   ReceiptProcessingController(
       ReceiptService receiptService,
       ReceiptAnalyser receiptAnalyser,
       ReceiptAnalysisService receiptAnalysisService,
       ReceiptEditorService receiptEditorService,
-      RegisterService registerService) {
+      RegisterService registerService,
+      CurrencyService currencyService) {
     this.receiptService = receiptService;
     this.receiptAnalyser = receiptAnalyser;
     this.receiptAnalysisService = receiptAnalysisService;
     this.receiptEditorService = receiptEditorService;
     this.registerService = registerService;
+    this.currencyService = currencyService;
   }
 
   /**
@@ -321,6 +325,11 @@ class ReceiptProcessingController {
     model.addAttribute("editor", receiptEditorService.panel(form));
     model.addAttribute(
         "register", registerService.view(new RegisterFilter(List.of(), null, null, null)));
+    // The header currency-picker (a shared fragment) renders its <select> from `currencies`,
+    // exactly
+    // as the register and settings screens supply it — without it the picker is an empty, unusable
+    // <select required> that blocks Save.
+    model.addAttribute("currencies", currencyService.findAll());
   }
 
   /** Redirect back to a receipt's processing screen, preserving the carried filter + order. */

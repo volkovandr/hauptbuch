@@ -481,7 +481,7 @@
     <ol class="split-lines" data-split-lines>
       <th:block th:each="l : ${editor.lines()}">
         <th:block
-          th:replace="~{fragments/line-editor :: line(line=${l.view()}, currency=${editor.currency()}, removeUrl=@{/receipts/{id}/lines/remove-line(id=${id})}, redistributeUrl=@{/receipts/{id}/lines/redistribute(id=${id})}, panelTarget='#receipt-editor', categoryOptionsId='receipt-category-options', tagOptionsId='receipt-tag-options', ghost=${l.ghost()}, description=${l.description()})}"
+          th:replace="~{fragments/line-editor :: line(line=${l.view()}, currency=${editor.currency()}, removeUrl=@{/receipts/{id}/lines/remove-line(id=${id})}, redistributeUrl=@{/receipts/{id}/lines/redistribute(id=${id})}, panelTarget='#receipt-editor', categoryOptionsId='receipt-category-options', tagOptionsId='receipt-tag-options', ghost=${l.ghost()}, description=${l.description()}, tagIndexBase=0)}"
         ></th:block>
       </th:block>
     </ol>

@@ -545,10 +545,24 @@ table.receipts tbody td {
 }
 
 /* ── Processed view (owner feedback 2026-08-02): give the seeded data the room, not the image.
-   Image column ~40 %, data ~60 %, so the parsed detail + line table (now with a Category column)
-   isn't crammed next to a tall receipt with a gulf of empty space between them. ─────────────── */
+   The post-process editor line carries more fields than the register split (an Item column), so on
+   a wide screen it needs the width — the tall scan does not. Let this state use the full screen
+   (the app-wide 92rem cap otherwise strands ~half a big monitor unused) and pin the image column to
+   a readable-but-modest width so everything left over goes to the editor. ─────────────────────── */
+.receipt-process[data-receipt-state="processed"] {
+  max-width: none;
+}
+
 .receipt-process__read--data {
-  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  grid-template-columns: minmax(18rem, 30rem) minmax(0, 1fr);
+}
+
+/* The editor's Item and Category are the fields the operator reads and edits most, so they grow
+   ahead of Note/Tags and start wide enough to show a full category path. The widened data column
+   above keeps the whole line on one row, so the ⇄ / ✕ buttons stay inline (owner feedback). */
+.receipt-editor .field--split-description,
+.receipt-editor .field--split-category {
+  flex: 2 1 12rem;
 }
 
 /* Merchant / Date / Total as label-then-value on one line each (no dt-over-dd stacking). */
