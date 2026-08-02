@@ -248,7 +248,7 @@ re-editable with its recipe replayed; `discarded` is gone from schema and UI.
 **Done when:** the vocabulary renders and resolves per the crafted scenarios and is editable from
 category-edit.
 
-## 9e — Analyse (single): worker, parser, seeding
+## 9e — Analyse (single): worker, parser, seeding ✅ **complete** (owner-confirmed 2026-08-02)
 
 **Goal:** one `pre_processed` receipt goes through the Messages API and comes back `processed`
 with seeded draft lines — or `failed` with retry. Decisions below grilled & settled 2026-08-01.
