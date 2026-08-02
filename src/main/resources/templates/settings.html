@@ -78,5 +78,95 @@
         </p>
       </form>
     </section>
+
+    <!--
+      AI parsing (stage 9e, data-model §3.8): the model the receipt parser calls, the one DB-stored
+      secret (write-only — the key is never rendered back, only its status), and the four per-MTok
+      USD price rates a parse's frozen cost is computed from.
+    -->
+    <section class="panel">
+      <p class="eyebrow">AI parsing</p>
+
+      <form method="post" th:action="@{/settings/ai-model}" class="form">
+        <div class="field">
+          <label class="field__label" for="aiModel">Model</label>
+          <input
+            id="aiModel"
+            name="aiModel"
+            type="text"
+            class="input"
+            th:value="${ai.model()}"
+            th:placeholder="${ai.defaultModel()}"
+            autocomplete="off"
+          />
+          <p class="muted">
+            The Anthropic model the receipt parser calls. Blank uses
+            <span class="num" th:text="${ai.defaultModel()}">claude-sonnet-5</span>.
+          </p>
+        </div>
+        <p class="actions"><button type="submit" class="btn">Save model</button></p>
+      </form>
+
+      <form method="post" th:action="@{/settings/ai-key}" class="form">
+        <div class="field">
+          <span class="field__label">API key</span>
+          <p class="muted" th:if="${ai.keySet()}">
+            A key is stored (ends <span class="num" th:text="'…' + ${ai.keyLast4()}">…1234</span>).
+          </p>
+          <p class="muted" th:unless="${ai.keySet()}">
+            No key stored.
+            <span th:if="${ai.envKeyPresent()}">The <span class="num">ANTHROPIC_API_KEY</span> environment fallback is set.</span>
+            <span th:unless="${ai.envKeyPresent()}">No environment fallback either — set one below.</span>
+          </p>
+          <input
+            id="aiApiKey"
+            name="aiApiKey"
+            type="password"
+            class="input"
+            placeholder="Enter a new key to replace the stored one"
+            autocomplete="off"
+          />
+          <label class="receipt-edit__toggle" th:if="${ai.keySet()}">
+            <input type="checkbox" name="clear" value="true" /> Clear the stored key (use the
+            environment fallback)
+          </label>
+        </div>
+        <p class="actions"><button type="submit" class="btn">Save key</button></p>
+      </form>
+
+      <form method="post" th:action="@{/settings/ai-prices}" class="form">
+        <p class="muted">USD price per million tokens, for the currently configured model.</p>
+        <div class="field">
+          <label class="field__label" for="priceIn">Input</label>
+          <input id="priceIn" name="priceIn" type="text" inputmode="decimal" class="input num"
+                 th:value="${ai.priceIn()}" placeholder="0.00" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label class="field__label" for="priceOut">Output</label>
+          <input id="priceOut" name="priceOut" type="text" inputmode="decimal" class="input num"
+                 th:value="${ai.priceOut()}" placeholder="0.00" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label class="field__label" for="priceCacheWrite">Cache write</label>
+          <input id="priceCacheWrite" name="priceCacheWrite" type="text" inputmode="decimal"
+                 class="input num" th:value="${ai.priceCacheWrite()}" placeholder="0.00" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label class="field__label" for="priceCacheRead">Cache read</label>
+          <input id="priceCacheRead" name="priceCacheRead" type="text" inputmode="decimal"
+                 class="input num" th:value="${ai.priceCacheRead()}" placeholder="0.00" autocomplete="off" />
+        </div>
+        <p class="actions"><button type="submit" class="btn">Save prices</button></p>
+      </form>
+
+      <div class="field">
+        <span class="field__label">Parse prompt</span>
+        <p class="muted">
+          The instructions the parser is sent, plus a read-only preview of the category list as the
+          AI sees it.
+        </p>
+        <p class="actions"><a class="btn" th:href="@{/receipts/ai-prompt}">Edit parse prompt</a></p>
+      </div>
+    </section>
   </main>
 </html>

@@ -1,12 +1,15 @@
 package volkovandr.hauptbuch.receipts.repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import volkovandr.hauptbuch.receipts.ParsedHeader;
 import volkovandr.hauptbuch.receipts.Receipt;
+import volkovandr.hauptbuch.receipts.ReceiptParseResult;
 
 /**
  * Repository for {@link Receipt} rows (data-model §13.1). All reads scope to {@code deleted_at is
@@ -148,6 +151,146 @@ public class ReceiptRepository {
              where receipt_id = :id and deleted_at is null
             """)
         .param("id", receiptId)
+        .update();
+  }
+
+  // ── Analyse (stage 9e): the worker's state transitions and result writes ────
+
+  /**
+   * Move a live {@code pre_processed} receipt to {@code processing} (9e): the atomic claim the
+   * background worker makes before the API call. Returns the rows affected — zero when the receipt
+   * is not (any longer) an un-deleted {@code pre_processed} one, so a double-submit claims nothing.
+   */
+  public int markProcessing(long receiptId) {
+    return jdbcClient
+        .sql(
+            """
+            update receipt set state = 'processing'
+            where receipt_id = :id and state = 'pre_processed' and deleted_at is null
+            """)
+        .param("id", receiptId)
+        .update();
+  }
+
+  /**
+   * Apply a successful, decoded parse (9e): store the raw body, the usage counts, the frozen cost,
+   * and the seeded header, and flip to {@code processed} — clearing any prior {@code parse_error}.
+   * Scoped to a still-live receipt: a receipt soft-deleted mid-flight is left untouched (the worker
+   * then abandons the result). Returns the rows affected.
+   */
+  public int applyProcessed(
+      long receiptId, ReceiptParseResult usage, BigDecimal parseCost, ParsedHeader header) {
+    return jdbcClient
+        .sql(
+            """
+            update receipt set
+              state = 'processed', parse_error = null,
+              parse_raw = :parseRaw,
+              tokens_in = :tokensIn, tokens_out = :tokensOut,
+              tokens_cache_write = :tokensCacheWrite, tokens_cache_read = :tokensCacheRead,
+              parse_cost = :parseCost,
+              merchant_text = :merchantText, merchant_city = :merchantCity,
+              merchant_country = :merchantCountry,
+              receipt_date = :receiptDate, receipt_time = :receiptTime,
+              receipt_number = :receiptNumber,
+              total_amount = :totalAmount, currency_code = :currencyCode,
+              account_id = :accountId
+            where receipt_id = :id and deleted_at is null
+            """)
+        .param("id", receiptId)
+        .param("parseRaw", usage.rawToon())
+        .param("tokensIn", usage.tokensIn())
+        .param("tokensOut", usage.tokensOut())
+        .param("tokensCacheWrite", usage.tokensCacheWrite())
+        .param("tokensCacheRead", usage.tokensCacheRead())
+        .param("parseCost", parseCost)
+        .param("merchantText", header.merchantText())
+        .param("merchantCity", header.merchantCity())
+        .param("merchantCountry", header.merchantCountry())
+        .param("receiptDate", header.receiptDate())
+        .param("receiptTime", header.receiptTime())
+        .param("receiptNumber", header.receiptNumber())
+        .param("totalAmount", header.totalAmount())
+        .param("currencyCode", header.currencyCode())
+        .param("accountId", header.accountId())
+        .update();
+  }
+
+  /**
+   * Fail a parse that could not complete (9e transport/API error): the reason is recorded, no
+   * body/usage/cost exists to keep, and the receipt moves to {@code failed} (retryable). Scoped to
+   * a live receipt.
+   */
+  public int failTransport(long receiptId, String parseError) {
+    return jdbcClient
+        .sql(
+            """
+            update receipt set state = 'failed', parse_error = :parseError
+            where receipt_id = :id and deleted_at is null
+            """)
+        .param("id", receiptId)
+        .param("parseError", parseError)
+        .update();
+  }
+
+  /**
+   * Fail a parse whose body came back but could not be decoded (9e): the raw body <em>is</em> kept
+   * (audit) along with its usage and computed cost, the reason is recorded, and the receipt moves
+   * to {@code failed}. Scoped to a live receipt.
+   */
+  public int failUndecodable(
+      long receiptId, String parseError, ReceiptParseResult usage, BigDecimal parseCost) {
+    return jdbcClient
+        .sql(
+            """
+            update receipt set
+              state = 'failed', parse_error = :parseError,
+              parse_raw = :parseRaw,
+              tokens_in = :tokensIn, tokens_out = :tokensOut,
+              tokens_cache_write = :tokensCacheWrite, tokens_cache_read = :tokensCacheRead,
+              parse_cost = :parseCost
+            where receipt_id = :id and deleted_at is null
+            """)
+        .param("id", receiptId)
+        .param("parseError", parseError)
+        .param("parseRaw", usage.rawToon())
+        .param("tokensIn", usage.tokensIn())
+        .param("tokensOut", usage.tokensOut())
+        .param("tokensCacheWrite", usage.tokensCacheWrite())
+        .param("tokensCacheRead", usage.tokensCacheRead())
+        .param("parseCost", parseCost)
+        .update();
+  }
+
+  /**
+   * Retry a {@code failed} receipt (9e): back to {@code pre_processed} with the error cleared,
+   * ready to Analyse again. Returns the rows affected (zero when the receipt is not a live failed
+   * one).
+   */
+  public int retryToPreProcessed(long receiptId) {
+    return jdbcClient
+        .sql(
+            """
+            update receipt set state = 'pre_processed', parse_error = null
+            where receipt_id = :id and state = 'failed' and deleted_at is null
+            """)
+        .param("id", receiptId)
+        .update();
+  }
+
+  /**
+   * The startup sweep (9e): flip every orphaned single-mode {@code processing} receipt (no {@code
+   * batch_id}, not soft-deleted) to {@code failed} — its worker thread died with the JVM. Batch
+   * rows are exempt (9h's poller resumes them). Returns how many were swept.
+   */
+  public int sweepOrphanedProcessing(String parseError) {
+    return jdbcClient
+        .sql(
+            """
+            update receipt set state = 'failed', parse_error = :parseError
+            where state = 'processing' and batch_id is null and deleted_at is null
+            """)
+        .param("parseError", parseError)
         .update();
   }
 }

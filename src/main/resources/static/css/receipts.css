@@ -511,3 +511,32 @@ table.receipts tbody td {
   display: flex;
   gap: 0.5rem;
 }
+
+/* ── Processed-view sum check (stage 9e, owner feedback): a green tick when the seeded item
+   amounts sum to the parsed total, an amber warning when they diverge. ─────────────────────── */
+.receipt-summatch {
+  margin-left: 0.4rem;
+  font-weight: 700;
+}
+
+.receipt-summatch--ok {
+  color: var(--green-ink);
+}
+
+.receipt-summatch--warn {
+  color: #b8860b; /* amber — a caution, not the destructive oxblood */
+}
+
+/* ── Parse-prompt editor: the read-only category preview, a scrollable monospace block. ─────── */
+.ai-prompt-preview {
+  font-family: var(--font-num);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  max-height: 24rem;
+  overflow: auto;
+  padding: 0.6rem 0.8rem;
+  border: 1.5px solid var(--rule);
+  background: var(--paper-edge);
+  color: var(--ink);
+  white-space: pre;
+}

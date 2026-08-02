@@ -71,6 +71,51 @@
     </section>
 
     <section class="panel">
+      <p class="eyebrow">Receipt detection</p>
+      <h2>Paying-account detection</h2>
+      <p class="muted">
+        How the receipt parser recognises this account as the one that paid (data-model §13.4). The
+        card's last four digits match a printed card slip; the cash marker catches a
+        <span class="num">Bar</span>/cash line and cash-withdrawal transfers. Never sent to the AI.
+      </p>
+      <form
+        method="post"
+        th:action="@{/accounts/{id}/detection(id=${account.accountId()})}"
+        class="form"
+      >
+        <div class="field">
+          <label class="field__label" for="cardLast4">Card last 4 digits</label>
+          <input
+            id="cardLast4"
+            name="cardLast4"
+            type="text"
+            class="input num"
+            inputmode="numeric"
+            maxlength="4"
+            pattern="\d{4}"
+            placeholder="1234"
+            th:value="${detection.cardLast4()}"
+            autocomplete="off"
+          />
+        </div>
+        <div class="field">
+          <label class="receipt-edit__toggle">
+            <input
+              type="checkbox"
+              name="cashAccount"
+              value="true"
+              th:checked="${detection.cashAccount()}"
+            />
+            This is the cash account
+          </label>
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Save detection</button>
+        </p>
+      </form>
+    </section>
+
+    <section class="panel">
       <p class="eyebrow">Lifecycle</p>
       <h2>Close this account</h2>
       <div th:if="${account.closedAt() != null}">

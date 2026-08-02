@@ -101,9 +101,26 @@ class AccountsController {
             .orElseThrow(() -> new IllegalArgumentException("No account with id " + accountId));
     model.addAttribute("account", account);
     model.addAttribute("hueOptions", HUE_OPTIONS);
+    model.addAttribute(
+        "detection",
+        accountService.detectionOf(accountId).orElse(new AccountDetection(null, false)));
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", account.name() + " · Hauptbuch");
     return EDIT_VIEW;
+  }
+
+  /**
+   * Save the paying-account detection config (data-model §13.4, stage 9e): the card last-4 whose
+   * slips seed this as the receipt's paying account, and whether it is the cash account a {@code
+   * Bar}/cash line resolves to.
+   */
+  @PostMapping("/accounts/{accountId}/detection")
+  String updateDetection(
+      @PathVariable long accountId,
+      @RequestParam(required = false) String cardLast4,
+      @RequestParam(required = false, defaultValue = "false") boolean cashAccount) {
+    accountService.updateDetection(accountId, cardLast4, cashAccount);
+    return REDIRECT_TO_LIST;
   }
 
   /** Save the freely-editable fields: display name and stored hue. */

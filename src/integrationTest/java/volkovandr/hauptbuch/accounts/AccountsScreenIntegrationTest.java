@@ -183,6 +183,47 @@ class AccountsScreenIntegrationTest {
   }
 
   @Test
+  void savesPayingAccountDetection() throws Exception {
+    mockMvc
+        .perform(
+            post(ACCOUNTS_PATH)
+                .param(NAME, GIRO)
+                .param(TYPE, ASSET)
+                .param(CURRENCY_CODE, EUR)
+                .param(OPENED_AT, OPENED_DAY))
+        .andExpect(status().is3xxRedirection());
+    long accountId = accountIdNamed(GIRO);
+
+    // The edit page offers the detection section (data-model §13.4).
+    mockMvc
+        .perform(get(ACCOUNT_PATH_PREFIX + accountId))
+        .andExpect(content().string(containsString("Paying-account detection")));
+
+    mockMvc
+        .perform(
+            post(ACCOUNT_PATH_PREFIX + accountId + "/detection")
+                .param("cardLast4", "1234")
+                .param("cashAccount", "true"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl(ACCOUNTS_PATH));
+
+    String cardLast4 =
+        jdbcClient
+            .sql("select card_last4 from account where account_id = :id")
+            .param("id", accountId)
+            .query(String.class)
+            .single();
+    Boolean cash =
+        jdbcClient
+            .sql("select cash_account from account where account_id = :id")
+            .param("id", accountId)
+            .query(Boolean.class)
+            .single();
+    assertThat(cardLast4).isEqualTo("1234");
+    assertThat(cash).isTrue();
+  }
+
+  @Test
   void editRenamesAndRecolours() throws Exception {
     mockMvc
         .perform(

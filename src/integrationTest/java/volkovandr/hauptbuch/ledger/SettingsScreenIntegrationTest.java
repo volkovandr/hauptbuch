@@ -95,4 +95,65 @@ class SettingsScreenIntegrationTest {
         // No base currency yet: the first-run prompt to open settings is shown.
         .andExpect(content().string(containsString("Set the base currency")));
   }
+
+  // ── AI parsing section (stage 9e, data-model §3.8) ──────────────────────────
+
+  @Test
+  void aiSectionRendersWithTheModelDefaultAndNoKey() throws Exception {
+    mockMvc
+        .perform(get("/settings"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("AI parsing")))
+        // The default model is offered as a placeholder; no key stored on a fresh book.
+        .andExpect(content().string(containsString("claude-sonnet-5")))
+        .andExpect(content().string(containsString("No key stored")));
+  }
+
+  @Test
+  void savingTheKeyShowsItMaskedNotVerbatim() throws Exception {
+    mockMvc
+        .perform(post("/settings/ai-key").param("aiApiKey", "sk-secret-9876"))
+        .andExpect(status().isOk())
+        // Write-only: the stored key is never rendered back — only its last four characters.
+        .andExpect(content().string(not(containsString("sk-secret-9876"))))
+        .andExpect(content().string(containsString("…9876")));
+  }
+
+  @Test
+  void savingModelAndPricesRoundTripsThroughTheScreen() throws Exception {
+    mockMvc
+        .perform(post("/settings/ai-model").param("aiModel", "claude-opus-4-8"))
+        .andExpect(status().isOk());
+    mockMvc
+        .perform(
+            post("/settings/ai-prices")
+                .param("priceIn", "3.00")
+                .param("priceOut", "15.00")
+                .param("priceCacheWrite", "3.75")
+                .param("priceCacheRead", "0.30"))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(get("/settings"))
+        .andExpect(content().string(containsString("claude-opus-4-8")));
+  }
+
+  @Test
+  void priceFieldsAcceptCommaDecimalSeparator() throws Exception {
+    // Owner feedback 2026-08-02: a comma must not 400 — the register's amount inputs tolerate both
+    // separators, and so must these. "2,00" parses to 2.00, same as "2.00".
+    mockMvc
+        .perform(
+            post("/settings/ai-prices")
+                .param("priceIn", "2,00")
+                .param("priceOut", "10,50")
+                .param("priceCacheWrite", "")
+                .param("priceCacheRead", ""))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(get("/settings"))
+        .andExpect(content().string(containsString("2.00")))
+        .andExpect(content().string(containsString("10.50")));
+  }
 }

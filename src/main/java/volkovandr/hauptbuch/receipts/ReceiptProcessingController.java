@@ -1,5 +1,8 @@
 package volkovandr.hauptbuch.receipts;
 
+import jakarta.servlet.http.HttpServletResponse;
+import java.math.BigDecimal;
+import java.util.List;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,9 +34,16 @@ class ReceiptProcessingController {
   private static final String RANGE = "range";
 
   private final ReceiptService receiptService;
+  private final ReceiptAnalyser receiptAnalyser;
+  private final ReceiptAnalysisService receiptAnalysisService;
 
-  ReceiptProcessingController(ReceiptService receiptService) {
+  ReceiptProcessingController(
+      ReceiptService receiptService,
+      ReceiptAnalyser receiptAnalyser,
+      ReceiptAnalysisService receiptAnalysisService) {
     this.receiptService = receiptService;
+    this.receiptAnalyser = receiptAnalyser;
+    this.receiptAnalysisService = receiptAnalysisService;
   }
 
   /**
@@ -50,7 +60,11 @@ class ReceiptProcessingController {
         .findById(id)
         .map(
             receipt -> {
+              List<ReceiptLine> lines = receiptService.linesOf(id);
+              model.addAttribute("id", id);
               model.addAttribute("receipt", receipt);
+              model.addAttribute("lines", lines);
+              model.addAttribute("sumStatus", sumStatus(lines, receipt.totalAmount()));
               model.addAttribute(
                   "neighbours",
                   receiptService.neighbours(
@@ -101,6 +115,82 @@ class ReceiptProcessingController {
   }
 
   /**
+   * Start analysing a {@code pre_processed} receipt (§3.1): claim it (→ {@code processing}) and
+   * queue the background parse, then redirect to the screen — which now renders the greyed, polling
+   * processing view. A receipt that is not a live {@code pre_processed} one is not claimed; the
+   * redirect simply re-renders its current state.
+   */
+  @PostMapping("/receipts/{id}/analyse")
+  String analyse(
+      @PathVariable long id,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      RedirectAttributes redirectAttributes) {
+    receiptAnalyser.start(id);
+    return redirectToScreen(id, state, range, redirectAttributes);
+  }
+
+  /**
+   * The status poll target (§3.1): while a receipt is {@code processing}, returns the polling
+   * fragment so htmx keeps checking every 2 s; once it lands ({@code processed} or {@code failed}),
+   * asks htmx to refresh the whole page (via {@code HX-Refresh}) so the state-appropriate view
+   * shows. A vanished receipt also refreshes (back to the register).
+   */
+  @GetMapping("/receipts/{id}/status")
+  String status(
+      @PathVariable long id,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      Model model,
+      HttpServletResponse response) {
+    boolean stillProcessing =
+        receiptService
+            .findById(id)
+            .map(r -> ReceiptState.PROCESSING.equals(r.state()))
+            .orElse(false);
+    if (stillProcessing) {
+      model.addAttribute("id", id);
+      model.addAttribute("stateFilter", state);
+      model.addAttribute("rangeFilter", range);
+      return VIEW + " :: statusPoll";
+    }
+    response.setHeader("HX-Refresh", "true");
+    return VIEW + " :: statusDone";
+  }
+
+  /**
+   * Retry a {@code failed} receipt (§3.1): back to {@code pre_processed}, where Analyse can be
+   * fired again. Redirects to the screen showing the pre-process view.
+   */
+  @PostMapping("/receipts/{id}/retry")
+  String retry(
+      @PathVariable long id,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      RedirectAttributes redirectAttributes) {
+    receiptAnalysisService.retry(id);
+    return redirectToScreen(id, state, range, redirectAttributes);
+  }
+
+  /**
+   * Re-seed a {@code failed} receipt from the operator-edited parser response (owner feedback
+   * 2026-08-02) — no new API call. When the model returned slightly-malformed TOON, editing the
+   * stored text and re-decoding is faster and cheaper than re-prompting. Redirects to the screen,
+   * which shows {@code processed} on success or the still-{@code failed} view (with the edited text
+   * kept) when the edit still will not decode.
+   */
+  @PostMapping("/receipts/{id}/reparse")
+  String reparse(
+      @PathVariable long id,
+      @RequestParam(required = false) String rawText,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      RedirectAttributes redirectAttributes) {
+    receiptAnalyser.reparse(id, rawText);
+    return redirectToScreen(id, state, range, redirectAttributes);
+  }
+
+  /**
    * The 3-way keep/delete-files dialog for this one receipt (§6), rendered into the overlay mount.
    */
   @GetMapping("/receipts/{id}/delete-confirm")
@@ -139,6 +229,25 @@ class ReceiptProcessingController {
       return "redirect:" + BASE_PATH;
     }
     return redirectToScreen(landing, state, range, redirectAttributes);
+  }
+
+  /**
+   * The seeded-lines-vs-total check for the processed view's badge (owner feedback 2026-08-02):
+   * {@code "ok"} (green tick) when the line amounts sum to the parsed total, {@code "warn"} (yellow
+   * warning) when they diverge, or null (no badge) when there is no total to check against or no
+   * lines were parsed.
+   */
+  private static String sumStatus(List<ReceiptLine> lines, BigDecimal total) {
+    if (total == null || lines.isEmpty()) {
+      return null;
+    }
+    BigDecimal sum = BigDecimal.ZERO;
+    for (ReceiptLine line : lines) {
+      if (line.amount() != null) {
+        sum = sum.add(line.amount());
+      }
+    }
+    return sum.compareTo(total) == 0 ? "ok" : "warn";
   }
 
   /** Redirect back to a receipt's processing screen, preserving the carried filter + order. */
