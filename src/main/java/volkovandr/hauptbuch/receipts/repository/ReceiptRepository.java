@@ -154,6 +154,38 @@ public class ReceiptRepository {
         .update();
   }
 
+  /**
+   * Persist the post-process header edits (9f): the operator's date, payee, paying account, header
+   * currency, and (editable) total. The receipt stays {@code processed} — Save reviews the draft,
+   * it does not advance the state ({@code committed} is 9g's Confirm). Scoped to a live receipt.
+   */
+  public void saveEditorHeader(
+      long receiptId,
+      LocalDate receiptDate,
+      Long payeeId,
+      Long accountId,
+      String currencyCode,
+      BigDecimal totalAmount) {
+    jdbcClient
+        .sql(
+            """
+            update receipt
+               set receipt_date = :receiptDate,
+                   payee_id = :payeeId,
+                   account_id = :accountId,
+                   currency_code = :currencyCode,
+                   total_amount = :totalAmount
+             where receipt_id = :id and deleted_at is null
+            """)
+        .param("receiptDate", receiptDate)
+        .param("payeeId", payeeId)
+        .param("accountId", accountId)
+        .param("currencyCode", currencyCode)
+        .param("totalAmount", totalAmount)
+        .param("id", receiptId)
+        .update();
+  }
+
   // ── Analyse (stage 9e): the worker's state transitions and result writes ────
 
   /**
