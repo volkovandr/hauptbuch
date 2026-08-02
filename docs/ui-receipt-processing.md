@@ -1,8 +1,8 @@
 # Personal Finance Manager — UI: Receipt Processing & Receipt Register
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.4
-**Date:** 2026-07-31
+**Status:** Draft v0.5
+**Date:** 2026-08-02
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
@@ -22,6 +22,18 @@
 > The **exact keyboard state machine** is deferred to implementation, as in the register doc.
 
 **Changelog**
+- **v0.5 (2026-08-02):** Stage-9f grilling round (owner-confirmed; full decisions in
+  `implementation-plan-stage-9.md` §9f). **Review = editing the analysis result, nothing more**:
+  Save persists the draft and the state stays `processed` — `committed` is the reviewed state;
+  no marker for saved-but-unconfirmed (interrupted work). §6.3 sharpened: the header gains an
+  **editable total** (null total → neutral hint, not ⚠); the payee picker **prefills from the
+  parsed merchant**; currency ≠ account currency **warns at Save, blocks only at Confirm**
+  (cross-currency commits → backlog). The category **ghost** is concrete: resolved suggestions
+  are plain values, unresolved lines show the AI's raw term (`receipt_line.ai_target_text`,
+  data-model v0.11) as a grey hint — which also marks targetless transfer lines. **⇄
+  Redistribute is a per-line action** (spread this line over the others, remove it) — no
+  Tax-line detection; base = all lines except real-account transfer legs, negatives participate,
+  largest-remainder rounding, total preserved.
 - **v0.4 (2026-07-31):** Stage-9c grilling round (owner-confirmed). **The ▲▼ stage axis is
   retired**: the workflow pane becomes the **processing screen** — one view per *state*, at its own
   URL, with every transition (forward or backward) an explicit named button, never auto-triggered
@@ -333,34 +345,48 @@ The `failed` view offers **Retry** (→ `pre_processed`) — or Delete, as every
 ```
 
 - **Image left, editable item table right** (the requested side-by-side).
-- **Header fields:** date, **payee** (existing picker + create-new §3.4), **account**, currency.
+- **Header fields:** date, **payee** (existing picker + create-new §3.4; the text **prefills from
+  the parsed merchant** — an exact case-insensitive match pre-selects, else create-new is one
+  Enter away), **account**, currency, and the **total — editable** (a mis-read total must be
+  fixable, or the ✓ check below trains you to ignore it). Currency disagreeing with the chosen
+  account's currency **warns at Save but never blocks** (the draft stays lenient); **Confirm**
+  (§6.4) blocks until they match — cross-currency receipt commits are a backlog item.
   - **Account detection:** parsed from the payment line — `Bar`/cash → the account **marked as the
     cash account**; card → matched by **last-4**, configured **on the account** (account-edit
     screen — T-RX-2 resolved, 2026-07-21). No match / no payment line → operator **picks**
     the account (same field as register §3.3, which already accepts real *and* person-debt
     accounts). This is why account selection must always be available, per your note.
-- **Item table = the split panel (§3.10), reused.** Each line carries **category** (picker §3.5,
-  with the AI's suggestion shown as a per-line ghost — §3.9 generalised to per-item; the suggestion
-  comes from the **AI Vocabulary** — the curated projection of data-model §13.3 — resolved
-  term→category at seeding; a line's target may also be a **real account**, i.e. a transfer leg —
+- **Item table = the split panel (§3.10), reused** — concretely, a shared per-line editor core
+  both surfaces render (the register keeps its funding/view wrapper; receipts get their own,
+  posting to receipt endpoints). Each line carries **category** (picker §3.5, with the AI's
+  suggestion per-line — §3.9 generalised to per-item; the suggestion comes from the
+  **AI Vocabulary** — the curated projection of data-model §13.3 — resolved term→category at
+  seeding: a **resolved** suggestion is simply the line's value (override = one keystroke, the
+  raw term kept as a tooltip), an **unresolved** one renders as a grey non-committing **ghost
+  hint** ("AI said: …", from `receipt_line.ai_target_text`) — which also marks a targetless
+  transfer line for what it is; a line's target may also be a **real account**, i.e. a transfer leg —
   a recognised **cash-withdrawal line** (supermarket cashback, *Bargeldauszahlung*) seeds as a
   transfer to the marked cash account, and the reused split panel already supports split
   transfers), **tags**
   (chips §3.6), **beneficiary** `→ Person` (§2.6/§3.8), and a **note** (§3.7). This delivers "full
   transaction detail, same as the main register."
-- **`remaining 0,00 ✓` readout** reconciles **Σ items vs parsed total** — here it doubles as a
-  **parse sanity check**: a non-zero remaining means the AI mis-summed, missed a line, or there's a
-  tax/rounding gap to resolve before commit. (At commit the paying account's −total funding leg is
+- **`remaining 0,00 ✓` readout** reconciles **Σ items vs the (editable) total** — here it doubles
+  as a **parse sanity check**: a non-zero remaining means the AI mis-summed, missed a line, or
+  there's a tax/rounding gap to resolve before commit. No total parsed → a neutral "no total"
+  hint, not a warning. (At commit the paying account's −total funding leg is
   added automatically, so the transaction's posting-level sum-to-zero holds by construction —
   data-model §8.1; the item table is the expense side of that.)
 - **Tax handling (your three real cases), no model change** — "Tax" is just a category leaf:
   - *Consumer receipt, tax included in the total* → nothing special; the line amounts already
     include it (the number you care about).
   - *Tax as a separate line you keep* → enter it as an item categorised **Tax**.
-  - *Redistribute* → a small **⇄ Redistribute tax** helper takes the Tax line and spreads it across
-    the other items **proportionally to each item's pre-tax share**, then removes the Tax line;
-    **total preserved**, `remaining` stays `0,00 ✓`. Optional — both leaving-as-Tax and
-    redistributing are first-class.
+  - *Redistribute* → a **per-line ⇄ action** ("spread this line over the others, then remove it"
+    — no Tax-detection heuristics; two VAT lines = two clicks, and it serves Pfand/rounding lines
+    too): the line's amount spreads **proportionally over all other lines except real-account
+    transfer legs** (beneficiary lines absorb — their items bore tax too; negative lines
+    participate with negative shares), cent-level largest-remainder rounding; **total preserved**,
+    `remaining` unchanged. Refused when the absorbing lines sum to zero. Optional — both
+    leaving-as-Tax and redistributing are first-class.
 
 ### 6.4 Step ④ Confirm
 

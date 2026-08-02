@@ -312,19 +312,48 @@ draft lines with token counts and cost recorded; all suites green without networ
 ## 9f — Post-process: the full split toolkit
 
 **Goal:** the §6.3 review surface — image left, editable item table right, full transaction
-detail.
+detail. Decisions below grilled & settled 2026-08-02 (data-model to v0.11).
 
-- **Header fields:** date, payee (existing picker incl. create-new), account (detected value
-  pre-filled, always changeable), currency.
-- **Item table:** description · amount · category (picker, AI suggestion as ghost) · tags (chips)
-  · beneficiary `→ Person` · note; add/remove lines; edits persist to `receipt_line`(+`_tag`). A
-  line's target may also be a **real account** (transfer leg — cashback → Cash); the split panel
-  being reused already supports split transfers (7d.3).
-- **`remaining 0,00 ✓`** readout (Σ items vs parsed total) as the parse sanity check.
-- **⇄ Redistribute tax:** spreads the Tax line pro-rata over the other items, removes it, total
-  preserved.
-- **Tests:** unit for the redistribute arithmetic (pure); MockMvc acceptance for the table
-  editing, the readout, and persistence; reuse of the register's picker fragments asserted.
+- **Review changes nothing but the draft.** Post-process is editing the AI analysis result;
+  Save persists the draft and the receipt **stays `processed`** — `committed` (9g's Confirm) *is*
+  the reviewed state. Saved-but-unconfirmed = interrupted work, deliberately unmarked (owner
+  call: no `reviewed_at`, no extra state).
+- **Panel reuse = shared line-editor core.** The per-line row editor (category/account picker,
+  amount, tags, note, `→ Person`) is extracted from `fragments/split-panel.html` into a
+  sub-fragment both surfaces render; the register keeps its wrapper (funding header, view-state,
+  dock POSTs), receipts get their own wrapper on the `processed` view posting to
+  `/receipts/{id}/…`, assembled via `operations`' public API (edge exists). The
+  `keyboard.js` `data-split-*` markup contract is shared, so the live remaining readout comes
+  free. No whole-fragment mode switch, no copy.
+- **One explicit Save.** Header + all lines are one form; Save delete-and-reinserts the draft
+  lines (`receipt_line` + `_tag`; header chips expand per-line, T-RX-3) and updates the header.
+  ↑/↓/Esc/Back get the 9c-style dirty guard; no autosave, navigation never writes.
+- **Migration V14** (V13 was taken by the 9e follow-up `settings.ai_system_prompt`):
+  `receipt.payee_id` (header payee, created-on-Save via the picker's
+  create-new; `merchant_text` stays the parse fact) and `receipt_line.ai_target_text` (the AI's
+  raw target term — unresolved category echo, or the transfer signal stored as
+  `transfer: cash` / `transfer: card •1234`). The 9e seeder now populates it.
+- **Header:** date · payee (picker text **prefilled from `merchant_text`** — case-insensitive
+  exact match pre-selects, else create-new is one Enter away; nothing persists until Save) ·
+  account (detected pre-filled, always changeable) · currency · **editable total**
+  (mis-read totals are fixable; persists to `total_amount`). `remaining = total − Σ lines`,
+  live; null total → neutral "no total" hint instead of ✓/⚠. **Currency ≠ account currency
+  warns at Save, never blocks** (lenient-draft philosophy); 9g's Confirm hard-blocks.
+  Cross-currency receipt commits → backlog.
+- **Ghost = hint on unresolved lines.** Resolved AI categories display as plain picker values
+  (override is one keystroke); unresolved lines show `ai_target_text` as a grey non-committing
+  hint ("AI said: …"), which also marks a targetless transfer line for what it is; resolved
+  lines carry the term as a provenance tooltip. The 9e parse-telemetry line stays at the bottom.
+- **⇄ Redistribute is a per-line action** — "spread this line over the others, remove it"; no
+  Tax-detection heuristics (two VAT lines = two clicks; works for Pfand/rounding lines too).
+  Spread base: **all lines except real-account transfer legs** (beneficiary lines absorb — their
+  items bore tax too; negative lines participate with negative shares); cent-level
+  largest-remainder so the total is preserved exactly; refused when the absorbing lines sum to
+  zero. Server round-trip re-rendering unsaved form state — persisted only at Save.
+- **Tests:** unit for the redistribute arithmetic (pure) and the seeder's `ai_target_text`
+  cases; integration round-trips for the V13 columns; MockMvc acceptance for the surface, the
+  Save round-trip, the readout, the mismatch warning, ghost/hint rendering, and the shared
+  line-editor fragment reuse. The JS leaf stays untested per the standing rule.
 
 **Done when:** a processed receipt can be brought to complete, balanced transaction detail
 without leaving the pane.

@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.34
-**Date:** 2026-08-01
+**Status:** Draft v0.36
+**Date:** 2026-08-02
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md` (the five authoritative design docs)
@@ -23,6 +23,13 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.36 (2026-08-02):** **9f grilled & planned** (owner-confirmed; not yet implemented).
+  Review is draft-editing only — Save never changes state (`committed` is the reviewed state;
+  no reviewed-marker). Entity changes (V14, data-model v0.11): `receipt.payee_id`,
+  `receipt_line.ai_target_text`. The header total becomes **editable**; the split panel is reused
+  as a **shared line-editor core**; ⇄ Redistribute is a **per-line** action (no Tax detection);
+  **cross-currency receipt commits deferred** to §14 (Save warns, Confirm blocks). Details in the
+  sub-plan §9f; receipt doc v0.5.
 - **v0.35 (2026-08-02):** **9e complete** (owner-confirmed) — single-receipt analyse shipped. Scope
   addition from owner feedback: the receipt-parser **system prompt is operator-editable** (new
   `settings.ai_system_prompt`, V13; NULL = built-in default), edited on a receipts-owned screen that
@@ -500,7 +507,10 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
   phone grid is a fixed 90-day, newest-first, all-states list; controls to filter or re-sort it are
   deferred (stage 9b). **Receipt register search + column re-sort** — the §5.2 fuzzy search
   (merchant + AI note + line text) and re-sortable columns arrive with the first parsed data
-  (9c/9e), not in the 9b skeleton.
+  (9c/9e), not in the 9b skeleton. **Cross-currency receipt commits** — a receipt whose currency
+  differs from the paying account's (foreign card payments): post-process (9f) warns at Save,
+  Confirm (9g) blocks until they match; committing through the dock's cross-currency path (with a
+  funding-total field) is deferred until the need is real.
 - **Auth / LAN-open stance:** the app is unauthenticated and open on the LAN; receipts (capture
   surface, image serving) do not change this. Minimal auth is tracked under *Ops & hardening* below
   (ARCH-04) and is the prerequisite for any non-localhost exposure.
