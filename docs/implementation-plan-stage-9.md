@@ -309,7 +309,7 @@ with seeded draft lines — or `failed` with retry. Decisions below grilled & se
 **Done when:** a real receipt analysed end-to-end (manually, against the live API) seeds correct
 draft lines with token counts and cost recorded; all suites green without network.
 
-## 9f — Post-process: the full split toolkit
+## 9f — Post-process: the full split toolkit ✅ **complete** (owner-confirmed 2026-08-02)
 
 **Goal:** the §6.3 review surface — image left, editable item table right, full transaction
 detail. Decisions below grilled & settled 2026-08-02 (data-model to v0.11).
