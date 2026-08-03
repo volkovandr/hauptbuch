@@ -10,14 +10,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -67,7 +64,7 @@ class ReceiptCaptureScreenIntegrationTest {
   @Test
   void uploadStoresTheScanAndRedirectsToTheGrid() throws Exception {
     mockMvc
-        .perform(multipart("/receipts").file(jpegPart()))
+        .perform(multipart("/receipts").file(ReceiptImages.jpegPart()))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl(CAPTURE_PATH));
 
@@ -92,7 +89,9 @@ class ReceiptCaptureScreenIntegrationTest {
 
   @Test
   void gridShowsCapturedReceiptsAndServesTheirImages() throws Exception {
-    mockMvc.perform(multipart("/receipts").file(jpegPart())).andExpect(status().is3xxRedirection());
+    mockMvc
+        .perform(multipart("/receipts").file(ReceiptImages.jpegPart()))
+        .andExpect(status().is3xxRedirection());
     long id = latestReceiptId();
 
     // The grid renders a tile linking to the full-scale image.
@@ -114,7 +113,9 @@ class ReceiptCaptureScreenIntegrationTest {
 
   @Test
   void mobileDeleteRemovesNewReceiptAndItsFiles() throws Exception {
-    mockMvc.perform(multipart("/receipts").file(jpegPart())).andExpect(status().is3xxRedirection());
+    mockMvc
+        .perform(multipart("/receipts").file(ReceiptImages.jpegPart()))
+        .andExpect(status().is3xxRedirection());
     long id = latestReceiptId();
     String path = latestOriginalPath();
     assertThat(Files.exists(STORAGE_ROOT.resolve(path))).isTrue();
@@ -153,21 +154,6 @@ class ReceiptCaptureScreenIntegrationTest {
         .param("id", id)
         .query(Boolean.class)
         .single();
-  }
-
-  private static MockMultipartFile jpegPart() {
-    return new MockMultipartFile("image", "photo.jpg", "image/jpeg", jpegBytes());
-  }
-
-  private static byte[] jpegBytes() {
-    BufferedImage img = new BufferedImage(120, 160, BufferedImage.TYPE_INT_RGB);
-    ByteArrayOutputStream out = new ByteArrayOutputStream();
-    try {
-      ImageIO.write(img, "jpg", out);
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
-    return out.toByteArray();
   }
 
   private static Path tempRoot() {

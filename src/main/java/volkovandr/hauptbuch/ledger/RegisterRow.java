@@ -29,6 +29,9 @@ import java.time.LocalDate;
  * @param runningBalance the account's native running balance up to and including this leg
  * @param lifecycle {@code pending_review} rows render muted with no balance (register §2.10)
  * @param reconciliation drives the reconciliation status glyph
+ * @param receiptId the live receipt this transaction was booked from (register §7, plan stage 9g),
+ *     or null — the paperclip's target. Read straight out of the SQL rather than through a {@code
+ *     receipts} service call, which would close a {@code ledger → receipts} module cycle
  */
 public record RegisterRow(
     long postingId,
@@ -43,4 +46,5 @@ public record RegisterRow(
     BigDecimal amount,
     BigDecimal runningBalance,
     String lifecycle,
-    String reconciliation) {}
+    String reconciliation,
+    Long receiptId) {}

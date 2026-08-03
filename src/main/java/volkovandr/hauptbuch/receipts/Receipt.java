@@ -47,6 +47,8 @@ import java.time.OffsetDateTime;
  * @param receiptNumber parsed printed receipt/Beleg number (9e); null until processed
  * @param payeeId the header payee the operator picks or creates at post-process Save (9f); null
  *     until then ({@code merchantText} stays the parse fact)
+ * @param note the operator's header note (9g), copied to {@code transaction.note} at Confirm; null
+ *     until entered. Distinct from {@code aiNote}, which steers the parse rather than the booking
  */
 public record Receipt(
     Long receiptId,
@@ -76,7 +78,8 @@ public record Receipt(
     String merchantCountry,
     LocalTime receiptTime,
     String receiptNumber,
-    Long payeeId) {
+    Long payeeId,
+    String note) {
 
   /** The image path actually shown: the edited derivative when present, else the raw original. */
   public String displayPath() {

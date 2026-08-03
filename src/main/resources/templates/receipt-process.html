@@ -26,59 +26,7 @@
     <!-- A rejected Save (e.g. a mangled edited upload) redirects back with the reason shown here. -->
     <p class="warning" th:if="${editError}" th:text="${editError}">Could not save the edit.</p>
 
-    <!-- ── Common chrome: prev / next, back, state, delete (hidden while editing) ── -->
-    <div class="receipt-process__chrome" data-receipt-chrome>
-      <a
-        class="btn"
-        th:href="@{/receipts(state=${stateFilter},range=${rangeFilter})}"
-        data-receipt-back
-        title="Back to the register (Backspace or Esc)"
-        >← Back</a
-      >
-      <span class="receipt-process__nav">
-        <a
-          class="btn"
-          th:if="${neighbours.prev() != null}"
-          th:href="@{/receipts/{id}(id=${neighbours.prev()},state=${stateFilter},range=${rangeFilter})}"
-          data-receipt-prev
-          title="Previous receipt (↑)"
-          >↑ Prev</a
-        >
-        <span class="btn is-disabled" th:unless="${neighbours.prev() != null}" aria-disabled="true"
-          >↑ Prev</span
-        >
-        <a
-          class="btn"
-          th:if="${neighbours.next() != null}"
-          th:href="@{/receipts/{id}(id=${neighbours.next()},state=${stateFilter},range=${rangeFilter})}"
-          data-receipt-next
-          title="Next receipt (↓)"
-          >↓ Next</a
-        >
-        <span class="btn is-disabled" th:unless="${neighbours.next() != null}" aria-disabled="true"
-          >↓ Next</span
-        >
-      </span>
-      <span
-        class="rstate"
-        th:classappend="'rstate--' + ${receipt.state()}"
-        th:text="${#strings.capitalize(#strings.replace(receipt.state(), '_', ' '))}"
-        >New</span
-      >
-      <!-- Delete is the 3-way keep/delete-files rung for any NON-committed state; a committed
-           receipt's deletion is the transaction-aware 5-way dialog (§7/9g), so no button here. -->
-      <button
-        class="btn btn--danger"
-        type="button"
-        th:if="${receipt.state() != 'committed'}"
-        data-receipt-delete
-        th:attr="hx-get=@{/receipts/{id}/delete-confirm(id=${receipt.receiptId()},state=${stateFilter},range=${rangeFilter})}"
-        hx-target="#receipt-dialog"
-        hx-swap="innerHTML"
-      >
-        Delete
-      </button>
-    </div>
+    <div th:replace="~{:: chrome(false)}"></div>
 
     <!-- ── The pre-process views: `new` and `pre_processed` (§6.1) ─────────────── -->
     <th:block th:if="${receipt.state() == 'new' or receipt.state() == 'pre_processed'}">
@@ -219,13 +167,15 @@
       </div>
     </section>
 
-    <!-- ── processed: the post-process editor (plan §9f) — image left, editable detail right ── -->
-    <!-- Wider data column (owner feedback): image ~40%, editable data ~60%. The editor form is
-         re-rendered on its own (add/remove/redistribute/Save swap #receipt-editor); the parse
-         telemetry sits outside it, below, unchanged by line edits. -->
+    <!-- ── processed + committed: the post-process editor (plan §9f/§9g) ─────────────────────────
+         Image left, detail right (image ~40%, data ~60% — owner feedback). ONE surface for both
+         states: `committed` is the same editor rendered read-only (plan §9g), so the booked result
+         is inspected in the shape it was reviewed in. Confirm swaps #receipt-pane in place (the
+         chrome rides along out-of-band) — the pile rhythm is "commit, ↓, next receipt", and the
+         booked result deserves a glance before you move on. -->
     <section
       class="receipt-process__read receipt-process__read--data"
-      th:if="${receipt.state() == 'processed'}"
+      th:if="${receipt.state() == 'processed' or receipt.state() == 'committed'}"
     >
       <figure class="receipt-process__image">
         <a th:href="@{/receipts/{id}/edited(id=${receipt.receiptId()})}" target="_blank" rel="noopener">
@@ -233,15 +183,7 @@
         </a>
       </figure>
       <div class="receipt-process__side">
-        <div th:replace="~{:: editor}"></div>
-
-        <p class="receipt-telemetry muted">
-          Parsed with
-          <span class="num" th:text="${receipt.tokensIn()} ?: 0">1200</span> in /
-          <span class="num" th:text="${receipt.tokensOut()} ?: 0">300</span> out tokens<span
-            th:if="${receipt.parseCost() != null}"> · $<span class="num" th:text="${receipt.parseCost()}">0.006</span></span
-          >.
-        </p>
+        <div th:replace="~{:: pane}"></div>
       </div>
 
       <!-- Dirty guard (plan §9f, the 9c-style undo protection): a page-scoped leaf (CLAUDE.md §1.6)
@@ -323,12 +265,7 @@
       </div>
     </section>
 
-    <!-- ── committed: the confirm/link views land in 9g ─────────────────────────── -->
-    <section class="receipt-process__placeholder" th:if="${receipt.state() == 'committed'}">
-      <p class="muted">This receipt is committed. Its confirm and link screens arrive in a later step.</p>
-    </section>
-
-    <!-- Transient dialog mount (the 3-way delete confirm), cleared by the keyboard.js overlay leaf. -->
+    <!-- Transient dialog mount (the delete confirms), cleared by the keyboard.js overlay leaf. -->
     <div id="receipt-dialog"></div>
 
     <!-- Page-scoped JS leaves (§1.6): Cropper.js library, then the editor component that drives it.
@@ -337,6 +274,116 @@
     <script th:src="@{/js/cropper.min.js}"></script>
     <script th:src="@{/js/receipt-editor.js}"></script>
   </main>
+
+  <!-- ── Common chrome: back, prev / next, state, delete ──────────────────────────────────────────
+    A named fragment because Confirm and Reopen change two of its parts (the state badge and which
+    delete rung the Delete button opens) while swapping only the pane. They re-render it out of band
+    (`oob=true`), the same idiom the register's entry dock uses to reset itself after a commit. -->
+  <div
+    th:fragment="chrome(oob)"
+    id="receipt-chrome"
+    class="receipt-process__chrome"
+    data-receipt-chrome
+    th:attr="hx-swap-oob=${oob} ? 'true' : null"
+  >
+    <a
+      class="btn"
+      th:href="@{/receipts(state=${stateFilter},range=${rangeFilter})}"
+      data-receipt-back
+      title="Back to the register (Backspace or Esc)"
+      >← Back</a
+    >
+    <span class="receipt-process__nav">
+      <a
+        class="btn"
+        th:if="${neighbours.prev() != null}"
+        th:href="@{/receipts/{id}(id=${neighbours.prev()},state=${stateFilter},range=${rangeFilter})}"
+        data-receipt-prev
+        title="Previous receipt (↑)"
+        >↑ Prev</a
+      >
+      <span class="btn is-disabled" th:unless="${neighbours.prev() != null}" aria-disabled="true"
+        >↑ Prev</span
+      >
+      <a
+        class="btn"
+        th:if="${neighbours.next() != null}"
+        th:href="@{/receipts/{id}(id=${neighbours.next()},state=${stateFilter},range=${rangeFilter})}"
+        data-receipt-next
+        title="Next receipt (↓)"
+        >↓ Next</a
+      >
+      <span class="btn is-disabled" th:unless="${neighbours.next() != null}" aria-disabled="true"
+        >↓ Next</span
+      >
+    </span>
+    <span
+      class="rstate"
+      th:classappend="'rstate--' + ${receipt.state()}"
+      th:text="${#strings.capitalize(#strings.replace(receipt.state(), '_', ' '))}"
+      >New</span
+    >
+    <!-- Delete opens the rung this receipt's state calls for: the 3-way keep/delete-files dialog
+         for any non-committed state, the transaction-aware 5-way one once it backs a transaction
+         (plan §9g). Both swap into the same #receipt-dialog mount. -->
+    <button
+      class="btn btn--danger"
+      type="button"
+      data-receipt-delete
+      th:attr="hx-get=${receipt.state() == 'committed'}
+                 ? @{/receipts/{id}/delete-committed-confirm(id=${receipt.receiptId()},state=${stateFilter},range=${rangeFilter})}
+                 : @{/receipts/{id}/delete-confirm(id=${receipt.receiptId()},state=${stateFilter},range=${rangeFilter})}"
+      hx-target="#receipt-dialog"
+      hx-swap="innerHTML"
+    >
+      Delete
+    </button>
+  </div>
+
+  <!-- ── The post-process / committed pane (plan §9g) ─────────────────────────────────────────────
+    Everything Confirm and Reopen flip between: the editor (editable, or the same fragment rendered
+    read-only), the committed receipt's own actions, and the parse telemetry, which stays put through
+    every line edit. Confirm/Reopen swap this whole div; the line round-trips (add / remove / ⇄ /
+    Save) still swap only #receipt-editor inside it. -->
+  <div th:fragment="pane" id="receipt-pane">
+    <div th:replace="~{:: editor}"></div>
+
+    <!-- The committed receipt's actions (plan §9g). Edit transaction jumps to the register with the
+         booked row selected and docked; Reopen is instant (nothing is written but the state) and
+         turns the pane back into the editor, where Confirm now reads "Re-enter". -->
+    <div class="receipt-process__actions" th:if="${readOnly}">
+      <a
+        class="btn"
+        th:if="${receipt.transactionId() != null}"
+        th:href="@{/register(selected=${receipt.transactionId()})}"
+        >Edit transaction</a
+      >
+      <button
+        type="button"
+        class="btn"
+        hx-target="#receipt-pane"
+        hx-swap="outerHTML"
+        th:attr="hx-post=@{/receipts/{id}/reopen(id=${id},state=${stateFilter},range=${rangeFilter})}"
+      >
+        Reopen
+      </button>
+    </div>
+
+    <p class="receipt-telemetry muted">
+      Parsed with
+      <span class="num" th:text="${receipt.tokensIn()} ?: 0">1200</span> in /
+      <span class="num" th:text="${receipt.tokensOut()} ?: 0">300</span> out tokens<span
+        th:if="${receipt.parseCost() != null}"> · $<span class="num" th:text="${receipt.parseCost()}">0.006</span></span
+      >.
+    </p>
+  </div>
+
+  <!-- The Confirm / Reopen response: the pane (the primary swap) plus the chrome out-of-band, so the
+       state badge and the Delete rung follow the receipt into (or out of) its committed shape. -->
+  <th:block th:fragment="paneResponse">
+    <th:block th:replace="~{:: pane}"></th:block>
+    <th:block th:replace="~{:: chrome(true)}"></th:block>
+  </th:block>
 
   <!-- ── The 3-way keep/delete-files dialog (receipt doc §6), full-navigation POSTs ── -->
   <div th:fragment="deleteDialog" class="receipt-dialog" data-receipt-dialog>
@@ -355,6 +402,39 @@
         <input type="hidden" name="range" th:value="${rangeFilter}" />
         <input type="hidden" name="removeFiles" value="true" />
         <button type="submit" class="btn btn--danger">Delete files too</button>
+      </form>
+      <button type="button" class="btn btn--ghost" data-receipt-dismiss>Cancel</button>
+    </div>
+  </div>
+
+  <!-- ── The committed 5-way delete dialog (plan §9g, the ladder's last rung) ─────────────────────
+    Two independent axes — void the booked transaction or keep it, remove the image files or keep
+    them — plus Cancel. All four non-cancel choices soft-delete the receipt KEEPING its
+    transaction_id: every live-link query scopes to `deleted_at is null`, so unlinking is an effect
+    of the delete rather than a column write, and the audit trail survives. A kept transaction is
+    thereafter indistinguishable from a hand-entered one (intended). -->
+  <div th:fragment="deleteCommittedDialog" class="receipt-dialog" data-receipt-dialog>
+    <p class="receipt-dialog__prompt">
+      This receipt backs a booked transaction. Void that transaction too, or leave it in the ledger?
+    </p>
+    <div class="receipt-dialog__actions">
+      <form
+        method="post"
+        th:action="@{/receipts/{id}/delete-committed(id=${id})}"
+        th:each="choice : ${deleteChoices}"
+      >
+        <input type="hidden" name="state" th:value="${stateFilter}" />
+        <input type="hidden" name="range" th:value="${rangeFilter}" />
+        <input type="hidden" name="voidTransaction" th:value="${choice.voidTransaction()}" />
+        <input type="hidden" name="removeFiles" th:value="${choice.removeFiles()}" />
+        <button
+          type="submit"
+          class="btn"
+          th:classappend="${choice.voidTransaction()} ? 'btn--danger'"
+          th:text="${choice.label()}"
+        >
+          Void the transaction, keep the files
+        </button>
       </form>
       <button type="button" class="btn btn--ghost" data-receipt-dismiss>Cancel</button>
     </div>
@@ -399,8 +479,26 @@
              action=@{/receipts/{id}/lines/save(id=${id})},
              hx-post=@{/receipts/{id}/lines/save(id=${id})}"
   >
-    <p class="entry-dock__title eyebrow">✎ Review receipt</p>
+    <p
+      class="entry-dock__title eyebrow"
+      th:text="${readOnly} ? '✓ Booked receipt' : '✎ Review receipt'"
+    >
+      ✎ Review receipt
+    </p>
 
+    <!-- The carried register filter + order, so Confirm/Reopen can re-resolve the prev/next
+         neighbours the out-of-band chrome renders. Outside the fieldset below: it stays submittable
+         when the pane is read-only. -->
+    <input type="hidden" name="state" th:value="${stateFilter}" />
+    <input type="hidden" name="range" th:value="${rangeFilter}" />
+
+    <!-- The committed view IS this editor, disabled (plan §9g): one `disabled` fieldset turns every
+         input, picker, and per-line button read-only at once, so the booked receipt is inspected in
+         exactly the shape it was reviewed in — no parallel read-only template to keep in step. -->
+    <fieldset
+      class="receipt-editor__body"
+      th:attr="disabled=${readOnly} ? 'disabled' : null"
+    >
     <div class="entry-dock__fields">
       <div class="field">
         <label class="field__label" for="receipt-date">Date</label>
@@ -470,6 +568,26 @@
           data-split-total-input
         />
       </div>
+
+      <!-- The printed receipt/Beleg number (plan §9g): prefilled from the parse, editable, saved
+           with the header. A reference the operator may want to keep even when the AI misread it. -->
+      <div class="field">
+        <label class="field__label" for="receipt-number">Receipt no.</label>
+        <input
+          id="receipt-number"
+          name="receiptNumber"
+          class="input"
+          autocomplete="off"
+          th:value="${editor.receiptNumber()}"
+        />
+      </div>
+    </div>
+
+    <!-- The header note (plan §9g): free text, persisted on Save and copied to transaction.note at
+         Confirm. Distinct from the AI note of the pre-process step, which steers the parse. -->
+    <div class="field">
+      <label class="field__label" for="receipt-note">Note</label>
+      <textarea id="receipt-note" name="note" rows="2" class="input" th:text="${editor.note()}"></textarea>
     </div>
 
     <!-- The chosen currency differs from the paying account's — warned here, never blocked (9g's
@@ -530,12 +648,37 @@
       </span>
       <span class="split-status__hint muted" th:if="${editor.status() == 'none'}">no total set</span>
     </div>
+    </fieldset>
 
-    <p class="actions">
+    <!-- Save keeps the draft (lenient); Confirm books it (the hard-blocking gate, plan §9g). On a
+         reopened receipt Confirm becomes "Re-enter": it voids the transaction booked last time —
+         register hand-edits included, the settled no-drift-check — and books afresh, so it asks
+         first. Confirm swaps the whole pane, which comes back read-only. -->
+    <p class="actions" th:unless="${readOnly}">
       <button type="submit" class="btn" data-split-save>Save</button>
+      <button
+        type="button"
+        class="btn btn--primary"
+        data-receipt-confirm
+        hx-include="closest form"
+        hx-target="#receipt-pane"
+        hx-swap="outerHTML"
+        th:text="${reentry} ? 'Re-enter' : 'Confirm'"
+        th:attr="hx-post=@{/receipts/{id}/confirm(id=${id})}, hx-confirm=${reentry} ? 'Re-entering voids the transaction booked from this receipt — register edits included — and books a new one. Continue?' : null"
+      >
+        Confirm
+      </button>
     </p>
 
     <p class="entry-dock__note muted" th:if="${editorSaved}" data-receipt-editor-saved>Saved.</p>
     <p class="entry-dock__error warning" th:if="${editorError}" th:text="${editorError}"></p>
+
+    <!-- Every hard block the Confirm gate found, stated at once: rediscovering them one Confirm at
+         a time would be its own small punishment. -->
+    <ul class="entry-dock__error warning" th:if="${confirmProblems}" data-receipt-confirm-problems>
+      <li th:each="problem : ${confirmProblems}" th:text="${problem}">
+        Pick the receipt's date before confirming.
+      </li>
+    </ul>
   </form>
 </html>

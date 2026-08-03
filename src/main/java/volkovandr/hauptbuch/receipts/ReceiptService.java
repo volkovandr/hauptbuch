@@ -120,7 +120,21 @@ public class ReceiptService {
       throw new IllegalStateException(
           "A committed receipt is deleted through the transaction dialog, not the ladder");
     }
-    receiptRepository.softDelete(receiptId);
+    softDelete(receipt, removeFiles);
+  }
+
+  /**
+   * The committed rung of the same ladder (9g): soft-delete a committed receipt, keeping its {@code
+   * transaction_id}. Whether the backing transaction is voided is the caller's decision — {@link
+   * ReceiptCommitService} owns the 5-way dialog's two axes; this half only touches the receipt.
+   */
+  void deleteCommitted(long receiptId, boolean removeFiles) {
+    softDelete(requireLive(receiptId), removeFiles);
+  }
+
+  /** Stamp {@code deleted_at} and, when asked, remove the scan and its derivatives from disk. */
+  private void softDelete(Receipt receipt, boolean removeFiles) {
+    receiptRepository.softDelete(receipt.receiptId());
     if (removeFiles) {
       receiptStorage.deleteFiles(receipt.originalPath(), receipt.editedPath());
     }

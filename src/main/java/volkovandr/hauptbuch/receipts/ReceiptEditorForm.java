@@ -23,6 +23,9 @@ import org.springframework.util.MultiValueMap;
  * @param accountId the chosen paying account id, or null
  * @param currencyCode the chosen header currency
  * @param total the editable total as typed
+ * @param note the header note (9g) — persisted on Save, copied to {@code transaction.note} at
+ *     Confirm
+ * @param receiptNumber the printed receipt/Beleg number (9g) — prefilled from the parse, editable
  * @param lineDescription per-line parsed item name (editable)
  * @param categoryText per-line category/transfer/person text
  * @param lineCategoryId per-line resolved id (category or transfer-target account id)
@@ -42,6 +45,8 @@ public record ReceiptEditorForm(
     Long accountId,
     String currencyCode,
     String total,
+    String note,
+    String receiptNumber,
     List<String> lineDescription,
     List<String> categoryText,
     List<String> lineCategoryId,
@@ -103,9 +108,11 @@ public record ReceiptEditorForm(
     return new ReceiptEditorForm(
         params.getFirst("date"),
         params.getFirst("payeeText"),
-        parseLong(params.getFirst("accountId")),
+        ReceiptEditorText.parseId(params.getFirst("accountId")),
         params.getFirst("currencyCode"),
         params.getFirst("total"),
+        params.getFirst("note"),
+        params.getFirst("receiptNumber"),
         strings(params, "lineDescription"),
         strings(params, "categoryText"),
         strings(params, "lineCategoryId"),
@@ -128,22 +135,11 @@ public record ReceiptEditorForm(
   private static List<Long> longs(MultiValueMap<String, String> params, String name) {
     List<Long> ids = new ArrayList<>();
     for (String raw : strings(params, name)) {
-      Long id = parseLong(raw);
+      Long id = ReceiptEditorText.parseId(raw);
       if (id != null) {
         ids.add(id);
       }
     }
     return ids;
-  }
-
-  private static Long parseLong(String raw) {
-    if (raw == null || raw.isBlank()) {
-      return null;
-    }
-    try {
-      return Long.valueOf(raw.strip());
-    } catch (NumberFormatException e) {
-      return null;
-    }
   }
 }

@@ -34,6 +34,18 @@ final class ReceiptEditorText {
     }
   }
 
+  /** Parse a hidden id field; a blank or unparseable value reads as null. */
+  static Long parseId(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return null;
+    }
+    try {
+      return Long.valueOf(raw.strip());
+    } catch (NumberFormatException e) {
+      return null;
+    }
+  }
+
   /** Parse an ISO date; a blank or unparseable value reads as null. */
   static LocalDate parseDate(String raw) {
     if (raw == null || raw.isBlank()) {

@@ -204,8 +204,25 @@
     }
   }
 
-  /** Scroll every [data-scroll-bottom] container to its bottom (register newest-at-bottom, §2.1). */
+  /** Whether an htmx swap replaced any navigable rows (vs. swapping only the dock or a panel). */
+  function swapTouchedRows(target) {
+    if (!target || !target.querySelector) {
+      return false;
+    }
+    return (target.matches && target.matches(ROW)) || target.querySelector(ROW) !== null;
+  }
+
+  /**
+   * Scroll every [data-scroll-bottom] container to its bottom (register newest-at-bottom, §2.1) —
+   * unless the server pre-selected a row (the receipt→register jump, register §7): then that row is
+   * what the user came for, so centre it instead and leave the keyboard selection standing on it.
+   */
   function scrollToBottom() {
+    const preselected = document.querySelector("[data-kbd-row]." + SELECTED);
+    if (preselected) {
+      preselected.scrollIntoView({ block: "center" });
+      return;
+    }
     document
       .querySelectorAll("[data-scroll-bottom]")
       .forEach((el) => (el.scrollTop = el.scrollHeight));
@@ -621,13 +638,17 @@
     updateSplitReadout();
   });
 
-  // After an htmx swap, a selected row may have been replaced; drop a stale selection so the next
-  // arrow keypress re-selects from a clean state, re-anchor the newest-at-bottom scroll, and
-  // re-mirror the dock's edit state onto the rows (all no-ops when htmx is absent).
+  // After an htmx swap that REPLACED ROWS, drop a stale selection so the next arrow keypress
+  // re-selects from a clean state, and re-anchor the newest-at-bottom scroll. Scoped to swaps that
+  // actually touched rows: a dock-only swap (the ✎ affordance, or the receipt→register jump's
+  // load-triggered dock, register §7) leaves the rows standing, and clearing there would strip the
+  // server-marked [row--selected] and scroll away from the very row the jump just centred.
   document.body &&
     document.body.addEventListener("htmx:afterSwap", function (event) {
-      rows().forEach((r) => r.classList.remove(SELECTED));
-      scrollToBottom();
+      if (swapTouchedRows(event.target)) {
+        rows().forEach((r) => r.classList.remove(SELECTED));
+        scrollToBottom();
+      }
       syncEditingRow();
       updateSplitReadout();
       const config = event.detail && event.detail.requestConfig;

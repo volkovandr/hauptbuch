@@ -141,7 +141,8 @@ class RegisterRowRenderer {
         !pending && row.runningBalance().signum() < 0,
         pending,
         row.reconciliation(),
-        tags);
+        tags,
+        row.receiptId());
   }
 
   /**

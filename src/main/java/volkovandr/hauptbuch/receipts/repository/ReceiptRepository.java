@@ -9,6 +9,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.receipts.ParsedHeader;
 import volkovandr.hauptbuch.receipts.Receipt;
+import volkovandr.hauptbuch.receipts.ReceiptHeaderDraft;
 import volkovandr.hauptbuch.receipts.ReceiptParseResult;
 
 /**
@@ -156,16 +157,11 @@ public class ReceiptRepository {
 
   /**
    * Persist the post-process header edits (9f): the operator's date, payee, paying account, header
-   * currency, and (editable) total. The receipt stays {@code processed} — Save reviews the draft,
-   * it does not advance the state ({@code committed} is 9g's Confirm). Scoped to a live receipt.
+   * currency, (editable) total, and — from 9g — the header note and receipt number. The receipt
+   * stays {@code processed} — Save reviews the draft, it does not advance the state ({@code
+   * committed} is 9g's Confirm). Scoped to a live receipt.
    */
-  public void saveEditorHeader(
-      long receiptId,
-      LocalDate receiptDate,
-      Long payeeId,
-      Long accountId,
-      String currencyCode,
-      BigDecimal totalAmount) {
+  public void saveEditorHeader(long receiptId, ReceiptHeaderDraft header) {
     jdbcClient
         .sql(
             """
@@ -174,14 +170,51 @@ public class ReceiptRepository {
                    payee_id = :payeeId,
                    account_id = :accountId,
                    currency_code = :currencyCode,
-                   total_amount = :totalAmount
+                   total_amount = :totalAmount,
+                   note = :note,
+                   receipt_number = :receiptNumber
              where receipt_id = :id and deleted_at is null
             """)
-        .param("receiptDate", receiptDate)
-        .param("payeeId", payeeId)
-        .param("accountId", accountId)
-        .param("currencyCode", currencyCode)
-        .param("totalAmount", totalAmount)
+        .param("receiptDate", header.receiptDate())
+        .param("payeeId", header.payeeId())
+        .param("accountId", header.accountId())
+        .param("currencyCode", header.currencyCode())
+        .param("totalAmount", header.totalAmount())
+        .param("note", header.note())
+        .param("receiptNumber", header.receiptNumber())
+        .param("id", receiptId)
+        .update();
+  }
+
+  /**
+   * Book a reviewed draft (9g Confirm): link the receipt to the transaction it materialised and
+   * flip it to {@code committed}. Scoped to a live receipt; returns the rows affected.
+   */
+  public int markCommitted(long receiptId, long transactionId) {
+    return jdbcClient
+        .sql(
+            """
+            update receipt set state = 'committed', transaction_id = :transactionId
+            where receipt_id = :id and deleted_at is null
+            """)
+        .param("transactionId", transactionId)
+        .param("id", receiptId)
+        .update();
+  }
+
+  /**
+   * Reopen a {@code committed} receipt (9g): back to {@code processed} for another round of
+   * editing. Nothing else is written — the transaction is untouched and the {@code transaction_id}
+   * link is <em>kept</em>, which is what later makes the confirm button read "Re-enter". Returns
+   * the rows affected (zero when the receipt is not a live committed one).
+   */
+  public int reopen(long receiptId) {
+    return jdbcClient
+        .sql(
+            """
+            update receipt set state = 'processed'
+            where receipt_id = :id and state = 'committed' and deleted_at is null
+            """)
         .param("id", receiptId)
         .update();
   }

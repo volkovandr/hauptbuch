@@ -10,20 +10,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -43,7 +37,7 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 @Transactional
 class ReceiptProcessingScreenIntegrationTest {
 
-  private static final Path STORAGE_ROOT = tempRoot();
+  private static final Path STORAGE_ROOT = ReceiptImages.tempStorageRoot();
   private static final String QUERY = "?state=queue&range=d90";
 
   @Autowired MockMvc mockMvc;
@@ -82,7 +76,7 @@ class ReceiptProcessingScreenIntegrationTest {
     mockMvc
         .perform(
             multipart("/receipts/" + id + "/pre-process")
-                .file(new MockMultipartFile("image", "edited.jpg", "image/jpeg", jpegBytes()))
+                .file(ReceiptImages.editedJpegPart())
                 .param("editRecipe", "{\"rotate\":90}")
                 .param("aiNote", "this is fuel"))
         .andExpect(status().is3xxRedirection())
@@ -126,19 +120,23 @@ class ReceiptProcessingScreenIntegrationTest {
   }
 
   @Test
-  void committedReceiptScreenHidesTheDeleteButton() throws Exception {
+  void committedReceiptScreenPointsDeleteAtTheFiveWayDialog() throws Exception {
     long id = upload();
     jdbcClient
         .sql("update receipt set state = 'committed' where receipt_id = :id")
         .param("id", id)
         .update();
 
-    // A committed receipt's deletion is the transaction-aware 5-way dialog (§7/9g), not this rung —
-    // so the processing screen offers no Delete button (which would 500 on the ladder path).
+    // A committed receipt's deletion is the transaction-aware 5-way dialog (§7, plan §9g), never
+    // the ladder's 3-way rung (which would 500 on ReceiptService.delete's committed guard).
     mockMvc
         .perform(get("/receipts/" + id))
         .andExpect(status().isOk())
-        .andExpect(content().string(not(containsString("data-receipt-delete"))));
+        .andExpect(content().string(containsString("/delete-committed-confirm")))
+        .andExpect(content().string(not(containsString("/delete-confirm?"))))
+        // The chrome is out-of-band only in a Confirm/Reopen response — never on a page load, where
+        // htmx would have nothing to swap it into.
+        .andExpect(content().string(not(containsString("hx-swap-oob"))));
   }
 
   @Test
@@ -174,7 +172,7 @@ class ReceiptProcessingScreenIntegrationTest {
 
   private long upload() throws Exception {
     mockMvc
-        .perform(multipart("/receipts/upload").file(jpegPart()))
+        .perform(multipart("/receipts/upload").file(ReceiptImages.jpegPart()))
         .andExpect(status().is3xxRedirection());
     return jdbcClient
         .sql("select receipt_id from receipt order by receipt_id desc limit 1")
@@ -187,7 +185,7 @@ class ReceiptProcessingScreenIntegrationTest {
     mockMvc
         .perform(
             multipart("/receipts/" + id + "/pre-process")
-                .file(new MockMultipartFile("image", "edited.jpg", "image/jpeg", jpegBytes()))
+                .file(ReceiptImages.editedJpegPart())
                 .param("editRecipe", "{}")
                 .param("aiNote", "this is fuel"))
         .andExpect(status().is3xxRedirection());
@@ -213,28 +211,5 @@ class ReceiptProcessingScreenIntegrationTest {
         .param("id", id)
         .query(Boolean.class)
         .single();
-  }
-
-  private static MockMultipartFile jpegPart() {
-    return new MockMultipartFile("image", "photo.jpg", "image/jpeg", jpegBytes());
-  }
-
-  private static byte[] jpegBytes() {
-    BufferedImage img = new BufferedImage(120, 160, BufferedImage.TYPE_INT_RGB);
-    ByteArrayOutputStream out = new ByteArrayOutputStream();
-    try {
-      ImageIO.write(img, "jpg", out);
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
-    return out.toByteArray();
-  }
-
-  private static Path tempRoot() {
-    try {
-      return Files.createTempDirectory("hauptbuch-process-test");
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
   }
 }

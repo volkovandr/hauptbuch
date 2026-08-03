@@ -197,6 +197,21 @@ th.register__spine {
   color: var(--green-ink);
 }
 
+/* The paperclip (register §7, plan stage 9g): this row was booked from a receipt. Always visible —
+   unlike the edit affordance it carries information, not just an action. */
+.register__receipt {
+  margin-left: 0.2rem;
+  font-size: 0.75rem;
+  line-height: 1;
+  text-decoration: none;
+}
+
+/* The jumped-to row (?selected=<txn>): the rows carry an inline hue background, so the selection
+   marker has to be the left tab rather than a wash. */
+.register__row.row--selected td {
+  box-shadow: inset 0 3px 0 var(--green-ink), inset 0 -3px 0 var(--green-ink);
+}
+
 .recon--unreconciled {
   color: var(--feint);
 }

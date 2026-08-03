@@ -114,21 +114,40 @@ public class ReceiptEditorService {
   /**
    * Persist the reviewed draft: header edits + a full rewrite of the lines. Stays {@code
    * processed}.
+   *
+   * <p>Refuses a {@code committed} receipt. Its draft is the middle link of the audit chain ({@code
+   * parse_raw} → {@code receipt_line} → postings, data-model §13.2), so rewriting it would leave
+   * the booked transaction described by lines it was never built from. The committed view renders
+   * the editor disabled, but that is a display rule — this is the invariant (CLAUDE.md §1.7).
+   * Reopen first; then Re-enter re-books from whatever the draft became.
+   *
+   * @throws IllegalStateException if the receipt is {@code committed}
    */
   public void save(long receiptId, ReceiptEditorForm form) {
+    if (receiptRepository
+        .findById(receiptId)
+        .filter(r -> ReceiptState.COMMITTED.equals(r.state()))
+        .isPresent()) {
+      throw new IllegalStateException(
+          "A committed receipt's draft is the record of what was booked — reopen it before"
+              + " editing");
+    }
     Long payeeId =
         ReceiptEditorText.blankToNull(form.payeeText()) == null
             ? null
             : payeeService.resolvePayee(null, form.payeeText());
     receiptRepository.saveEditorHeader(
         receiptId,
-        ReceiptEditorText.parseDate(form.date()),
-        payeeId,
-        form.accountId(),
-        ReceiptEditorText.blankToNull(form.currencyCode()),
-        ReceiptEditorText.blankToNull(form.total()) == null
-            ? null
-            : ReceiptEditorText.parse(form.total()));
+        new ReceiptHeaderDraft(
+            ReceiptEditorText.parseDate(form.date()),
+            payeeId,
+            form.accountId(),
+            ReceiptEditorText.blankToNull(form.currencyCode()),
+            ReceiptEditorText.blankToNull(form.total()) == null
+                ? null
+                : ReceiptEditorText.parse(form.total()),
+            ReceiptEditorText.blankToNull(form.note()),
+            ReceiptEditorText.blankToNull(form.receiptNumber())));
 
     receiptLineRepository.deleteByReceiptId(receiptId);
     int sortOrder = 0;
@@ -178,6 +197,8 @@ public class ReceiptEditorService {
         form.accountId(),
         form.currencyCode(),
         form.total(),
+        form.note(),
+        form.receiptNumber(),
         working);
   }
 }

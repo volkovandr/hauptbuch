@@ -55,11 +55,21 @@ class ReceiptEditorAssembler {
         form.accountId(),
         new SplitCurrency(false, currency, currency, currency, false, "", "", "", "", "0", "0"),
         MoneyFormat.number(total, FRACTION_DIGITS),
+        ReceiptEditorText.orEmpty(form.note()),
+        ReceiptEditorText.orEmpty(form.receiptNumber()),
         MoneyFormat.number(remaining, FRACTION_DIGITS),
         balanced,
-        !hasTotal ? "none" : balanced ? "ok" : "warn",
+        status(hasTotal, balanced),
         currencyMismatch(form),
         lines);
+  }
+
+  /** The readout's three-valued verdict, whose vocabulary {@link ReceiptEditor} owns. */
+  private static String status(boolean hasTotal, boolean balanced) {
+    if (!hasTotal) {
+      return ReceiptEditor.STATUS_NO_TOTAL;
+    }
+    return balanced ? ReceiptEditor.STATUS_BALANCED : ReceiptEditor.STATUS_UNBALANCED;
   }
 
   private static BigDecimal contribution(ReceiptEditorForm form, int i) {

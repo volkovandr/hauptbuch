@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.ledger.RegisterCounterpartLeg;
+import volkovandr.hauptbuch.ledger.RegisterOwnLeg;
 import volkovandr.hauptbuch.ledger.RegisterRow;
 
 /**
@@ -104,7 +105,15 @@ public class RegisterRepository {
                    threaded.amount,
                    threaded.running_balance,
                    threaded.lifecycle,
-                   threaded.reconciliation
+                   threaded.reconciliation,
+                   -- The paperclip (register §7, plan stage 9g): the live receipt this transaction
+                   -- was booked from. A scalar subquery rather than a join, so a transaction that
+                   -- somehow carries two live receipts can never double the register row; a
+                   -- soft-deleted receipt is not a live link, which is exactly how the committed
+                   -- delete's "keep the transaction" choice unlinks without writing a column.
+                   (select min(rcpt.receipt_id) from receipt rcpt
+                     where rcpt.transaction_id = threaded.transaction_id
+                       and rcpt.deleted_at is null) as receipt_id
             from threaded
             left join payee pay on threaded.payee_id = pay.payee_id
             left join country pay_country on pay.country_code = pay_country.country_code
@@ -156,6 +165,30 @@ public class RegisterRepository {
             """)
         .param(TRANSACTION_IDS, transactionIds)
         .query(RegisterCounterpartLeg.class)
+        .list();
+  }
+
+  /**
+   * A live transaction's legs into your own accounts, with its date — what the {@code selected=}
+   * jump (register §7, plan stage 9g) derives its filter from. Biggest magnitude first, so the
+   * account that actually funded the transaction leads. Empty for a voided or unknown transaction,
+   * which lets the jump fall back to the default register view rather than showing an empty one.
+   */
+  public List<RegisterOwnLeg> findOwnLegs(long transactionId) {
+    return jdbcClient
+        .sql(
+            """
+            select t.date, p.account_id
+            from posting p
+            join transaction t on p.transaction_id = t.transaction_id
+            join account a on p.account_id = a.account_id
+            where p.transaction_id = :transactionId
+              and t.deleted_at is null
+              and a.type in ('asset', 'liability')
+            order by abs(p.amount) desc, p.account_id
+            """)
+        .param("transactionId", transactionId)
+        .query(RegisterOwnLeg.class)
         .list();
   }
 }

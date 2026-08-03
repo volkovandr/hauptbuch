@@ -416,6 +416,109 @@ class RegisterSqlLogicTest {
             });
   }
 
+  // ── findRows: the receipt paperclip (register §7, plan stage 9g) ──────────
+
+  @Test
+  void rowCarriesTheLiveReceiptItWasBookedFrom() {
+    long cash = insertAccount(CASH, ASSET, EUR, 210);
+    long food = insertAccount(FOOD, EXPENSE, EUR, null);
+    long txn = spend(JAN_1, null, cash, food, HUNDRED);
+    long receipt = insertReceipt(txn);
+
+    assertThat(registerRepository.findRows(List.of(cash), null, null, null, EUR))
+        .singleElement()
+        .extracting(RegisterRow::receiptId)
+        .isEqualTo(receipt);
+  }
+
+  @Test
+  void rowHasNoPaperclipWithoutReceipt() {
+    long cash = insertAccount(CASH, ASSET, EUR, 210);
+    long food = insertAccount(FOOD, EXPENSE, EUR, null);
+    spend(JAN_1, null, cash, food, HUNDRED);
+
+    assertThat(registerRepository.findRows(List.of(cash), null, null, null, EUR))
+        .singleElement()
+        .extracting(RegisterRow::receiptId)
+        .isNull();
+  }
+
+  @Test
+  void softDeletedReceiptIsNoLongerLive() {
+    // The committed delete's "keep the transaction" choice unlinks by soft-deleting the receipt and
+    // never writes transaction_id (plan §9g) — so a deleted receipt must not paperclip its row.
+    long cash = insertAccount(CASH, ASSET, EUR, 210);
+    long food = insertAccount(FOOD, EXPENSE, EUR, null);
+    long txn = spend(JAN_1, null, cash, food, HUNDRED);
+    long receipt = insertReceipt(txn);
+    jdbcClient
+        .sql("update receipt set deleted_at = now() where receipt_id = :r")
+        .param("r", receipt)
+        .update();
+
+    assertThat(registerRepository.findRows(List.of(cash), null, null, null, EUR))
+        .singleElement()
+        .extracting(RegisterRow::receiptId)
+        .isNull();
+  }
+
+  @Test
+  void twoReceiptsOnOneTransactionStillYieldOneRow() {
+    // The link is read as a scalar subquery precisely so a stray second receipt cannot double the
+    // register row (which would double the running balance the eye reads off it).
+    long cash = insertAccount(CASH, ASSET, EUR, 210);
+    long food = insertAccount(FOOD, EXPENSE, EUR, null);
+    long txn = spend(JAN_1, null, cash, food, HUNDRED);
+    insertReceipt(txn);
+    insertReceipt(txn);
+
+    assertThat(registerRepository.findRows(List.of(cash), null, null, null, EUR)).hasSize(1);
+  }
+
+  // ── findOwnLegs: the receipt→register jump's derived filter ────────────────
+
+  @Test
+  void ownLegsCarryTheDateAndTheOwnAccountsBiggestFirst() {
+    long cash = insertAccount(CASH, ASSET, EUR, 210);
+    long giro = insertAccount(GIRO, ASSET, EUR, 30);
+    long food = insertAccount(FOOD, EXPENSE, EUR, null);
+    long txn = insertTxn(JAN_5, null, "confirmed");
+    insertPosting(txn, cash, "-10.00");
+    insertPosting(txn, giro, "-90.00");
+    insertPosting(txn, food, HUNDRED);
+
+    assertThat(registerRepository.findOwnLegs(txn))
+        .extracting(RegisterOwnLeg::accountId)
+        .containsExactly(giro, cash); // the category leg is not a viewable account thread
+    assertThat(registerRepository.findOwnLegs(txn))
+        .allSatisfy(leg -> assertThat(leg.date()).isEqualTo(LocalDate.parse(JAN_5)));
+  }
+
+  @Test
+  void ownLegsAreEmptyForVoidedOrUnknownTransactions() {
+    long cash = insertAccount(CASH, ASSET, EUR, 210);
+    long food = insertAccount(FOOD, EXPENSE, EUR, null);
+    long txn = spend(JAN_1, null, cash, food, HUNDRED);
+    softDeleteTxn(txn);
+
+    assertThat(registerRepository.findOwnLegs(txn)).isEmpty();
+    assertThat(registerRepository.findOwnLegs(-1L)).isEmpty();
+  }
+
+  /** A committed receipt backing {@code txnId} — only its link matters here. */
+  private long insertReceipt(long txnId) {
+    return jdbcClient
+        .sql(
+            """
+            insert into receipt (state, source, original_path, transaction_id)
+            values ('committed', 'pc', 'originals/a.jpg', :t)
+            returning receipt_id
+            """)
+        .param("t", txnId)
+        .query(Long.class)
+        .single();
+  }
+
   private static BigDecimal bd(String value) {
     return new BigDecimal(value);
   }
