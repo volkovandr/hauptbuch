@@ -30,6 +30,8 @@ import java.util.List;
  * @param reconciliation the reconciliation state, for the trailing status glyph
  * @param tags the canonical {@code Parent:Child} labels of this leg's tags, rendered as chips in
  *     the Category cell (register §3.6, plan stage 7e); empty when the leg is untagged
+ * @param receiptId the live receipt this transaction was booked from (register §7, plan stage 9g),
+ *     or null — the row's paperclip, linking to that receipt's committed view
  */
 public record RegisterRowView(
     long postingId,
@@ -47,7 +49,8 @@ public record RegisterRowView(
     boolean negativeBalance,
     boolean pending,
     String reconciliation,
-    List<String> tags) {
+    List<String> tags,
+    Long receiptId) {
 
   /** Defensively copy the tags to an immutable list (null-safe). */
   public RegisterRowView {

@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.receipts;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -149,6 +150,64 @@ class ReceiptRepositoryIntegrationTest {
 
     // Newest first; committed included; the out-of-window one excluded.
     assertThat(ids).containsSubsequence(fresh, committed).doesNotContain(ancient);
+  }
+
+  @Test
+  void saveEditorHeaderRoundTripsTheNoteAndReceiptNumber() {
+    Receipt r = receiptRepository.insertCaptured("pc", "originals/2026/08/a.jpg");
+
+    receiptRepository.saveEditorHeader(
+        r.receiptId(),
+        new ReceiptHeaderDraft(
+            LocalDate.parse("2026-08-03"),
+            null,
+            null,
+            "EUR",
+            new BigDecimal("42.14"),
+            "Company car",
+            "BEL-4711"));
+
+    Receipt saved = receiptRepository.findById(r.receiptId()).orElseThrow();
+    assertThat(saved.receiptDate()).isEqualTo(LocalDate.parse("2026-08-03"));
+    assertThat(saved.currencyCode()).isEqualTo("EUR");
+    assertThat(saved.totalAmount()).isEqualByComparingTo("42.14");
+    assertThat(saved.note()).isEqualTo("Company car"); // the V15 column
+    assertThat(saved.receiptNumber()).isEqualTo("BEL-4711");
+  }
+
+  @Test
+  void markCommittedLinksTheTransactionAndReopenReturnsToProcessed() {
+    long id = capturedWithState("processed");
+    long transactionId = insertTransaction();
+
+    assertThat(receiptRepository.markCommitted(id, transactionId)).isEqualTo(1);
+    Receipt committed = receiptRepository.findById(id).orElseThrow();
+    assertThat(committed.state()).isEqualTo("committed");
+    assertThat(committed.transactionId()).isEqualTo(transactionId);
+
+    assertThat(receiptRepository.reopen(id)).isEqualTo(1);
+    Receipt reopened = receiptRepository.findById(id).orElseThrow();
+    assertThat(reopened.state()).isEqualTo("processed");
+    // Reopen writes nothing but the state — the link is what makes the next Confirm a Re-enter.
+    assertThat(reopened.transactionId()).isEqualTo(transactionId);
+  }
+
+  /** A bare transaction row to point a receipt's FK at (its legs are irrelevant here). */
+  private long insertTransaction() {
+    return jdbcClient
+        .sql(
+            "insert into transaction (date, lifecycle) values (:d, 'confirmed')"
+                + " returning transaction_id")
+        .param("d", LocalDate.parse("2026-08-03"))
+        .query(Long.class)
+        .single();
+  }
+
+  @Test
+  void reopenTouchesNothingButCommittedReceipts() {
+    long id = capturedWithState("processed");
+
+    assertThat(receiptRepository.reopen(id)).isZero();
   }
 
   /** Insert a receipt in a given state at "now", returning its id. */

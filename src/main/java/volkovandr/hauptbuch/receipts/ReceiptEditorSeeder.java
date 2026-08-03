@@ -65,6 +65,8 @@ class ReceiptEditorSeeder {
         receipt.totalAmount() == null
             ? ""
             : MoneyFormat.number(receipt.totalAmount(), FRACTION_DIGITS),
+        ReceiptEditorText.orEmpty(receipt.note()),
+        ReceiptEditorText.orEmpty(receipt.receiptNumber()),
         working);
   }
 

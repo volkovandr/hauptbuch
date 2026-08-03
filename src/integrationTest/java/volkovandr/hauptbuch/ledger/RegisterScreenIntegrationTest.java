@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
@@ -54,6 +55,7 @@ class RegisterScreenIntegrationTest {
   @Autowired LedgerService ledgerService;
   @Autowired SettingsService settingsService;
   @Autowired PersonProvisioningService personProvisioningService;
+  @Autowired JdbcClient jdbcClient;
 
   @BeforeEach
   void setUp() {
@@ -80,8 +82,8 @@ class RegisterScreenIntegrationTest {
   }
 
   /** Record a single-category spend: {@code account −magnitude / category +magnitude}. */
-  private void spend(String date, long account, long category, String magnitude) {
-    ledgerService.recordTransaction(
+  private long spend(String date, long account, long category, String magnitude) {
+    return ledgerService.recordTransaction(
         new TransactionDraft(
             LocalDate.parse(date),
             null,
@@ -236,5 +238,116 @@ class RegisterScreenIntegrationTest {
         .andExpect(content().string(containsString(FOOD)))
         // And the person is offered in the account filter as `Max (EUR)` (plan stage 8c).
         .andExpect(content().string(containsString("Max (EUR)")));
+  }
+
+  // ── The receipt link, both ways (register §7, plan stage 9g) ───────────────
+
+  @Test
+  void rowBookedFromReceiptShowsPaperclipLinkingToIt() throws Exception {
+    long cash = openAccount(CASH, EUR, "500");
+    long food = insertCategory(FOOD, EUR);
+    long txn = spend("2026-06-01", cash, food, "10");
+    long receipt = linkReceipt(txn);
+
+    mockMvc
+        .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("register__receipt")))
+        .andExpect(content().string(containsString("/receipts/" + receipt)));
+  }
+
+  @Test
+  void rowWithoutReceiptShowsNoPaperclip() throws Exception {
+    long cash = openAccount(CASH, EUR, "500");
+    long food = insertCategory(FOOD, EUR);
+    spend("2026-06-01", cash, food, "10");
+
+    mockMvc
+        .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("register__receipt"))));
+  }
+
+  @Test
+  void selectedJumpDerivesTheFilterFromTheTransactionAndDocksIt() throws Exception {
+    long cash = openAccount(CASH, EUR, "500");
+    long giro = openAccount(GIRO, EUR, "500");
+    long food = insertCategory(FOOD, EUR);
+    // Old enough that the default last-12-months range would hide it — the jump must not rely on
+    // it.
+    long txn = spend("2020-03-04", cash, food, "10");
+    spend("2026-06-01", giro, food, "77");
+
+    mockMvc
+        .perform(get(REGISTER_PATH).param("selected", String.valueOf(txn)))
+        .andExpect(status().isOk())
+        // The jumped-to row is on screen and marked…
+        .andExpect(content().string(containsString("row--selected")))
+        // …the filter came from the transaction, so the other account's row is not in this view…
+        .andExpect(content().string(not(containsString("77,00"))))
+        // …and the dock loads that transaction's edit mode as the page settles.
+        .andExpect(content().string(containsString("/register/edit/" + txn)));
+  }
+
+  @Test
+  void selectedJumpFallsBackToTheDefaultViewForVoidedTransaction() throws Exception {
+    long cash = openAccount(CASH, EUR, "500");
+    long food = insertCategory(FOOD, EUR);
+    long txn = spend("2026-06-01", cash, food, "10");
+    ledgerService.voidTransaction(txn);
+
+    mockMvc
+        .perform(get(REGISTER_PATH).param("selected", String.valueOf(txn)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("row--selected"))))
+        // And it must not dock a transaction the register cannot show — the dock would come back
+        // with an "opening balance" style error for a row that is not even on screen.
+        .andExpect(content().string(not(containsString("/register/edit/" + txn))));
+  }
+
+  @Test
+  void selectedJumpViewsTheFundingAccountOnly() throws Exception {
+    long cash = openAccount(CASH, EUR, "500");
+    long giro = openAccount(GIRO, EUR, "777");
+    long food = insertCategory(FOOD, EUR);
+    // A receipt with a cashback line: paid 30 from Cash, 10 of it swept into Giro. The jump lands
+    // on the paying account's thread, not on both.
+    ledgerService.recordTransaction(
+        new TransactionDraft(
+            LocalDate.parse("2026-06-01"),
+            null,
+            "cashback",
+            CONFIRMED,
+            List.of(
+                PostingDraft.of(cash, new BigDecimal("-30")),
+                PostingDraft.of(giro, BigDecimal.TEN),
+                PostingDraft.of(food, new BigDecimal("20")))));
+    long txn =
+        jdbcClient
+            .sql("select transaction_id from transaction order by transaction_id desc limit 1")
+            .query(Long.class)
+            .single();
+
+    mockMvc
+        .perform(get(REGISTER_PATH).param("selected", String.valueOf(txn)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("row--selected")))
+        // Giro's leg is not in the viewed set at all — its balance thread never renders. (Its NAME
+        // still appears, in the account filter's checkbox list, so the balance is what to assert.)
+        .andExpect(content().string(not(containsString("787,00"))));
+  }
+
+  /** A committed receipt backing {@code txnId}; returns its id (the paperclip's target). */
+  private long linkReceipt(long txnId) {
+    return jdbcClient
+        .sql(
+            """
+            insert into receipt (state, source, original_path, transaction_id)
+            values ('committed', 'pc', 'originals/a.jpg', :t)
+            returning receipt_id
+            """)
+        .param("t", txnId)
+        .query(Long.class)
+        .single();
   }
 }

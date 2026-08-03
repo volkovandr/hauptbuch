@@ -142,6 +142,8 @@ record WorkingLine(
       Long accountId,
       String currencyCode,
       String total,
+      String headerNote,
+      String receiptNumber,
       List<WorkingLine> lines) {
     List<String> description = new ArrayList<>();
     List<String> categoryText = new ArrayList<>();
@@ -175,6 +177,8 @@ record WorkingLine(
         accountId,
         currencyCode,
         total,
+        headerNote,
+        receiptNumber,
         description,
         categoryText,
         categoryId,

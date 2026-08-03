@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.ledger;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,10 +27,15 @@ class RegisterController {
   private static final String VIEW = "register";
 
   private final RegisterService registerService;
+  private final RegisterJumpService registerJumpService;
   private final CurrencyService currencyService;
 
-  RegisterController(RegisterService registerService, CurrencyService currencyService) {
+  RegisterController(
+      RegisterService registerService,
+      RegisterJumpService registerJumpService,
+      CurrencyService currencyService) {
     this.registerService = registerService;
+    this.registerJumpService = registerJumpService;
     this.currencyService = currencyService;
   }
 
@@ -43,6 +49,10 @@ class RegisterController {
    *     blank
    * @param toDate inclusive upper date bound
    * @param payeeId show only this payee's rows; null for all
+   * @param selected jump to this transaction (register §7, plan stage 9g) — the committed receipt's
+   *     "Edit transaction". The filter is then derived from the transaction and every other param
+   *     is discarded, so the row is guaranteed visible; the view marks it selected and loads it
+   *     into the dock
    */
   @GetMapping(BASE_PATH)
   String register(
@@ -50,19 +60,33 @@ class RegisterController {
       @RequestParam(required = false) LocalDate fromDate,
       @RequestParam(required = false) LocalDate toDate,
       @RequestParam(required = false) Long payeeId,
+      @RequestParam(required = false) Long selected,
       Model model) {
-    LocalDate effectiveFrom = defaultFrom(fromDate, toDate);
+    Optional<RegisterFilter> jump = jumpFilter(selected);
     RegisterFilter filter =
-        new RegisterFilter(
-            accountId == null ? List.of() : accountId, effectiveFrom, toDate, payeeId);
+        jump.orElseGet(
+            () ->
+                new RegisterFilter(
+                    accountId == null ? List.of() : accountId,
+                    defaultFrom(fromDate, toDate),
+                    toDate,
+                    payeeId));
     RegisterView register = registerService.view(filter);
 
     model.addAttribute("register", register);
+    // Only a jump that actually resolved marks and docks a row. A voided or unknown id falls back
+    // to the default view — and must not then dock a transaction the register cannot show.
+    model.addAttribute("selectedTransactionId", jump.isPresent() ? selected : null);
     model.addAttribute("currencies", currencyService.findAll());
     model.addAttribute("amountFields", defaultAmountFields(register));
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", "Register · Hauptbuch");
     return VIEW;
+  }
+
+  /** The transaction-derived filter for a {@code selected=} jump; empty when there is no jump. */
+  private Optional<RegisterFilter> jumpFilter(Long selected) {
+    return selected == null ? Optional.empty() : registerJumpService.filterForTransaction(selected);
   }
 
   /**

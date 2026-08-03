@@ -58,7 +58,8 @@ class ReceiptServiceTest {
         null,
         null,
         null,
-        // 9e telemetry + header (parseError … receiptNumber)
+        // 9e telemetry + header (parseError … receiptNumber), then payeeId (9f) and note (9g)
+        null,
         null,
         null,
         null,

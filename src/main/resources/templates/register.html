@@ -143,7 +143,9 @@
             data-kbd-row
             th:attr="data-transaction-id=${r.transactionId()}"
             tabindex="-1"
-            th:classappend="${r.pending()} ? 'register__row--pending'"
+            th:classappend="(${r.pending()} ? 'register__row--pending ' : '')
+              + (${selectedTransactionId != null and r.transactionId() == selectedTransactionId}
+                   ? 'row--selected' : '')"
             th:style="${r.accountHue() != null}
               ? (${r.zebraDark()}
                   ? |background: hsl(${r.accountHue()} 40% 90%)|
@@ -239,6 +241,17 @@
               >
                 ✎
               </button>
+              <!-- The paperclip (register §7, plan stage 9g): this row was booked from a receipt;
+                   click through to its committed view. Deliberately AFTER the edit button —
+                   keyboard.js activates a row's FIRST link or button on Enter, and Enter on a
+                   register row must keep meaning "edit this transaction". -->
+              <a
+                class="register__receipt"
+                th:if="${r.receiptId() != null}"
+                th:href="@{/receipts/{id}(id=${r.receiptId()})}"
+                title="Open the receipt this was booked from"
+                >📎</a
+              >
             </td>
           </tr>
         </tbody>
@@ -257,5 +270,19 @@
     <div
       th:replace="~{fragments/currency-picker :: dialogMount('entry-category-currency')}"
     ></div>
+
+    <!-- The receipt→register jump (register §7, plan stage 9g): arriving with ?selected=<txn>, the
+         controller has already derived the filter from that transaction (so its row is on screen and
+         marked), and this loads it into the dock's edit mode the moment the page settles — the same
+         endpoint the row's own ✎ calls, carrying the same active-filter fields. Remove this and the
+         jump still lands on the right row; only the dock stays empty. -->
+    <span
+      th:if="${selectedTransactionId != null}"
+      th:attr="hx-get=@{/register/edit/{id}(id=${selectedTransactionId})}"
+      hx-trigger="load"
+      hx-include="[name='viewAccountId'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
+      hx-target="#entry-dock"
+      hx-swap="outerHTML"
+    ></span>
   </main>
 </html>

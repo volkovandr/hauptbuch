@@ -66,7 +66,8 @@ class RegisterRowRendererTest {
         new BigDecimal(amount),
         new BigDecimal(amount),
         CONFIRMED,
-        "unreconciled");
+        "unreconciled",
+        null);
   }
 
   private RegisterCounterpartLeg leg(long txnId, String name, String type, String amount) {
@@ -245,7 +246,8 @@ class RegisterRowRendererTest {
             new BigDecimal("-10.00"),
             new BigDecimal("-10.00"),
             "pending_review",
-            "unreconciled");
+            "unreconciled",
+            null);
 
     RegisterRowView view = renderOne(pending);
 

@@ -20,6 +20,8 @@ import volkovandr.hauptbuch.operations.SplitCurrency;
  * @param accountId the selected paying account, or null when the book has no accounts
  * @param currency the (single-currency) header currency state the shared fragment reads
  * @param total the editable total, German-formatted; the reference the remaining counts against
+ * @param note the header note (9g) — free text, copied to {@code transaction.note} at Confirm
+ * @param receiptNumber the printed receipt/Beleg number (9g) — prefilled from the parse, editable
  * @param remaining {@code total − |Σ signed lines|}, German-formatted
  * @param balanced whether {@code remaining} is zero (drives the ✓ state)
  * @param status {@code ok} (lines sum to the total), {@code warn} (they diverge), or {@code none}
@@ -34,11 +36,22 @@ public record ReceiptEditor(
     Long accountId,
     SplitCurrency currency,
     String total,
+    String note,
+    String receiptNumber,
     String remaining,
     boolean balanced,
     String status,
     boolean currencyMismatch,
     List<ReceiptEditorLine> lines) {
+
+  /** {@link #status()}: there is no total to check the lines against — the neutral hint. */
+  public static final String STATUS_NO_TOTAL = "none";
+
+  /** {@link #status()}: the lines sum exactly to the total (the ✓ state). */
+  public static final String STATUS_BALANCED = "ok";
+
+  /** {@link #status()}: a total is set but the lines diverge from it. */
+  public static final String STATUS_UNBALANCED = "warn";
 
   /** Defensively copy the lines so the view model cannot be mutated after assembly. */
   public ReceiptEditor {

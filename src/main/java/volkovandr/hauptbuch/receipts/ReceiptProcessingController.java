@@ -34,7 +34,10 @@ class ReceiptProcessingController {
   private static final String BASE_PATH = "/receipts";
   private static final String VIEW = "receipt-process";
   private static final String EDITOR = VIEW + " :: editor";
+  private static final String PANE_RESPONSE = VIEW + " :: paneResponse";
   private static final String STATE = "state";
+  private static final String STATE_FILTER = "stateFilter";
+  private static final String RANGE_FILTER = "rangeFilter";
   private static final String RANGE = "range";
   private static final String REDIRECT_REGISTER = "redirect:" + BASE_PATH;
 
@@ -42,6 +45,7 @@ class ReceiptProcessingController {
   private final ReceiptAnalyser receiptAnalyser;
   private final ReceiptAnalysisService receiptAnalysisService;
   private final ReceiptEditorService receiptEditorService;
+  private final ReceiptCommitService receiptCommitService;
   private final RegisterService registerService;
   private final CurrencyService currencyService;
 
@@ -50,12 +54,14 @@ class ReceiptProcessingController {
       ReceiptAnalyser receiptAnalyser,
       ReceiptAnalysisService receiptAnalysisService,
       ReceiptEditorService receiptEditorService,
+      ReceiptCommitService receiptCommitService,
       RegisterService registerService,
       CurrencyService currencyService) {
     this.receiptService = receiptService;
     this.receiptAnalyser = receiptAnalyser;
     this.receiptAnalysisService = receiptAnalysisService;
     this.receiptEditorService = receiptEditorService;
+    this.receiptCommitService = receiptCommitService;
     this.registerService = registerService;
     this.currencyService = currencyService;
   }
@@ -74,18 +80,12 @@ class ReceiptProcessingController {
         .findById(id)
         .map(
             receipt -> {
-              model.addAttribute("id", id);
-              model.addAttribute("receipt", receipt);
-              if (ReceiptState.PROCESSED.equals(receipt.state())) {
+              addChrome(receipt, state, range, model);
+              if (ReceiptState.PROCESSED.equals(receipt.state())
+                  || ReceiptState.COMMITTED.equals(receipt.state())) {
                 addEditor(
-                    id, receiptEditorService.seed(receipt, receiptService.linesOf(id)), model);
+                    receipt, receiptEditorService.seed(receipt, receiptService.linesOf(id)), model);
               }
-              model.addAttribute(
-                  "neighbours",
-                  receiptService.neighbours(
-                      id, ReceiptFilters.statesFor(state), ReceiptFilters.rangeFrom(range)));
-              model.addAttribute("stateFilter", state);
-              model.addAttribute("rangeFilter", range);
               model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
               model.addAttribute("title", "Receipt · Hauptbuch");
               return VIEW;
@@ -165,8 +165,8 @@ class ReceiptProcessingController {
             .orElse(false);
     if (stillProcessing) {
       model.addAttribute("id", id);
-      model.addAttribute("stateFilter", state);
-      model.addAttribute("rangeFilter", range);
+      model.addAttribute(STATE_FILTER, state);
+      model.addAttribute(RANGE_FILTER, range);
       return VIEW + " :: statusPoll";
     }
     response.setHeader("HX-Refresh", "true");
@@ -215,8 +215,8 @@ class ReceiptProcessingController {
       @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
       Model model) {
     model.addAttribute("id", id);
-    model.addAttribute("stateFilter", state);
-    model.addAttribute("rangeFilter", range);
+    model.addAttribute(STATE_FILTER, state);
+    model.addAttribute(RANGE_FILTER, range);
     return VIEW + " :: deleteDialog";
   }
 
@@ -236,7 +236,17 @@ class ReceiptProcessingController {
         receiptService.neighbours(
             id, ReceiptFilters.statesFor(state), ReceiptFilters.rangeFrom(range));
     receiptService.delete(id, removeFiles);
+    return navigateAfterDelete(neighbours, state, range, redirectAttributes);
+  }
 
+  /**
+   * Land on the next receipt in the filtered list, else the previous, else back to the register.
+   */
+  private static String navigateAfterDelete(
+      ReceiptNeighbours neighbours,
+      String state,
+      String range,
+      RedirectAttributes redirectAttributes) {
     Long landing = neighbours.next() != null ? neighbours.next() : neighbours.prev();
     if (landing == null) {
       redirectAttributes.addAttribute(STATE, state);
@@ -255,8 +265,13 @@ class ReceiptProcessingController {
    */
   @PostMapping("/receipts/{id}/lines/add-line")
   String addLine(
-      @PathVariable long id, @RequestParam MultiValueMap<String, String> params, Model model) {
-    return renderEditor(id, receiptEditorService.addLine(ReceiptEditorForm.bind(params)), model);
+      @PathVariable long id,
+      @RequestParam MultiValueMap<String, String> params,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      Model model) {
+    return renderEditor(
+        id, receiptEditorService.addLine(ReceiptEditorForm.bind(params)), state, range, model);
   }
 
   /**
@@ -267,9 +282,15 @@ class ReceiptProcessingController {
       @PathVariable long id,
       @RequestParam int index,
       @RequestParam MultiValueMap<String, String> params,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
       Model model) {
     return renderEditor(
-        id, receiptEditorService.removeLine(ReceiptEditorForm.bind(params), index), model);
+        id,
+        receiptEditorService.removeLine(ReceiptEditorForm.bind(params), index),
+        state,
+        range,
+        model);
   }
 
   /**
@@ -281,13 +302,15 @@ class ReceiptProcessingController {
       @PathVariable long id,
       @RequestParam int index,
       @RequestParam MultiValueMap<String, String> params,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
       Model model) {
     ReceiptEditorForm form = ReceiptEditorForm.bind(params);
     try {
-      return renderEditor(id, receiptEditorService.redistribute(form, index), model);
+      return renderEditor(id, receiptEditorService.redistribute(form, index), state, range, model);
     } catch (LineRedistribution.RedistributeRefusedException e) {
       model.addAttribute("editorError", e.getMessage());
-      return renderEditor(id, form, model);
+      return renderEditor(id, form, state, range, model);
     }
   }
 
@@ -300,7 +323,11 @@ class ReceiptProcessingController {
    */
   @PostMapping("/receipts/{id}/lines/save")
   String save(
-      @PathVariable long id, @RequestParam MultiValueMap<String, String> params, Model model) {
+      @PathVariable long id,
+      @RequestParam MultiValueMap<String, String> params,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      Model model) {
     receiptEditorService.save(id, ReceiptEditorForm.bind(params));
     return receiptService
         .findById(id)
@@ -308,20 +335,152 @@ class ReceiptProcessingController {
             receipt -> {
               model.addAttribute("editorSaved", true);
               return renderEditor(
-                  id, receiptEditorService.seed(receipt, receiptService.linesOf(id)), model);
+                  id,
+                  receiptEditorService.seed(receipt, receiptService.linesOf(id)),
+                  state,
+                  range,
+                  model);
             })
         .orElse(REDIRECT_REGISTER);
   }
 
-  /** Render the editor fragment from a bound form (the add/remove/redistribute round-trips). */
-  private String renderEditor(long id, ReceiptEditorForm form, Model model) {
-    addEditor(id, form, model);
-    return EDITOR;
+  // ── Confirm / reopen / the committed delete (plan §9g) ──────────────────────
+
+  /**
+   * Confirm the reviewed draft (§9g): the gate hard-blocks anything the ledger would choke on,
+   * otherwise the draft is saved, materialised through the split commit path, and the receipt flips
+   * to {@code committed}. On a reopened receipt this is the <em>Re-enter</em>: the previously
+   * booked transaction is voided and a new one takes its place.
+   *
+   * <p>Confirm never navigates — the pane comes back read-only in place (the chrome rides along
+   * out-of-band, so the state badge and the Delete rung follow). A refused gate re-renders the same
+   * pane, still editable, listing every block.
+   */
+  @PostMapping("/receipts/{id}/confirm")
+  String confirm(
+      @PathVariable long id,
+      @RequestParam MultiValueMap<String, String> params,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      Model model) {
+    ReceiptEditorForm form = ReceiptEditorForm.bind(params);
+    try {
+      receiptCommitService.confirm(id, form);
+    } catch (ReceiptConfirmException e) {
+      model.addAttribute("confirmProblems", e.problems());
+      return renderPane(id, form, state, range, model);
+    }
+    return renderPane(id, null, state, range, model);
+  }
+
+  /**
+   * Reopen a committed receipt (§9g): instant, no dialog — the transaction is untouched and stays
+   * linked, so the pane comes back editable with Confirm reading "Re-enter".
+   */
+  @PostMapping("/receipts/{id}/reopen")
+  String reopen(
+      @PathVariable long id,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      Model model) {
+    receiptCommitService.reopen(id);
+    return renderPane(id, null, state, range, model);
+  }
+
+  /** The 5-way committed-delete dialog (§9g), rendered into the overlay mount. */
+  @GetMapping("/receipts/{id}/delete-committed-confirm")
+  String deleteCommittedConfirm(
+      @PathVariable long id,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      Model model) {
+    model.addAttribute("id", id);
+    model.addAttribute(STATE_FILTER, state);
+    model.addAttribute(RANGE_FILTER, range);
+    model.addAttribute("deleteChoices", CommittedDeleteChoice.ALL);
+    return VIEW + " :: deleteCommittedDialog";
+  }
+
+  /**
+   * Delete a committed receipt through the 5-way dialog (§9g), then navigate on exactly as the
+   * non-committed rung does. The receipt keeps its {@code transaction_id} either way; whether the
+   * transaction itself is voided is the dialog's first axis.
+   */
+  @PostMapping("/receipts/{id}/delete-committed")
+  String deleteCommitted(
+      @PathVariable long id,
+      @RequestParam(required = false, defaultValue = "false") boolean voidTransaction,
+      @RequestParam(required = false, defaultValue = "false") boolean removeFiles,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      RedirectAttributes redirectAttributes) {
+    ReceiptNeighbours neighbours =
+        receiptService.neighbours(
+            id, ReceiptFilters.statesFor(state), ReceiptFilters.rangeFrom(range));
+    receiptCommitService.deleteCommitted(id, voidTransaction, removeFiles);
+    return navigateAfterDelete(neighbours, state, range, redirectAttributes);
+  }
+
+  // ── Model assembly ──────────────────────────────────────────────────────────
+
+  /**
+   * Render the editor fragment from a bound form (the add/remove/redistribute/Save round-trips).
+   */
+  private String renderEditor(
+      long id, ReceiptEditorForm form, String state, String range, Model model) {
+    return receiptService
+        .findById(id)
+        .map(
+            receipt -> {
+              model.addAttribute(STATE_FILTER, state);
+              model.addAttribute(RANGE_FILTER, range);
+              addEditor(receipt, form, model);
+              return EDITOR;
+            })
+        .orElse(REDIRECT_REGISTER);
+  }
+
+  /**
+   * Render the whole pane + the out-of-band chrome (Confirm, Reopen). A null {@code form} re-seeds
+   * from what was just persisted — the freshly booked or reopened state; a non-null one keeps the
+   * operator's unsaved edits on screen beside the gate's findings.
+   */
+  private String renderPane(
+      long id, ReceiptEditorForm form, String state, String range, Model model) {
+    return receiptService
+        .findById(id)
+        .map(
+            receipt -> {
+              addChrome(receipt, state, range, model);
+              addEditor(
+                  receipt,
+                  form == null
+                      ? receiptEditorService.seed(receipt, receiptService.linesOf(id))
+                      : form,
+                  model);
+              return PANE_RESPONSE;
+            })
+        .orElse(REDIRECT_REGISTER);
+  }
+
+  /** The state-independent chrome: the carried filter and the prev/next neighbours over it. */
+  private void addChrome(Receipt receipt, String state, String range, Model model) {
+    long id = receipt.receiptId();
+    model.addAttribute("id", id);
+    model.addAttribute("receipt", receipt);
+    model.addAttribute(
+        "neighbours",
+        receiptService.neighbours(
+            id, ReceiptFilters.statesFor(state), ReceiptFilters.rangeFrom(range)));
+    model.addAttribute(STATE_FILTER, state);
+    model.addAttribute(RANGE_FILTER, range);
   }
 
   /** Put the assembled editor + the shared register datalists on the model. */
-  private void addEditor(long id, ReceiptEditorForm form, Model model) {
-    model.addAttribute("id", id);
+  private void addEditor(Receipt receipt, ReceiptEditorForm form, Model model) {
+    boolean committed = ReceiptState.COMMITTED.equals(receipt.state());
+    model.addAttribute("id", receipt.receiptId());
+    model.addAttribute("receipt", receipt);
     model.addAttribute("editor", receiptEditorService.panel(form));
     model.addAttribute(
         "register", registerService.view(new RegisterFilter(List.of(), null, null, null)));
@@ -330,6 +489,10 @@ class ReceiptProcessingController {
     // as the register and settings screens supply it — without it the picker is an empty, unusable
     // <select required> that blocks Save.
     model.addAttribute("currencies", currencyService.findAll());
+    // A committed receipt renders the same editor, disabled (§9g); an already-booked but reopened
+    // one keeps its transaction link, which is what turns Confirm into Re-enter.
+    model.addAttribute("readOnly", committed);
+    model.addAttribute("reentry", !committed && receipt.transactionId() != null);
   }
 
   /** Redirect back to a receipt's processing screen, preserving the carried filter + order. */

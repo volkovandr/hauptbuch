@@ -40,6 +40,7 @@ class ReceiptTest {
         country,
         null,
         null,
+        null,
         null);
   }
 
