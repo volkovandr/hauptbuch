@@ -1,7 +1,7 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.37
+**Status:** Draft v0.38
 **Date:** 2026-08-02
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
@@ -23,6 +23,14 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.38 (2026-08-03):** **9g grilled & planned** (owner-confirmed; not yet implemented).
+  Confirm reuses the **register's split commit path** (one entry-point) and gets a strict
+  **hard-block gate** (unresolved lines, stale non-leaf categories, total required + matching,
+  cross-currency). Scope addition — a **9f header omission folded in**: header **Note**
+  (new `receipt.note`, V15; → `transaction.note` at Confirm) and editable **Receipt no.**
+  fields. Committed view = read-only editor; re-confirm reads "Re-enter" and warns; 5-way
+  committed delete keeps `transaction_id` on the soft-deleted row; multi-delete skips
+  `committed`. Details in the sub-plan §9g; receipt doc v0.6, data-model v0.12.
 - **v0.37 (2026-08-02):** **9f complete** (owner-confirmed) — the post-process split toolkit
   shipped. Next: 9g (confirm/link/reopen).
 - **v0.36 (2026-08-02):** **9f grilled & planned** (owner-confirmed; not yet implemented).
