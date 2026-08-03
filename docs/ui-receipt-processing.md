@@ -1,8 +1,8 @@
 # Personal Finance Manager — UI: Receipt Processing & Receipt Register
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.5
-**Date:** 2026-08-02
+**Status:** Draft v0.6
+**Date:** 2026-08-03
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
@@ -265,7 +265,10 @@ Left-to-right: **thumbnail · captured · state · merchant · total · account 
 the selection), **Delete** (always the 3-way keep/delete-files dialog on PC, `new` included —
 2026-07-31; there is no Discard entry, §2.1), **Re-analyse**. Single-receipt double-click opens
 the processing screen (§6). Items in the selection that aren't in a valid state for an action are
-skipped with a count ("3 of 5 were not ready to process").
+skipped with a count ("3 of 5 were not ready to process"). **Multi-delete skips `committed`
+members the same way** (2026-08-03) — the 5-way committed rung (§7) fires only on a single
+receipt; voiding booked transactions is never a bulk action. There is **no Confirm menu entry**:
+confirming is the deliberate end of a per-receipt review, on the processing screen only.
 
 ---
 
@@ -347,8 +350,11 @@ The `failed` view offers **Retry** (→ `pre_processed`) — or Delete, as every
 - **Image left, editable item table right** (the requested side-by-side).
 - **Header fields:** date, **payee** (existing picker + create-new §3.4; the text **prefills from
   the parsed merchant** — an exact case-insensitive match pre-selects, else create-new is one
-  Enter away), **account**, currency, and the **total — editable** (a mis-read total must be
-  fixable, or the ✓ check below trains you to ignore it). Currency disagreeing with the chosen
+  Enter away), **account**, currency, the **total — editable** (a mis-read total must be
+  fixable, or the ✓ check below trains you to ignore it), a **Receipt no.** (prefilled from the
+  parsed `receipt_number`, editable), and a free-text **Note** (empty by default; becomes
+  `transaction.note` at Confirm — added 2026-08-03, a 9f omission; `receipt.note`, distinct from
+  the AI note §8). Currency disagreeing with the chosen
   account's currency **warns at Save but never blocks** (the draft stays lenient); **Confirm**
   (§6.4) blocks until they match — cross-currency receipt commits are a backlog item.
   - **Account detection:** parsed from the payment line — `Bar`/cash → the account **marked as the
@@ -403,7 +409,23 @@ The `failed` view offers **Retry** (→ `pre_processed`) — or Delete, as every
 - **Create new** (or no dup): **materialise** the draft `receipt_line`s into a `transaction` + its
   `posting`s — items as expense, transfer (real-account target, e.g. cashback → Cash), or
   beneficiary (person-debt) legs, the paying account as the −total funding leg —
-  set `receipt.transaction_id`, state → `committed`.
+  set `receipt.transaction_id`, state → `committed`. Materialisation goes through the **one split
+  commit path** the register uses (2026-08-03) — no second entry-point; line notes/tags, the
+  header payee (resolved or created), and the header note flow onto the transaction.
+- **The Confirm gate (2026-08-03).** Save stays lenient (§6.3); Confirm is the strict rung and
+  **hard-blocks with a plain message**, the receipt staying `processed`:
+  - a line with **no resolved target** (uncategorised item or targetless transfer — such lines
+    are already excluded from the `remaining` readout, so the gap is visible before you try);
+  - a category that is **no longer a postable leaf** — subdivided *after* analysis (e.g. `Car` →
+    `Car:Fuel/…`); re-validated at confirm time, the message points at the line;
+  - a **missing or mismatched grand total** — Σ lines must equal a *present* total; deliberately
+    **no** register-style "update total" shortcut here (a mismatch means the review isn't done);
+  - a missing **date** or **account**; and the **cross-currency mismatch** (§6.3).
+- **Confirm does not navigate** (2026-08-03): the pane flips to the **`committed` view** in place
+  — the §6.3 editor rendered **read-only** from the same fragments (image alongside, parse
+  telemetry kept) with **Edit transaction** (the §7 jump), **Reopen**, and **Delete** (the 5-way
+  rung, §7) plus the common chrome. The pile rhythm is "commit, ↓, next receipt" — seeing what
+  got booked for a beat beats auto-advancing away from it.
 - **Link to existing:** attach the image + parsed metadata to #N (set `transaction_id`), state →
   `committed`, **no** new transaction. Whether to also push the parsed splits onto a bare existing
   transaction is **open (Q-RX-2)** — lean: offer it only if #N is a single unsplit line, else just
@@ -418,16 +440,29 @@ The `failed` view offers **Retry** (→ `pre_processed`) — or Delete, as every
   receipt" requires exactly this.
 - **Receipt is born without a transaction** and may die without one (delete) — the whole
   point of confirm-time creation (keeps the register clean).
-- **Jump both ways.** From a `committed` receipt → **Open transaction** (register, scrolled +
-  selected + loaded in the dock). From the register, the **receipt paperclip** (register §2.10)
-  opens the receipt in the processing screen.
+- **Jump both ways.** From a `committed` receipt, the **Edit transaction** button → the register
+  with the transaction **scrolled + selected + loaded in the dock**; the register derives its
+  filter *from the transaction* (its funding account, a date range covering it), discarding the
+  last-used filter, so the row is guaranteed visible (2026-08-03). From the register, the
+  **receipt paperclip** (register §2.10) opens the receipt's `committed` view.
 - **Reopen & re-enter (added 2026-07-21).** A `committed` receipt may be **reopened** — state back
   to `processed`, the transaction untouched until re-confirm — its draft lines re-edited, and
   **re-entered**: the old transaction is **soft-deleted** (postings with it; soft-delete *is* the
   void mechanism, no new lifecycle value), a new transaction is materialised from the edited
   draft, and the link repoints. Deliberately **no drift check**: re-enter always overwrites, even
   if the transaction was hand-edited in the register after commit (owner call). Every previously
-  booked version stays inspectable as a soft-deleted record.
+  booked version stays inspectable as a soft-deleted record. UI (2026-08-03): **Reopen is
+  instant** — no dialog, nothing is written to the ledger; on a reopened receipt the confirm
+  button reads **"Re-enter"** and carries an `hx-confirm` naming the consequence ("voids
+  transaction #N, including any edits made in the register, and books a new one") — the
+  no-drift-check call made visible exactly where it fires.
+- **Deleting a `committed` receipt** (the delete ladder's last rung, 2026-08-03): a **5-way
+  dialog** on two axes — transaction: **void** (soft-delete, the standing void mechanism) or
+  **keep**; files: delete or keep — plus cancel. Every non-cancel choice soft-deletes the receipt
+  row **with `transaction_id` left in place**: live-link queries (the paperclip, the 1:0..1
+  guard) scope to `deleted_at is null`, so unlinking is an *effect*, not a column write, and the
+  audit trail ("this dead receipt once booked #N") survives. A kept transaction is thereafter
+  indistinguishable from a hand-entered one — intended.
 
 ---
 

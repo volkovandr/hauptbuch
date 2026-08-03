@@ -362,24 +362,63 @@ without leaving the pane.
 ## 9g — Confirm, link, reopen
 
 **Goal:** the draft becomes a real transaction; the loop closes — including re-entry.
+Decisions grilled & settled 2026-08-03 (receipt doc to v0.6, data-model to v0.12).
 
-- **Confirm (§6.4, duplicates deferred):** materialise `receipt_line`s into a `transaction` +
-  postings via the `operations` commit path — items as expense, **transfer** (real-account target,
-  e.g. cashback), or beneficiary legs (per-currency leaf resolved at post time, beneficiary lines
-  to the person's debt leaf — a debt increase), the paying account as the
-  −total funding leg; `receipt_line_tag` → `posting_tag`; set `transaction_id`, → `committed`.
-- **Jump both ways (§7):** receipt → its transaction in the register (selected, docked); the
-  register's paperclip → this pane.
-- **Reopen / re-enter:** reopen = `committed` → `processed`, transaction untouched; re-enter =
-  soft-delete the old transaction (postings with it), materialise anew, repoint the link. No
-  drift check.
-- **Committed-delete dialog (9b's delete ladder, last rung):** deleting a `committed` receipt
-  offers a 5-way choice — void the transaction ± delete files, or keep the transaction unlinked
-  ± delete files, or cancel; the receipt row is soft-deleted (or just unlinked) per choice.
+- **Confirm (§6.4, duplicates deferred) = the existing split commit path.** Materialise by
+  building a `SplitEntry` and calling `DockSplitService.commit` — the one commit path in the app;
+  receipts format their `numeric` amounts into the dock's string shape rather than growing a
+  second typed entry-point. Lines map to category / **transfer** (real-account target, e.g.
+  cashback) / beneficiary legs (per-currency leaf resolved at post time, beneficiary lines to the
+  person's debt leaf — a debt increase), the paying account as the −total funding leg;
+  `receipt_line_tag` → `posting_tag`, line notes → posting notes, header payee resolved or
+  created, header note → `transaction.note`; set `transaction_id`, → `committed`. **Confirm never
+  navigates** — the pane flips to the `committed` view in place (the pile rhythm is
+  "commit, ↓, next receipt", and the booked result deserves a glance).
+- **The Confirm gate — hard-blocks, plain-English message, receipt stays `processed`** (9f's
+  Save stays lenient; this is the strict rung):
+  - any line with **no resolved target** (uncategorised item or targetless transfer — already
+    excluded from the readout, so the gap is visible);
+  - a **stale non-leaf category** — subdivided after analysis (the tested `Car` → `Car:Fuel/…`
+    case) — re-validated at confirm time, message pointing at the line;
+  - **grand total required and Σ lines must equal it** — no register-style "update total"
+    convenience here (a null total is only legitimate on one-liners; not worth special-casing);
+  - missing **date** or **account**;
+  - **cross-currency (§14 backlog):** header currency ≠ paying account's currency refuses with
+    the not-implemented message (the funding total in the account's currency, and the frozen
+    `base_amount` when neither side is base, have nowhere to be entered). Lifting it means
+    reopening the 9f header and the schema, not just this slice.
+- **9f header retrofit (a 9f omission, folded in here) + migration V15:** the header gains a
+  **Note** field (empty default; new `receipt.note` column, distinct from `ai_note`; Save
+  persists it, Confirm copies it to `transaction.note`) and a **Receipt no.** field (prefilled
+  from the parsed `receipt_number`, editable, saved).
+- **Jump both ways (§7):** the register row query **left-joins the live receipt** for the
+  paperclip (no `ledger → receipts` Java edge — it would cycle); click → the receipt's
+  `committed` view. Receipt → register via a new `selected=<txnId>` param on `/register`: the
+  controller derives the filter *from the transaction* (funding account, range covering its
+  date; the last-used filter is discarded so the row is guaranteed visible), renders it
+  selected + docked + scrolled. The jump lives on an **Edit transaction** button, existing only
+  on the `committed` view.
+- **The `committed` view = the 9f editor rendered read-only** (shared fragments, image
+  alongside, telemetry line kept) + **Edit transaction / Reopen / Delete** + common chrome.
+- **Reopen / re-enter:** reopen is **instant, no dialog** (`committed` → `processed`,
+  transaction untouched — nothing is written). On a reopened receipt the confirm button reads
+  **"Re-enter"** with an `hx-confirm` naming the consequence — voids the old transaction
+  *including register hand-edits* (the settled no-drift-check), books anew, repoints the link.
+- **Committed-delete dialog (9b's delete ladder, last rung):** 5-way, two axes — transaction:
+  **void** (`DockCommitService.voidTransaction`, the standing mechanism) / **keep**; files:
+  delete / keep — plus cancel, extending the modal fragment family. All four non-cancel choices
+  soft-delete the receipt **keeping `transaction_id`**: live-link queries scope to
+  `deleted_at is null`, so unlinking is an effect, not a column write, and the audit trail
+  survives. A kept transaction is thereafter indistinguishable from a hand-entered one
+  (intended). **Multi-delete skips `committed` members with the standard count**; the 5-way
+  fires single-receipt only. **No Confirm in the context menu** — confirming stays on the
+  processing screen.
 - **Tests:** unit for the materialisation shape (sum-to-zero by construction, leaf routing,
-  funding leg); MockMvc acceptance capture→…→commit as the money-critical flow (replacing the
-  retired Playwright smoke); integration for the link queries; reopen/re-enter acceptance incl.
-  the soft-deleted predecessor.
+  funding leg) and the gate (unresolved line, stale non-leaf, total missing/mismatched); MockMvc
+  acceptance capture→…→commit as the money-critical flow (replacing the retired Playwright
+  smoke), reopen/re-enter incl. the soft-deleted predecessor, the currency-mismatch refusal,
+  the `selected=` jump, paperclip rendering, skip-committed multi-delete, and the note /
+  receipt-no round-trip; integration for V15 and the link queries.
 
 **Done when:** confirm books a balanced transaction visible in the register with the paperclip;
 reopen→re-enter voids and re-books; the old version remains inspectable soft-deleted.
