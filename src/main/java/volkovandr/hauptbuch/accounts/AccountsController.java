@@ -110,16 +110,16 @@ class AccountsController {
   }
 
   /**
-   * Save the paying-account detection config (data-model §13.4, stage 9e): the card last-4 whose
-   * slips seed this as the receipt's paying account, and whether it is the cash account a {@code
-   * Bar}/cash line resolves to.
+   * Save the paying-account detection config (data-model §13.4): the labels whose appearance in a
+   * receipt's payment line seeds this as the paying account, and whether it is the cash account a
+   * {@code Bar}/cash line resolves to in this account's currency.
    */
   @PostMapping("/accounts/{accountId}/detection")
   String updateDetection(
       @PathVariable long accountId,
-      @RequestParam(required = false) String cardLast4,
+      @RequestParam(required = false) String detectionLabels,
       @RequestParam(required = false, defaultValue = "false") boolean cashAccount) {
-    accountService.updateDetection(accountId, cardLast4, cashAccount);
+    accountService.updateDetection(accountId, detectionLabels, cashAccount);
     return REDIRECT_TO_LIST;
   }
 

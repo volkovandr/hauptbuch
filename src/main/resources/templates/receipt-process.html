@@ -532,10 +532,18 @@
 
       <!-- The paying account (detected, always changeable). A plain select of the real accounts —
            the receipt's funding leg is an own account, never a person sigil (beneficiaries are a
-           per-line attribution, not the header). -->
+           per-line attribution, not the header).
+
+           The empty first option is load-bearing: without it a browser pre-selects the first real
+           account whenever detection found nothing, so "undetected" submitted as "the operator
+           chose Cash" (alphabetically first) and Confirm waved it through. Undetected must stay
+           visibly empty and be blocked at Confirm. -->
       <div class="field">
         <label class="field__label" for="receipt-account">Account</label>
         <select id="receipt-account" name="accountId" class="input">
+          <option value="" th:selected="${editor.accountId() == null}">
+            — pick an account —
+          </option>
           <option
             th:each="a : ${register.accounts()}"
             th:value="${a.accountId()}"

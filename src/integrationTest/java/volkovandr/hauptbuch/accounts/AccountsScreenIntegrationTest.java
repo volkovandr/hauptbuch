@@ -202,14 +202,16 @@ class AccountsScreenIntegrationTest {
     mockMvc
         .perform(
             post(ACCOUNT_PATH_PREFIX + accountId + "/detection")
-                .param("cardLast4", "1234")
+                .param("detectionLabels", "card, 1234")
                 .param("cashAccount", "true"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl(ACCOUNTS_PATH));
 
-    String cardLast4 =
+    // The screen's job is to bind and persist; the label normalisation itself is the service's
+    // decision logic and is owned by AccountServiceTest (CLAUDE.md §6).
+    String labels =
         jdbcClient
-            .sql("select card_last4 from account where account_id = :id")
+            .sql("select detection_labels from account where account_id = :id")
             .param("id", accountId)
             .query(String.class)
             .single();
@@ -219,7 +221,7 @@ class AccountsScreenIntegrationTest {
             .param("id", accountId)
             .query(Boolean.class)
             .single();
-    assertThat(cardLast4).isEqualTo("1234");
+    assertThat(labels).isEqualTo("card, 1234");
     assertThat(cash).isTrue();
   }
 

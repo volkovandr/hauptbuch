@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountDetection;
+import volkovandr.hauptbuch.accounts.AccountDetectionCandidate;
 import volkovandr.hauptbuch.accounts.AccountNode;
 
 /**
@@ -299,58 +300,69 @@ public class AccountRepository {
   }
 
   /**
-   * The live account whose card last-4 matches (data-model §13.4) — the paying account a card
-   * slip's printed digits seed. Empty when no account carries that last-4, or (defensively) more
-   * than one does — an ambiguous match is refused rather than guessed, and the operator picks.
+   * Every account a receipt's payment line may resolve to (data-model §13.4), in the order that
+   * decides which one wins. The predicate deliberately mirrors the register's pickable own accounts
+   * — open, live, asset/liability, no per-person debt leaves — so detection can only land on an
+   * account the post-process screen actually offers. It is spelled out again here rather than
+   * shared: that set is defined in {@code ledger}, which depends on this module, so reusing it
+   * would close a cycle.
+   *
+   * <p>The ordering carries the whole tie-break rule, because labels are deliberately not unique
+   * (two cards can share their printed last four) and the detector takes the first match:
+   *
+   * <ol>
+   *   <li>accounts in the receipt's currency first — the same card labelled in two currencies
+   *       resolves to the one the receipt was actually paid in;
+   *   <li>cash accounts last — an explicit card label always outranks the cash fallback;
+   *   <li>then by name, which also makes the duplicate-cash-marker case (not expected, not refused)
+   *       resolve to the first alphabetically rather than at random.
+   * </ol>
+   *
+   * <p>{@code currencyCode} is nullable: the parse may not have read a currency, in which case
+   * {@code coalesce} leaves the first key {@code false} for every row and the remaining two decide.
+   * The cast spells out the parameter's type for that null case.
    */
-  public Optional<Account> findByCardLast4(String cardLast4) {
-    List<Account> matches =
-        jdbcClient
-            .sql(
-                SELECT_ACCOUNT_COLUMNS
-                    + "from account where card_last4 = :cardLast4 and deleted_at is null")
-            .param("cardLast4", cardLast4)
-            .query(Account.class)
-            .list();
-    return matches.size() == 1 ? Optional.of(matches.get(0)) : Optional.empty();
-  }
-
-  /**
-   * The live account marked as the cash account (data-model §13.4) — where a {@code Bar}/cash line,
-   * and a recognised cash-withdrawal/deposit transfer, resolve. Empty when none is marked or (a
-   * misconfiguration) more than one is, in which case the operator picks.
-   */
-  public Optional<Account> findCashAccount() {
-    List<Account> matches =
-        jdbcClient
-            .sql(SELECT_ACCOUNT_COLUMNS + "from account where cash_account and deleted_at is null")
-            .query(Account.class)
-            .list();
-    return matches.size() == 1 ? Optional.of(matches.get(0)) : Optional.empty();
+  public List<AccountDetectionCandidate> findDetectionCandidates(String currencyCode) {
+    return jdbcClient
+        .sql(
+            """
+            select account_id, currency_code, detection_labels, cash_account
+            from account
+            where type in ('asset', 'liability')
+              and not person_leaf
+              and closed_at is null
+              and deleted_at is null
+            order by coalesce(currency_code = cast(:currencyCode as text), false) desc,
+                     cash_account asc,
+                     name asc
+            """)
+        .param(CURRENCY_CODE, currencyCode)
+        .query(AccountDetectionCandidate.class)
+        .list();
   }
 
   /** The detection config of one account, for the account-edit screen (data-model §13.4). */
   public Optional<AccountDetection> findDetection(long accountId) {
     return jdbcClient
-        .sql("select card_last4, cash_account from account where account_id = :accountId")
+        .sql("select detection_labels, cash_account from account where account_id = :accountId")
         .param(ACCOUNT_ID, accountId)
         .query(AccountDetection.class)
         .optional();
   }
 
   /**
-   * Update the paying-account detection config (data-model §13.4): the card last-4 and the
-   * cash-account marker, edited on the account-edit screen (stage 9e).
+   * Update the paying-account detection config (data-model §13.4): the label list and the
+   * cash-account marker, edited on the account-edit screen.
    */
-  public int updateDetection(long accountId, String cardLast4, boolean cashAccount) {
+  public int updateDetection(long accountId, String detectionLabels, boolean cashAccount) {
     return jdbcClient
         .sql(
             """
             update account
-            set card_last4 = :cardLast4, cash_account = :cashAccount
+            set detection_labels = :detectionLabels, cash_account = :cashAccount
             where account_id = :accountId
             """)
-        .param("cardLast4", cardLast4)
+        .param("detectionLabels", detectionLabels)
         .param("cashAccount", cashAccount)
         .param(ACCOUNT_ID, accountId)
         .update();

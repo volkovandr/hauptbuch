@@ -192,6 +192,36 @@ class ReceiptConfirmScreenIntegrationTest {
   }
 
   @Test
+  void confirmRefusesAnUndetectedAccountWithoutWriting() throws Exception {
+    // The empty account <select> option submits a blank id (issue 01). Before it existed the
+    // browser pre-selected the alphabetically first account and the gate waved that through, so
+    // this is the block that has to hold for "undetected" to stay visibly undetected.
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(cash, "42.14", EUR);
+
+    // Built inline rather than through confirm(): the blank account is the whole point, and the
+    // helper would supply a real one.
+    mockMvc
+        .perform(
+            post("/receipts/" + id + "/confirm")
+                .param("date", DAY)
+                .param("accountId", "")
+                .param("currencyCode", EUR)
+                .param("total", "42,14")
+                .param("lineDescription", "Diesel")
+                .param("categoryText", "Fuel")
+                .param("lineCategoryId", String.valueOf(fuel))
+                .param("lineCategoryType", "expense")
+                .param("lineAmount", "42,14"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Pick the account")));
+
+    assertThat(header(id, "state", String.class)).isEqualTo("processed");
+    assertThat(header(id, "transaction_id", Long.class)).isNull();
+  }
+
+  @Test
   void confirmRefusesWhenTheLinesDoNotAddUpToTheTotal() throws Exception {
     long cash = openAccount("Cash", EUR);
     long fuel = category("Fuel", "expense");

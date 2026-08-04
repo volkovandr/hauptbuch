@@ -16,7 +16,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.PayingAccountDetector;
 import volkovandr.hauptbuch.categories.AiVocabularyService;
 import volkovandr.hauptbuch.categories.TagService;
@@ -43,13 +42,9 @@ class ReceiptSeederTest {
     return new ReceiptSeeder(aiVocabularyService, tagService, personService, payingAccountDetector);
   }
 
-  private static Account account(long id) {
-    return new Account(id, "n", "asset", null, "EUR", null, null, null, null, false, false);
-  }
-
   @Test
   void seedsHeaderAndResolvesCategoryLeaf() {
-    when(payingAccountDetector.detect("card XXXX1234")).thenReturn(Optional.of(account(7L)));
+    when(payingAccountDetector.detect("card XXXX1234", "EUR")).thenReturn(OptionalLong.of(7L));
     when(aiVocabularyService.resolveTerm("Food - Sweets")).thenReturn(OptionalLong.of(42L));
 
     ParsedReceipt parsed =
@@ -122,7 +117,8 @@ class ReceiptSeederTest {
 
   @Test
   void resolvesTransferTargetAndDoesNotFallBackToCategory() {
-    when(payingAccountDetector.detect("cash")).thenReturn(Optional.of(account(9L)));
+    // No transaction block parsed, so the transfer detection runs with no currency (§13.4).
+    when(payingAccountDetector.detect("cash", null)).thenReturn(OptionalLong.of(9L));
 
     ParsedReceipt parsed =
         new ParsedReceipt(
@@ -206,7 +202,7 @@ class ReceiptSeederTest {
 
   @Test
   void keepsCashTransferSignalAsAiTargetText() {
-    when(payingAccountDetector.detect("cash")).thenReturn(Optional.of(account(9L)));
+    when(payingAccountDetector.detect("cash", null)).thenReturn(OptionalLong.of(9L));
 
     ParsedReceipt parsed =
         new ParsedReceipt(
@@ -221,7 +217,7 @@ class ReceiptSeederTest {
 
   @Test
   void keepsCardTransferSignalAsAiTargetText() {
-    when(payingAccountDetector.detect(any())).thenReturn(Optional.empty());
+    when(payingAccountDetector.detect(any(), any())).thenReturn(OptionalLong.empty());
 
     ParsedReceipt parsed =
         new ParsedReceipt(

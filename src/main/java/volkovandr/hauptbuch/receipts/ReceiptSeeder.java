@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalLong;
 import org.springframework.stereotype.Component;
-import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.PayingAccountDetector;
 import volkovandr.hauptbuch.categories.AiVocabularyService;
 import volkovandr.hauptbuch.categories.TagService;
@@ -48,9 +47,13 @@ public class ReceiptSeeder {
     this.payingAccountDetector = payingAccountDetector;
   }
 
-  /** Seed the header and lines from a decoded parse. */
+  /**
+   * Seed the header and lines from a decoded parse. The header is built first because its parsed
+   * currency is what the lines' transfer-target detection resolves cash against (§13.4).
+   */
   public SeededReceipt seed(ParsedReceipt parsed) {
-    return new SeededReceipt(header(parsed), lines(parsed));
+    ParsedHeader header = header(parsed);
+    return new SeededReceipt(header, lines(parsed, header.currencyCode()));
   }
 
   /**
@@ -82,8 +85,7 @@ public class ReceiptSeeder {
       receiptNumber = txn.receiptNumber();
       total = txn.totalAmount();
       currency = txn.currency();
-      payingAccount =
-          payingAccountDetector.detect(txn.account()).map(Account::accountId).orElse(null);
+      payingAccount = detected(txn.account(), currency);
     }
     return new ParsedHeader(
         merchantText,
@@ -97,20 +99,20 @@ public class ReceiptSeeder {
         payingAccount);
   }
 
-  private List<ReceiptLineDraft> lines(ParsedReceipt parsed) {
+  private List<ReceiptLineDraft> lines(ParsedReceipt parsed, String currency) {
     List<ReceiptLineDraft> drafts = new ArrayList<>();
     List<ParsedItem> items = parsed.items();
     for (int sortOrder = 0; sortOrder < items.size(); sortOrder++) {
-      drafts.add(lineOf(items.get(sortOrder), sortOrder));
+      drafts.add(lineOf(items.get(sortOrder), sortOrder, currency));
     }
     return drafts;
   }
 
-  private ReceiptLineDraft lineOf(ParsedItem item, int sortOrder) {
+  private ReceiptLineDraft lineOf(ParsedItem item, int sortOrder, String currency) {
     return new ReceiptLineDraft(
         describe(item),
         item.totalPrice() == null ? BigDecimal.ZERO : item.totalPrice(),
-        targetAccount(item),
+        targetAccount(item, currency),
         beneficiary(item),
         null,
         sortOrder,
@@ -151,12 +153,22 @@ public class ReceiptSeeder {
    * (§13.4) — even an unresolved transfer stays targetless rather than falling through to a
    * category — otherwise the resolved category leaf, or null (uncategorised).
    */
-  private Long targetAccount(ParsedItem item) {
+  private Long targetAccount(ParsedItem item, String currency) {
     if (item.transfer() != null && !item.transfer().isBlank()) {
-      return payingAccountDetector.detect(item.transfer()).map(Account::accountId).orElse(null);
+      return detected(item.transfer(), currency);
     }
     OptionalLong leaf = aiVocabularyService.resolveTerm(item.category());
     return leaf.isPresent() ? leaf.getAsLong() : null;
+  }
+
+  /**
+   * The account a payment signal resolves to, or null when nothing matched — the paying account for
+   * the header, a transfer target for a withdrawal line (§13.4). Null is a real answer: the
+   * operator picks on the post-process screen rather than having one guessed for them.
+   */
+  private Long detected(String signal, String currency) {
+    OptionalLong account = payingAccountDetector.detect(signal, currency);
+    return account.isPresent() ? account.getAsLong() : null;
   }
 
   /** The beneficiary person for a person-debt leg, resolved by exact live name, or null. */

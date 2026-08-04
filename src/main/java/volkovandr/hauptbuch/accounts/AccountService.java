@@ -70,21 +70,21 @@ public class AccountService {
   }
 
   /**
-   * Save an account's paying-account detection config (data-model §13.4, stage 9e): the card last-4
-   * and the cash-account marker. A blank last-4 normalises to null (no card detection); the marker
-   * is stored as given. Gated to the accounts screen's managed types, like the other edits.
+   * Save an account's paying-account detection config (data-model §13.4): the label list and the
+   * cash-account marker. Gated to the accounts screen's managed types, like the other edits.
    *
-   * @throws IllegalArgumentException if the account is not one the screen manages, or the last-4 is
-   *     present but not exactly four digits
+   * <p>Labels are free text — whatever the AI might call this account's payment line — so there is
+   * nothing to validate, only to tidy: each entry is stripped, blanks are dropped (an empty label
+   * would be a substring of every receipt), and the operator's order is preserved because it is the
+   * tie-break when two accounts share a label. An empty list normalises to null.
+   *
+   * @throws IllegalArgumentException if the account is not one the screen manages
    */
   @Transactional
-  public void updateDetection(long accountId, String cardLast4, boolean cashAccount) {
+  public void updateDetection(long accountId, String detectionLabels, boolean cashAccount) {
     requireManageable(accountId);
-    String normalized = cardLast4 == null || cardLast4.isBlank() ? null : cardLast4.strip();
-    if (normalized != null && !normalized.matches("\\d{4}")) {
-      throw new IllegalArgumentException("Card last-4 must be exactly four digits");
-    }
-    accountRepository.updateDetection(accountId, normalized, cashAccount);
+    accountRepository.updateDetection(
+        accountId, DetectionLabels.normalise(detectionLabels), cashAccount);
   }
 
   /**

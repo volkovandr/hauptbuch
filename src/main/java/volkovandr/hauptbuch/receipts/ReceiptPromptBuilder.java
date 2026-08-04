@@ -40,7 +40,7 @@ public class ReceiptPromptBuilder {
         transaction:
           date: <yyyy-mm-dd>
           time: <HH:mm>
-          account: <the payment line: "card XXXX1234" with the last 4 digits, or "Bar" for cash>
+          account: <the payment line as printed, verbatim, e.g. "girocard XXXX1234" or "Bar">
           totalAmount: <the printed total, digits and a dot decimal, e.g. 45.67>
           currency: <ISO code, e.g. EUR>
           receiptNumber: <the printed receipt/Beleg number>
@@ -55,7 +55,7 @@ public class ReceiptPromptBuilder {
         transaction:
           date: 2026-07-21
           time: 12:13
-          account: card XXXX1234
+          account: girocard XXXX1234
           totalAmount: 45.67
           currency: EUR
           receiptNumber: 4711
