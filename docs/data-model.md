@@ -1,8 +1,8 @@
 # Hauptbuch — Core Data Model
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.12
-**Date:** 2026-08-03
+**Status:** Draft v0.13
+**Date:** 2026-08-04
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.6),
 `tech-stack.md` (v0.1)
@@ -17,6 +17,13 @@
 > attachments, and holdings are deliberately **not modeled here yet** — see §12.
 
 **Changelog**
+- **v0.13 (2026-08-04):** §13.4 **paying-account detection widened to a label vocabulary** after
+  owner testing found it almost never fired (`account.card_last4` → `detection_labels`, V16): a
+  comma-separated substring list, matched case-insensitively, first match wins in a defined
+  candidate order (receipt currency first, cash last, then name). Cash resolution becomes
+  **per-currency**. A default-account fallback was considered and **rejected** — no match seeds
+  nothing, because a guessed paying account is indistinguishable from a chosen one on the
+  post-process screen.
 - **v0.12 (2026-08-03):** Stage-9g grilling round (confirm/link/reopen). `receipt` gains **`note`**
   — the draft transaction-level note (a 9f header omission), edited in post-process and copied to
   `transaction.note` at Confirm; distinct from `ai_note` (prompt guidance). The header also
@@ -1060,24 +1067,43 @@ parent (children inherit it); **deletion** removes the subtree's config rows wit
 
 ### 13.4 Paying-account detection
 
-The parsed payment line seeds the paying account: `Bar`/cash → the account marked as the cash
-account; a card slip's last-4 → the matching account; no match → the operator picks. The config
-lives **on the account** (the same parsing-config-on-the-entity pattern as §13.3).
+The parsed payment line seeds the paying account. The config lives **on the account** (the same
+parsing-config-on-the-entity pattern as §13.3), and two rules read it, in this order:
+
+1. **Labels.** `detection_labels` is a comma-separated list of substrings identifying the account in
+   a payment line (`card, 1234, girocard`); the first that appears in the parsed signal,
+   case-insensitively, wins. Substring matching rather than an exact card last-4 because the model
+   names the line freely — real parses read `card`, `XXXX1234`, `card XXXX1234`, and a bare `card`
+   carries no digits at all. Labels are **not unique**: two cards can share their printed last four.
+2. **Cash.** Failing that, a signal naming cash resolves to the cash account **of the receipt's
+   currency**. Labels are tried first because `Barclaycard` and `Bargeldauszahlung` both contain
+   `bar`, and explicit config must outrank the built-in vocabulary. No parsed currency → no cash
+   resolution.
+
+**No match seeds nothing** and the operator picks. There is deliberately no default-account
+fallback: on the post-process screen a guessed account is indistinguishable from a chosen one, so a
+wrong guess books real money silently (the account `<select>` therefore carries an empty
+placeholder option — without it the browser pre-selects the alphabetically first account).
+
+Since labels are not unique and the first match wins, the **candidate order** carries the tie-break:
+accounts in the receipt's currency first, cash accounts last, then by name. The candidate set is the
+register's pickable own accounts (open, live, asset/liability, no person leaves), so detection can
+only land on an account the screen actually offers. The name key also settles the
+duplicate-cash-marker case — not expected, not refused, resolved to the first alphabetically.
 
 The cash marker serves double duty: a **cash-withdrawal line** on the receipt (German supermarket
 cashback, *Bargeldauszahlung*) is recognised by the parser and seeded as a **transfer line**
-targeting the marked cash account — `EC-card −50 / Cash +50` inside the same transaction. No
-marked cash account → the line seeds without a target and the operator picks.
+targeting the cash account — `EC-card −50 / Cash +50` inside the same transaction.
 
-The parse schema carries this as the per-item **`transfer` field** (settled 2026-08-01): the
-model fills it with the word `cash` or a card's printed last-4 — the same signal vocabulary as
-the paying-account line, resolved through the same lookup (last-4 → `card_last4` match, `cash` →
-the marked cash account, unresolved → targetless transfer line for post-process). Real account
-names are never sent to or echoed by the model (ARCH-08). The symmetry covers **ATM slips** in
-both directions: a withdrawal is `card → cash`, a deposit `cash → card`.
+The parse schema carries this as the per-item **`transfer` field** (settled 2026-08-01): the model
+fills it with the word `cash` or a card's printed last-4, and it resolves through the **same two
+rules** (unresolved → targetless transfer line for post-process). Real account names and labels are
+never sent to or echoed by the model — matching happens here (ARCH-08). The symmetry covers **ATM
+slips** in both directions: a withdrawal is `card → cash`, a deposit `cash → card`.
 
 ```sql
-alter table account add column card_last4   text;                            -- card slips: '1234'
+-- V12, renamed in V16 (card_last4 → detection_labels)
+alter table account add column detection_labels text;                        -- 'card, 1234'
 alter table account add column cash_account boolean not null default false;  -- matches 'Bar'/cash
 ```
 

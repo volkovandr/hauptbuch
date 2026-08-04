@@ -74,9 +74,12 @@
       <p class="eyebrow">Receipt detection</p>
       <h2>Paying-account detection</h2>
       <p class="muted">
-        How the receipt parser recognises this account as the one that paid (data-model §13.4). The
-        card's last four digits match a printed card slip; the cash marker catches a
-        <span class="num">Bar</span>/cash line and cash-withdrawal transfers. Never sent to the AI.
+        How the receipt parser recognises this account as the one that paid (data-model §13.4).
+        Each label is matched as a substring of the payment line the AI read, ignoring case — so
+        <span class="num">card</span> catches <span class="num">card XXXX1234</span> too. The first
+        label that matches wins, so put the more specific ones first. The cash marker catches a
+        <span class="num">Bar</span>/cash line and cash-withdrawal transfers in this account's
+        currency. Never sent to the AI.
       </p>
       <form
         method="post"
@@ -84,17 +87,16 @@
         class="form"
       >
         <div class="field">
-          <label class="field__label" for="cardLast4">Card last 4 digits</label>
+          <label class="field__label" for="detectionLabels">
+            Payment-line labels (comma-separated)
+          </label>
           <input
-            id="cardLast4"
-            name="cardLast4"
+            id="detectionLabels"
+            name="detectionLabels"
             type="text"
-            class="input num"
-            inputmode="numeric"
-            maxlength="4"
-            pattern="\d{4}"
-            placeholder="1234"
-            th:value="${detection.cardLast4()}"
+            class="input"
+            placeholder="card, 1234, girocard"
+            th:value="${detection.detectionLabels()}"
             autocomplete="off"
           />
         </div>

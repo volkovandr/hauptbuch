@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -423,6 +424,38 @@ class AccountServiceTest {
             true,
             false),
         1);
+  }
+
+  @Test
+  void detectionLabelsAreStrippedAndBlanksDropped() {
+    when(accountRepository.findById(NEW_ID))
+        .thenReturn(Optional.of(account(NEW_ID, GIRO, ASSET, null)));
+
+    // An empty label would be a substring of every payment line; the order given is preserved
+    // because it is the detection tie-break (data-model §13.4).
+    accountService.updateDetection(NEW_ID, "  card , 1234 , ,", true);
+
+    verify(accountRepository).updateDetection(NEW_ID, "card, 1234", true);
+  }
+
+  @Test
+  void allBlankDetectionLabelsNormaliseToNull() {
+    when(accountRepository.findById(NEW_ID))
+        .thenReturn(Optional.of(account(NEW_ID, GIRO, ASSET, null)));
+
+    accountService.updateDetection(NEW_ID, " , , ", false);
+
+    verify(accountRepository).updateDetection(NEW_ID, null, false);
+  }
+
+  @Test
+  void detectionIsRefusedOnAnUnmanagedAccount() {
+    when(accountRepository.findById(NEW_ID))
+        .thenReturn(Optional.of(account(NEW_ID, "Food", EXPENSE, null)));
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> accountService.updateDetection(NEW_ID, "card", false));
+    verify(accountRepository, never()).updateDetection(anyLong(), any(), anyBoolean());
   }
 
   @Test

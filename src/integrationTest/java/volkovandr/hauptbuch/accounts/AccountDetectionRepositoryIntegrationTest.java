@@ -11,9 +11,10 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.accounts.repository.AccountRepository;
 
 /**
- * Integration tier (§1.5): the stage-9e paying-account detection round-trips (data-model §13.4) —
- * the card-last-4 and cash-account config write, read, and the lookups the analyse worker uses.
- * Flyway applies V12; each test is rolled back.
+ * Integration tier (§1.5): the paying-account detection config round-trips (data-model §13.4) — the
+ * label list and cash marker the account-edit screen writes, read back as the record. The candidate
+ * lookup the analyse worker uses is ordering logic and lives in the SQL-logic tier instead. Flyway
+ * applies V16; each test is rolled back.
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
@@ -31,36 +32,47 @@ class AccountDetectionRepositoryIntegrationTest {
   void updateAndFindDetectionRoundTrip() {
     long id = asset("EC Card");
 
-    accountRepository.updateDetection(id, "1234", false);
+    accountRepository.updateDetection(id, "card, 1234", false);
 
     AccountDetection detection = accountRepository.findDetection(id).orElseThrow();
-    assertThat(detection.cardLast4()).isEqualTo("1234");
+    assertThat(detection.detectionLabels()).isEqualTo("card, 1234");
     assertThat(detection.cashAccount()).isFalse();
   }
 
   @Test
-  void findByCardLast4MatchesTheConfiguredAccount() {
+  void updateDetectionClearsTheLabels() {
     long id = asset("Visa");
     accountRepository.updateDetection(id, "9876", false);
 
-    assertThat(accountRepository.findByCardLast4("9876").orElseThrow().accountId()).isEqualTo(id);
-    assertThat(accountRepository.findByCardLast4("0000")).isEmpty();
-  }
-
-  @Test
-  void findCashAccountMatchesTheMarkedAccount() {
-    long id = asset("Wallet");
     accountRepository.updateDetection(id, null, true);
 
-    assertThat(accountRepository.findCashAccount().orElseThrow().accountId()).isEqualTo(id);
+    AccountDetection detection = accountRepository.findDetection(id).orElseThrow();
+    assertThat(detection.detectionLabels()).isNull();
+    assertThat(detection.cashAccount()).isTrue();
   }
 
   @Test
-  void defaultsAreNoCardAndNotCash() {
+  void detectionCandidateCarriesTheColumnsTheDetectorReads() {
+    long id = asset("Girocard");
+    accountRepository.updateDetection(id, "card, 1234", false);
+
+    AccountDetectionCandidate candidate =
+        accountRepository.findDetectionCandidates("EUR").stream()
+            .filter(c -> c.accountId() == id)
+            .findFirst()
+            .orElseThrow();
+
+    assertThat(candidate.detectionLabels()).isEqualTo("card, 1234");
+    assertThat(candidate.currencyCode()).isEqualTo("EUR");
+    assertThat(candidate.cashAccount()).isFalse();
+  }
+
+  @Test
+  void defaultsAreNoLabelsAndNotCash() {
     long id = asset("Plain");
 
     AccountDetection detection = accountRepository.findDetection(id).orElseThrow();
-    assertThat(detection.cardLast4()).isNull();
+    assertThat(detection.detectionLabels()).isNull();
     assertThat(detection.cashAccount()).isFalse();
   }
 }

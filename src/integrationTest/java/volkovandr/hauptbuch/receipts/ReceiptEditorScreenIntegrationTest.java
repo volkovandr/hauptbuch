@@ -99,6 +99,63 @@ class ReceiptEditorScreenIntegrationTest {
   }
 
   @Test
+  void undetectedAccountLeavesThePlaceholderSelected() throws Exception {
+    // 'Cash' sorts first among the accounts, which is exactly what a browser used to pre-select
+    // when detection found nothing — submitting a wrong account that Confirm then waved through.
+    account("Cash", "asset", "EUR");
+    account("Girocard", "asset", "EUR");
+    long id = undetectedReceipt("5.00", "EUR");
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(Matchers.containsString("pick an account")))
+        .andExpect(content().string(Matchers.containsString("value=\"\" selected=\"selected\"")));
+  }
+
+  @Test
+  void saveKeepsTheDraftWithNoAccountPicked() throws Exception {
+    // Save is the lenient rung: an undetected account must survive a round-trip rather than being
+    // rejected or silently filled in. Confirm is where the missing account is a hard block.
+    account("Cash", "asset", "EUR");
+    long id = undetectedReceipt("5.00", "EUR");
+
+    mockMvc
+        .perform(
+            post("/receipts/" + id + "/lines/save")
+                .param("date", "2026-07-21")
+                .param("accountId", "")
+                .param("currencyCode", "EUR")
+                .param("total", "5,00")
+                .param("lineDescription", "Snack")
+                .param("lineAmount", "5,00"))
+        .andExpect(status().isOk());
+
+    Long saved =
+        jdbcClient
+            .sql("select account_id from receipt where receipt_id = :id")
+            .param("id", id)
+            .query(Long.class)
+            .optional()
+            .orElse(null);
+    assertThat(saved).isNull();
+    assertThat(linesOf(id)).hasSize(1);
+  }
+
+  @Test
+  void detectedAccountLeavesThePlaceholderUnselected() throws Exception {
+    long pay = account("Girocard", "asset", "EUR");
+    long id = processedReceipt(pay, "5.00", "EUR");
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(Matchers.not(Matchers.containsString("value=\"\" selected=\"selected\""))));
+  }
+
+  @Test
   void warnsWhenTheCurrencyDiffersFromTheAccount() throws Exception {
     long pay = account("Cash", "asset", "EUR");
     long id = processedReceipt(pay, "5.00", "USD");
@@ -230,6 +287,23 @@ class ReceiptEditorScreenIntegrationTest {
             """)
         .param("accountId", accountId)
         .param("total", total == null ? null : new BigDecimal(total))
+        .param("currency", currency)
+        .query(Long.class)
+        .single();
+  }
+
+  /** A processed receipt whose paying account detection found nothing — the operator must pick. */
+  private long undetectedReceipt(String total, String currency) {
+    return jdbcClient
+        .sql(
+            """
+            insert into receipt (state, source, original_path, edited_path, edit_recipe,
+                                 total_amount, currency_code)
+            values ('processed', 'pc', 'originals/a.jpg', 'edited/a.jpg', '{}',
+                    :total, :currency)
+            returning receipt_id
+            """)
+        .param("total", new BigDecimal(total))
         .param("currency", currency)
         .query(Long.class)
         .single();
