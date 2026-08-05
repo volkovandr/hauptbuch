@@ -37,12 +37,6 @@ public class ReceiptAnalyser {
 
   private static final Logger LOG = LoggerFactory.getLogger(ReceiptAnalyser.class);
 
-  /** The edited image sent to the model is the 9c-baked JPEG (never re-encoded, §13.1). */
-  private static final String EDITED_MEDIA_TYPE = "image/jpeg";
-
-  /** Kept short so a long API/SDK message cannot overflow a UI line; the full detail is logged. */
-  private static final int MAX_ERROR_LENGTH = 500;
-
   private final ExecutorService executor =
       Executors.newSingleThreadExecutor(
           runnable -> {
@@ -84,13 +78,16 @@ public class ReceiptAnalyser {
    * succeeded, hand the parse to the background thread. A receipt that is not a live {@code
    * pre_processed} one is not claimed and nothing is submitted.
    *
+   * @param cachePrompt whether to mark the system prompt with a cache breakpoint — the operator's
+   *     "Analyse (cached)" button (9h); worth it only when more parses follow within the 5-minute
+   *     TTL, which is why it is a second button rather than the default
    * @return true if the receipt was claimed and queued
    */
-  public boolean start(long receiptId) {
+  public boolean start(long receiptId, boolean cachePrompt) {
     if (!analysisService.claim(receiptId)) {
       return false;
     }
-    executor.execute(() -> run(receiptId));
+    executor.execute(() -> run(receiptId, cachePrompt));
     return true;
   }
 
@@ -100,7 +97,7 @@ public class ReceiptAnalyser {
    * otherwise seeds and processes it. Any unexpected error still lands the receipt in {@code
    * failed} rather than leaving it stuck {@code processing}.
    */
-  void run(long receiptId) {
+  void run(long receiptId, boolean cachePrompt) {
     Optional<Receipt> found = receiptService.findById(receiptId);
     if (found.isEmpty()) {
       return; // deleted between claim and run — abandon
@@ -112,13 +109,13 @@ public class ReceiptAnalyser {
       return;
     }
     try {
-      parseAndSeed(receipt, imageBytes.get());
+      parseAndSeed(receipt, imageBytes.get(), cachePrompt);
     } catch (ReceiptParseException e) {
       LOG.warn("Receipt {} parse failed", receiptId, e);
-      analysisService.failTransport(receiptId, truncate(e.getMessage()));
+      analysisService.failTransport(receiptId, e.getMessage());
     } catch (RuntimeException e) {
       LOG.error("Receipt {} analyse errored unexpectedly", receiptId, e);
-      analysisService.failTransport(receiptId, truncate("Unexpected error: " + e.getMessage()));
+      analysisService.failTransport(receiptId, "Unexpected error: " + e.getMessage());
     }
   }
 
@@ -146,34 +143,44 @@ public class ReceiptAnalyser {
             orZero(receipt.tokensOut()),
             orZero(receipt.tokensCacheWrite()),
             orZero(receipt.tokensCacheRead()));
-    BigDecimal cost = receipt.parseCost();
-
-    Optional<ParsedReceipt> decoded = decoder.decode(editedRaw);
-    if (decoded.isEmpty()) {
-      analysisService.failUndecodable(
-          receiptId, "Could not decode the edited response", result, cost);
-      return false;
-    }
-    analysisService.applyProcessed(receiptId, result, cost, seeder.seed(decoded.get()));
-    return true;
+    return applyParsed(
+        receiptId, result, receipt.parseCost(), "Could not decode the edited response");
   }
 
   private static int orZero(Integer value) {
     return value == null ? 0 : value;
   }
 
-  private void parseAndSeed(Receipt receipt, byte[] imageBytes) {
-    long receiptId = receipt.receiptId();
+  /**
+   * Decode a returned body and land the receipt: seeded and {@code processed} when it decodes,
+   * {@code failed} with the raw body kept when it does not. The single-mode worker, the operator's
+   * re-parse, and the 9h batch poller all finish here, so "lenient seeding" means one thing in the
+   * app rather than three.
+   *
+   * @return true if the body decoded and the receipt is now {@code processed}
+   */
+  boolean applyParsed(
+      long receiptId, ReceiptParseResult result, BigDecimal cost, String undecodableReason) {
+    Optional<ParsedReceipt> decoded = decoder.decode(result.rawToon());
+    if (decoded.isEmpty()) {
+      analysisService.failUndecodable(receiptId, undecodableReason, result, cost);
+      return false;
+    }
+    analysisService.applyProcessed(receiptId, result, cost, seeder.seed(decoded.get()));
+    return true;
+  }
+
+  private void parseAndSeed(Receipt receipt, byte[] imageBytes, boolean cachePrompt) {
     AiSettings config = settingsService.aiConfig();
-    String systemPrompt =
-        promptBuilder.build(aiVocabularyService.aiVocabulary(), settingsService.aiSystemPrompt());
     ReceiptParseRequest request =
         new ReceiptParseRequest(
             config.model(),
             config.apiKey(),
-            systemPrompt,
+            promptBuilder.build(
+                aiVocabularyService.aiVocabulary(), settingsService.aiSystemPrompt()),
             promptBuilder.userText(receipt.aiNote()),
-            EDITED_MEDIA_TYPE);
+            AnthropicPrompts.EDITED_MEDIA_TYPE,
+            cachePrompt);
 
     ReceiptParseResult result = receiptParser.parse(request, imageBytes);
     BigDecimal cost =
@@ -183,13 +190,7 @@ public class ReceiptAnalyser {
             result.tokensCacheWrite(),
             result.tokensCacheRead());
 
-    Optional<ParsedReceipt> decoded = decoder.decode(result.rawToon());
-    if (decoded.isEmpty()) {
-      analysisService.failUndecodable(
-          receiptId, "Could not decode the parser response", result, cost);
-      return;
-    }
-    analysisService.applyProcessed(receiptId, result, cost, seeder.seed(decoded.get()));
+    applyParsed(receipt.receiptId(), result, cost, "Could not decode the parser response");
   }
 
   /** On boot, fail orphaned single-mode {@code processing} rows (data-model §13.1). */
@@ -199,11 +200,6 @@ public class ReceiptAnalyser {
     if (swept > 0) {
       LOG.info("Startup sweep failed {} orphaned processing receipt(s)", swept);
     }
-  }
-
-  private static String truncate(String message) {
-    String safe = message == null ? "The parse failed" : message;
-    return safe.length() <= MAX_ERROR_LENGTH ? safe : safe.substring(0, MAX_ERROR_LENGTH);
   }
 
   @PreDestroy

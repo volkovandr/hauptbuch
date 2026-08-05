@@ -165,6 +165,20 @@
           >View image</a
         >
       </li>
+      <!-- Process (9h): one Batches-API job for every pre_processed member, at half price. No
+           dialog — the claim is instant and reversible per receipt by deleting it. -->
+      <li th:if="${menu.canProcess()}">
+        <button
+          type="button"
+          hx-post="/receipts/process"
+          hx-include="[data-receipt-menu], [name='state'], [name='range']"
+          hx-target="#receipt-list"
+          hx-swap="outerHTML"
+          th:text="'Process ' + ${menu.processableLabel()} + ' with AI'"
+        >
+          Process with AI
+        </button>
+      </li>
       <li th:if="${menu.canDelete()}">
         <button
           type="button"
@@ -182,10 +196,19 @@
        th:text="|${menu.skipped()} of ${menu.total()} selected were committed — skipped|">
       1 of 3 selected were committed — skipped
     </p>
+    <p class="receipt-menu__skip muted" th:if="${menu.canProcess() and menu.processSkipped() > 0}"
+       th:text="|${menu.processSkipped()} of ${menu.total()} selected are not ready for the AI — Process skips them|">
+      1 of 3 selected are not ready for the AI — Process skips them
+    </p>
     <!-- What Delete means (the count reads as an amount, not IDs); the dialog then asks about files. -->
     <p class="receipt-menu__help muted" th:if="${menu.canDelete()}">
       <strong>Delete</strong> removes the record; the next step asks whether to remove the image
       files too, or keep them (e.g. "seen, chose not to book").
+    </p>
+    <!-- Why Process is worth batching: the shared prompt is cached and the batch discount halves it. -->
+    <p class="receipt-menu__help muted" th:if="${menu.canProcess()}">
+      <strong>Process</strong> sends the selection to the AI as one batch — half price, results
+      arrive per receipt over the next few minutes.
     </p>
   </div>
 

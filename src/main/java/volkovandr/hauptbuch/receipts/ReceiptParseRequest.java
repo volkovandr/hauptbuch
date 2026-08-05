@@ -12,6 +12,14 @@ package volkovandr.hauptbuch.receipts;
  * @param systemPrompt the system instructions + vocabulary + TOON skeleton (the cacheable prefix)
  * @param userText the per-receipt AI note that accompanies the image, or empty
  * @param mediaType the image's MIME type ({@code image/jpeg} — the baked edited copy, 9c)
+ * @param cachePrompt whether to mark the system prompt with a cache breakpoint (9h): the operator's
+ *     "Analyse (cached)" choice in single mode, always set for a batch member. A cache write costs
+ *     +25 % and only pays back on a second parse within the 5-minute TTL, so it is never implicit
  */
 public record ReceiptParseRequest(
-    String model, String apiKey, String systemPrompt, String userText, String mediaType) {}
+    String model,
+    String apiKey,
+    String systemPrompt,
+    String userText,
+    String mediaType,
+    boolean cachePrompt) {}

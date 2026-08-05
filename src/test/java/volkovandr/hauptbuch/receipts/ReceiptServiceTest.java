@@ -201,6 +201,40 @@ class ReceiptServiceTest {
     assertThat(service.neighbours(99L, List.of("new"), null)).isEqualTo(ReceiptNeighbours.NONE);
   }
 
+  /**
+   * The context menu's two counts are independent axes: everything non-committed is deletable, only
+   * {@code pre_processed} members can go into a batch (9h).
+   */
+  @Test
+  void menuCountsDeletableAndProcessableMembersSeparately() {
+    when(receiptRepository.findLiveByIds(any()))
+        .thenReturn(
+            List.of(
+                receipt(1L, "pre_processed", EDITED),
+                receipt(2L, "new", null),
+                receipt(3L, "committed", EDITED)));
+
+    SelectionMenu menu = service.menuFor(List.of(1L, 2L, 3L));
+
+    assertThat(menu.total()).isEqualTo(3);
+    assertThat(menu.deletable()).isEqualTo(2);
+    assertThat(menu.processable()).isEqualTo(1);
+    assertThat(menu.skipped()).isEqualTo(1);
+    assertThat(menu.processSkipped()).isEqualTo(2);
+    assertThat(menu.processableLabel()).isEqualTo("1 receipt");
+    assertThat(menu.deletableLabel()).isEqualTo("2 receipts");
+  }
+
+  @Test
+  void menuOffersNothingForAnEmptySelection() {
+    when(receiptRepository.findLiveByIds(any())).thenReturn(List.of());
+
+    SelectionMenu menu = service.menuFor(List.of());
+
+    assertThat(menu.canDelete()).isFalse();
+    assertThat(menu.canProcess()).isFalse();
+  }
+
   @Test
   void mobileListQueriesThe90DayWindow() {
     when(receiptRepository.findForMobile(any())).thenReturn(List.of());

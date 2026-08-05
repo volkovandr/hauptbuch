@@ -210,6 +210,131 @@ class ReceiptRepositoryIntegrationTest {
     assertThat(receiptRepository.reopen(id)).isZero();
   }
 
+  // ── Batch membership (plan §9h) ──────────────────────────────────────────────
+
+  @Test
+  void assignBatchStampsEveryMemberAndFindsThemBack() {
+    long one = capturedWithState("processing");
+    long two = capturedWithState("processing");
+
+    assertThat(receiptRepository.assignBatch(List.of(one, two), "msgbatch_01")).isEqualTo(2);
+
+    assertThat(receiptRepository.findById(one).orElseThrow().batchId()).isEqualTo("msgbatch_01");
+    assertThat(receiptRepository.findLiveBatchIds()).containsExactly("msgbatch_01");
+    assertThat(receiptRepository.findLiveBatchMembers("msgbatch_01"))
+        .extracting(Receipt::receiptId)
+        .containsExactly(one, two);
+  }
+
+  @Test
+  void assignBatchIgnoresEmptySelection() {
+    assertThat(receiptRepository.assignBatch(List.of(), "msgbatch_01")).isZero();
+  }
+
+  /**
+   * The poller's work list is the live, still-{@code processing} members only: a landed member and
+   * a soft-deleted one both drop out — which is exactly how a batch stops being polled.
+   */
+  @Test
+  void liveBatchLookupsSkipLandedAndDeletedMembers() {
+    long processing = capturedWithState("processing");
+    long landed = capturedWithState("processed");
+    long deleted = capturedWithState("processing");
+    receiptRepository.assignBatch(List.of(processing, landed, deleted), "msgbatch_01");
+    receiptRepository.softDelete(deleted);
+
+    assertThat(receiptRepository.findLiveBatchMembers("msgbatch_01"))
+        .extracting(Receipt::receiptId)
+        .containsExactly(processing);
+
+    receiptRepository.failBatchMembers("msgbatch_01", "gone");
+    assertThat(receiptRepository.findLiveBatchIds()).isEmpty();
+  }
+
+  @Test
+  void failBatchMembersFailsOnlyTheProcessingOnes() {
+    long processing = capturedWithState("processing");
+    long landed = capturedWithState("processed");
+    receiptRepository.assignBatch(List.of(processing, landed), "msgbatch_01");
+
+    assertThat(receiptRepository.failBatchMembers("msgbatch_01", "batch expired")).isEqualTo(1);
+
+    Receipt failed = receiptRepository.findById(processing).orElseThrow();
+    assertThat(failed.state()).isEqualTo("failed");
+    assertThat(failed.parseError()).isEqualTo("batch expired");
+    // The landed member keeps its state — a result already applied is not rolled back.
+    assertThat(receiptRepository.findById(landed).orElseThrow().state()).isEqualTo("processed");
+  }
+
+  /** A submit that never reached the API has no batch id yet, so its members fail by id. */
+  @Test
+  void failClaimedFailsTheClaimedReceipts() {
+    long claimed = capturedWithState("processing");
+    long untouched = capturedWithState("pre_processed");
+
+    assertThat(receiptRepository.failClaimed(List.of(claimed, untouched), "submit failed"))
+        .isEqualTo(1);
+
+    assertThat(receiptRepository.findById(claimed).orElseThrow().state()).isEqualTo("failed");
+    assertThat(receiptRepository.findById(untouched).orElseThrow().state())
+        .isEqualTo("pre_processed");
+  }
+
+  @Test
+  void failClaimedIgnoresEmptySelection() {
+    assertThat(receiptRepository.failClaimed(List.of(), "submit failed")).isZero();
+  }
+
+  /**
+   * A retried batch member leaves its batch behind. Without this the dead batch would stay on the
+   * poller's list, and the register would keep badging the receipt as a batch member.
+   */
+  @Test
+  void retryClearsTheBatchId() {
+    long id = capturedWithState("processing");
+    receiptRepository.assignBatch(List.of(id), "msgbatch_01");
+    receiptRepository.failBatchMembers("msgbatch_01", "batch expired");
+
+    assertThat(receiptRepository.retryToPreProcessed(id)).isEqualTo(1);
+
+    assertThat(receiptRepository.findById(id).orElseThrow().batchId()).isNull();
+    assertThat(receiptRepository.findLiveBatchIds()).isEmpty();
+  }
+
+  /**
+   * Every claim starts single-mode. A previously-batched receipt analysed again on its own must not
+   * keep pointing at the old batch — that would exempt it from the startup sweep and let the poller
+   * fail a live single parse when the dead batch 404s.
+   */
+  @Test
+  void claimingClearsStaleBatchId() {
+    long id = capturedWithState("processing");
+    receiptRepository.assignBatch(List.of(id), "msgbatch_01");
+    receiptRepository.failBatchMembers("msgbatch_01", "batch expired");
+    receiptRepository.retryToPreProcessed(id);
+
+    assertThat(receiptRepository.markProcessing(id)).isEqualTo(1);
+
+    Receipt claimed = receiptRepository.findById(id).orElseThrow();
+    assertThat(claimed.state()).isEqualTo("processing");
+    assertThat(claimed.batchId()).isNull();
+    // …and being single-mode again, it is back in the startup sweep's scope.
+    assertThat(receiptRepository.sweepOrphanedProcessing("restarted")).isEqualTo(1);
+  }
+
+  /** A batch member is exempt from the 9e startup sweep — the poller resumes it after a restart. */
+  @Test
+  void startupSweepLeavesBatchMembersAlone() {
+    long single = capturedWithState("processing");
+    long member = capturedWithState("processing");
+    receiptRepository.assignBatch(List.of(member), "msgbatch_01");
+
+    assertThat(receiptRepository.sweepOrphanedProcessing("restarted")).isEqualTo(1);
+
+    assertThat(receiptRepository.findById(single).orElseThrow().state()).isEqualTo("failed");
+    assertThat(receiptRepository.findById(member).orElseThrow().state()).isEqualTo("processing");
+  }
+
   /** Insert a receipt in a given state at "now", returning its id. */
   private long capturedWithState(String state) {
     Receipt r = receiptRepository.insertCaptured("pc", "originals/2026/07/x.jpg");

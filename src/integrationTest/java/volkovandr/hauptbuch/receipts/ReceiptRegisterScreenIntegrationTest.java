@@ -26,6 +26,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
@@ -50,6 +51,13 @@ class ReceiptRegisterScreenIntegrationTest {
 
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
+
+  /**
+   * The batch seam is faked so Process never reaches the network. The claim itself is synchronous
+   * and asserted below; the background submit sees nothing (this test's rows are rolled back, never
+   * committed), and with the seam faked that stays true however the executor is scheduled.
+   */
+  @MockitoBean ReceiptBatchClient receiptBatchClient;
 
   @DynamicPropertySource
   static void storageRoot(DynamicPropertyRegistry registry) {
@@ -214,6 +222,84 @@ class ReceiptRegisterScreenIntegrationTest {
         .andExpect(content().string(containsString("1 of 2 selected were committed")));
   }
 
+  // ── Batch: the Process action (§3.2, plan §9h) ───────────────────────────────
+
+  @Test
+  void menuOffersProcessForPreProcessedMembers() throws Exception {
+    long one = upload();
+    long two = upload();
+    setState(one, "pre_processed");
+    setState(two, "pre_processed");
+
+    mockMvc
+        .perform(
+            get("/receipts/menu").param(ID, String.valueOf(one)).param(ID, String.valueOf(two)))
+        .andExpect(content().string(containsString("Process 2 receipts with AI")))
+        .andExpect(content().string(containsString("/receipts/process")));
+  }
+
+  /** Nothing ready for the AI ⇒ no Process row at all (the action would be a no-op). */
+  @Test
+  void menuOmitsProcessWhenNothingIsPreProcessed() throws Exception {
+    long id = upload();
+
+    mockMvc
+        .perform(get("/receipts/menu").param(ID, String.valueOf(id)))
+        .andExpect(content().string(not(containsString("with AI"))));
+  }
+
+  @Test
+  void menuReportsMembersProcessWouldSkip() throws Exception {
+    long ready = upload();
+    long fresh = upload();
+    setState(ready, "pre_processed");
+
+    mockMvc
+        .perform(
+            get("/receipts/menu").param(ID, String.valueOf(ready)).param(ID, String.valueOf(fresh)))
+        .andExpect(content().string(containsString("Process 1 receipt with AI")))
+        .andExpect(content().string(containsString("1 of 2 selected are not ready for the AI")));
+  }
+
+  /**
+   * Process claims every valid member and skips the rest, then re-renders the list in place — the
+   * claimed rows read {@code Processing}, the skipped one keeps its state. The submit itself runs
+   * on the background executor, so nothing here touches the network.
+   */
+  @Test
+  void processClaimsPreProcessedMembersAndSkipsTheRest() throws Exception {
+    long ready = upload();
+    long fresh = upload();
+    setState(ready, "pre_processed");
+
+    mockMvc
+        .perform(
+            post("/receipts/process")
+                .param(ID, String.valueOf(ready))
+                .param(ID, String.valueOf(fresh)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("rstate--processing")));
+
+    assertThat(stateOf(ready)).isEqualTo("processing");
+    assertThat(stateOf(fresh)).isEqualTo("new");
+  }
+
+  /** A batch member is marked in the register's status column, so a stalled job is visible. */
+  @Test
+  void registerBadgesBatchMembers() throws Exception {
+    long id = upload();
+    setState(id, "processing");
+    jdbcClient
+        .sql("update receipt set batch_id = 'msgbatch_01' where receipt_id = :id")
+        .param(ID, id)
+        .update();
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH))
+        .andExpect(content().string(containsString("title=\"Batch member\"")))
+        .andExpect(content().string(containsString("rstate--processing")));
+  }
+
   @Test
   void phoneUserAgentRedirectsRootToCapture() throws Exception {
     mockMvc
@@ -255,6 +341,14 @@ class ReceiptRegisterScreenIntegrationTest {
         .param("state", state)
         .param(ID, id)
         .update();
+  }
+
+  private String stateOf(long id) {
+    return jdbcClient
+        .sql("select state from receipt where receipt_id = :id")
+        .param(ID, id)
+        .query(String.class)
+        .single();
   }
 
   private String originalPath(long id) {
