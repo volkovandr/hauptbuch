@@ -359,7 +359,7 @@ detail. Decisions below grilled & settled 2026-08-02 (data-model to v0.11).
 **Done when:** a processed receipt can be brought to complete, balanced transaction detail
 without leaving the pane.
 
-## 9g — Confirm, link, reopen
+## 9g — Confirm, link, reopen ✅ **complete** (owner-confirmed 2026-08-05)
 
 **Goal:** the draft becomes a real transaction; the loop closes — including re-entry.
 Decisions grilled & settled 2026-08-03 (receipt doc to v0.6, data-model to v0.12).
