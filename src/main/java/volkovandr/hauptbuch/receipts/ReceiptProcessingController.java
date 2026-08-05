@@ -41,6 +41,9 @@ class ReceiptProcessingController {
   private static final String RANGE = "range";
   private static final String REDIRECT_REGISTER = "redirect:" + BASE_PATH;
 
+  /** The default for every boolean request param here — an absent checkbox/button means "no". */
+  private static final String FALSE = "false";
+
   private final ReceiptService receiptService;
   private final ReceiptAnalyser receiptAnalyser;
   private final ReceiptAnalysisService receiptAnalysisService;
@@ -134,14 +137,19 @@ class ReceiptProcessingController {
    * queue the background parse, then redirect to the screen — which now renders the greyed, polling
    * processing view. A receipt that is not a live {@code pre_processed} one is not claimed; the
    * redirect simply re-renders its current state.
+   *
+   * <p>{@code cached} is the second Analyse button (9h): it marks the system prompt with a cache
+   * breakpoint, which pays off only when more parses follow within the 5-minute TTL. One POST, one
+   * boolean — no settings, no schema, no JS.
    */
   @PostMapping("/receipts/{id}/analyse")
   String analyse(
       @PathVariable long id,
+      @RequestParam(required = false, defaultValue = FALSE) boolean cached,
       @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
       @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
       RedirectAttributes redirectAttributes) {
-    receiptAnalyser.start(id);
+    receiptAnalyser.start(id, cached);
     return redirectToScreen(id, state, range, redirectAttributes);
   }
 
@@ -228,7 +236,7 @@ class ReceiptProcessingController {
   @PostMapping("/receipts/{id}/delete")
   String delete(
       @PathVariable long id,
-      @RequestParam(required = false, defaultValue = "false") boolean removeFiles,
+      @RequestParam(required = false, defaultValue = FALSE) boolean removeFiles,
       @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
       @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
       RedirectAttributes redirectAttributes) {
@@ -409,8 +417,8 @@ class ReceiptProcessingController {
   @PostMapping("/receipts/{id}/delete-committed")
   String deleteCommitted(
       @PathVariable long id,
-      @RequestParam(required = false, defaultValue = "false") boolean voidTransaction,
-      @RequestParam(required = false, defaultValue = "false") boolean removeFiles,
+      @RequestParam(required = false, defaultValue = FALSE) boolean voidTransaction,
+      @RequestParam(required = false, defaultValue = FALSE) boolean removeFiles,
       @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
       @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
       RedirectAttributes redirectAttributes) {

@@ -71,11 +71,23 @@
                    so no confirmation (a plain full-navigation POST — no page-scoped JS). -->
               <button type="submit" class="btn">Discard edits</button>
             </form>
-            <!-- Hand the baked image to the AI worker; the screen then greys and polls (§3.1). -->
+            <!-- Hand the baked image to the AI worker; the screen then greys and polls (§3.1).
+                 Two buttons (9h): plain Analyse, and one that marks the system prompt with a cache
+                 breakpoint. The write costs +25 % and only pays back on a second parse within the
+                 5-minute TTL, so caching is the operator's call, never implicit. -->
             <form method="post" th:action="@{/receipts/{id}/analyse(id=${receipt.receiptId()})}">
               <input type="hidden" name="state" th:value="${stateFilter}" />
               <input type="hidden" name="range" th:value="${rangeFilter}" />
-              <button type="submit" class="btn">Analyse</button>
+              <button type="submit" class="btn" name="cached" value="false">Analyse</button>
+              <button
+                type="submit"
+                class="btn btn--ghost"
+                name="cached"
+                value="true"
+                title="Cache the prompt prefix — cheaper when more receipts follow within 5 minutes"
+              >
+                Analyse (cached)
+              </button>
             </form>
           </div>
         </div>

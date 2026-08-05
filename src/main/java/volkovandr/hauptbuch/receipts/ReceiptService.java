@@ -200,17 +200,22 @@ public class ReceiptService {
 
   /**
    * Summarise which context-menu actions apply to a selection (§5.2). Reads the live receipts among
-   * {@code ids} and counts the deletable (non-committed) members — committed ones are skipped.
+   * {@code ids} and counts the deletable (non-committed) members — committed ones are skipped — and
+   * the processable ({@code pre_processed}) ones a batch can take (9h).
    */
   public SelectionMenu menuFor(List<Long> ids) {
     List<Receipt> selected = receiptRepository.findLiveByIds(ids);
     int deletable = 0;
+    int processable = 0;
     for (Receipt r : selected) {
       if (!ReceiptState.COMMITTED.equals(r.state())) {
         deletable++;
       }
+      if (ReceiptState.PRE_PROCESSED.equals(r.state())) {
+        processable++;
+      }
     }
-    return new SelectionMenu(selected.size(), deletable);
+    return new SelectionMenu(selected.size(), deletable, processable);
   }
 
   /**

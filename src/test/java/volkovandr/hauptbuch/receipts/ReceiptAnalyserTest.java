@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -142,7 +143,7 @@ class ReceiptAnalyserTest {
             new ParsedHeader(null, null, null, null, null, null, null, null, null), List.of());
     when(seeder.seed(parsed)).thenReturn(seeded);
 
-    analyser().run(ID);
+    analyser().run(ID, false);
 
     verify(analysisService).applyProcessed(eq(ID), eq(result), any(BigDecimal.class), eq(seeded));
   }
@@ -152,7 +153,7 @@ class ReceiptAnalyserTest {
     stubUpToParser();
     when(receiptParser.parse(any(), any())).thenThrow(new ReceiptParseException("network down"));
 
-    analyser().run(ID);
+    analyser().run(ID, false);
 
     verify(analysisService).failTransport(eq(ID), any());
     verify(analysisService, never()).applyProcessed(anyLong(), any(), any(), any());
@@ -165,7 +166,7 @@ class ReceiptAnalyserTest {
     when(receiptParser.parse(any(), any())).thenReturn(result);
     when(decoder.decode("garbage")).thenReturn(Optional.empty());
 
-    analyser().run(ID);
+    analyser().run(ID, false);
 
     verify(analysisService).failUndecodable(eq(ID), any(), eq(result), any(BigDecimal.class));
   }
@@ -174,7 +175,7 @@ class ReceiptAnalyserTest {
   void abandonsReceiptDeletedBeforeRun() {
     when(receiptService.findById(ID)).thenReturn(Optional.empty());
 
-    analyser().run(ID);
+    analyser().run(ID, false);
 
     verifyNoInteractions(receiptParser);
     verify(analysisService, never()).applyProcessed(anyLong(), any(), any(), any());
@@ -186,7 +187,7 @@ class ReceiptAnalyserTest {
     when(receiptService.findById(ID)).thenReturn(Optional.of(receipt()));
     when(receiptService.editedBytes(ID)).thenReturn(Optional.empty());
 
-    analyser().run(ID);
+    analyser().run(ID, false);
 
     verify(analysisService).failTransport(eq(ID), any());
     verifyNoInteractions(receiptParser);
@@ -196,7 +197,41 @@ class ReceiptAnalyserTest {
   void startClaimsBeforeQueuing() {
     when(analysisService.claim(ID)).thenReturn(false);
 
-    assertThat(analyser().start(ID)).isFalse();
+    assertThat(analyser().start(ID, false)).isFalse();
+  }
+
+  /**
+   * The 9h cache flag reaches the parser verbatim — plain Analyse leaves the prefix unmarked, so a
+   * one-off parse never pays the cache write.
+   */
+  @Test
+  void plainAnalyseAsksForNoPromptCache() {
+    stubUpToParser();
+    when(receiptParser.parse(any(), any())).thenThrow(new ReceiptParseException("stop here"));
+
+    analyser().run(ID, false);
+
+    assertThat(capturedRequest().cachePrompt()).isFalse();
+  }
+
+  @Test
+  void cachedAnalyseMarksThePromptPrefix() {
+    stubUpToParser();
+    when(receiptParser.parse(any(), any())).thenThrow(new ReceiptParseException("stop here"));
+
+    analyser().run(ID, true);
+
+    ReceiptParseRequest request = capturedRequest();
+    assertThat(request.cachePrompt()).isTrue();
+    // Only the system prompt is the cacheable prefix; the note stays in the volatile user turn.
+    assertThat(request.systemPrompt()).isEqualTo("system");
+    assertThat(request.userText()).isEqualTo("Parse this receipt.");
+  }
+
+  private ReceiptParseRequest capturedRequest() {
+    ArgumentCaptor<ReceiptParseRequest> sent = ArgumentCaptor.forClass(ReceiptParseRequest.class);
+    verify(receiptParser).parse(sent.capture(), any());
+    return sent.getValue();
   }
 
   @Test

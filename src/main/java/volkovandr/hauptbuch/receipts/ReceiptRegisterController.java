@@ -28,9 +28,12 @@ class ReceiptRegisterController {
   private static final String LIST_FRAGMENT = "receipts :: list(receipts=${receipts})";
 
   private final ReceiptService receiptService;
+  private final ReceiptBatchAnalyser receiptBatchAnalyser;
 
-  ReceiptRegisterController(ReceiptService receiptService) {
+  ReceiptRegisterController(
+      ReceiptService receiptService, ReceiptBatchAnalyser receiptBatchAnalyser) {
     this.receiptService = receiptService;
+    this.receiptBatchAnalyser = receiptBatchAnalyser;
   }
 
   /** The register page, filtered by state and capture-date range. */
@@ -62,7 +65,8 @@ class ReceiptRegisterController {
 
   /**
    * The right-click context menu for a selection (§5.2): a server-rendered fragment listing the
-   * actions valid for the selected receipts, with skip counts. 9e/9h add Process/Re-analyse rows.
+   * actions valid for the selected receipts, with skip counts — View image, Process (the 9h batch),
+   * and Delete.
    */
   @GetMapping("/receipts/menu")
   String menu(@RequestParam(name = "id", required = false) List<Long> ids, Model model) {
@@ -78,6 +82,23 @@ class ReceiptRegisterController {
   String deleteDialog(@RequestParam(name = "id", required = false) List<Long> ids, Model model) {
     populateSelection(model, ids);
     return "receipts :: deleteDialog";
+  }
+
+  /**
+   * Send a selection to the AI as one batch (§3.2, 9h): every {@code pre_processed} member is
+   * claimed and queued at half price, members in any other state are skipped. Returns as soon as
+   * the claim is done — the submit itself runs in the background — and re-renders the list, where
+   * the claimed rows now read {@code Processing}.
+   */
+  @PostMapping("/receipts/process")
+  String process(
+      @RequestParam(name = "id", required = false) List<Long> ids,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      Model model) {
+    receiptBatchAnalyser.start(nullSafe(ids));
+    populateList(model, state, range);
+    return LIST_FRAGMENT;
   }
 
   /** Delete a selection through the ladder; committed members are skipped. Re-renders the list. */

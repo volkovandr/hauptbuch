@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.receipts;
 
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -54,7 +55,7 @@ class ReceiptAnalyseScreenIntegrationTest {
 
   @Test
   void analyseStartsTheWorkerAndRedirects() throws Exception {
-    when(receiptAnalyser.start(anyLong())).thenReturn(true);
+    when(receiptAnalyser.start(anyLong(), anyBoolean())).thenReturn(true);
     long id = seed("pre_processed");
 
     mockMvc
@@ -62,7 +63,33 @@ class ReceiptAnalyseScreenIntegrationTest {
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrlPattern("/receipts/" + id + "*"));
 
-    verify(receiptAnalyser).start(id);
+    verify(receiptAnalyser).start(id, false);
+  }
+
+  /** The 9h second button: the same POST, carrying the cache-the-prefix choice. */
+  @Test
+  void analyseCachedPassesTheCacheFlagToTheWorker() throws Exception {
+    when(receiptAnalyser.start(anyLong(), anyBoolean())).thenReturn(true);
+    long id = seed("pre_processed");
+
+    mockMvc
+        .perform(post("/receipts/" + id + "/analyse").param("cached", "true"))
+        .andExpect(status().is3xxRedirection());
+
+    verify(receiptAnalyser).start(id, true);
+  }
+
+  /** Both Analyse buttons render on the pre-process view (9h), submitting the one form. */
+  @Test
+  void preProcessedViewOffersBothAnalyseButtons() throws Exception {
+    long id = seed("pre_processed");
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(Matchers.containsString("name=\"cached\" value=\"false\"")))
+        .andExpect(content().string(Matchers.containsString("value=\"true\"")))
+        .andExpect(content().string(Matchers.containsString("Analyse (cached)")));
   }
 
   @Test

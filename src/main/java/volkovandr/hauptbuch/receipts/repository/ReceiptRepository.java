@@ -23,6 +23,9 @@ import volkovandr.hauptbuch.receipts.ReceiptParseResult;
 @Repository
 public class ReceiptRepository {
 
+  /** The bind name shared by every "fail this receipt with a reason" update. */
+  private static final String PARSE_ERROR = "parseError";
+
   private final JdbcClient jdbcClient;
 
   ReceiptRepository(JdbcClient jdbcClient) {
@@ -225,12 +228,17 @@ public class ReceiptRepository {
    * Move a live {@code pre_processed} receipt to {@code processing} (9e): the atomic claim the
    * background worker makes before the API call. Returns the rows affected — zero when the receipt
    * is not (any longer) an un-deleted {@code pre_processed} one, so a double-submit claims nothing.
+   *
+   * <p>The claim <em>clears</em> any {@code batch_id} a previous round left behind (9h). Every
+   * claim starts out single-mode; the batch path re-stamps its id immediately after the create call
+   * returns. Without this a retried batch member would keep pointing at its dead batch — exempting
+   * it from the startup sweep and luring the poller into failing a perfectly live single parse.
    */
   public int markProcessing(long receiptId) {
     return jdbcClient
         .sql(
             """
-            update receipt set state = 'processing'
+            update receipt set state = 'processing', batch_id = null
             where receipt_id = :id and state = 'pre_processed' and deleted_at is null
             """)
         .param("id", receiptId)
@@ -294,7 +302,7 @@ public class ReceiptRepository {
             where receipt_id = :id and deleted_at is null
             """)
         .param("id", receiptId)
-        .param("parseError", parseError)
+        .param(PARSE_ERROR, parseError)
         .update();
   }
 
@@ -317,7 +325,7 @@ public class ReceiptRepository {
             where receipt_id = :id and deleted_at is null
             """)
         .param("id", receiptId)
-        .param("parseError", parseError)
+        .param(PARSE_ERROR, parseError)
         .param("parseRaw", usage.rawToon())
         .param("tokensIn", usage.tokensIn())
         .param("tokensOut", usage.tokensOut())
@@ -331,12 +339,15 @@ public class ReceiptRepository {
    * Retry a {@code failed} receipt (9e): back to {@code pre_processed} with the error cleared,
    * ready to Analyse again. Returns the rows affected (zero when the receipt is not a live failed
    * one).
+   *
+   * <p>The {@code batch_id} goes too (9h): a retried member has left that batch, so it should stop
+   * carrying the register's batch badge and stop keeping a finished batch on the poller's list.
    */
   public int retryToPreProcessed(long receiptId) {
     return jdbcClient
         .sql(
             """
-            update receipt set state = 'pre_processed', parse_error = null
+            update receipt set state = 'pre_processed', parse_error = null, batch_id = null
             where receipt_id = :id and state = 'failed' and deleted_at is null
             """)
         .param("id", receiptId)
@@ -355,7 +366,101 @@ public class ReceiptRepository {
             update receipt set state = 'failed', parse_error = :parseError
             where state = 'processing' and batch_id is null and deleted_at is null
             """)
-        .param("parseError", parseError)
+        .param(PARSE_ERROR, parseError)
+        .update();
+  }
+
+  // ── Batch (stage 9h): membership and the poller's lookups ───────────────────
+
+  /**
+   * Stamp the Batches-API id on every member of a just-created batch (9h). Written immediately
+   * after the create call returns, so a restart finds the job again — the poller resumes it and the
+   * 9e startup sweep leaves it alone. Empty {@code ids} short-circuits (an {@code in ()} is invalid
+   * SQL).
+   */
+  public int assignBatch(List<Long> ids, String batchId) {
+    if (ids.isEmpty()) {
+      return 0;
+    }
+    return jdbcClient
+        .sql(
+            """
+            update receipt set batch_id = :batchId
+            where receipt_id in (:ids) and deleted_at is null
+            """)
+        .param("batchId", batchId)
+        .param("ids", ids)
+        .update();
+  }
+
+  /**
+   * The distinct ids of every batch that still has a live {@code processing} member (9h) — what the
+   * poller ticks over, and what makes it idle (an empty list) when nothing is in flight. Multiple
+   * concurrent batches need no special handling: each id is polled once.
+   */
+  public List<String> findLiveBatchIds() {
+    return jdbcClient
+        .sql(
+            """
+            select distinct batch_id from receipt
+            where state = 'processing' and batch_id is not null and deleted_at is null
+            """)
+        .query(String.class)
+        .list();
+  }
+
+  /**
+   * The live, still-{@code processing} members of a batch (9h): who a distributed result may be
+   * applied to, and — once the results are in — who is left without one to fail. A member
+   * soft-deleted mid-flight is absent, so its result is quietly abandoned (9e tolerance).
+   */
+  public List<Receipt> findLiveBatchMembers(String batchId) {
+    return jdbcClient
+        .sql(
+            """
+            select * from receipt
+            where batch_id = :batchId and state = 'processing' and deleted_at is null
+            order by receipt_id asc
+            """)
+        .param("batchId", batchId)
+        .query(Receipt.class)
+        .list();
+  }
+
+  /**
+   * Fail the claimed receipts of a batch that never reached the API (9h) — the submit call itself
+   * threw, so there is no {@code batch_id} to key on yet. The standard Retry path applies from
+   * there. Empty {@code ids} short-circuits.
+   */
+  public int failClaimed(List<Long> ids, String parseError) {
+    if (ids.isEmpty()) {
+      return 0;
+    }
+    return jdbcClient
+        .sql(
+            """
+            update receipt set state = 'failed', parse_error = :parseError
+            where receipt_id in (:ids) and state = 'processing' and deleted_at is null
+            """)
+        .param(PARSE_ERROR, parseError)
+        .param("ids", ids)
+        .update();
+  }
+
+  /**
+   * Fail every live member of a batch still sitting in {@code processing} (9h): the whole batch on
+   * a poll failure (a 404'd batch), or the leftovers after an ended batch returned no result for
+   * them. Returns how many were failed.
+   */
+  public int failBatchMembers(String batchId, String parseError) {
+    return jdbcClient
+        .sql(
+            """
+            update receipt set state = 'failed', parse_error = :parseError
+            where batch_id = :batchId and state = 'processing' and deleted_at is null
+            """)
+        .param("batchId", batchId)
+        .param(PARSE_ERROR, parseError)
         .update();
   }
 }
