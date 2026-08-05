@@ -1,7 +1,7 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.39
+**Status:** Draft v0.40
 **Date:** 2026-08-05
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
@@ -23,6 +23,12 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.40 (2026-08-05):** **9h grilled & planned** (owner-confirmed; not yet implemented).
+  Scope addition — **prompt caching for both modes**, partially overturning 9e's
+  "no `cache_control`": single mode gets an **Analyse / Analyse (cached)** button pair,
+  batch always caches. New `ReceiptBatchClient` seam; 30 s poller; batch `parse_cost`
+  = standard rates × 0.5 (documented constant, no settings change); submit failure fails
+  all members; no batch cancel. Details in the sub-plan §9h.
 - **v0.39 (2026-08-05):** **9g complete** (owner-confirmed) — confirm/link/reopen shipped.
   Next: 9h (batch), the last slice of stage 9.
 - **v0.38 (2026-08-03):** **9g grilled & planned** (owner-confirmed; not yet implemented).
