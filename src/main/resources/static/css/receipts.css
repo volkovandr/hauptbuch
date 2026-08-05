@@ -9,8 +9,8 @@
   --state-new: #7a8b99; /* captured, unworked — neutral slate */
   --state-pre_processed: #3f6ea5; /* cleaned, queued for the AI — blue */
   --state-processing: #b8860b; /* in flight — amber */
-  --state-processed: var(--green-ink); /* back from the AI, under review — ledger green */
-  --state-committed: #2f5d3f; /* booked */
+  --state-processed: #3f7a52; /* back from the AI, under review — mid ledger green */
+  --state-committed: #16301f; /* booked — the darkest green, reads as "final" */
   --state-failed: var(--oxblood); /* AI call failed — oxblood */
 }
 
@@ -268,7 +268,15 @@ table.receipts tbody td {
 .rstate--pre_processed { background: var(--state-pre_processed); }
 .rstate--processing { background: var(--state-processing); }
 .rstate--processed { background: var(--state-processed); }
-.rstate--committed { background: var(--state-committed); }
+
+/* Committed is the terminal state: darkest fill plus extra weight and tracking, so it stays
+   distinguishable from `processed` by shape as well as by hue. */
+.rstate--committed {
+  background: var(--state-committed);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
 .rstate--failed { background: var(--state-failed); }
 
 .rstatus {
