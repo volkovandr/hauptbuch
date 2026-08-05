@@ -426,15 +426,42 @@ reopen→re-enter voids and re-books; the old version remains inspectable soft-d
 ## 9h — Batch (Batches API)
 
 **Goal:** the backlog rhythm (§3.2) — pre-process many, select, **Process** once, −50 %.
+Decisions below grilled & settled 2026-08-05.
 
-- **Register multi-select → Process:** all `pre_processed` in the selection into **one** Batches
-  API request; invalid-state members skipped with a count (§5.2); `batch_id` stored on each
-  member; all flip `processing`.
-- **Batch poller:** background polling of the batch; on completion distribute per-receipt results
-  through the *same* seeding path as 9e — each member independently `processed` or `failed`.
-  The UI is identical to single mode (§3.1).
-- **Tests:** unit for submit/distribute against a faked batches client (mixed results, partial
-  failures, skip counts); MockMvc for multi-select Process and the status badges.
+- **Batch seam:** a new `ReceiptBatchClient` interface (submit N requests keyed by
+  `custom_id` = receipt id → `batchId`; status; results), implemented by
+  `AnthropicReceiptBatchClient` over the official SDK, faked in unit tests — the `ReceiptParser`
+  seam and the 9e single-mode path stay structurally untouched.
+- **Prompt caching arrives for both modes** (scope addition; partially overturns 9e's
+  "no `cache_control`" — the breakpoint the 9e note predicted). Single mode gets **two
+  buttons** wherever Analyse appears — **Analyse** and **Analyse (cached)** — a boolean on the
+  existing POST threaded to prompt assembly; no JS, no settings, no schema change (cache token
+  counts and rates are already priced by `AiSettings.costOf`). Batch requests always mark the
+  system block — no button. Default 5-minute TTL, no extended-TTL beta.
+- **Register multi-select → Process** (§5.2 context-menu row): claims all valid members
+  (`pre_processed` → `processing`, invalid-state members skipped with the standard count),
+  returns immediately; the submit itself — building requests, uploading images — runs on the
+  background executor; `batch_id` is written to every member immediately after the create call
+  returns. **Submit failure → all members `failed`** with the transport error (standard Retry
+  path). Accepted gap: a JVM death between API accept and the `batch_id` write orphans the
+  batch (members swept to `failed` at boot; the half-price spend is lost).
+- **Batch poller:** `@Scheduled` fixed-delay **30 s**, active only while a live `processing`
+  receipt has a `batch_id`; resumes naturally on boot (the 9e startup sweep already exempts
+  batch rows); multiple concurrent batches just work (one poll per distinct `batch_id`). On
+  end, distribute per-receipt results through the *same* lenient seeding path as 9e — per
+  `custom_id`: succeeded → `processed`; errored/expired/canceled → `failed` with the reason; a
+  404'd batch fails all members; a soft-deleted member's result is quietly abandoned (9e
+  tolerance — still billed). The UI is identical to single mode (§3.1).
+- **Cost:** a batch member's frozen `parse_cost` = `costOf(…) × 0.5` as a documented constant —
+  the 50 % batch discount is Anthropic's pricing rule (it covers every token class, cache
+  writes/reads included), not an operator-tunable rate. No migration, no settings change.
+- **No batch cancel** in 9h — soft-deleting a member is the per-receipt escape; backlog if
+  ever missed.
+- **Tests:** unit for submit/distribute against the faked batch client (mixed results, partial
+  failures, skip counts, submit-failure), the poller, prompt assembly with/without the cache
+  flag, and the ×0.5 cost math; MockMvc for multi-select Process, the status badges, and the
+  two Analyse buttons; integration round-trips for the new repository methods (batch-member
+  claim, live-batch lookup).
 
 **Done when:** a pile of pre-processed receipts round-trips through one batch and lands
 individually reviewable, failures isolated per receipt.
