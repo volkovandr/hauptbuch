@@ -264,8 +264,8 @@
     tools.tilt.value = 0;
     tools.skew.value = 0;
     tools.brightness.value = 100;
-    tools.contrast.value = 100;
-    tools.grayscale.checked = false;
+    tools.contrast.value = 150;
+    tools.grayscale.checked = true;
     applyFilterPreview();
     applySkewPreview();
     markDirty();
