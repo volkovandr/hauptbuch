@@ -24,3 +24,8 @@ spring:
 hauptbuch:
   receipts:
     storage-root: ./.local-receipts
+    # Receipt-parse max_tokens (stage 9e/9h). On Sonnet-family models this budget is shared with
+    # adaptive thinking, so it must have real headroom over the visible TOON output — a 4096 cap
+    # truncated ordinary-sized receipts (issue 02). 16384 comfortably covers a ~50-item receipt.
+    ai:
+      max-tokens: 16384

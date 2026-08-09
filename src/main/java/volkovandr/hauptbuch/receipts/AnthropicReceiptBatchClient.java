@@ -34,9 +34,11 @@ class AnthropicReceiptBatchClient implements ReceiptBatchClient {
   private static final Logger LOG = LoggerFactory.getLogger(AnthropicReceiptBatchClient.class);
 
   private final AnthropicClients clients;
+  private final AnthropicProperties properties;
 
-  AnthropicReceiptBatchClient(AnthropicClients clients) {
+  AnthropicReceiptBatchClient(AnthropicClients clients, AnthropicProperties properties) {
     this.clients = clients;
+    this.properties = properties;
   }
 
   @Override
@@ -49,7 +51,7 @@ class AnthropicReceiptBatchClient implements ReceiptBatchClient {
               .params(
                   BatchCreateParams.Request.Params.builder()
                       .model(submission.model())
-                      .maxTokens(AnthropicPrompts.MAX_TOKENS)
+                      .maxTokens(properties.maxTokens())
                       .systemOfTextBlockParams(
                           AnthropicPrompts.systemBlocks(submission.systemPrompt(), true))
                       .addUserMessageOfBlockParams(

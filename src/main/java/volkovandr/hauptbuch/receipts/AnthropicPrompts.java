@@ -25,9 +25,6 @@ import java.util.List;
  */
 final class AnthropicPrompts {
 
-  /** Ample for a receipt's small TOON body; a low cap risks truncating a long itemised parse. */
-  static final long MAX_TOKENS = 4096L;
-
   /** The image every request carries is the 9c-baked edited JPEG (never re-encoded, §13.1). */
   static final String EDITED_MEDIA_TYPE = "image/jpeg";
 
