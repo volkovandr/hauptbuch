@@ -126,7 +126,7 @@ class ReceiptRepositoryIntegrationTest {
   }
 
   @Test
-  void registerListIsCapturedAscending() {
+  void registerListIsCapturedDescending() {
     long later = capturedAt("2026-07-20T10:00:00Z", "new");
     long earlier = capturedAt("2026-07-10T10:00:00Z", "new");
 
@@ -135,7 +135,7 @@ class ReceiptRepositoryIntegrationTest {
             .map(Receipt::receiptId)
             .toList();
 
-    assertThat(ids).containsSubsequence(earlier, later);
+    assertThat(ids).containsSubsequence(later, earlier);
   }
 
   @Test
