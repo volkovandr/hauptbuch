@@ -58,16 +58,15 @@ public class ReceiptRepository {
 
   /**
    * The PC register list (§5): live receipts whose state is in {@code states} and captured on or
-   * after {@code from}, oldest capture first — natural backlog order. A null {@code from} is
-   * open-ended (the "everything" date-range option, §9b). The register's date filter is preset
-   * lower-bounds only (last 90 days / last year / everything); an explicit upper bound arrives with
-   * a real caller for it.
+   * after {@code from}, newest capture first. A null {@code from} is open-ended (the "everything"
+   * date-range option, §9b). The register's date filter is preset lower-bounds only (last 90 days /
+   * last year / everything); an explicit upper bound arrives with a real caller for it.
    */
   public List<Receipt> findForRegister(List<String> states, LocalDate from) {
     String sql =
         "select * from receipt where deleted_at is null and state in (:states)"
             + (from == null ? "" : " and captured_at >= :from")
-            + " order by captured_at asc, receipt_id asc";
+            + " order by captured_at desc, receipt_id desc";
 
     JdbcClient.StatementSpec spec = jdbcClient.sql(sql).param("states", states);
     if (from != null) {
