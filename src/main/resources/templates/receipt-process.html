@@ -384,7 +384,11 @@
     <p class="receipt-telemetry muted">
       Parsed with
       <span class="num" th:text="${receipt.tokensIn()} ?: 0">1200</span> in /
-      <span class="num" th:text="${receipt.tokensOut()} ?: 0">300</span> out tokens<span
+      <span class="num" th:text="${receipt.tokensOut()} ?: 0">300</span> out<span
+        th:if="${receipt.tokensCacheWrite() != null or receipt.tokensCacheRead() != null}"
+        > / <span class="num" th:text="${receipt.tokensCacheWrite()} ?: 0">0</span> cache write /
+        <span class="num" th:text="${receipt.tokensCacheRead()} ?: 0">0</span> cache read</span
+      > tokens<span
         th:if="${receipt.parseCost() != null}"> · $<span class="num" th:text="${receipt.parseCost()}">0.006</span></span
       >.
     </p>
