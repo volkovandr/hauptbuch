@@ -77,6 +77,18 @@
   <!-- ── List fragment ──────────────────────────────────────────────────────── -->
   <th:block th:fragment="list(receipts)">
     <div id="receipt-list" class="receipt-list">
+      <div th:replace="~{:: listContent}"></div>
+    </div>
+    <!-- The list poll (issue tracker #03): present only while a row shown above is `processing`. -->
+    <div th:replace="~{:: listPoll}"></div>
+    <div id="receipt-menu" class="receipt-menu-mount" hx-swap-oob="true"></div>
+    <div id="receipt-dialog" hx-swap-oob="true"></div>
+  </th:block>
+
+  <!-- Inner list content only — the empty state / hint / table, with no #receipt-list wrapper of its
+       own. Shared by `list` (above) and `listOob` (the poll's out-of-band refresh, below) so the two
+       never duplicate the table markup. -->
+  <th:block th:fragment="listContent">
       <p class="muted" th:if="${#lists.isEmpty(receipts)}" id="receipt-empty">
         No receipts in this view. Capture one on your phone, or widen the filter.
       </p>
@@ -143,10 +155,40 @@
           </tr>
         </tbody>
       </table>
-    </div>
-    <!-- Transient overlay mounts, cleared on every list re-render (out-of-band). -->
-    <div id="receipt-menu" class="receipt-menu-mount" hx-swap-oob="true"></div>
-    <div id="receipt-dialog" hx-swap-oob="true"></div>
+  </th:block>
+
+  <!-- The list poll (issue tracker #03): while any row `listContent` rendered above is
+       `processing`, rechecks the watched ids every 10 s. Self-targeting (no explicit hx-target),
+       so a tick where nothing changed only ever replaces this one inert div — #receipt-list itself
+       is never touched, and the owner's row selection survives untouched. Absent entirely when
+       nothing is in flight, so it never polls forever. -->
+  <div
+    th:fragment="listPoll"
+    th:if="${!#lists.isEmpty(processingIds)}"
+    id="receipt-list-poll"
+    th:attr="hx-get=@{/receipts/status(id=${processingIds})}"
+    hx-include="[name='state'], [name='range']"
+    hx-trigger="every 10s"
+    hx-swap="outerHTML"
+    hidden
+  ></div>
+
+  <!-- The out-of-band #receipt-list refresh for the current filter — always paired with a fresh
+       listPoll (below), never returned alone. -->
+  <div th:fragment="listOob" id="receipt-list" class="receipt-list" hx-swap-oob="true">
+    <div th:replace="~{:: listContent}"></div>
+  </div>
+
+  <!-- Returned by GET /receipts/status once something watched has left `processing`: a fresh
+       listPoll — as the trigger's own primary self-target, so it re-arms over the up-to-date
+       processing set, or renders nothing at all (removing the trigger) once the queue has drained
+       — as a sibling of the out-of-band #receipt-list refresh. Mirrors the primary+OOB shape
+       `list` itself already uses for #receipt-menu/#receipt-dialog; deliberately siblings, not
+       nested, so the OOB #receipt-list swap can never detach the trigger this same response is
+       trying to update in place (see the htmx OOB-only-wipes-target trap from issue 05). -->
+  <th:block th:fragment="listChanged">
+    <div th:replace="~{:: listPoll}"></div>
+    <div th:replace="~{:: listOob}"></div>
   </th:block>
 
   <!-- ── Context menu fragment (§5.2) ───────────────────────────────────────── -->

@@ -101,6 +101,31 @@ class ReceiptRegisterController {
     return LIST_FRAGMENT;
   }
 
+  /**
+   * The list poll target (issue tracker #03): while any row shown is {@code processing}, {@code
+   * receipts.html}'s {@code listPoll} fragment rechecks the watched ids every 10 s. Nothing watched
+   * has left {@code processing} ⇒ hand back the very same trigger, unmoved — {@code #receipt-list}
+   * is never touched on a tick where nothing changed, so the owner's row selection survives.
+   * Something did (finished, failed, or was deleted mid-flight) ⇒ refresh {@code #receipt-list}
+   * out-of-band for the current filter; the fresh render embeds its own new trigger if anything is
+   * still in flight, or none at all once the queue has drained.
+   */
+  @GetMapping("/receipts/status")
+  String listStatus(
+      @RequestParam(name = "id", required = false) List<Long> ids,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      Model model) {
+    List<Long> watched = nullSafe(ids);
+    List<Long> stillProcessing = receiptService.stillProcessing(watched);
+    if (stillProcessing.size() == watched.size()) {
+      model.addAttribute("processingIds", stillProcessing);
+      return "receipts :: listPoll";
+    }
+    populateList(model, state, range);
+    return "receipts :: listChanged";
+  }
+
   /** Delete a selection through the ladder; committed members are skipped. Re-renders the list. */
   @PostMapping("/receipts/delete")
   String delete(
@@ -129,13 +154,22 @@ class ReceiptRegisterController {
 
   /**
    * Resolve the filter and load the list rows into the model (shared by the page and re-renders).
+   * {@code processingIds} rides along so {@code listPoll} (issue tracker #03) knows what to watch.
    */
   private void populateList(Model model, String state, String range) {
-    model.addAttribute(
-        "receipts",
+    List<Receipt> receipts =
         receiptService.forRegister(
-            ReceiptFilters.statesFor(state), ReceiptFilters.rangeFrom(range)));
+            ReceiptFilters.statesFor(state), ReceiptFilters.rangeFrom(range));
+    model.addAttribute("receipts", receipts);
+    model.addAttribute("processingIds", processingIdsOf(receipts));
     model.addAttribute("stateFilter", state);
     model.addAttribute("rangeFilter", range);
+  }
+
+  private static List<Long> processingIdsOf(List<Receipt> receipts) {
+    return receipts.stream()
+        .filter(r -> ReceiptState.PROCESSING.equals(r.state()))
+        .map(Receipt::receiptId)
+        .toList();
   }
 }
