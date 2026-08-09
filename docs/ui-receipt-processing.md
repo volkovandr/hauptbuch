@@ -242,7 +242,7 @@ Same **dense list** shape as the transaction register: thin rows, state as the *
 Left-to-right: **thumbnail · captured · state · merchant · total · account · 🔗 txn · status**.
 
 - **thumbnail** — tiny preview (the edited image if present, else the raw scan).
-- **captured** — capture date/time (the stable sort key for "work the backlog oldest-first").
+- **captured** — capture date/time (the stable sort key, newest first).
 - **state** — the §2.1 badge; colour-coded, the spine of the list.
 - **merchant / total / account** — parsed (denormalised onto the row for list/filter/search; blank
   until `processed`). Total renders by the register's currency rules (EUR bare, German-formatted
@@ -257,7 +257,7 @@ Left-to-right: **thumbnail · captured · state · merchant · total · account 
 |--------|---------|-------|
 | State | **everything except `committed`** | i.e. "the work queue." One click to show committed/all. |
 | Date range | **Last 90 days** of captures | Keeps the list bounded (tech-stack §4.2); widen as needed. |
-| Order | **Captured, ascending** | Oldest first = natural backlog order. Re-sortable by any column. |
+| Order | **Captured, descending** | Newest first (owner decision, 2026-08-07). Re-sortable by any column. |
 | Search | across merchant + AI note + parsed line text | Fuzzy, like the payee key (register §3.4). |
 | Select | **shift-click / ctrl-click** ranges & sets | Multi-select feeds the right-click menu. |
 
