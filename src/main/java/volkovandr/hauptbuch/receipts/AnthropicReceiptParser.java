@@ -23,9 +23,11 @@ import org.springframework.stereotype.Component;
 class AnthropicReceiptParser implements ReceiptParser {
 
   private final AnthropicClients clients;
+  private final AnthropicProperties properties;
 
-  AnthropicReceiptParser(AnthropicClients clients) {
+  AnthropicReceiptParser(AnthropicClients clients, AnthropicProperties properties) {
     this.clients = clients;
+    this.properties = properties;
   }
 
   @Override
@@ -33,7 +35,7 @@ class AnthropicReceiptParser implements ReceiptParser {
     MessageCreateParams params =
         MessageCreateParams.builder()
             .model(request.model())
-            .maxTokens(AnthropicPrompts.MAX_TOKENS)
+            .maxTokens(properties.maxTokens())
             .systemOfTextBlockParams(
                 AnthropicPrompts.systemBlocks(request.systemPrompt(), request.cachePrompt()))
             .addUserMessageOfBlockParams(
