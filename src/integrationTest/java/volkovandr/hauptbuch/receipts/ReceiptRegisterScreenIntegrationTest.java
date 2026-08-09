@@ -300,6 +300,91 @@ class ReceiptRegisterScreenIntegrationTest {
         .andExpect(content().string(containsString("rstate--processing")));
   }
 
+  // ── The list poll (issue tracker #03) ────────────────────────────────────────
+
+  /**
+   * Nothing watched has left {@code processing}: the response is the bare trigger fragment alone —
+   * no {@code hx-swap-oob} marker anywhere, i.e. {@code #receipt-list} itself is never touched by
+   * an unchanged tick (the htmx contract that keeps the owner's row selection alive, not just the
+   * rendered text).
+   */
+  @Test
+  void listStatusKeepsPollingWhenNothingChanged() throws Exception {
+    long id = upload();
+    setState(id, "processing");
+
+    mockMvc
+        .perform(get("/receipts/status").param(ID, String.valueOf(id)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"receipt-list-poll\"")))
+        .andExpect(content().string(not(containsString("hx-swap-oob"))))
+        .andExpect(content().string(not(containsString("<table"))));
+  }
+
+  /**
+   * A watched receipt left {@code processing}: the response carries the out-of-band {@code
+   * #receipt-list} refresh (the real htmx contract, not just updated text) reflecting the new
+   * state, and — since nothing else is in flight — no trigger at all, so the poll stops.
+   */
+  @Test
+  void listStatusRefreshesTheListOnceRowLeavesProcessing() throws Exception {
+    long id = upload();
+    setState(id, "processed");
+
+    mockMvc
+        .perform(get("/receipts/status").param(ID, String.valueOf(id)))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    containsString(
+                        "id=\"receipt-list\" class=\"receipt-list\" hx-swap-oob=\"true\"")))
+        .andExpect(content().string(containsString("rstate--processed")))
+        .andExpect(content().string(not(containsString("id=\"receipt-list-poll\""))));
+  }
+
+  /**
+   * One of two watched receipts finished; the other is still {@code processing}. The refreshed list
+   * still carries a live trigger — watching the one still in flight — so the poll continues.
+   */
+  @Test
+  void listStatusReArmsTheTriggerWhenOneOfSeveralIsStillProcessing() throws Exception {
+    long finished = upload();
+    long stillGoing = upload();
+    setState(finished, "processed");
+    setState(stillGoing, "processing");
+
+    mockMvc
+        .perform(
+            get("/receipts/status")
+                .param(ID, String.valueOf(finished))
+                .param(ID, String.valueOf(stillGoing)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("hx-swap-oob=\"true\"")))
+        .andExpect(content().string(containsString("id=\"receipt-list-poll\"")))
+        .andExpect(content().string(containsString("/receipts/status?id=" + stillGoing)));
+  }
+
+  @Test
+  void registerRendersTheListPollWhenRowIsProcessing() throws Exception {
+    long id = upload();
+    setState(id, "processing");
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH))
+        .andExpect(content().string(containsString("id=\"receipt-list-poll\"")))
+        .andExpect(content().string(containsString("hx-trigger=\"every 10s\"")));
+  }
+
+  @Test
+  void registerOmitsTheListPollWhenNothingIsProcessing() throws Exception {
+    upload();
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH))
+        .andExpect(content().string(not(containsString("id=\"receipt-list-poll\""))));
+  }
+
   @Test
   void phoneUserAgentRedirectsRootToCapture() throws Exception {
     mockMvc

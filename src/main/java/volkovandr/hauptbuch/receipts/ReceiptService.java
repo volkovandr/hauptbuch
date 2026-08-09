@@ -219,6 +219,20 @@ public class ReceiptService {
   }
 
   /**
+   * Which of {@code ids} are still {@code processing} right now (the register's list poll, issue
+   * tracker #03): callers compare the result's size against {@code ids.size()} to tell "nothing
+   * moved on" from "something did" — finished, failed, or was soft-deleted mid-flight ({@link
+   * ReceiptRepository#findLiveByIds} already excludes the latter, so a stranded id simply drops out
+   * here too).
+   */
+  public List<Long> stillProcessing(List<Long> ids) {
+    return receiptRepository.findLiveByIds(ids).stream()
+        .filter(r -> ReceiptState.PROCESSING.equals(r.state()))
+        .map(Receipt::receiptId)
+        .toList();
+  }
+
+  /**
    * Delete every valid (non-committed) member of a selection through the ladder, skipping committed
    * ones; returns how many were deleted. {@code removeFiles} applies uniformly to the batch.
    */

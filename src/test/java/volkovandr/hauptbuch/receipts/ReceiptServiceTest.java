@@ -249,6 +249,31 @@ class ReceiptServiceTest {
   }
 
   @Test
+  void stillProcessingReturnsOnlyTheWatchedIdsStillInThatState() {
+    when(receiptRepository.findLiveByIds(List.of(1L, 2L, 3L)))
+        .thenReturn(
+            List.of(
+                receipt(1L, "processing", EDITED),
+                receipt(2L, "processed", EDITED),
+                receipt(3L, "processing", EDITED)));
+
+    assertThat(service.stillProcessing(List.of(1L, 2L, 3L))).containsExactly(1L, 3L);
+  }
+
+  /**
+   * {@link ReceiptRepository#findLiveByIds} already excludes soft-deleted rows, so a receipt
+   * deleted mid-batch simply drops out of the result — the caller reads that as "changed" because
+   * the returned list is shorter than the ids it watched.
+   */
+  @Test
+  void stillProcessingDropsIdsThatWereSoftDeletedMidFlight() {
+    when(receiptRepository.findLiveByIds(List.of(1L, 2L)))
+        .thenReturn(List.of(receipt(1L, "processing", EDITED)));
+
+    assertThat(service.stillProcessing(List.of(1L, 2L))).containsExactly(1L);
+  }
+
+  @Test
   void originalBytesReturnsEmptyForMissingReceipt() {
     when(receiptRepository.findById(7L)).thenReturn(Optional.empty());
 
