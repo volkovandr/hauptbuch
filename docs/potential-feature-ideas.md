@@ -96,6 +96,8 @@ settle-up, and merge. These were consciously left out:
 * When editing a transaction that has a lot of items, would be nice to have a feature to add a tag to all items at once instead of adding them one by one.
   Normally I would ask AI to do that in the notes, but what if I forgot to add the note, and re-parsing the receipt now? It's too expensive for long receipts.
 * Analyzed receipts cannot be re-analyzed. Next to the Save button we should have a "revert-analysis" button that would discard the analysis and return the receipt into the pre-analysed state.ª
+* When editing an analyzed receipt, the field widths are adjusted depending on the size of the content. This looks bad, and it is not necessary because their initial size is already good enough. 
+  We should set it in the way that they do not change their sizes, but at the same time the app still looks fine on smaller screens. (Owner is exploring a CSS-only fix directly.)
 
 ## General UX improvements
 
