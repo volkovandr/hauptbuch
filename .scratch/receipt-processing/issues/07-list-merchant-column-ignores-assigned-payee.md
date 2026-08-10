@@ -1,6 +1,6 @@
 # Register list keeps showing a blank Merchant even after the receipt has a proper Payee
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: medium
 Area: Receipts — register list (`receipts.html`) × post-process editor payee assignment
@@ -145,3 +145,11 @@ lands in.
 Triaged 2026-08-10: claims verified against current code, display precedence confirmed by the owner
 (assigned payee → `merchantDisplay()` composite → blank). Join-vs-batched-lookup left as an
 implementation call, as originally scoped. Moved to `ready-for-agent` with the brief above.
+
+**Resolved:** implemented per the agreed precedence on `stage/9h` — `PayeeRepository.findByIds` (a
+batched `in (:ids)` lookup, integration-tier round-trip test) and `PayeeService.namesFor` (unit
+tested) resolve payee names for a page of receipts in one query; `ReceiptService.merchantDisplays`
+applies the payee → `merchantDisplay()` → blank precedence per receipt (unit tested); the register
+controller and `receipts.html`'s Merchant cell were switched from the raw `merchantText()` read to
+the resolved map. `ReceiptRegisterScreenIntegrationTest` covers all three precedence tiers plus the
+no-stale-caching repro. `./gradlew check` green.

@@ -7,6 +7,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -127,5 +129,16 @@ class PayeeServiceTest {
     assertThat(payeeService.resolvePayee(null, null)).isNull();
     assertThat(payeeService.resolvePayee(null, "  ")).isNull();
     verify(payeeRepository, never()).insert(any(), any(), any());
+  }
+
+  @Test
+  void namesForKeysTheBatchedLookupByPayeeId() {
+    when(payeeRepository.findByIds(List.of(9L, 42L)))
+        .thenReturn(
+            List.of(
+                new Payee(9L, "Lidl", null, "FRA", null),
+                new Payee(42L, "Rewe", "Dortmund", "DEU", null)));
+
+    assertThat(payeeService.namesFor(List.of(9L, 42L))).isEqualTo(Map.of(9L, "Lidl", 42L, "Rewe"));
   }
 }

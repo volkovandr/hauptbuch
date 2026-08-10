@@ -9,7 +9,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
 
 /**
@@ -33,6 +36,7 @@ class ReceiptServiceTest {
   @Mock ReceiptRepository receiptRepository;
   @Mock volkovandr.hauptbuch.receipts.repository.ReceiptLineRepository receiptLineRepository;
   @Mock ReceiptStorage receiptStorage;
+  @Mock PayeeService payeeService;
   @InjectMocks ReceiptService service;
 
   private Receipt receiptInState(String state) {
@@ -40,6 +44,17 @@ class ReceiptServiceTest {
   }
 
   private Receipt receipt(long id, String state, String editedPath) {
+    return receiptWithMerchant(id, state, editedPath, null, null, null, null);
+  }
+
+  private Receipt receiptWithMerchant(
+      long id,
+      String state,
+      String editedPath,
+      String merchantText,
+      String merchantCity,
+      String merchantCountry,
+      Long payeeId) {
     return new Receipt(
         id,
         state,
@@ -51,25 +66,25 @@ class ReceiptServiceTest {
         null,
         null,
         null,
+        merchantText,
         null,
         null,
         null,
         null,
         null,
         null,
-        null,
-        // 9e telemetry + header (parseError … receiptNumber), then payeeId (9f) and note (9g)
-        null,
+        // 9e telemetry (parseError … parseCost), then merchantCity/merchantCountry
         null,
         null,
         null,
         null,
         null,
         null,
+        merchantCity,
+        merchantCountry,
         null,
         null,
-        null,
-        null,
+        payeeId,
         null);
   }
 
@@ -279,5 +294,38 @@ class ReceiptServiceTest {
 
     assertThat(service.originalBytes(7L)).isEmpty();
     verifyNoInteractions(receiptStorage);
+  }
+
+  /**
+   * The register's Merchant column precedence (issue tracker #07): assigned payee's name, else the
+   * AI's merchant composite, else blank (omitted from the map). One batched payee lookup for the
+   * whole page, not a per-row call.
+   */
+  @Test
+  void merchantDisplaysAppliesThePayeeThenParseFallbackPrecedence() {
+    Receipt withPayee = receiptWithMerchant(1L, "processed", null, "Rewe Raw", null, null, 42L);
+    Receipt parsedOnly =
+        receiptWithMerchant(2L, "processed", null, null, "Berlin", "Germany", null);
+    Receipt blank = receiptWithMerchant(3L, "new", null, null, null, null, null);
+    // A real HashMap, not Map.of(...): production's Collectors.toMap-built map permits the
+    // null-payee lookup below (Map.of()'s immutable map would throw on a null key).
+    when(payeeService.namesFor(List.of(42L))).thenReturn(new HashMap<>(Map.of(42L, "Rewe")));
+
+    Map<Long, String> displays = service.merchantDisplays(List.of(withPayee, parsedOnly, blank));
+
+    assertThat(displays)
+        .containsEntry(1L, "Rewe")
+        .containsEntry(2L, "Berlin - Germany")
+        .doesNotContainKey(3L);
+  }
+
+  @Test
+  void merchantDisplaysFallsBackToParseCompositeWhenThePayeeNameIsMissing() {
+    Receipt withPayee = receiptWithMerchant(1L, "processed", null, "Rewe Raw", null, null, 42L);
+    when(payeeService.namesFor(List.of(42L))).thenReturn(Map.of());
+
+    Map<Long, String> displays = service.merchantDisplays(List.of(withPayee));
+
+    assertThat(displays).containsEntry(1L, "Rewe Raw");
   }
 }

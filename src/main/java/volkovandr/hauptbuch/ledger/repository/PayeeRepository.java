@@ -20,6 +20,7 @@ import volkovandr.hauptbuch.ledger.Payee;
 public class PayeeRepository {
 
   private static final String PAYEE_COLUMNS = "payee_id, name, city, country_code, deleted_at";
+  private static final String SELECT_PAYEES = "select " + PAYEE_COLUMNS + " from payee where ";
   private static final String NAME = "name";
   private static final String CITY = "city";
   private static final String COUNTRY_CODE = "countryCode";
@@ -53,7 +54,7 @@ public class PayeeRepository {
   /** The live payees, alphabetical — the register's payee filter options (register §2.3). */
   public List<Payee> findAllLive() {
     return jdbcClient
-        .sql("select " + PAYEE_COLUMNS + " from payee where deleted_at is null order by name")
+        .sql(SELECT_PAYEES + "deleted_at is null order by name")
         .query(Payee.class)
         .list();
   }
@@ -103,9 +104,8 @@ public class PayeeRepository {
   public Optional<Payee> findByAddress(String name, String city, String countryCode) {
     return jdbcClient
         .sql(
-            "select "
-                + PAYEE_COLUMNS
-                + " from payee where deleted_at is null"
+            SELECT_PAYEES
+                + "deleted_at is null"
                 + " and lower(name) = lower(:name)"
                 + " and city is not distinct from :city"
                 + " and country_code is not distinct from :countryCode"
@@ -120,10 +120,28 @@ public class PayeeRepository {
   /** Find a payee by id. */
   public Optional<Payee> findById(long payeeId) {
     return jdbcClient
-        .sql("select " + PAYEE_COLUMNS + " from payee where payee_id = :payeeId")
+        .sql(SELECT_PAYEES + "payee_id = :payeeId")
         .param(PAYEE_ID, payeeId)
         .query(Payee.class)
         .optional();
+  }
+
+  /**
+   * The payees among {@code ids} — a batched lookup for callers resolving many payee references at
+   * once (e.g. the receipts register's Merchant column, issue tracker #07), instead of a per-row
+   * single-id call in a loop. Not scoped to live payees, same as {@link #findById}, so a receipt
+   * referencing a since-deleted payee still resolves a name. Empty {@code ids} short-circuits to an
+   * empty list (an {@code in ()} is invalid SQL).
+   */
+  public List<Payee> findByIds(List<Long> ids) {
+    if (ids.isEmpty()) {
+      return List.of();
+    }
+    return jdbcClient
+        .sql(SELECT_PAYEES + "payee_id in (:ids)")
+        .param("ids", ids)
+        .query(Payee.class)
+        .list();
   }
 
   /**

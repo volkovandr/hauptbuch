@@ -142,8 +142,9 @@
                 >New</span
               >
             </td>
-            <!-- Parsed columns: blank until 9e seeds them. -->
-            <td class="receipts__merchant" th:text="${r.merchantText()}"></td>
+            <!-- Merchant precedence (issue tracker #07): assigned payee's name, else the AI's
+                 merchant composite, else blank. -->
+            <td class="receipts__merchant" th:text="${merchantDisplays.get(r.receiptId())}"></td>
             <td class="receipts__total num" th:text="${r.totalAmount()}"></td>
             <td class="receipts__account"></td>
             <td class="receipts__txn"></td>

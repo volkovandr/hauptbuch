@@ -3,10 +3,14 @@ package volkovandr.hauptbuch.receipts;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.receipts.repository.ReceiptLineRepository;
 import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
 
@@ -36,14 +40,17 @@ public class ReceiptService {
   private final ReceiptRepository receiptRepository;
   private final ReceiptLineRepository receiptLineRepository;
   private final ReceiptStorage receiptStorage;
+  private final PayeeService payeeService;
 
   ReceiptService(
       ReceiptRepository receiptRepository,
       ReceiptLineRepository receiptLineRepository,
-      ReceiptStorage receiptStorage) {
+      ReceiptStorage receiptStorage,
+      PayeeService payeeService) {
     this.receiptRepository = receiptRepository;
     this.receiptLineRepository = receiptLineRepository;
     this.receiptStorage = receiptStorage;
+    this.payeeService = payeeService;
   }
 
   /**
@@ -75,6 +82,27 @@ public class ReceiptService {
    */
   public List<Receipt> forRegister(List<String> states, LocalDate from) {
     return receiptRepository.findForRegister(states, from);
+  }
+
+  /**
+   * The register's Merchant cell text, per receipt id, in order of authority (issue tracker #07):
+   * the assigned payee's name once one has been set, else the AI's best-available merchant
+   * composite ({@link Receipt#merchantDisplay()}), else blank — a receipt with neither is simply
+   * absent from the map, which a template lookup against a missing key already renders blank as.
+   * Payee names are resolved in one batched lookup for the whole list, never a per-row query.
+   */
+  public Map<Long, String> merchantDisplays(List<Receipt> receipts) {
+    List<Long> payeeIds =
+        receipts.stream().map(Receipt::payeeId).filter(Objects::nonNull).distinct().toList();
+    Map<Long, String> payeeNames = payeeService.namesFor(payeeIds);
+    Map<Long, String> displays = new LinkedHashMap<>();
+    for (Receipt receipt : receipts) {
+      String display = payeeNames.getOrDefault(receipt.payeeId(), receipt.merchantDisplay());
+      if (display != null) {
+        displays.put(receipt.receiptId(), display);
+      }
+    }
+    return displays;
   }
 
   /** The mobile grid: all live receipts captured within the last {@link #MOBILE_WINDOW_DAYS}. */
