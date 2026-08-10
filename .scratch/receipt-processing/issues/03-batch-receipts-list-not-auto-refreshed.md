@@ -1,6 +1,6 @@
 # Receipts list doesn't refresh when a background batch finishes processing
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: medium
 Area: Receipts — register list (`receipts.html`) × batch analyse poller (stage 9h)
@@ -168,3 +168,9 @@ changed.
 Filed 2026-08-07 from an owner note in `docs/potential-feature-ideas.md`. The owner intended to run
 a proper grilling session on the design before this became an agent brief — done 2026-08-09 (see
 "Owner decisions" above); moved to `ready-for-agent`.
+
+**Resolved:** implemented per the agreed design in commit `4a409e4` ("feat: auto-refresh the
+receipts list when a batch (or single analyse) finishes") on `stage/9h` — `ReceiptService
+.stillProcessing`, `GET /receipts/status`, `processingIds` on the model, and the
+`listStatusPoll`/`listOob` fragments in `receipts.html`, with unit coverage for `stillProcessing`
+and integration coverage for the unchanged/changed poll branches.

@@ -1,6 +1,6 @@
 # On a long receipt, the image and the Save actions scroll out of view with the line list
 
-Status: needs-triage
+Status: ready-for-agent
 Category: enhancement
 Severity: low
 Area: Receipts — processing screen layout (`receipt-process.html`, `receipts.css`), post-process
@@ -44,6 +44,82 @@ Two things worth deciding before implementing (not resolved here):
   whole `<fieldset>` end area — and how it looks against the page background on both themes (a
   sticky bar needs an opaque background so line rows don't show through as they scroll under it).
 
+## Owner decisions (triage, 2026-08-10)
+
+1. **Image column** — its own independent scroll region, not a plain `position: sticky` pin. Within
+   that region the image auto-zooms to the full width of the region, capped at its own natural
+   (original) size — never upscaled past that.
+2. **Sticky bottom bar** — narrow scope: only the `remaining` readout + Save/Confirm. `＋ Add line`
+   stays in normal document flow above it and scrolls away with the line list.
+
+## Agent Brief
+
+**Category:** enhancement
+**Summary:** On the receipt processing/review screen, make the receipt image independently
+scrollable (not tied to the line-list scroll) and pin the remaining-amount readout + Save/Confirm
+to the bottom of the viewport, so both stay usable on a receipt with enough lines to scroll.
+
+**Current behavior:**
+The processing screen lays the receipt image and the line editor out as a two-column grid with no
+scroll boundary of its own — the whole page is one scrolling document. On a receipt with enough
+lines, scrolling the line list also scrolls the image out of view (defeating line-by-line
+comparison against the printed receipt) and scrolls the remaining-amount readout and Save/Confirm
+buttons out of view (forcing a scroll to the bottom every time to save).
+
+**Desired behavior:**
+- The image column becomes its own independently scrollable region, separate from the line-editor
+  column's scrolling. Within that region, the image is auto-sized to fill the region's full width,
+  but never upscaled beyond its natural/original pixel size — a small original image should not be
+  stretched to fill a wide region. A receipt image taller than the region remains reachable by
+  scrolling within the region itself, not the page.
+- The remaining-amount readout and the Save/Confirm actions are pinned to the bottom of the
+  viewport (or their column, whichever the existing layout naturally supports) so they stay visible
+  regardless of how far the line list has scrolled. The `＋ Add line` control is explicitly **not**
+  part of this pinned area — it stays in normal flow with the line list.
+- The pinned bar needs an opaque background (correct in both light and dark themes) so scrolling
+  line rows don't visually show through underneath it.
+- On a receipt short enough that nothing scrolls, behavior is visually unchanged — no stray
+  scrollbar or pinned-bar seam appears where there's nothing to pin against.
+- The read-only (committed) rendering of this same screen shows the remaining readout without the
+  Save/Confirm actions (they're absent entirely when the receipt is already committed) — the pinned
+  area must still look correct with just the readout and no action buttons underneath it.
+
+**Key interfaces (durable names — locate them, don't trust line numbers):**
+- The processing screen's read/review layout (the two-column image + editor grid) — CSS-only change,
+  no template restructuring should be needed for the scroll region.
+- The line-editor's live remaining-amount readout and its Save/Confirm actions, which sit at the
+  tail end of the same form the line list belongs to — these are two adjacent pieces of markup, one
+  inside the disabled-on-readonly fieldset and one just outside it; both need to end up in the same
+  visually pinned area regardless of that markup boundary.
+- The register screen already uses `position: sticky` for an analogous sticky-header problem — follow
+  that established technique/precedent rather than introducing a new mechanism (no JS; CLAUDE.md
+  §1.6 keeps bespoke JS out of this).
+
+**Acceptance criteria:**
+- [ ] On a receipt with enough lines to make the editor column scroll, the receipt image is
+      reachable via its own scroll, independent of the line-list scroll position.
+- [ ] The displayed image fills the full width of its scroll region but is never scaled larger than
+      its natural size.
+- [ ] The remaining-amount readout and Save/Confirm buttons stay visible at the bottom of the
+      viewport while scrolling through a long line list; `＋ Add line` is not part of that pinned
+      area and scrolls with the list.
+- [ ] The pinned bar has an opaque background in both light and dark themes — scrolling line rows do
+      not show through it.
+- [ ] A short receipt (no scrolling needed) renders with no visible change from today.
+- [ ] The read-only/committed rendering (no Save/Confirm) still renders correctly with just the
+      remaining readout in the pinned area.
+- [ ] `./gradlew check` green. Since this is CSS/layout-only, no new automated test is expected to be
+      added for the visual behavior itself — verify by hand in the browser per CLAUDE.md's UI-change
+      guidance.
+
+**Out of scope:**
+- Any change to the line-editor's markup, its htmx wiring, or `keyboard.js`'s live-recompute logic —
+  this is a pure layout/CSS change.
+- The field-width bullet from the same owner note (`docs/potential-feature-ideas.md`) — the owner is
+  handling that one separately.
+- Responsive/narrow-viewport collapsing of the two-column grid — not currently handled and not part
+  of this ask.
+
 ## Comments
 
 Filed 2026-08-09 from two bullets in the owner's `docs/potential-feature-ideas.md` note (the third,
@@ -51,3 +127,10 @@ field-width, bullet in the same note is out of scope here — the owner is explo
 for that one directly). Left at `needs-triage`: worth a quick decision on the two open points above
 before this becomes an agent brief, but both are small enough that a short owner sign-off should be
 enough — no full grilling session expected.
+
+> *This was generated by AI during triage.*
+
+Triaged 2026-08-10: owner picked an independent scroll region (not sticky-pin) for the image, with
+auto-zoom to the region's width capped at natural size; and the narrow scope for the sticky bottom
+bar (remaining + Save/Confirm only, `＋ Add line` excluded). Moved to `ready-for-agent` with the
+brief above.
