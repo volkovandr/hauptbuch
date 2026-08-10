@@ -1,6 +1,6 @@
 # Register list keeps showing a blank Merchant even after the receipt has a proper Payee
 
-Status: needs-triage
+Status: ready-for-agent
 Category: bug
 Severity: medium
 Area: Receipts — register list (`receipts.html`) × post-process editor payee assignment
@@ -58,9 +58,90 @@ loop would be an N+1 over the list; a bulk lookup (a `findByIds`, or joining `pa
 `ReceiptRepository` (crossing into `payee`'s table directly) or as a separate batched
 `PayeeRepository` call composed in `ReceiptService` is a design call for whoever picks this up.
 
+## Owner decisions (triage, 2026-08-10)
+
+Verified against the current code: every claim in "What exists today" and "A related, smaller gap"
+holds — the list template reads bare `merchantText()`, `findForRegister` has no join to `payee`,
+`PayeeRepository` has only a single-id `findById`, and `merchantDisplay()` exists but is unused by
+the list.
+
+1. **Display precedence confirmed** — assigned payee's name, else `merchantDisplay()`'s composite,
+   else blank.
+2. **Join vs. batched-lookup** left as an implementation call for whoever picks this up, as
+   originally scoped — not a product decision.
+
+## Agent Brief
+
+**Category:** bug
+**Summary:** The register list's Merchant column only ever reads the raw AI parse
+(`Receipt.merchantText`) and never reflects a payee the operator has since assigned in the editor,
+nor falls back to the AI's partial name/city/country guess — so a receipt the owner has already
+fixed up still shows blank (or an incomplete name) back on the list.
+
+**Current behavior:**
+The list's Merchant cell renders `Receipt.merchantText()` directly. That field is, by design, the
+frozen raw AI parse fact — it is never updated when the operator assigns or corrects a payee during
+post-process review (that goes to the separate `Receipt.payeeId` field instead). The list query
+backing this screen does not fetch payee data at all, so even a template change alone couldn't fix
+this without also reaching the payee. Independently, a receipt where the AI parsed some merchant
+parts (e.g. city/country) but not others shows fully blank in the list today, even though a
+composite display value for exactly that case already exists on `Receipt` and is simply not used by
+this column.
+
+**Desired behavior:**
+The list's Merchant cell shows, in order of authority:
+1. The name of the receipt's assigned payee, once one has been set.
+2. Otherwise, the best-available composite of whatever merchant parts the AI did parse (name/city/
+   country), dropping blank parts — the same composition logic `Receipt.merchantDisplay()` already
+   implements.
+3. Otherwise, blank (nothing parsed, nothing assigned).
+
+Assigning or changing a receipt's payee in the editor and returning to the list must show the new
+name immediately (matches the owner's exact repro) — no stale caching.
+
+**Key interfaces (durable names — locate them, don't trust line numbers):**
+- The register list's row rendering for the Merchant column — needs to resolve through the
+  precedence above rather than reading the raw parsed field alone.
+- `Receipt.payeeId` / the assigned payee's name — the list needs this without incurring an N+1
+  lookup per row. Either extending the list's own query to bring back the payee name (a join) or a
+  single batched lookup composed alongside it (e.g. resolving payee names for the whole page of
+  receipts in one call) are both acceptable — whichever fits the existing query/service shape best;
+  a per-row single-id lookup in a loop is not.
+- `Receipt.merchantDisplay()` — reuse as-is for the fallback tier; don't reimplement its
+  name/city/country composition elsewhere.
+
+**Acceptance criteria:**
+- [ ] A receipt with an assigned payee shows that payee's name in the list's Merchant column,
+      regardless of what the raw AI parse says.
+- [ ] A receipt with no assigned payee but a partial AI parse (e.g. city + country, no name) shows
+      the composite fallback instead of blank.
+- [ ] A receipt with neither an assigned payee nor any parsed merchant data still shows blank, as
+      today.
+- [ ] Fetching the list does not issue a per-row payee lookup — payee names for a rendered page of
+      receipts are resolved in a bounded number of queries.
+- [ ] Assigning/changing a payee via the editor's Save, then returning to the list, immediately
+      shows the updated name.
+- [ ] Test coverage matches CLAUDE.md §6's tiering: a plain join/lookup addition without grouping,
+      aggregation, or more than two tables is a repository round-trip in the `integrationTest` tier,
+      not `sqlLogicTest`; the display-precedence logic itself belongs wherever the equivalent
+      row-assembly logic already lives and is tested today.
+- [ ] `./gradlew check` green.
+
+**Out of scope:**
+- Changing what `Receipt.merchantText` stores or when it's set — it stays the frozen raw parse fact.
+- Any change to the post-process editor's payee assignment/resolution flow itself
+  (`ReceiptEditorService`, `PayeeService.resolvePayee`) — only how the list *displays* the result.
+- Any other register-list column.
+
 ## Comments
 
 Filed 2026-08-09 from an owner repro while reviewing a receipt with a missing AI-detected merchant
 name. Left at `needs-triage`: the display precedence above is a reasonable default but not
 owner-confirmed, and the join-vs-batched-lookup choice affects which module's repository the change
 lands in.
+
+> *This was generated by AI during triage.*
+
+Triaged 2026-08-10: claims verified against current code, display precedence confirmed by the owner
+(assigned payee → `merchantDisplay()` composite → blank). Join-vs-batched-lookup left as an
+implementation call, as originally scoped. Moved to `ready-for-agent` with the brief above.
