@@ -1,7 +1,9 @@
 package volkovandr.hauptbuch.ledger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.ledger.repository.CountryRepository;
@@ -57,6 +59,16 @@ public class PayeeService {
         .filter(o -> o.payeeId() == payeeId)
         .map(PayeeRepository.PayeeOption::entryValue)
         .findFirst();
+  }
+
+  /**
+   * The names of {@code payeeIds}, keyed by id — a batched lookup for a caller rendering many payee
+   * references at once (e.g. the receipts register's Merchant column, issue tracker #07), instead
+   * of a per-row single-id call in a loop.
+   */
+  public Map<Long, String> namesFor(List<Long> payeeIds) {
+    return payeeRepository.findByIds(payeeIds).stream()
+        .collect(Collectors.toMap(Payee::payeeId, Payee::name));
   }
 
   /**

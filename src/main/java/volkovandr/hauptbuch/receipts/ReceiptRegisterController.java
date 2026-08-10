@@ -161,6 +161,7 @@ class ReceiptRegisterController {
         receiptService.forRegister(
             ReceiptFilters.statesFor(state), ReceiptFilters.rangeFrom(range));
     model.addAttribute("receipts", receipts);
+    model.addAttribute("merchantDisplays", receiptService.merchantDisplays(receipts));
     model.addAttribute("processingIds", processingIdsOf(receipts));
     model.addAttribute("stateFilter", state);
     model.addAttribute("rangeFilter", range);

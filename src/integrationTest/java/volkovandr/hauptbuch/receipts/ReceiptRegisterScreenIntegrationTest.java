@@ -385,6 +385,57 @@ class ReceiptRegisterScreenIntegrationTest {
         .andExpect(content().string(not(containsString("id=\"receipt-list-poll\""))));
   }
 
+  // ── Merchant column precedence (issue tracker #07) ───────────────────────────
+
+  @Test
+  void registerShowsTheAssignedPayeesNameOverTheRawParse() throws Exception {
+    long id = upload();
+    setMerchant(id, "REWE SAGT DANKE", null, null);
+    long payeeId = insertPayee("Rewe", "Dortmund", null);
+    setPayee(id, payeeId);
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH))
+        .andExpect(content().string(containsString(">Rewe<")))
+        .andExpect(content().string(not(containsString("REWE SAGT DANKE"))));
+  }
+
+  @Test
+  void registerFallsBackToTheParsedMerchantCompositeWhenNoPayeeIsAssigned() throws Exception {
+    long id = upload();
+    setMerchant(id, null, "Berlin", "Germany");
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH))
+        .andExpect(content().string(containsString(">Berlin - Germany<")));
+  }
+
+  @Test
+  void registerShowsBlankMerchantWhenNothingWasParsedOrAssigned() throws Exception {
+    upload();
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH))
+        .andExpect(content().string(containsString("class=\"receipts__merchant\"></td>")));
+  }
+
+  /**
+   * The owner's exact repro: assigning a payee via Save and returning to the list must show it
+   * immediately, with no stale caching — the list re-queries fresh on every render.
+   */
+  @Test
+  void registerReflectsPayeeAssignedAfterTheFirstListRender() throws Exception {
+    long id = upload();
+    mockMvc
+        .perform(get(RECEIPTS_PATH))
+        .andExpect(content().string(containsString("class=\"receipts__merchant\"></td>")));
+
+    long payeeId = insertPayee("Lidl", null, null);
+    setPayee(id, payeeId);
+
+    mockMvc.perform(get(RECEIPTS_PATH)).andExpect(content().string(containsString(">Lidl<")));
+  }
+
   @Test
   void phoneUserAgentRedirectsRootToCapture() throws Exception {
     mockMvc
@@ -416,6 +467,44 @@ class ReceiptRegisterScreenIntegrationTest {
     mockMvc.perform(multipart("/receipts").file(jpegPart())).andExpect(status().is3xxRedirection());
     return jdbcClient
         .sql("select receipt_id from receipt order by receipt_id desc limit 1")
+        .query(Long.class)
+        .single();
+  }
+
+  private void setMerchant(
+      long id, String merchantText, String merchantCity, String merchantCountry) {
+    jdbcClient
+        .sql(
+            """
+            update receipt
+               set merchant_text = :merchantText,
+                   merchant_city = :merchantCity,
+                   merchant_country = :merchantCountry
+             where receipt_id = :id
+            """)
+        .param("merchantText", merchantText)
+        .param("merchantCity", merchantCity)
+        .param("merchantCountry", merchantCountry)
+        .param(ID, id)
+        .update();
+  }
+
+  private void setPayee(long id, long payeeId) {
+    jdbcClient
+        .sql("update receipt set payee_id = :payeeId where receipt_id = :id")
+        .param("payeeId", payeeId)
+        .param(ID, id)
+        .update();
+  }
+
+  private long insertPayee(String name, String city, String countryCode) {
+    return jdbcClient
+        .sql(
+            "insert into payee (name, city, country_code) values (:name, :city, :countryCode) "
+                + "returning payee_id")
+        .param("name", name)
+        .param("city", city)
+        .param("countryCode", countryCode)
         .query(Long.class)
         .single();
   }

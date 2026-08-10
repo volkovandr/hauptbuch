@@ -255,6 +255,20 @@ class RepositoryRoundTripIntegrationTest {
   }
 
   @Test
+  void findByIdsReturnsOnlyTheRequestedLiveAndSoftDeletedPayees() {
+    long rewe = payeeRepository.insert("Rewe", "Dortmund", "DEU");
+    long lidl = payeeRepository.insert("Lidl", null, null);
+    payeeRepository.insert("Aldi", null, null);
+
+    assertThat(payeeRepository.findByIds(List.of(rewe, lidl)))
+        .extracting(Payee::name)
+        .containsExactlyInAnyOrder("Rewe", "Lidl");
+
+    // An empty ask short-circuits rather than issuing an invalid `in ()`.
+    assertThat(payeeRepository.findByIds(List.of())).isEmpty();
+  }
+
+  @Test
   void countryListAndAliasLookupReadFromTheSeed() {
     // The country reference list and its alias lookup (register §3.4) — plain reads over the V4
     // seed.
