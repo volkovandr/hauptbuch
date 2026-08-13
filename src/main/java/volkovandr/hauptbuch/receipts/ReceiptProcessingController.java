@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.util.UriComponentsBuilder;
 import volkovandr.hauptbuch.ledger.CurrencyService;
 import volkovandr.hauptbuch.ledger.RegisterFilter;
 import volkovandr.hauptbuch.ledger.RegisterService;
@@ -255,13 +256,18 @@ class ReceiptProcessingController {
       String state,
       String range,
       RedirectAttributes redirectAttributes) {
-    Long landing = neighbours.next() != null ? neighbours.next() : neighbours.prev();
+    Long landing = landingAfter(neighbours);
     if (landing == null) {
       redirectAttributes.addAttribute(STATE, state);
       redirectAttributes.addAttribute(RANGE, range);
       return REDIRECT_REGISTER;
     }
     return redirectToScreen(landing, state, range, redirectAttributes);
+  }
+
+  /** The next receipt in the filtered list, else the previous — the shared fallback ladder. */
+  private static Long landingAfter(ReceiptNeighbours neighbours) {
+    return neighbours.next() != null ? neighbours.next() : neighbours.prev();
   }
 
   // ── Post-process editor round-trips (plan §9f) ──────────────────────────────
@@ -360,9 +366,15 @@ class ReceiptProcessingController {
    * to {@code committed}. On a reopened receipt this is the <em>Re-enter</em>: the previously
    * booked transaction is voided and a new one takes its place.
    *
-   * <p>Confirm never navigates — the pane comes back read-only in place (the chrome rides along
-   * out-of-band, so the state badge and the Delete rung follow). A refused gate re-renders the same
-   * pane, still editable, listing every block.
+   * <p>When the active filter still includes {@code committed} (e.g. {@code state=all}), Confirm
+   * never navigates — the pane comes back read-only in place (the chrome rides along out-of-band,
+   * so the state badge and the Delete rung follow). When the active filter excludes it (the default
+   * work queue), the just-committed receipt would otherwise strand Prev/Next dead — it can no
+   * longer find itself in that filtered list — so a successful commit instead auto-advances: land
+   * on the next receipt in the filter as it stood <em>before</em> the commit, else the previous,
+   * else the register, the same fallback ladder the committed-delete flow already uses. That lands
+   * via {@code HX-Redirect} so the address bar follows, not an in-place swap. A refused gate
+   * re-renders the same pane, still editable, listing every block, and never navigates either way.
    */
   @PostMapping("/receipts/{id}/confirm")
   String confirm(
@@ -370,15 +382,38 @@ class ReceiptProcessingController {
       @RequestParam MultiValueMap<String, String> params,
       @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
       @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
-      Model model) {
+      Model model,
+      HttpServletResponse response) {
     ReceiptEditorForm form = ReceiptEditorForm.bind(params);
+    List<String> states = ReceiptFilters.statesFor(state);
+    ReceiptNeighbours preCommitNeighbours =
+        states.contains(ReceiptState.COMMITTED)
+            ? null
+            : receiptService.neighbours(id, states, ReceiptFilters.rangeFrom(range));
     try {
       receiptCommitService.confirm(id, form);
     } catch (ReceiptConfirmException e) {
       model.addAttribute("confirmProblems", e.problems());
       return renderPane(id, form, state, range, model);
     }
+    if (preCommitNeighbours != null) {
+      response.setHeader("HX-Redirect", advanceUrl(preCommitNeighbours, state, range));
+    }
     return renderPane(id, null, state, range, model);
+  }
+
+  /**
+   * The URL to auto-advance to after a commit drops the receipt out of the active filter: the next
+   * receipt in the pre-commit list, else the previous, else the register — carrying the same {@code
+   * state}/{@code range} filter along.
+   */
+  private static String advanceUrl(ReceiptNeighbours neighbours, String state, String range) {
+    Long landing = landingAfter(neighbours);
+    String path = landing == null ? BASE_PATH : BASE_PATH + "/" + landing;
+    return UriComponentsBuilder.fromPath(path)
+        .queryParam(STATE, state)
+        .queryParam(RANGE, range)
+        .toUriString();
   }
 
   /**

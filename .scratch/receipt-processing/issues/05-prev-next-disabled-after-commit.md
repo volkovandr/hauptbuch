@@ -1,6 +1,6 @@
 # Prev/Next go dead the moment a receipt is committed, breaking the "commit, next" pile rhythm
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: medium
 Area: Receipts — processing screen chrome (prev/next nav, `receipt-process.html`) × commit
