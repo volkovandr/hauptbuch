@@ -565,6 +565,39 @@ table.receipts tbody td {
   grid-template-columns: minmax(18rem, 30rem) minmax(0, 1fr);
 }
 
+/* ── Independent scroll regions (issue 06) ───────────────────────────────────────────────
+   On a receipt with enough lines to scroll, the whole page used to scroll as one document —
+   the image and the Save/Confirm bar both scrolled away with the line list. Each column now
+   carries its own scrollbar, capped at the same 78vh the plain read view already uses
+   (receipt-process__image img above), the same technique the register's own scroll frame uses
+   (register.css, .register-scroll). `overflow: auto` only shows a scrollbar when a column's
+   content actually exceeds 78vh, so a short receipt is unaffected. */
+.receipt-process__read--data .receipt-process__image {
+  max-height: 78vh;
+  overflow: auto;
+}
+
+.receipt-process__read--data .receipt-process__image img {
+  max-height: none; /* the figure's own scroll handles overflow instead of clipping the image */
+}
+
+.receipt-process__read--data .receipt-process__side {
+  max-height: 78vh;
+  overflow-y: auto;
+}
+
+/* The live remaining readout and Save/Confirm straddle the disabled-on-readonly fieldset (one
+   sits inside it, one just outside), but share this one wrapper so they read as a single bar
+   pinned to the foot of the scrolling editor column above — the register's sticky table header
+   (register.css, .register thead th) is the same technique pointed at the opposite edge. Matches
+   the page background exactly, so it is invisible until there is something to scroll and opaque
+   once there is (scrolling line rows don't show through it). */
+.receipt-editor__pinned {
+  position: sticky;
+  bottom: 0;
+  background: var(--paper);
+}
+
 /* The editor's Item and Category are the fields the operator reads and edits most, so they grow
    ahead of Note/Tags and start wide enough to show a full category path. The widened data column
    above keeps the whole line on one row, so the ⇄ / ✕ buttons stay inline (owner feedback). */
