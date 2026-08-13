@@ -1,6 +1,6 @@
 # On a long receipt, the image and the Save actions scroll out of view with the line list
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: low
 Area: Receipts — processing screen layout (`receipt-process.html`, `receipts.css`), post-process

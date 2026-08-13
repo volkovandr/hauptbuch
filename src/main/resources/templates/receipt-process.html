@@ -652,47 +652,54 @@
         ＋ Add line
       </button>
     </p>
-
-    <!-- Live readout (plan §9f): remaining = total − Σ lines. keyboard.js recomputes it live from
-         data-split-*; the server value here is authoritative on each round-trip. A null total shows
-         a neutral "no total" hint instead of ✓/⚠. -->
-    <div class="entry-dock__status split-status">
-      <span
-        class="split-status__remaining"
-        data-split-remaining
-        th:classappend="${editor.balanced()} ? 'is-balanced'"
-      >
-        remaining <span data-split-remaining-value th:text="${editor.remaining()}">0,00</span>
-        <span
-          data-split-remaining-check
-          aria-hidden="true"
-          th:attr="style=${editor.balanced() and editor.status() != 'none'} ? '' : 'display:none'"
-          >✓</span
-        >
-      </span>
-      <span class="split-status__hint muted" th:if="${editor.status() == 'none'}">no total set</span>
-    </div>
     </fieldset>
 
-    <!-- Save keeps the draft (lenient); Confirm books it (the hard-blocking gate, plan §9g). On a
-         reopened receipt Confirm becomes "Re-enter": it voids the transaction booked last time —
-         register hand-edits included, the settled no-drift-check — and books afresh, so it asks
-         first. Confirm swaps the whole pane, which comes back read-only. -->
-    <p class="actions" th:unless="${readOnly}">
-      <button type="submit" class="btn" data-split-save>Save</button>
-      <button
-        type="button"
-        class="btn btn--primary"
-        data-receipt-confirm
-        hx-include="closest form"
-        hx-target="#receipt-pane"
-        hx-swap="outerHTML"
-        th:text="${reentry} ? 'Re-enter' : 'Confirm'"
-        th:attr="hx-post=@{/receipts/{id}/confirm(id=${id})}, hx-confirm=${reentry} ? 'Re-entering voids the transaction booked from this receipt — register edits included — and books a new one. Continue?' : null"
-      >
-        Confirm
-      </button>
-    </p>
+    <!-- Pinned bar (issue 06): the live remaining readout and Save/Confirm scroll with the rest of
+         the fields normally, then stick to the foot of the editor column's own scroll region
+         (receipts.css, .receipt-editor__pinned) once the line list is tall enough to scroll. Grouped
+         here even though the readout lives inside the disabled-on-readonly fieldset above it and
+         Save/Confirm sits outside — the wrapper makes that markup boundary invisible to the layout. -->
+    <div class="receipt-editor__pinned">
+      <!-- Live readout (plan §9f): remaining = total − Σ lines. keyboard.js recomputes it live from
+           data-split-*; the server value here is authoritative on each round-trip. A null total shows
+           a neutral "no total" hint instead of ✓/⚠. -->
+      <div class="entry-dock__status split-status">
+        <span
+          class="split-status__remaining"
+          data-split-remaining
+          th:classappend="${editor.balanced()} ? 'is-balanced'"
+        >
+          remaining <span data-split-remaining-value th:text="${editor.remaining()}">0,00</span>
+          <span
+            data-split-remaining-check
+            aria-hidden="true"
+            th:attr="style=${editor.balanced() and editor.status() != 'none'} ? '' : 'display:none'"
+            >✓</span
+          >
+        </span>
+        <span class="split-status__hint muted" th:if="${editor.status() == 'none'}">no total set</span>
+      </div>
+
+      <!-- Save keeps the draft (lenient); Confirm books it (the hard-blocking gate, plan §9g). On a
+           reopened receipt Confirm becomes "Re-enter": it voids the transaction booked last time —
+           register hand-edits included, the settled no-drift-check — and books afresh, so it asks
+           first. Confirm swaps the whole pane, which comes back read-only. -->
+      <p class="actions" th:unless="${readOnly}">
+        <button type="submit" class="btn" data-split-save>Save</button>
+        <button
+          type="button"
+          class="btn btn--primary"
+          data-receipt-confirm
+          hx-include="closest form"
+          hx-target="#receipt-pane"
+          hx-swap="outerHTML"
+          th:text="${reentry} ? 'Re-enter' : 'Confirm'"
+          th:attr="hx-post=@{/receipts/{id}/confirm(id=${id})}, hx-confirm=${reentry} ? 'Re-entering voids the transaction booked from this receipt — register edits included — and books a new one. Continue?' : null"
+        >
+          Confirm
+        </button>
+      </p>
+    </div>
 
     <p class="entry-dock__note muted" th:if="${editorSaved}" data-receipt-editor-saved>Saved.</p>
     <p class="entry-dock__error warning" th:if="${editorError}" th:text="${editorError}"></p>
