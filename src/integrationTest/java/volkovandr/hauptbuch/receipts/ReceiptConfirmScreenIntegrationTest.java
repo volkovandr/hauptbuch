@@ -25,6 +25,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.ledger.SettingsService;
@@ -230,6 +231,96 @@ class ReceiptConfirmScreenIntegrationTest {
     mockMvc
         .perform(confirm(id, cash, "50,00", fuel, "42,14"))
         .andExpect(status().isOk())
+        .andExpect(content().string(containsString("do not add up")));
+
+    assertThat(header(id, "state", String.class)).isEqualTo("processed");
+  }
+
+  // ── Confirm's post-commit navigation (issue 05) ─────────────────────────────
+
+  @Test
+  void confirmStaysInPlaceWhenFilterIncludesCommitted() throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(cash, "42.14", EUR);
+    long other = processedReceipt(cash, "5.00", EUR);
+
+    mockMvc
+        .perform(confirm(id, cash, "42,14", fuel, "42,14").param("state", "all"))
+        .andExpect(status().isOk())
+        .andExpect(MockMvcResultMatchers.header().doesNotExist("HX-Redirect"))
+        // The pane re-renders in place, and Prev/Next still resolve — `other` stays a member of
+        // its own filtered list across the commit (state=all includes committed).
+        .andExpect(content().string(containsString("id=\"receipt-pane\"")))
+        .andExpect(content().string(containsString("data-receipt-prev")));
+
+    assertThat(header(id, "state", String.class)).isEqualTo("committed");
+    assertThat(header(other, "state", String.class)).isEqualTo("processed");
+  }
+
+  @Test
+  void confirmUnderTheDefaultQueueFilterAutoAdvancesToTheNextReceipt() throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long earlier = processedReceipt(cash, "5.00", EUR);
+    long id = processedReceipt(cash, "42.14", EUR);
+    long later = processedReceipt(cash, "7.00", EUR);
+
+    // The default queue filter excludes `committed`, so the just-committed receipt would strand
+    // Prev/Next dead in-place; instead it auto-advances via HX-Redirect using the pre-commit list
+    // (newest-captured-first, §5), landing on the older neighbour it still had before committing.
+    mockMvc
+        .perform(confirm(id, cash, "42,14", fuel, "42,14"))
+        .andExpect(status().isOk())
+        .andExpect(
+            MockMvcResultMatchers.header()
+                .string("HX-Redirect", "/receipts/" + earlier + "?state=queue&range=d90"));
+
+    assertThat(header(id, "state", String.class)).isEqualTo("committed");
+    assertThat(header(later, "state", String.class)).isEqualTo("processed");
+  }
+
+  @Test
+  void confirmFallsBackToThePreviousReceiptWhenThereIsNoNext() throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    // Inserted first, so it sits last in the newest-captured-first list — no next neighbour, only
+    // a previous one (the receipt inserted after it).
+    long id = processedReceipt(cash, "42.14", EUR);
+    long newer = processedReceipt(cash, "5.00", EUR);
+
+    mockMvc
+        .perform(confirm(id, cash, "42,14", fuel, "42,14"))
+        .andExpect(status().isOk())
+        .andExpect(
+            MockMvcResultMatchers.header()
+                .string("HX-Redirect", "/receipts/" + newer + "?state=queue&range=d90"));
+  }
+
+  @Test
+  void confirmReturnsToTheRegisterWhenThereAreNoNeighbours() throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(cash, "42.14", EUR);
+
+    mockMvc
+        .perform(confirm(id, cash, "42,14", fuel, "42,14"))
+        .andExpect(status().isOk())
+        .andExpect(
+            MockMvcResultMatchers.header()
+                .string("HX-Redirect", "/receipts?state=queue&range=d90"));
+  }
+
+  @Test
+  void refusedConfirmNeverNavigates() throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(cash, "50.00", EUR);
+
+    mockMvc
+        .perform(confirm(id, cash, "50,00", fuel, "42,14"))
+        .andExpect(status().isOk())
+        .andExpect(MockMvcResultMatchers.header().doesNotExist("HX-Redirect"))
         .andExpect(content().string(containsString("do not add up")));
 
     assertThat(header(id, "state", String.class)).isEqualTo("processed");
