@@ -28,6 +28,14 @@ A receipt deliberately not booked (junk, true duplicate) — kept for the record
 soft-delete is the orthogonal "remove this row" axis.
 _Avoid_: deleted, rejected
 
+**Void (badge)**:
+The grey "Void" label/dot shown for a `committed` receipt whose linked transaction was voided
+elsewhere (e.g. from the register directly) — computed live at render time against the
+transaction's own `deleted_at`, never stored on the receipt. Not a `receipt` state; a display
+fact layered on top of `committed`. Distinct from voiding itself, the underlying ledger act.
+_Avoid_: orphaned, stale, disconnected, voided receipt (the receipt isn't voided — its
+transaction is)
+
 ### AI parsing
 
 **AI Vocabulary**:
