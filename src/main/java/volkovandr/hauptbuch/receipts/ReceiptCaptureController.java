@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.receipts;
 
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -35,7 +36,9 @@ class ReceiptCaptureController {
   /** The capture page: the shoot button and the thumbnail grid of recent receipts. */
   @GetMapping(CAPTURE_PATH)
   String capture(Model model) {
-    model.addAttribute("receipts", receiptService.forMobile());
+    List<Receipt> receipts = receiptService.forMobile();
+    model.addAttribute("receipts", receipts);
+    model.addAttribute("voidedReceiptIds", receiptService.voidedReceiptIds(receipts));
     model.addAttribute("title", "Capture · Hauptbuch");
     return CAPTURE_VIEW;
   }
@@ -52,7 +55,9 @@ class ReceiptCaptureController {
     } catch (ReceiptFormatException e) {
       response.setStatus(HttpStatus.BAD_REQUEST.value());
       model.addAttribute("error", e.getMessage());
-      model.addAttribute("receipts", receiptService.forMobile());
+      List<Receipt> receipts = receiptService.forMobile();
+      model.addAttribute("receipts", receipts);
+      model.addAttribute("voidedReceiptIds", receiptService.voidedReceiptIds(receipts));
       model.addAttribute("title", "Capture · Hauptbuch");
       return CAPTURE_VIEW;
     }

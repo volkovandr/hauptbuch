@@ -75,10 +75,13 @@
               loading="lazy"
             />
             <span class="tile__meta">
+              <!-- A committed tile whose transaction was voided from the register (issue tracker
+                   #08) gets the same grey "Void" treatment as the PC badge — the batched
+                   voidedReceiptIds check, never a per-row query. -->
               <span
                 class="state-dot"
-                th:classappend="'state-dot--' + ${r.state()}"
-                th:title="${r.state()}"
+                th:classappend="${voidedReceiptIds.contains(r.receiptId()) ? 'state-dot--void' : 'state-dot--' + r.state()}"
+                th:title="${voidedReceiptIds.contains(r.receiptId()) ? 'Void' : r.state()}"
                 aria-hidden="true"
               ></span>
               <time

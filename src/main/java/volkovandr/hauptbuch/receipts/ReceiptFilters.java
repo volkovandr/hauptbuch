@@ -16,6 +16,14 @@ final class ReceiptFilters {
   /** State filter: every state. */
   static final String STATE_ALL = "all";
 
+  /**
+   * State filter: committed receipts whose linked transaction was voided from the register (issue
+   * tracker #08) — a compound filter, not a {@link ReceiptState} value; {@link #statesFor} maps it
+   * to the plain {@code committed} query, and the caller narrows the result with the batched
+   * voided-transaction lookup ({@code ReceiptService#voidedReceiptIds}).
+   */
+  static final String STATE_VOIDED = "voided";
+
   /** Date-range filter: the last 90 days of captures (the default). */
   static final String RANGE_90D = "d90";
 
@@ -31,6 +39,9 @@ final class ReceiptFilters {
   static List<String> statesFor(String state) {
     if (STATE_ALL.equals(state)) {
       return ReceiptState.ALL;
+    }
+    if (STATE_VOIDED.equals(state)) {
+      return List.of(ReceiptState.COMMITTED);
     }
     if (ReceiptState.isValid(state)) {
       return List.of(state);

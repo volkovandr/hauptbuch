@@ -214,6 +214,28 @@ class RepositoryRoundTripIntegrationTest {
     assertThat(transactionRepository.softDelete(txnId)).isZero();
   }
 
+  /**
+   * The batched liveness check (issue tracker #08): only the soft-deleted ids among those asked
+   * about come back, a live transaction and an untouched one are both excluded.
+   */
+  @Test
+  void findVoidedIdsReturnsOnlyTheSoftDeletedOnesAmongThoseAsked() {
+    long voided =
+        transactionRepository.insertTransaction(
+            new Transaction(
+                null, LocalDate.of(2026, 6, 2), null, null, CONFIRMED, null, null, null));
+    long live =
+        transactionRepository.insertTransaction(
+            new Transaction(
+                null, LocalDate.of(2026, 6, 3), null, null, CONFIRMED, null, null, null));
+    transactionRepository.softDelete(voided);
+
+    assertThat(transactionRepository.findVoidedIds(List.of(voided, live))).containsExactly(voided);
+
+    // An empty ask short-circuits rather than issuing an invalid `in ()`.
+    assertThat(transactionRepository.findVoidedIds(List.of())).isEmpty();
+  }
+
   @Test
   void settingsRowExistsAndDisplayNameUpdates() {
     settingsRepository.updateDisplayName("Andrey");

@@ -12,6 +12,9 @@
   --state-processed: #3f7a52; /* back from the AI, under review — mid ledger green */
   --state-committed: #16301f; /* booked — the darkest green, reads as "final" */
   --state-failed: var(--oxblood); /* AI call failed — oxblood */
+  /* committed, but the linked transaction was voided from the register (issue tracker #08) — a
+     distinct grey, never appended to the committed green, so it reads as its own state. */
+  --state-void: var(--ink-soft);
 }
 
 /* ── Mobile capture surface ────────────────────────────────────────────── */
@@ -166,6 +169,7 @@ body.capture {
 .state-dot--processed { background: var(--state-processed); }
 .state-dot--committed { background: var(--state-committed); }
 .state-dot--failed { background: var(--state-failed); }
+.state-dot--void { background: var(--state-void); }
 
 /* ── PC receipt register ───────────────────────────────────────────────── */
 .receipt-toolbar {
@@ -278,6 +282,10 @@ table.receipts tbody td {
 }
 
 .rstate--failed { background: var(--state-failed); }
+
+/* Committed, but the linked transaction was voided from the register (issue tracker #08): a
+   distinct grey badge labelled "Void", replacing "Committed" rather than appending to it. */
+.rstate--void { background: var(--state-void); }
 
 .rstatus {
   margin-right: 0.2rem;

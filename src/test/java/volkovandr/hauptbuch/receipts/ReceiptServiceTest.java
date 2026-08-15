@@ -8,18 +8,22 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
+import volkovandr.hauptbuch.ledger.Transaction;
 import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
 
 /**
@@ -37,6 +41,7 @@ class ReceiptServiceTest {
   @Mock volkovandr.hauptbuch.receipts.repository.ReceiptLineRepository receiptLineRepository;
   @Mock ReceiptStorage receiptStorage;
   @Mock PayeeService payeeService;
+  @Mock LedgerService ledgerService;
   @InjectMocks ReceiptService service;
 
   private Receipt receiptInState(String state) {
@@ -55,6 +60,23 @@ class ReceiptServiceTest {
       String merchantCity,
       String merchantCountry,
       Long payeeId) {
+    return receiptWithTransaction(
+        id, state, editedPath, merchantText, merchantCity, merchantCountry, payeeId, null);
+  }
+
+  private Receipt committedReceipt(long id, Long transactionId) {
+    return receiptWithTransaction(id, "committed", null, null, null, null, null, transactionId);
+  }
+
+  private Receipt receiptWithTransaction(
+      long id,
+      String state,
+      String editedPath,
+      String merchantText,
+      String merchantCity,
+      String merchantCountry,
+      Long payeeId,
+      Long transactionId) {
     return new Receipt(
         id,
         state,
@@ -71,7 +93,7 @@ class ReceiptServiceTest {
         null,
         null,
         null,
-        null,
+        transactionId,
         null,
         // 9e telemetry (parseError … parseCost), then merchantCity/merchantCountry
         null,
@@ -327,5 +349,52 @@ class ReceiptServiceTest {
     Map<Long, String> displays = service.merchantDisplays(List.of(withPayee));
 
     assertThat(displays).containsEntry(1L, "Rewe Raw");
+  }
+
+  // ── The voided-transaction display fact (issue tracker #08) ──────────────────
+
+  @Test
+  void transactionVoidedIsFalseWithNoLinkedTransaction() {
+    assertThat(service.transactionVoided(committedReceipt(1L, null))).isFalse();
+    verifyNoInteractions(ledgerService);
+  }
+
+  @Test
+  void transactionVoidedIsTrueWhenTheLinkedTransactionIsGone() {
+    when(ledgerService.findTransaction(70L)).thenReturn(Optional.empty());
+
+    assertThat(service.transactionVoided(committedReceipt(1L, 70L))).isTrue();
+  }
+
+  @Test
+  void transactionVoidedIsFalseWhenTheLinkedTransactionIsStillLive() {
+    when(ledgerService.findTransaction(70L))
+        .thenReturn(
+            Optional.of(
+                new Transaction(70L, LocalDate.now(), null, null, "confirmed", null, null, null)));
+
+    assertThat(service.transactionVoided(committedReceipt(1L, 70L))).isFalse();
+  }
+
+  /**
+   * The batched sibling for a list/grid render (issue tracker #08): only committed receipts with a
+   * transaction the ledger reports voided make it into the result, one lookup for the whole page.
+   */
+  @Test
+  void voidedReceiptIdsReturnsOnlyCommittedReceiptsWhoseTransactionIsVoided() {
+    Receipt live = committedReceipt(1L, 70L);
+    Receipt voided = committedReceipt(2L, 71L);
+    Receipt notCommitted = receiptInState("processed");
+    when(ledgerService.voidedTransactionIds(List.of(70L, 71L))).thenReturn(Set.of(71L));
+
+    Set<Long> voidedReceiptIds = service.voidedReceiptIds(List.of(live, voided, notCommitted));
+
+    assertThat(voidedReceiptIds).containsExactly(2L);
+  }
+
+  @Test
+  void voidedReceiptIdsSkipsTheLedgerLookupWhenNothingIsCommitted() {
+    assertThat(service.voidedReceiptIds(List.of(receiptInState("new")))).isEmpty();
+    verifyNoInteractions(ledgerService);
   }
 }

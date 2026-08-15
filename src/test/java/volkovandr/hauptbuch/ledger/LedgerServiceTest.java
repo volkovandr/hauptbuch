@@ -330,6 +330,18 @@ class LedgerServiceTest {
         .isThrownBy(() -> ledgerService.voidTransaction(42L));
   }
 
+  /**
+   * The batched sibling to {@link LedgerService#findTransaction}'s single-id liveness check (issue
+   * tracker #08): a plain pass-through to the repository's batched query, wrapped in a {@link
+   * java.util.Set}.
+   */
+  @Test
+  void voidedTransactionIdsReturnsWhatTheRepositoryReports() {
+    when(transactionRepository.findVoidedIds(List.of(42L, 43L))).thenReturn(List.of(42L));
+
+    assertThat(ledgerService.voidedTransactionIds(List.of(42L, 43L))).containsExactly(42L);
+  }
+
   @Test
   void editingReThreadsTheLegs() {
     stubBaseCurrency(EUR);

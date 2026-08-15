@@ -141,6 +141,27 @@ public class TransactionRepository {
         .list();
   }
 
+  /**
+   * Which of {@code transactionIds} are voided (soft-deleted) — a batched liveness check (issue
+   * tracker #08) for a caller marking many transaction references at once (e.g. the receipts list's
+   * committed rows) instead of a per-row lookup. Empty input short-circuits (an {@code in ()} is
+   * invalid SQL).
+   */
+  public List<Long> findVoidedIds(List<Long> transactionIds) {
+    if (transactionIds.isEmpty()) {
+      return List.of();
+    }
+    return jdbcClient
+        .sql(
+            """
+            select transaction_id from transaction
+            where transaction_id in (:transactionIds) and deleted_at is not null
+            """)
+        .param("transactionIds", transactionIds)
+        .query(Long.class)
+        .list();
+  }
+
   /** Soft-delete a transaction (and, by the join, its postings). Returns rows affected. */
   public int softDelete(long transactionId) {
     return jdbcClient

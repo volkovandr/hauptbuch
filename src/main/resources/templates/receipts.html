@@ -54,6 +54,9 @@
             New
           </option>
           <option value="all" th:selected="${stateFilter == 'all'}">Everything</option>
+          <!-- Compound filter (issue tracker #08): committed receipts whose transaction was voided
+               from the register — not a receipt.state value of its own. -->
+          <option value="voided" th:selected="${stateFilter == 'voided'}">Voided</option>
         </select>
       </div>
       <div class="field">
@@ -135,10 +138,13 @@
               2026-07-30 14:30
             </td>
             <td class="receipts__state">
+              <!-- A committed row whose transaction was voided from the register (issue tracker
+                   #08) shows a distinct grey "Void" badge in place of "Committed" — the batched
+                   voidedReceiptIds check, never a per-row query. -->
               <span
                 class="rstate"
-                th:classappend="'rstate--' + ${r.state()}"
-                th:text="${#strings.capitalize(#strings.replace(r.state(), '_', ' '))}"
+                th:classappend="${voidedReceiptIds.contains(r.receiptId()) ? 'rstate--void' : 'rstate--' + r.state()}"
+                th:text="${voidedReceiptIds.contains(r.receiptId()) ? 'Void' : #strings.capitalize(#strings.replace(r.state(), '_', ' '))}"
                 >New</span
               >
             </td>

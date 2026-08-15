@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.operations;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -26,6 +27,7 @@ import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.PostingDraft;
 import volkovandr.hauptbuch.ledger.SettingsService;
+import volkovandr.hauptbuch.ledger.Transaction;
 import volkovandr.hauptbuch.ledger.TransactionDraft;
 import volkovandr.hauptbuch.ledger.TransferTarget;
 
@@ -734,6 +736,35 @@ class DockCommitServiceTest {
   void voidTransactionDelegatesToTheEngine() {
     dockCommitService.voidTransaction(7L);
     verify(ledgerService).voidTransaction(7L);
+  }
+
+  /**
+   * The tolerant void (issue tracker #08), used by the receipt side's re-entry and committed-delete
+   * paths: a live target is still voided through the engine, exactly as the strict version does.
+   */
+  @Test
+  void voidTransactionIfLiveVoidsLiveTarget() {
+    when(ledgerService.findTransaction(7L))
+        .thenReturn(
+            Optional.of(
+                new Transaction(7L, LocalDate.now(), null, null, "confirmed", null, null, null)));
+
+    dockCommitService.voidTransactionIfLive(7L);
+
+    verify(ledgerService).voidTransaction(7L);
+  }
+
+  /**
+   * A target already voided is treated as already-satisfied (issue tracker #08): no call reaches
+   * the engine's strict {@code voidTransaction}, which would otherwise reject it.
+   */
+  @Test
+  void voidTransactionIfLiveIsNoOpWhenAlreadyVoided() {
+    when(ledgerService.findTransaction(7L)).thenReturn(Optional.empty());
+
+    dockCommitService.voidTransactionIfLive(7L);
+
+    verify(ledgerService, never()).voidTransaction(anyLong());
   }
 
   private static BigDecimal leg(List<PostingDraft> legs, long accountId) {

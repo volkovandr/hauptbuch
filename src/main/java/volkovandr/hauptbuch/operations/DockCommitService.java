@@ -312,6 +312,21 @@ public class DockCommitService {
   }
 
   /**
+   * Void a transaction, tolerating one that is already voided (issue tracker #08): the receipt
+   * side's actual intent when it voids its own linked transaction — on re-entry, and on the
+   * committed-delete dialog's void axis — is "make sure no live transaction remains linked", which
+   * is already true if something else (e.g. the register's own void action) got there first. {@link
+   * #voidTransaction} stays strict for the register's own edit-mode void, which only ever targets a
+   * transaction it just loaded live.
+   */
+  @Transactional
+  public void voidTransactionIfLive(long transactionId) {
+    if (ledgerService.findTransaction(transactionId).isPresent()) {
+      ledgerService.voidTransaction(transactionId);
+    }
+  }
+
+  /**
    * The signed amount on the <em>funding</em> leg (register §3.8). The magnitude is entered bare;
    * its sign is the counterpart's type — {@code expense} is an outflow ({@code −}), {@code income}
    * an inflow ({@code +}) — unless an explicit leading {@code +}/{@code −} overrides it (a refund

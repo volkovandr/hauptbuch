@@ -536,6 +536,10 @@ class ReceiptProcessingController {
     // one keeps its transaction link, which is what turns Confirm into Re-enter.
     model.addAttribute("readOnly", committed);
     model.addAttribute("reentry", !committed && receipt.transactionId() != null);
+    // Live-checked on every render, never persisted (issue tracker #08): a committed receipt whose
+    // transaction was voided from the register gets the pane's dead-link warning instead of a
+    // confirmed-dead "Edit transaction" jump.
+    model.addAttribute("transactionVoided", committed && receiptService.transactionVoided(receipt));
   }
 
   /** Redirect back to a receipt's processing screen, preserving the carried filter + order. */

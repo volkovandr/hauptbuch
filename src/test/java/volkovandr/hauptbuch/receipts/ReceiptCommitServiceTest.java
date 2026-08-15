@@ -56,7 +56,7 @@ class ReceiptCommitServiceTest {
     order.verify(receiptEditorService).save(RECEIPT_ID, form());
     order.verify(dockSplitService).commit(any());
     order.verify(receiptRepository).markCommitted(RECEIPT_ID, NEW_TXN);
-    verify(dockCommitService, never()).voidTransaction(anyLong());
+    verify(dockCommitService, never()).voidTransactionIfLive(anyLong());
   }
 
   @Test
@@ -70,7 +70,7 @@ class ReceiptCommitServiceTest {
     service.confirm(RECEIPT_ID, form());
 
     InOrder order = inOrder(dockCommitService, dockSplitService, receiptRepository);
-    order.verify(dockCommitService).voidTransaction(OLD_TXN);
+    order.verify(dockCommitService).voidTransactionIfLive(OLD_TXN);
     order.verify(dockSplitService).commit(any());
     order.verify(receiptRepository).markCommitted(RECEIPT_ID, NEW_TXN);
   }
@@ -106,7 +106,7 @@ class ReceiptCommitServiceTest {
     service.reopen(RECEIPT_ID);
 
     verify(receiptRepository).reopen(RECEIPT_ID);
-    verify(dockCommitService, never()).voidTransaction(anyLong());
+    verify(dockCommitService, never()).voidTransactionIfLive(anyLong());
   }
 
   @Test
@@ -116,7 +116,7 @@ class ReceiptCommitServiceTest {
 
     service.deleteCommitted(RECEIPT_ID, false, true);
 
-    verify(dockCommitService, never()).voidTransaction(anyLong());
+    verify(dockCommitService, never()).voidTransactionIfLive(anyLong());
     verify(receiptService).deleteCommitted(RECEIPT_ID, true);
   }
 
@@ -127,7 +127,7 @@ class ReceiptCommitServiceTest {
 
     service.deleteCommitted(RECEIPT_ID, true, false);
 
-    verify(dockCommitService).voidTransaction(OLD_TXN);
+    verify(dockCommitService).voidTransactionIfLive(OLD_TXN);
     verify(receiptService).deleteCommitted(RECEIPT_ID, false);
   }
 

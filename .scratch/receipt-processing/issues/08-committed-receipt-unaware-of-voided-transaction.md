@@ -1,6 +1,6 @@
 # A committed receipt has no idea its linked transaction was voided from the register
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: medium
 Area: Receipts — processing screen, committed view (`receipt-process.html`) × register void
