@@ -362,14 +362,20 @@
 
     <!-- The committed receipt's actions (plan §9g). Edit transaction jumps to the register with the
          booked row selected and docked; Reopen is instant (nothing is written but the state) and
-         turns the pane back into the editor, where Confirm now reads "Re-enter". -->
+         turns the pane back into the editor, where Confirm now reads "Re-enter". When the linked
+         transaction was voided from the register (issue tracker #08), the jump would silently land
+         on the plain register instead — so it is hidden in favour of an explanatory note pointing
+         at Reopen, the actual way back in. -->
     <div class="receipt-process__actions" th:if="${readOnly}">
       <a
         class="btn"
-        th:if="${receipt.transactionId() != null}"
+        th:if="${receipt.transactionId() != null and !transactionVoided}"
         th:href="@{/register(selected=${receipt.transactionId()})}"
         >Edit transaction</a
       >
+      <p class="receipt-process__voided-note muted" th:if="${transactionVoided}">
+        The linked transaction was voided from the register. Reopen this receipt to re-enter it.
+      </p>
       <button
         type="button"
         class="btn"

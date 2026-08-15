@@ -21,7 +21,11 @@ import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
  * <p><strong>Re-entry</strong> (a Confirm on a receipt that has already been booked and reopened)
  * voids the predecessor and books afresh, deliberately overwriting any register-side hand-edits —
  * the settled no-drift-check. The voided transaction stays soft-deleted and inspectable; the
- * receipt simply points at the new one.
+ * receipt simply points at the new one. The predecessor may already be voided — e.g. voided
+ * directly from the register, bypassing receipts entirely (issue tracker #08) — in which case
+ * voiding it again is a no-op, not an error: {@link DockCommitService#voidTransactionIfLive} is
+ * used here (and on the committed-delete dialog's void axis below) rather than the strict {@code
+ * voidTransaction} the register's own edit-mode void uses.
  *
  * <p>Lives in {@code receipts} beside the rest of the receipt lifecycle, calling {@code operations}
  * for the two ledger-side operations (commit, void) exactly as the plan's boundary note anticipates
@@ -73,7 +77,7 @@ public class ReceiptCommitService {
     receiptEditorService.save(receiptId, form);
     Receipt saved = receiptService.findById(receiptId).orElseThrow(() -> vanished(receiptId));
     if (receipt.transactionId() != null) {
-      dockCommitService.voidTransaction(receipt.transactionId());
+      dockCommitService.voidTransactionIfLive(receipt.transactionId());
     }
     long transactionId = dockSplitService.commit(ReceiptSplitEntries.of(saved, form));
     receiptRepository.markCommitted(receiptId, transactionId);
@@ -107,7 +111,7 @@ public class ReceiptCommitService {
   public void deleteCommitted(long receiptId, boolean voidTransaction, boolean removeFiles) {
     Receipt receipt = requireCommitted(receiptId);
     if (voidTransaction && receipt.transactionId() != null) {
-      dockCommitService.voidTransaction(receipt.transactionId());
+      dockCommitService.voidTransactionIfLive(receipt.transactionId());
     }
     receiptService.deleteCommitted(receiptId, removeFiles);
   }

@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.receipts;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -27,6 +28,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
+import volkovandr.hauptbuch.ledger.LedgerService;
 
 /**
  * Integration tier (§1.5): the mobile capture surface driven through its controller against real
@@ -44,6 +46,7 @@ class ReceiptCaptureScreenIntegrationTest {
 
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
+  @Autowired LedgerService ledgerService;
 
   @DynamicPropertySource
   static void storageRoot(DynamicPropertyRegistry registry) {
@@ -132,6 +135,40 @@ class ReceiptCaptureScreenIntegrationTest {
   @Test
   void servingAnUnknownReceiptIs404() throws Exception {
     mockMvc.perform(get("/receipts/999999/thumb")).andExpect(status().isNotFound());
+  }
+
+  /**
+   * The mobile grid's state dot gets the same grey "Void" treatment as the PC badge for a committed
+   * receipt whose transaction was voided from the register (issue tracker #08).
+   */
+  @Test
+  void gridShowsGreyVoidDotForCommittedReceiptWhoseTransactionWasVoided() throws Exception {
+    mockMvc
+        .perform(multipart("/receipts").file(ReceiptImages.jpegPart()))
+        .andExpect(status().is3xxRedirection());
+    long id = latestReceiptId();
+    jdbcClient
+        .sql("update receipt set state = 'committed' where receipt_id = :id")
+        .param("id", id)
+        .update();
+    long transactionId =
+        jdbcClient
+            .sql("insert into transaction (date) values (current_date) returning transaction_id")
+            .query(Long.class)
+            .single();
+    jdbcClient
+        .sql("update receipt set transaction_id = :tid where receipt_id = :id")
+        .param("tid", transactionId)
+        .param("id", id)
+        .update();
+    ledgerService.voidTransaction(transactionId);
+
+    mockMvc
+        .perform(get(CAPTURE_PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("state-dot--void")))
+        .andExpect(content().string(containsString("title=\"Void\"")))
+        .andExpect(content().string(not(containsString("state-dot--committed"))));
   }
 
   private long latestReceiptId() {

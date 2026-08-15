@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.receipts;
 
 import java.util.List;
+import java.util.Set;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -155,13 +156,23 @@ class ReceiptRegisterController {
   /**
    * Resolve the filter and load the list rows into the model (shared by the page and re-renders).
    * {@code processingIds} rides along so {@code listPoll} (issue tracker #03) knows what to watch.
+   *
+   * <p>{@code voided} (issue tracker #08) is a compound filter {@link ReceiptFilters} cannot push
+   * into the SQL query itself: it fetches every committed receipt, then narrows to the ones the
+   * batched voided-transaction lookup marks — the same lookup that also drives the badge on every
+   * other filter, so it always runs regardless of which filter is active.
    */
   private void populateList(Model model, String state, String range) {
     List<Receipt> receipts =
         receiptService.forRegister(
             ReceiptFilters.statesFor(state), ReceiptFilters.rangeFrom(range));
+    Set<Long> voidedReceiptIds = receiptService.voidedReceiptIds(receipts);
+    if (ReceiptFilters.STATE_VOIDED.equals(state)) {
+      receipts = receipts.stream().filter(r -> voidedReceiptIds.contains(r.receiptId())).toList();
+    }
     model.addAttribute("receipts", receipts);
     model.addAttribute("merchantDisplays", receiptService.merchantDisplays(receipts));
+    model.addAttribute("voidedReceiptIds", voidedReceiptIds);
     model.addAttribute("processingIds", processingIdsOf(receipts));
     model.addAttribute("stateFilter", state);
     model.addAttribute("rangeFilter", range);

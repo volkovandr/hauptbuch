@@ -8,8 +8,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.receipts.repository.ReceiptLineRepository;
 import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
@@ -41,16 +44,19 @@ public class ReceiptService {
   private final ReceiptLineRepository receiptLineRepository;
   private final ReceiptStorage receiptStorage;
   private final PayeeService payeeService;
+  private final LedgerService ledgerService;
 
   ReceiptService(
       ReceiptRepository receiptRepository,
       ReceiptLineRepository receiptLineRepository,
       ReceiptStorage receiptStorage,
-      PayeeService payeeService) {
+      PayeeService payeeService,
+      LedgerService ledgerService) {
     this.receiptRepository = receiptRepository;
     this.receiptLineRepository = receiptLineRepository;
     this.receiptStorage = receiptStorage;
     this.payeeService = payeeService;
+    this.ledgerService = ledgerService;
   }
 
   /**
@@ -103,6 +109,42 @@ public class ReceiptService {
       }
     }
     return displays;
+  }
+
+  /**
+   * Whether a receipt's linked transaction has been voided from the register (issue tracker #08) —
+   * a live check, never persisted, reusing the ledger's single-id liveness lookup. False for a
+   * receipt with no linked transaction. Meant for the single-receipt pane, where only one receipt
+   * is ever checked per render; {@link #voidedReceiptIds} is the batched sibling for a list/grid.
+   */
+  public boolean transactionVoided(Receipt receipt) {
+    return receipt.transactionId() != null
+        && ledgerService.findTransaction(receipt.transactionId()).isEmpty();
+  }
+
+  /**
+   * Which of {@code receipts} are committed with a transaction since voided from the register
+   * (issue tracker #08) — one batched lookup for a whole list/grid render, mirroring the
+   * Merchant-column display-map precedent (issue tracker #07) rather than a query per row. A
+   * receipt that is not committed, or whose transaction is still live, is simply absent from the
+   * result.
+   */
+  public Set<Long> voidedReceiptIds(List<Receipt> receipts) {
+    List<Long> transactionIds =
+        receipts.stream()
+            .filter(r -> ReceiptState.COMMITTED.equals(r.state()))
+            .map(Receipt::transactionId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+    if (transactionIds.isEmpty()) {
+      return Set.of();
+    }
+    Set<Long> voidedTransactionIds = ledgerService.voidedTransactionIds(transactionIds);
+    return receipts.stream()
+        .filter(r -> r.transactionId() != null && voidedTransactionIds.contains(r.transactionId()))
+        .map(Receipt::receiptId)
+        .collect(Collectors.toSet());
   }
 
   /** The mobile grid: all live receipts captured within the last {@link #MOBILE_WINDOW_DAYS}. */

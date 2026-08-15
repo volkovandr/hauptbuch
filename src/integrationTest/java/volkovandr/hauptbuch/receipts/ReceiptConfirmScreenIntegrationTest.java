@@ -28,6 +28,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
+import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
@@ -51,6 +52,7 @@ class ReceiptConfirmScreenIntegrationTest {
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
   @Autowired SettingsService settingsService;
+  @Autowired LedgerService ledgerService;
 
   @DynamicPropertySource
   static void storageRoot(DynamicPropertyRegistry registry) {
@@ -365,6 +367,72 @@ class ReceiptConfirmScreenIntegrationTest {
     assertThat(isVoided(first)).isTrue();
     assertThat(isVoided(second)).isFalse();
     assertThat(legsOf(second)).containsExactlyInAnyOrder(leg(cash, "-40.00"), leg(fuel, "40.00"));
+  }
+
+  // ── The transaction voided from outside receipts (issue tracker #08) ────────
+
+  @Test
+  void reEnteringAfterTheTransactionWasVoidedFromTheRegisterSucceeds() throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(cash, "42.14", EUR);
+    mockMvc.perform(confirm(id, cash, "42,14", fuel, "42,14")).andExpect(status().isOk());
+    long first = header(id, "transaction_id", Long.class);
+    mockMvc.perform(post("/receipts/" + id + "/reopen")).andExpect(status().isOk());
+    // Voided directly from the register (a normal, valid, unrelated action), never through the
+    // receipt at all — exactly the gap issue tracker #08 describes.
+    ledgerService.voidTransaction(first);
+
+    // Re-entering must succeed regardless: "make sure no live transaction remains linked" is
+    // already true, so voiding the already-voided predecessor is a no-op, not an error.
+    mockMvc
+        .perform(confirm(id, cash, "40,00", fuel, "40,00"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"receipt-pane\"")));
+
+    long second = header(id, "transaction_id", Long.class);
+    assertThat(second).isNotEqualTo(first);
+    assertThat(isVoided(first)).isTrue();
+    assertThat(isVoided(second)).isFalse();
+    assertThat(legsOf(second)).containsExactlyInAnyOrder(leg(cash, "-40.00"), leg(fuel, "40.00"));
+  }
+
+  @Test
+  void committedDeleteVoidAxisAfterTheTransactionWasAlreadyVoidedCompletesWithoutError()
+      throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(cash, "42.14", EUR);
+    mockMvc.perform(confirm(id, cash, "42,14", fuel, "42,14")).andExpect(status().isOk());
+    long transactionId = header(id, "transaction_id", Long.class);
+    ledgerService.voidTransaction(transactionId);
+
+    mockMvc
+        .perform(post("/receipts/" + id + "/delete-committed").param("voidTransaction", "true"))
+        .andExpect(status().is3xxRedirection());
+
+    assertThat(header(id, "deleted_at", java.time.OffsetDateTime.class)).isNotNull();
+    assertThat(isVoided(transactionId)).isTrue();
+  }
+
+  @Test
+  void singleReceiptPaneShowsTheVoidedNoteInsteadOfEditTransactionLinkWhenTheTransactionWasVoided()
+      throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(cash, "42.14", EUR);
+    mockMvc.perform(confirm(id, cash, "42,14", fuel, "42,14")).andExpect(status().isOk());
+    long transactionId = header(id, "transaction_id", Long.class);
+    ledgerService.voidTransaction(transactionId);
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        // Not the phrase "Edit transaction" alone — the template's own explanatory comment says
+        // that regardless — but the confirmed-dead jump itself must be gone.
+        .andExpect(content().string(not(containsString("/register?selected="))))
+        .andExpect(content().string(containsString("voided from the register")))
+        .andExpect(content().string(containsString("Reopen")));
   }
 
   // ── The committed delete (the ladder's last rung) ───────────────────────────

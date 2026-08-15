@@ -98,6 +98,15 @@ public class LedgerService {
   }
 
   /**
+   * Which of {@code transactionIds} are voided — a batched sibling to {@link #findTransaction}'s
+   * single-id liveness check (issue tracker #08), for a caller marking many transaction references
+   * at once (e.g. a committed-receipt's list/grid render) without a query per row.
+   */
+  public Set<Long> voidedTransactionIds(Collection<Long> transactionIds) {
+    return Set.copyOf(transactionRepository.findVoidedIds(List.copyOf(transactionIds)));
+  }
+
+  /**
    * The legs of a transaction, in posting-id order — the other half of an edit-mode load (register
    * §3.1). The dock classifies them into the funding (own-account) leg and the category legs.
    */

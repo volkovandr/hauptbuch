@@ -436,6 +436,57 @@ class ReceiptRegisterScreenIntegrationTest {
     mockMvc.perform(get(RECEIPTS_PATH)).andExpect(content().string(containsString(">Lidl<")));
   }
 
+  // ── Voided-transaction badge and filter (issue tracker #08) ─────────────────
+
+  @Test
+  void registerShowsGreyVoidBadgeForCommittedReceiptWhoseTransactionWasVoided() throws Exception {
+    long id = upload();
+    setState(id, "committed");
+    long transactionId = insertTransaction();
+    linkTransaction(id, transactionId);
+    voidTransactionDirectly(transactionId);
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH).param("state", "all"))
+        .andExpect(content().string(containsString("rstate--void")))
+        .andExpect(content().string(containsString(">Void<")))
+        .andExpect(content().string(not(containsString("rstate--committed"))));
+  }
+
+  @Test
+  void registerKeepsTheOrdinaryCommittedBadgeWhenTheTransactionIsStillLive() throws Exception {
+    long id = upload();
+    setState(id, "committed");
+    linkTransaction(id, insertTransaction());
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH).param("state", "all"))
+        .andExpect(content().string(containsString("rstate--committed")))
+        .andExpect(content().string(not(containsString("rstate--void"))));
+  }
+
+  @Test
+  void voidedFilterReturnsExactlyTheCommittedAndVoidedReceipts() throws Exception {
+    long voided = upload();
+    setState(voided, "committed");
+    long voidedTxn = insertTransaction();
+    linkTransaction(voided, voidedTxn);
+    voidTransactionDirectly(voidedTxn);
+
+    long stillLive = upload();
+    setState(stillLive, "committed");
+    linkTransaction(stillLive, insertTransaction());
+
+    long notCommitted = upload();
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH).param("state", "voided"))
+        .andExpect(content().string(containsString("data-receipt-id=\"" + voided + "\"")))
+        .andExpect(content().string(not(containsString("data-receipt-id=\"" + stillLive + "\""))))
+        .andExpect(
+            content().string(not(containsString("data-receipt-id=\"" + notCommitted + "\""))));
+  }
+
   @Test
   void phoneUserAgentRedirectsRootToCapture() throws Exception {
     mockMvc
@@ -507,6 +558,34 @@ class ReceiptRegisterScreenIntegrationTest {
         .param("countryCode", countryCode)
         .query(Long.class)
         .single();
+  }
+
+  private long insertTransaction() {
+    return jdbcClient
+        .sql("insert into transaction (date) values (current_date) returning transaction_id")
+        .query(Long.class)
+        .single();
+  }
+
+  private void linkTransaction(long receiptId, long transactionId) {
+    jdbcClient
+        .sql("update receipt set transaction_id = :tid where receipt_id = :id")
+        .param("tid", transactionId)
+        .param(ID, receiptId)
+        .update();
+  }
+
+  /**
+   * A bare soft-delete of a transaction, standing in for the register's own void action (whose
+   * engine round-trip is already proven in {@code LedgerServiceTest}/{@code
+   * RepositoryRoundTripIntegrationTest}) — kept a plain SQL update rather than an autowired {@code
+   * LedgerService} so this screen test stays focused on rendering, not re-proving the engine.
+   */
+  private void voidTransactionDirectly(long transactionId) {
+    jdbcClient
+        .sql("update transaction set deleted_at = now() where transaction_id = :id")
+        .param(ID, transactionId)
+        .update();
   }
 
   private void setState(long id, String state) {
