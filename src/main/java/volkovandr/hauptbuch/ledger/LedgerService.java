@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.ledger;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -104,6 +105,15 @@ public class LedgerService {
    */
   public Set<Long> voidedTransactionIds(Collection<Long> transactionIds) {
     return Set.copyOf(transactionRepository.findVoidedIds(List.copyOf(transactionIds)));
+  }
+
+  /**
+   * The booking date of each transaction in {@code transactionIds}, live or soft-deleted — the
+   * receipts register's transaction-date column (issue tracker #09), one batched lookup for a whole
+   * list/grid render rather than a query per row.
+   */
+  public Map<Long, LocalDate> datesForTransactions(Collection<Long> transactionIds) {
+    return transactionRepository.findDatesByIds(transactionIds);
   }
 
   /**

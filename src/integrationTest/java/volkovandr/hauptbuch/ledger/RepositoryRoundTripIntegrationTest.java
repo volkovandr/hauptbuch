@@ -236,6 +236,30 @@ class RepositoryRoundTripIntegrationTest {
     assertThat(transactionRepository.findVoidedIds(List.of())).isEmpty();
   }
 
+  /**
+   * The batched booking-date lookup (issue tracker #09): every asked-about transaction comes back
+   * with its date, voided ones included — a voided transaction's date is still a fact.
+   */
+  @Test
+  void findDatesByIdsReturnsTheBookingDateOfEveryAskedIdIncludingVoided() {
+    long live =
+        transactionRepository.insertTransaction(
+            new Transaction(
+                null, LocalDate.of(2026, 6, 2), null, null, CONFIRMED, null, null, null));
+    long voided =
+        transactionRepository.insertTransaction(
+            new Transaction(
+                null, LocalDate.of(2026, 6, 5), null, null, CONFIRMED, null, null, null));
+    transactionRepository.softDelete(voided);
+
+    assertThat(transactionRepository.findDatesByIds(List.of(live, voided)))
+        .containsEntry(live, LocalDate.of(2026, 6, 2))
+        .containsEntry(voided, LocalDate.of(2026, 6, 5));
+
+    // An empty ask short-circuits rather than issuing an invalid `in ()`.
+    assertThat(transactionRepository.findDatesByIds(List.of())).isEmpty();
+  }
+
   @Test
   void settingsRowExistsAndDisplayNameUpdates() {
     settingsRepository.updateDisplayName("Andrey");

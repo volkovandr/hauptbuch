@@ -172,6 +172,7 @@ class ReceiptRegisterController {
     }
     model.addAttribute("receipts", receipts);
     model.addAttribute("merchantDisplays", receiptService.merchantDisplays(receipts));
+    model.addAttribute("transactionDates", receiptService.transactionDates(receipts));
     model.addAttribute("voidedReceiptIds", voidedReceiptIds);
     model.addAttribute("processingIds", processingIdsOf(receipts));
     model.addAttribute("stateFilter", state);

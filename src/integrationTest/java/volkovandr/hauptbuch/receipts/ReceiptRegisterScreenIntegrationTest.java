@@ -72,6 +72,7 @@ class ReceiptRegisterScreenIntegrationTest {
         .perform(get(RECEIPTS_PATH))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("Captured")))
+        .andExpect(content().string(containsString("Txn date")))
         .andExpect(content().string(containsString("Merchant")))
         .andExpect(content().string(containsString("Total")))
         .andExpect(content().string(containsString("Work queue")));
@@ -436,6 +437,28 @@ class ReceiptRegisterScreenIntegrationTest {
     mockMvc.perform(get(RECEIPTS_PATH)).andExpect(content().string(containsString(">Lidl<")));
   }
 
+  // ── Transaction-date column (issue tracker #09) ─────────────────────────────
+
+  @Test
+  void registerShowsTheLinkedTransactionsBookingDate() throws Exception {
+    long id = upload();
+    setState(id, "committed");
+    linkTransaction(id, insertTransaction(java.time.LocalDate.of(2026, 6, 1)));
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH).param("state", "all"))
+        .andExpect(content().string(containsString(">2026-06-01<")));
+  }
+
+  @Test
+  void registerShowsBlankTransactionDateWhenNotYetCommitted() throws Exception {
+    upload();
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH))
+        .andExpect(content().string(containsString("class=\"receipts__txn-date num\"></td>")));
+  }
+
   // ── Voided-transaction badge and filter (issue tracker #08) ─────────────────
 
   @Test
@@ -563,6 +586,14 @@ class ReceiptRegisterScreenIntegrationTest {
   private long insertTransaction() {
     return jdbcClient
         .sql("insert into transaction (date) values (current_date) returning transaction_id")
+        .query(Long.class)
+        .single();
+  }
+
+  private long insertTransaction(java.time.LocalDate date) {
+    return jdbcClient
+        .sql("insert into transaction (date) values (:date) returning transaction_id")
+        .param("date", date)
         .query(Long.class)
         .single();
   }
