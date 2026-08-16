@@ -112,6 +112,30 @@ public class ReceiptService {
   }
 
   /**
+   * The register's transaction-date cell (issue tracker #09): the linked transaction's booking
+   * date, keyed by receipt id, for every receipt with one — a receipt not yet committed is simply
+   * absent from the map, which a template lookup against a missing key already renders blank as.
+   * Dates are resolved in one batched lookup for the whole list, never a per-row query, mirroring
+   * the Merchant-column precedent (issue tracker #07).
+   */
+  public Map<Long, LocalDate> transactionDates(List<Receipt> receipts) {
+    List<Long> transactionIds =
+        receipts.stream().map(Receipt::transactionId).filter(Objects::nonNull).distinct().toList();
+    if (transactionIds.isEmpty()) {
+      return Map.of();
+    }
+    Map<Long, LocalDate> datesByTransactionId = ledgerService.datesForTransactions(transactionIds);
+    Map<Long, LocalDate> dates = new LinkedHashMap<>();
+    for (Receipt receipt : receipts) {
+      LocalDate date = datesByTransactionId.get(receipt.transactionId());
+      if (date != null) {
+        dates.put(receipt.receiptId(), date);
+      }
+    }
+    return dates;
+  }
+
+  /**
    * Whether a receipt's linked transaction has been voided from the register (issue tracker #08) —
    * a live check, never persisted, reusing the ledger's single-id liveness lookup. False for a
    * receipt with no linked transaction. Meant for the single-receipt pane, where only one receipt

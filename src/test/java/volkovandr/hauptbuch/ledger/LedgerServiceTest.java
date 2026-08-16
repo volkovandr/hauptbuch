@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -340,6 +341,19 @@ class LedgerServiceTest {
     when(transactionRepository.findVoidedIds(List.of(42L, 43L))).thenReturn(List.of(42L));
 
     assertThat(ledgerService.voidedTransactionIds(List.of(42L, 43L))).containsExactly(42L);
+  }
+
+  /**
+   * The batched booking-date lookup (issue tracker #09): a plain pass-through to the repository's
+   * batched query.
+   */
+  @Test
+  void datesForTransactionsReturnsWhatTheRepositoryReports() {
+    when(transactionRepository.findDatesByIds(List.of(42L)))
+        .thenReturn(Map.of(42L, LocalDate.of(2026, 6, 1)));
+
+    assertThat(ledgerService.datesForTransactions(List.of(42L)))
+        .containsEntry(42L, LocalDate.of(2026, 6, 1));
   }
 
   @Test

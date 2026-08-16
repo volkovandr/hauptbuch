@@ -1,7 +1,11 @@
 package volkovandr.hauptbuch.ledger.repository;
 
+import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -160,6 +164,32 @@ public class TransactionRepository {
         .param("transactionIds", transactionIds)
         .query(Long.class)
         .list();
+  }
+
+  /**
+   * The booking date of each transaction in {@code transactionIds}, live or soft-deleted (mirrors
+   * {@link #findById}'s no-live-filter stance — a voided transaction's date is still a fact) — a
+   * batched lookup for the receipts register's transaction-date column (issue tracker #09), one
+   * query for a whole list/grid render instead of a query per row. Empty input short-circuits (an
+   * {@code in ()} is invalid SQL).
+   */
+  public Map<Long, LocalDate> findDatesByIds(Collection<Long> transactionIds) {
+    if (transactionIds.isEmpty()) {
+      return Map.of();
+    }
+    record IdDate(long transactionId, LocalDate date) {}
+
+    return jdbcClient
+        .sql(
+            """
+            select transaction_id, date from transaction
+            where transaction_id in (:transactionIds)
+            """)
+        .param("transactionIds", transactionIds)
+        .query(IdDate.class)
+        .list()
+        .stream()
+        .collect(Collectors.toMap(IdDate::transactionId, IdDate::date));
   }
 
   /** Soft-delete a transaction (and, by the join, its postings). Returns rows affected. */

@@ -1,6 +1,6 @@
 # Receipts list: show the transaction date
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: medium
 Area: Receipts — register list screen (`receipts.html`/`ReceiptRegisterController`/

@@ -239,10 +239,13 @@ Same **dense list** shape as the transaction register: thin rows, state as the *
 
 ### 5.1 Columns
 
-Left-to-right: **thumbnail · captured · state · merchant · total · account · 🔗 txn · status**.
+Left-to-right: **thumbnail · captured · txn date · state · merchant · total · account · 🔗 txn ·
+status**.
 
 - **thumbnail** — tiny preview (the edited image if present, else the raw scan).
 - **captured** — capture date/time (the stable sort key, newest first).
+- **txn date** — the linked transaction's booking date (issue tracker #09); blank until
+  `committed`.
 - **state** — the §2.1 badge; colour-coded, the spine of the list.
 - **merchant / total / account** — parsed (denormalised onto the row for list/filter/search; blank
   until `processed`). Total renders by the register's currency rules (EUR bare, German-formatted

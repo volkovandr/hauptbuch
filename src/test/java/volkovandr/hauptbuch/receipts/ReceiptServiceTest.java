@@ -351,6 +351,32 @@ class ReceiptServiceTest {
     assertThat(displays).containsEntry(1L, "Rewe Raw");
   }
 
+  // ── The register's transaction-date column (issue tracker #09) ───────────────
+
+  /**
+   * Only receipts with a linked transaction get a date, resolved by one batched ledger lookup for
+   * the whole list, mirroring the Merchant-column precedent (issue tracker #07).
+   */
+  @Test
+  void transactionDatesResolvesOnlyReceiptsWithLinkedTransaction() {
+    Receipt withTransaction = committedReceipt(1L, 70L);
+    Receipt notCommitted = receiptInState("processed");
+    // A real HashMap, not Map.of(...): production's Collectors.toMap-built map permits the
+    // null-transaction-id lookup below (Map.of()'s immutable map would throw on a null key).
+    when(ledgerService.datesForTransactions(List.of(70L)))
+        .thenReturn(new HashMap<>(Map.of(70L, LocalDate.of(2026, 6, 1))));
+
+    Map<Long, LocalDate> dates = service.transactionDates(List.of(withTransaction, notCommitted));
+
+    assertThat(dates).containsEntry(1L, LocalDate.of(2026, 6, 1)).doesNotContainKey(7L);
+  }
+
+  @Test
+  void transactionDatesSkipsTheLedgerLookupWhenNothingIsLinked() {
+    assertThat(service.transactionDates(List.of(receiptInState("new")))).isEmpty();
+    verifyNoInteractions(ledgerService);
+  }
+
   // ── The voided-transaction display fact (issue tracker #08) ──────────────────
 
   @Test
