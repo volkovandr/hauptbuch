@@ -1,6 +1,6 @@
 # Receipts list: let any column be sorted
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: medium
 Area: Receipts — register list screen (`receipts.html`/`ReceiptRegisterController`/

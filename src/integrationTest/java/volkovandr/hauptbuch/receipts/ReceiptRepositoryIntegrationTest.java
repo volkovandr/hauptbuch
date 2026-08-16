@@ -102,7 +102,7 @@ class ReceiptRepositoryIntegrationTest {
     receiptRepository.softDelete(deleted);
 
     List<Long> ids =
-        receiptRepository.findForRegister(List.of("new"), null).stream()
+        receiptRepository.findForRegister(List.of("new"), null, false, true).stream()
             .map(Receipt::receiptId)
             .toList();
 
@@ -118,7 +118,9 @@ class ReceiptRepositoryIntegrationTest {
     long tooEarly = capturedAt("2026-07-05T12:00:00Z", "new");
 
     List<Long> ids =
-        receiptRepository.findForRegister(List.of("new"), LocalDate.parse("2026-07-10")).stream()
+        receiptRepository
+            .findForRegister(List.of("new"), LocalDate.parse("2026-07-10"), false, true)
+            .stream()
             .map(Receipt::receiptId)
             .toList();
 
@@ -126,16 +128,82 @@ class ReceiptRepositoryIntegrationTest {
   }
 
   @Test
-  void registerListIsCapturedDescending() {
+  void registerListIsCapturedDescendingByDefault() {
     long later = capturedAt("2026-07-20T10:00:00Z", "new");
     long earlier = capturedAt("2026-07-10T10:00:00Z", "new");
 
     List<Long> ids =
-        receiptRepository.findForRegister(List.of("new"), null).stream()
+        receiptRepository.findForRegister(List.of("new"), null, false, true).stream()
             .map(Receipt::receiptId)
             .toList();
 
     assertThat(ids).containsSubsequence(later, earlier);
+  }
+
+  // ── Sortable headers (issue tracker #11) ──────────────────────────────────
+
+  @Test
+  void findForRegisterOrdersByCapturedAscendingWhenNotDescending() {
+    long later = capturedAt("2026-07-20T10:00:00Z", "new");
+    long earlier = capturedAt("2026-07-10T10:00:00Z", "new");
+
+    List<Long> ids =
+        receiptRepository.findForRegister(List.of("new"), null, false, false).stream()
+            .map(Receipt::receiptId)
+            .toList();
+
+    assertThat(ids).containsSubsequence(earlier, later);
+  }
+
+  @Test
+  void findForRegisterOrdersByTotalWhenSortByTotalIsTrue() {
+    long small = capturedWithTotal("new", "5.00");
+    long large = capturedWithTotal("new", "50.00");
+
+    List<Long> descending =
+        receiptRepository.findForRegister(List.of("new"), null, true, true).stream()
+            .map(Receipt::receiptId)
+            .toList();
+    List<Long> ascending =
+        receiptRepository.findForRegister(List.of("new"), null, true, false).stream()
+            .map(Receipt::receiptId)
+            .toList();
+
+    assertThat(descending).containsSubsequence(large, small);
+    assertThat(ascending).containsSubsequence(small, large);
+  }
+
+  @Test
+  void findForRegisterPlacesNullTotalsLastAscendingAndFirstDescending() {
+    long noTotal = capturedWithState("new");
+    long withTotal = capturedWithTotal("new", "5.00");
+
+    List<Long> ascending =
+        receiptRepository.findForRegister(List.of("new"), null, true, false).stream()
+            .map(Receipt::receiptId)
+            .toList();
+    List<Long> descending =
+        receiptRepository.findForRegister(List.of("new"), null, true, true).stream()
+            .map(Receipt::receiptId)
+            .toList();
+
+    assertThat(ascending).containsSubsequence(withTotal, noTotal);
+    assertThat(descending).containsSubsequence(noTotal, withTotal);
+  }
+
+  @Test
+  void findForRegisterBreaksTotalTiesByCapturedThenReceiptId() {
+    long earlierSameTotal = capturedAtWithTotal("2026-07-10T10:00:00Z", "new", "5.00");
+    long laterSameTotal = capturedAtWithTotal("2026-07-20T10:00:00Z", "new", "5.00");
+
+    List<Long> descending =
+        receiptRepository.findForRegister(List.of("new"), null, true, true).stream()
+            .map(Receipt::receiptId)
+            .toList();
+
+    // Same total; ties break by captured date in the same (descending) direction as the primary
+    // sort.
+    assertThat(descending).containsSubsequence(laterSameTotal, earlierSameTotal);
   }
 
   @Test
@@ -361,5 +429,27 @@ class ReceiptRepositoryIntegrationTest {
             OffsetDateTime.parse(instant).atZoneSameInstant(ZoneOffset.UTC).toOffsetDateTime())
         .query(Long.class)
         .single();
+  }
+
+  /** Insert a receipt in a given state at "now" with a parsed total, returning its id. */
+  private long capturedWithTotal(String state, String total) {
+    long id = capturedWithState(state);
+    jdbcClient
+        .sql("update receipt set total_amount = :total where receipt_id = :id")
+        .param("total", new BigDecimal(total))
+        .param("id", id)
+        .update();
+    return id;
+  }
+
+  /** Insert a receipt at a crafted capture instant, state, and parsed total. */
+  private long capturedAtWithTotal(String instant, String state, String total) {
+    long id = capturedAt(instant, state);
+    jdbcClient
+        .sql("update receipt set total_amount = :total where receipt_id = :id")
+        .param("total", new BigDecimal(total))
+        .param("id", id)
+        .update();
+    return id;
   }
 }

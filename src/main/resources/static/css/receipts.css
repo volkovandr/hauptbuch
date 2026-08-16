@@ -235,6 +235,18 @@ table.receipts tbody td {
   vertical-align: middle;
 }
 
+/* Sortable column headers (issue tracker #11): a plain link, styled to read as the header text it
+   replaces rather than as a conspicuous link. */
+.receipts__sort {
+  color: inherit;
+  text-decoration: none;
+}
+
+.receipts__sort:hover,
+.receipts__sort:focus-visible {
+  text-decoration: underline;
+}
+
 .receipts__row {
   cursor: default;
 }

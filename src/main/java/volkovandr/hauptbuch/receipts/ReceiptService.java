@@ -84,10 +84,15 @@ public class ReceiptService {
   }
 
   /**
-   * The PC register list for the given state filter and (optional) capture-date lower bound (§5).
+   * The PC register list for the given state filter, (optional) capture-date lower bound, and SQL
+   * sort (issue tracker #11) — {@code sortByTotal} is whether the resolved column is {@link
+   * ReceiptSort#TOTAL}, {@code descending} is {@link ReceiptSort#isDescending}. Sorting by Txn date
+   * or Merchant isn't expressible here (neither is a real column); the caller re-orders the result
+   * afterward with {@link ReceiptSort#sortByLookup}.
    */
-  public List<Receipt> forRegister(List<String> states, LocalDate from) {
-    return receiptRepository.findForRegister(states, from);
+  public List<Receipt> forRegister(
+      List<String> states, LocalDate from, boolean sortByTotal, boolean descending) {
+    return receiptRepository.findForRegister(states, from, sortByTotal, descending);
   }
 
   /**
@@ -281,7 +286,10 @@ public class ReceiptService {
    * its state moved outside the filter) has no neighbours.
    */
   public ReceiptNeighbours neighbours(long receiptId, List<String> states, LocalDate from) {
-    List<Receipt> list = receiptRepository.findForRegister(states, from);
+    // Prev/Next always walks the default capture order — the processing screen doesn't yet carry
+    // the register's active sort (issue tracker #10 covers Prev/Next's filter-consistency gap more
+    // broadly; folding sort in belongs there, not here).
+    List<Receipt> list = receiptRepository.findForRegister(states, from, false, true);
     for (int i = 0; i < list.size(); i++) {
       if (list.get(i).receiptId() == receiptId) {
         Long prev = i > 0 ? list.get(i - 1).receiptId() : null;

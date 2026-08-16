@@ -58,15 +58,40 @@ public class ReceiptRepository {
 
   /**
    * The PC register list (§5): live receipts whose state is in {@code states} and captured on or
-   * after {@code from}, newest capture first. A null {@code from} is open-ended (the "everything"
-   * date-range option, §9b). The register's date filter is preset lower-bounds only (last 90 days /
-   * last year / everything); an explicit upper bound arrives with a real caller for it.
+   * after {@code from}. A null {@code from} is open-ended (the "everything" date-range option,
+   * §9b). The register's date filter is preset lower-bounds only (last 90 days / last year /
+   * everything); an explicit upper bound arrives with a real caller for it.
+   *
+   * <p>Ordered by {@code total_amount} when {@code sortByTotal} is true, else by {@code
+   * captured_at} (today's default) — the two real columns the register's sortable-header feature
+   * (issue tracker #11) can order in SQL; the other two sortable columns aren't columns at all and
+   * sort in memory afterward (the {@code receipts} module's {@code ReceiptSort.sortByLookup}), so
+   * any caller ordering by one of those simply leaves {@code sortByTotal} false — the base order
+   * this method picks for them is immaterial, since it's fully overridden downstream. Either way,
+   * {@code descending} sets the direction, with {@code captured_at} then {@code receipt_id} as the
+   * tiebreak (both in the same direction) — for the default {@code captured_at} order, that
+   * collapses to {@code receipt_id} alone. A null {@code total_amount} (unparsed) places last
+   * ascending, first descending — the standard SQL convention, made explicit here.
    */
-  public List<Receipt> findForRegister(List<String> states, LocalDate from) {
+  public List<Receipt> findForRegister(
+      List<String> states, LocalDate from, boolean sortByTotal, boolean descending) {
+    String dir = descending ? "desc" : "asc";
+    String orderBy =
+        sortByTotal
+            ? "total_amount "
+                + dir
+                + (descending ? " nulls first" : " nulls last")
+                + ", "
+                + "captured_at "
+                + dir
+                + ", receipt_id "
+                + dir
+            : "captured_at " + dir + ", receipt_id " + dir;
     String sql =
         "select * from receipt where deleted_at is null and state in (:states)"
             + (from == null ? "" : " and captured_at >= :from")
-            + " order by captured_at desc, receipt_id desc";
+            + " order by "
+            + orderBy;
 
     JdbcClient.StatementSpec spec = jdbcClient.sql(sql).param("states", states);
     if (from != null) {

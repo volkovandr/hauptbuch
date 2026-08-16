@@ -459,6 +459,96 @@ class ReceiptRegisterScreenIntegrationTest {
         .andExpect(content().string(containsString("class=\"receipts__txn-date num\"></td>")));
   }
 
+  // ── Sortable headers (issue tracker #11) ────────────────────────────────────
+
+  @Test
+  void sortByCapturedAscendingReordersTheList() throws Exception {
+    long later = upload();
+    setCapturedAt(later, "2026-07-20T10:00:00Z");
+    long earlier = upload();
+    setCapturedAt(earlier, "2026-07-10T10:00:00Z");
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH).param("sort", "captured").param("dir", "asc"))
+        .andExpect(content().string(rowOrder(earlier, later)));
+  }
+
+  @Test
+  void sortByTotalOrdersLargestFirstByDefault() throws Exception {
+    long small = upload();
+    setTotal(small, "5.00");
+    long large = upload();
+    setTotal(large, "50.00");
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH).param("sort", "total"))
+        .andExpect(content().string(rowOrder(large, small)));
+  }
+
+  @Test
+  void sortByMerchantOrdersAlphabeticallyByDefaultOverTheResolvedDisplay() throws Exception {
+    long apple = upload();
+    setMerchant(apple, "Apple Store", null, null);
+    long zebra = upload();
+    setMerchant(zebra, "Zebra Shop", null, null);
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH).param("sort", "merchant"))
+        .andExpect(content().string(rowOrder(apple, zebra)));
+  }
+
+  @Test
+  void sortByTxnDateOrdersOverTheLinkedTransactionsBookingDate() throws Exception {
+    long later = upload();
+    setState(later, "committed");
+    linkTransaction(later, insertTransaction(java.time.LocalDate.of(2026, 6, 20)));
+    long earlier = upload();
+    setState(earlier, "committed");
+    linkTransaction(earlier, insertTransaction(java.time.LocalDate.of(2026, 6, 10)));
+
+    mockMvc
+        .perform(
+            get(RECEIPTS_PATH).param("state", "all").param("sort", "txn_date").param("dir", "asc"))
+        .andExpect(content().string(rowOrder(earlier, later)));
+  }
+
+  @Test
+  void sortByTxnDatePlacesNotYetCommittedReceiptsLastAscending() throws Exception {
+    long committed = upload();
+    setState(committed, "committed");
+    linkTransaction(committed, insertTransaction(java.time.LocalDate.of(2026, 6, 10)));
+    long notCommitted = upload();
+
+    mockMvc
+        .perform(
+            get(RECEIPTS_PATH).param("state", "all").param("sort", "txn_date").param("dir", "asc"))
+        .andExpect(content().string(rowOrder(committed, notCommitted)));
+  }
+
+  @Test
+  void invalidSortAndDirFallBackToTheDefaultCapturedDescendingOrder() throws Exception {
+    upload();
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH).param("sort", "bogus").param("dir", "bogus"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("aria-sort=\"descending\"")))
+        .andExpect(content().string(not(containsString("aria-sort=\"ascending\""))));
+  }
+
+  @Test
+  void activeColumnShowsTheDirectionalGlyphAndCarriesTheSortInHiddenFields() throws Exception {
+    upload();
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH).param("sort", "total").param("dir", "asc"))
+        .andExpect(content().string(containsString("aria-sort=\"ascending\"")))
+        .andExpect(content().string(containsString(">Total<span")))
+        .andExpect(content().string(containsString("> ↑</span")))
+        .andExpect(content().string(containsString("name=\"sort\" value=\"total\"")))
+        .andExpect(content().string(containsString("name=\"dir\" value=\"asc\"")));
+  }
+
   // ── Voided-transaction badge and filter (issue tracker #08) ─────────────────
 
   @Test
@@ -543,6 +633,33 @@ class ReceiptRegisterScreenIntegrationTest {
         .sql("select receipt_id from receipt order by receipt_id desc limit 1")
         .query(Long.class)
         .single();
+  }
+
+  /**
+   * Backdate a receipt's capture instant (bypassing the {@code now()} default) — needed for the
+   * sort tests (issue tracker #11): every upload in one test method shares a transaction, so {@code
+   * now()} alone can't tell two captures apart.
+   */
+  private void setCapturedAt(long id, String instant) {
+    jdbcClient
+        .sql("update receipt set captured_at = :capturedAt where receipt_id = :id")
+        .param("capturedAt", java.time.OffsetDateTime.parse(instant))
+        .param(ID, id)
+        .update();
+  }
+
+  private void setTotal(long id, String total) {
+    jdbcClient
+        .sql("update receipt set total_amount = :total where receipt_id = :id")
+        .param("total", new java.math.BigDecimal(total))
+        .param(ID, id)
+        .update();
+  }
+
+  /** Matches when {@code first}'s row appears before {@code second}'s in the rendered list. */
+  private org.hamcrest.Matcher<String> rowOrder(long first, long second) {
+    return org.hamcrest.Matchers.matchesPattern(
+        "(?s).*data-receipt-id=\"" + first + "\".*data-receipt-id=\"" + second + "\".*");
   }
 
   private void setMerchant(
