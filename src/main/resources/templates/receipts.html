@@ -67,6 +67,12 @@
           <option value="all" th:selected="${rangeFilter == 'all'}">Everything</option>
         </select>
       </div>
+      <!-- The active sort (issue tracker #11) rides along as hidden fields: Apply re-submits it
+           unchanged alongside state/range (native form behaviour, no JS), and the list poll's
+           hx-include picks it up the same way it already does state/range. Column headers below
+           set these via their own link, not this form. -->
+      <input type="hidden" name="sort" th:value="${sortColumn}" />
+      <input type="hidden" name="dir" th:value="${sortDirection}" />
       <p class="actions">
         <button type="submit" class="btn">Apply</button>
       </p>
@@ -103,13 +109,72 @@
 
       <table class="receipts" th:unless="${#lists.isEmpty(receipts)}">
         <thead>
+          <!-- Sortable headers (issue tracker #11): Captured/Total order in SQL, Txn date/Merchant
+               order in memory over the very lookups their cells render from — all four look and
+               behave the same from here. A plain <a> (full-page GET, no JS) so a click applies
+               immediately, independent of the Apply button above, which stays scoped to
+               state/range. Each link carries the current state/range forward since it's its own
+               request, not a submit of the filter form. -->
           <tr>
             <th scope="col" class="receipts__thumb">Scan</th>
-            <th scope="col">Captured</th>
-            <th scope="col">Txn date</th>
+            <th
+              scope="col"
+              th:attr="aria-sort=${sortColumn == 'captured' ? (sortDirection == 'desc' ? 'descending' : 'ascending') : 'none'}"
+            >
+              <a
+                class="receipts__sort"
+                th:href="@{/receipts(state=${stateFilter}, range=${rangeFilter}, sort='captured', dir=${sortColumn == 'captured' and sortDirection == 'desc' ? 'asc' : 'desc'})}"
+                >Captured<span
+                  th:if="${sortColumn == 'captured'}"
+                  th:text="${sortDirection == 'desc' ? ' ↓' : ' ↑'}"
+                > ↓</span
+                ></a
+              >
+            </th>
+            <th
+              scope="col"
+              th:attr="aria-sort=${sortColumn == 'txn_date' ? (sortDirection == 'desc' ? 'descending' : 'ascending') : 'none'}"
+            >
+              <a
+                class="receipts__sort"
+                th:href="@{/receipts(state=${stateFilter}, range=${rangeFilter}, sort='txn_date', dir=${sortColumn == 'txn_date' and sortDirection == 'desc' ? 'asc' : 'desc'})}"
+                >Txn date<span
+                  th:if="${sortColumn == 'txn_date'}"
+                  th:text="${sortDirection == 'desc' ? ' ↓' : ' ↑'}"
+                > ↓</span
+                ></a
+              >
+            </th>
             <th scope="col">State</th>
-            <th scope="col">Merchant</th>
-            <th scope="col" class="num">Total</th>
+            <th
+              scope="col"
+              th:attr="aria-sort=${sortColumn == 'merchant' ? (sortDirection == 'desc' ? 'descending' : 'ascending') : 'none'}"
+            >
+              <a
+                class="receipts__sort"
+                th:href="@{/receipts(state=${stateFilter}, range=${rangeFilter}, sort='merchant', dir=${sortColumn == 'merchant' and sortDirection == 'asc' ? 'desc' : 'asc'})}"
+                >Merchant<span
+                  th:if="${sortColumn == 'merchant'}"
+                  th:text="${sortDirection == 'desc' ? ' ↓' : ' ↑'}"
+                > ↑</span
+                ></a
+              >
+            </th>
+            <th
+              scope="col"
+              class="num"
+              th:attr="aria-sort=${sortColumn == 'total' ? (sortDirection == 'desc' ? 'descending' : 'ascending') : 'none'}"
+            >
+              <a
+                class="receipts__sort"
+                th:href="@{/receipts(state=${stateFilter}, range=${rangeFilter}, sort='total', dir=${sortColumn == 'total' and sortDirection == 'desc' ? 'asc' : 'desc'})}"
+                >Total<span
+                  th:if="${sortColumn == 'total'}"
+                  th:text="${sortDirection == 'desc' ? ' ↓' : ' ↑'}"
+                > ↓</span
+                ></a
+              >
+            </th>
             <th scope="col">Account</th>
             <th scope="col" class="receipts__txn"><span class="visually-hidden">Transaction</span>🔗</th>
             <th scope="col" class="receipts__status"><span class="visually-hidden">Status</span></th>
@@ -178,7 +243,7 @@
     th:if="${!#lists.isEmpty(processingIds)}"
     id="receipt-list-poll"
     th:attr="hx-get=@{/receipts/status(id=${processingIds})}"
-    hx-include="[name='state'], [name='range']"
+    hx-include="[name='state'], [name='range'], [name='sort'], [name='dir']"
     hx-trigger="every 10s"
     hx-swap="outerHTML"
     hidden
@@ -224,7 +289,7 @@
         <button
           type="button"
           hx-post="/receipts/process"
-          hx-include="[data-receipt-menu], [name='state'], [name='range']"
+          hx-include="[data-receipt-menu], [name='state'], [name='range'], [name='sort'], [name='dir']"
           hx-target="#receipt-list"
           hx-swap="outerHTML"
           th:text="'Process ' + ${menu.processableLabel()} + ' with AI'"
@@ -278,7 +343,7 @@
         class="btn"
         hx-post="/receipts/delete"
         hx-vals='{"removeFiles": false}'
-        hx-include="[data-receipt-dialog], [name='state'], [name='range']"
+        hx-include="[data-receipt-dialog], [name='state'], [name='range'], [name='sort'], [name='dir']"
         hx-target="#receipt-list"
         hx-swap="outerHTML"
       >
@@ -289,7 +354,7 @@
         class="btn btn--danger"
         hx-post="/receipts/delete"
         hx-vals='{"removeFiles": true}'
-        hx-include="[data-receipt-dialog], [name='state'], [name='range']"
+        hx-include="[data-receipt-dialog], [name='state'], [name='range'], [name='sort'], [name='dir']"
         hx-target="#receipt-list"
         hx-swap="outerHTML"
       >

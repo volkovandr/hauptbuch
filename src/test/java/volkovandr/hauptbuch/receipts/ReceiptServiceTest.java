@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.receipts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -217,7 +218,7 @@ class ReceiptServiceTest {
 
   @Test
   void neighboursReturnsThePreviousAndNextInTheFilteredList() {
-    when(receiptRepository.findForRegister(any(), any()))
+    when(receiptRepository.findForRegister(any(), any(), eq(false), eq(true)))
         .thenReturn(
             List.of(receipt(1L, "new", null), receipt(2L, "new", null), receipt(3L, "new", null)));
 
@@ -229,7 +230,7 @@ class ReceiptServiceTest {
 
   @Test
   void neighboursAreNullAtTheEndsAndWhenAbsent() {
-    when(receiptRepository.findForRegister(any(), any()))
+    when(receiptRepository.findForRegister(any(), any(), eq(false), eq(true)))
         .thenReturn(List.of(receipt(1L, "new", null), receipt(2L, "new", null)));
 
     assertThat(service.neighbours(1L, List.of("new"), null).prev()).isNull();

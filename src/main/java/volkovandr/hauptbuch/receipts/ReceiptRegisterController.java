@@ -1,6 +1,9 @@
 package volkovandr.hauptbuch.receipts;
 
+import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -13,9 +16,10 @@ import volkovandr.hauptbuch.web.NavItem;
 
 /**
  * The PC receipt register (§5, plan stage 9b): the dense list of receipts with a state filter
- * (default work queue), a capture-date-range filter (incl. an "everything" option), captured
- * ascending. The parsed columns render blank until 9e — a stable layout now, no template churn
- * later. Selection + the right-click context menu (§5.2) drive the delete ladder.
+ * (default work queue), a capture-date-range filter (incl. an "everything" option), and — per
+ * column header — a sort (issue tracker #11), captured-descending by default. The parsed columns
+ * render blank until 9e — a stable layout now, no template churn later. Selection + the right-click
+ * context menu (§5.2) drive the delete ladder.
  *
  * <p>Lives in {@code receipts}: the feature module owns its screen (CLAUDE.md §3). Actions
  * re-render the list fragment in place (htmx); no full navigation, so the selection surface stays
@@ -37,13 +41,15 @@ class ReceiptRegisterController {
     this.receiptBatchAnalyser = receiptBatchAnalyser;
   }
 
-  /** The register page, filtered by state and capture-date range. */
+  /** The register page, filtered by state and capture-date range, ordered by sort/dir (§5, #11). */
   @GetMapping(BASE_PATH)
   String register(
       @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
       @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      @RequestParam(required = false) String sort,
+      @RequestParam(required = false) String dir,
       Model model) {
-    populateList(model, state, range);
+    populateList(model, state, range, sort, dir);
     model.addAttribute("states", ReceiptState.ALL);
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", "Receipts · Hauptbuch");
@@ -96,9 +102,11 @@ class ReceiptRegisterController {
       @RequestParam(name = "id", required = false) List<Long> ids,
       @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
       @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      @RequestParam(required = false) String sort,
+      @RequestParam(required = false) String dir,
       Model model) {
     receiptBatchAnalyser.start(nullSafe(ids));
-    populateList(model, state, range);
+    populateList(model, state, range, sort, dir);
     return LIST_FRAGMENT;
   }
 
@@ -116,14 +124,19 @@ class ReceiptRegisterController {
       @RequestParam(name = "id", required = false) List<Long> ids,
       @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
       @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      @RequestParam(required = false) String sort,
+      @RequestParam(required = false) String dir,
       Model model) {
     List<Long> watched = nullSafe(ids);
     List<Long> stillProcessing = receiptService.stillProcessing(watched);
     if (stillProcessing.size() == watched.size()) {
+      // Unchanged tick: hand back the same trigger. Like state/range, sort/dir aren't echoed here
+      // — the hidden [name='sort']/[name='dir'] carriers already sitting in the loaded page supply
+      // them via listPoll's hx-include when the next tick actually fires.
       model.addAttribute("processingIds", stillProcessing);
       return "receipts :: listPoll";
     }
-    populateList(model, state, range);
+    populateList(model, state, range, sort, dir);
     return "receipts :: listChanged";
   }
 
@@ -134,9 +147,11 @@ class ReceiptRegisterController {
       @RequestParam(required = false, defaultValue = "false") boolean removeFiles,
       @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
       @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      @RequestParam(required = false) String sort,
+      @RequestParam(required = false) String dir,
       Model model) {
     receiptService.deleteSelection(nullSafe(ids), removeFiles);
-    populateList(model, state, range);
+    populateList(model, state, range, sort, dir);
     return LIST_FRAGMENT;
   }
 
@@ -154,29 +169,59 @@ class ReceiptRegisterController {
   }
 
   /**
-   * Resolve the filter and load the list rows into the model (shared by the page and re-renders).
-   * {@code processingIds} rides along so {@code listPoll} (issue tracker #03) knows what to watch.
+   * Resolve the filter + sort and load the list rows into the model (shared by the page and
+   * re-renders). {@code processingIds} rides along so {@code listPoll} (issue tracker #03) knows
+   * what to watch.
    *
    * <p>{@code voided} (issue tracker #08) is a compound filter {@link ReceiptFilters} cannot push
    * into the SQL query itself: it fetches every committed receipt, then narrows to the ones the
    * batched voided-transaction lookup marks — the same lookup that also drives the badge on every
    * other filter, so it always runs regardless of which filter is active.
+   *
+   * <p>Sort (issue tracker #11) resolves to a column + direction via {@link ReceiptSort}: {@code
+   * captured}/{@code total} order in SQL ({@link ReceiptService#forRegister}); {@code txn_date}/
+   * {@code merchant} order afterward, in memory, over the very maps their cells render from ({@link
+   * ReceiptSort#sortByLookup}) — built here regardless of the active sort, since they back the
+   * Txn-date/Merchant cells on every row either way.
    */
-  private void populateList(Model model, String state, String range) {
+  private void populateList(
+      Model model, String state, String range, String rawSort, String rawDir) {
+    String sortColumn = ReceiptSort.resolveColumn(rawSort);
+    String sortDirection = ReceiptSort.resolveDirection(sortColumn, rawDir);
+    boolean descending = ReceiptSort.isDescending(sortDirection);
+
     List<Receipt> receipts =
         receiptService.forRegister(
-            ReceiptFilters.statesFor(state), ReceiptFilters.rangeFrom(range));
+            ReceiptFilters.statesFor(state),
+            ReceiptFilters.rangeFrom(range),
+            ReceiptSort.TOTAL.equals(sortColumn),
+            descending);
     Set<Long> voidedReceiptIds = receiptService.voidedReceiptIds(receipts);
     if (ReceiptFilters.STATE_VOIDED.equals(state)) {
       receipts = receipts.stream().filter(r -> voidedReceiptIds.contains(r.receiptId())).toList();
     }
+    Map<Long, String> merchantDisplays = receiptService.merchantDisplays(receipts);
+    Map<Long, LocalDate> transactionDates = receiptService.transactionDates(receipts);
+    if (ReceiptSort.TXN_DATE.equals(sortColumn)) {
+      receipts =
+          ReceiptSort.sortByLookup(
+              receipts, transactionDates, Comparator.naturalOrder(), descending);
+    } else if (ReceiptSort.MERCHANT.equals(sortColumn)) {
+      // Case-insensitive: matches RegisterService's own A→Z name-sort convention.
+      receipts =
+          ReceiptSort.sortByLookup(
+              receipts, merchantDisplays, String.CASE_INSENSITIVE_ORDER, descending);
+    }
+
     model.addAttribute("receipts", receipts);
-    model.addAttribute("merchantDisplays", receiptService.merchantDisplays(receipts));
-    model.addAttribute("transactionDates", receiptService.transactionDates(receipts));
+    model.addAttribute("merchantDisplays", merchantDisplays);
+    model.addAttribute("transactionDates", transactionDates);
     model.addAttribute("voidedReceiptIds", voidedReceiptIds);
     model.addAttribute("processingIds", processingIdsOf(receipts));
     model.addAttribute("stateFilter", state);
     model.addAttribute("rangeFilter", range);
+    model.addAttribute("sortColumn", sortColumn);
+    model.addAttribute("sortDirection", sortDirection);
   }
 
   private static List<Long> processingIdsOf(List<Receipt> receipts) {
