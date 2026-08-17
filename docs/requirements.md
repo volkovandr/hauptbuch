@@ -74,7 +74,7 @@ broader* exposure discussed there. See NFR-09.
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| ARCH-01 | App deliverable as containers (Docker / docker-compose). Final packaging decided at tech-stack selection. | Should |
+| ARCH-01 | App deliverable as a runnable artifact for the Pi. Final packaging decided at tech-stack selection — `installDist` + systemd, not Docker (revised 2026-08-17, see tech-stack.md §7). | Should |
 | ARCH-02 | **PostgreSQL runs natively on the Pi**; schema versioned with migrations. | Must |
 | ARCH-03 | AI document-parsing behind a **pluggable provider interface** (≥ Sonnet 4.6), swappable for upgrades. | Should |
 | ARCH-04 | Minimal authentication (single login) to avoid open LAN access. | Should |
@@ -378,7 +378,7 @@ everything, and allow full disabling. See Q11.
 | # | Question | Status |
 |---|----------|--------|
 | Q1 | AI approach / hosted parsing acceptability | **Resolved** — hosted OK; ≥ Sonnet 4.6; local insufficient |
-| Q2 | Deployment (Docker, Pi roles) | **Resolved** — Docker OK for app; DB + files native on Pi |
+| Q2 | Deployment (Docker, Pi roles) | **Resolved** — `installDist` + systemd for app (revised 2026-08-17, Docker dropped); DB + files native on Pi |
 | Q3 | Double- vs single-entry | **Resolved** — double-entry |
 | Q4 | Shared-debt settlement | **Resolved** — auto-managed per-person signed balances |
 | Q5 | Statement formats | **Resolved** — PDF primary; CSV last-12-months |

@@ -56,7 +56,7 @@ into small, well-bounded leaves.
 | UI testing | **Playwright** smoke tests on money-critical flows only | Should |
 | AI parser | Anthropic API via official Java SDK / Spring AI, behind ARCH-03 interface | Should |
 | MCP server | Spring (Spring AI MCP) wrapping the §5.18 domain operations | Could |
-| Packaging | Docker / docker-compose for the app (ARCH-01); Postgres native | Should |
+| Packaging | `installDist` + systemd for the app (ARCH-01, revised); Postgres native | Should |
 | Runtime | JVM on the Pi; GraalVM native image held as a future escape hatch | — |
 
 ---
@@ -313,8 +313,10 @@ Both stay in Java — no Python anywhere.
 
 ## 7. Packaging & runtime on the Pi
 
-- **App:** Docker / docker-compose (ARCH-01). **PostgreSQL native on the Pi** (ARCH-02), not
-  containerised.
+- **App:** `./gradlew installDist` (Gradle `application` plugin over the Spring Boot jar; no shading)
+  → systemd unit running the generated `bin/hauptbuch` script (ARCH-01, revised 2026-08-17 — Docker
+  dropped: a single-JVM single-user app with Postgres already native gains nothing from a second
+  daemon on a Pi). **PostgreSQL native on the Pi** (ARCH-02), not containerised.
 - **Footprint:** a Spring Boot app idles ~250–400 MB and starts in a few seconds; a Pi 4/5 with
   4 GB+ runs it comfortably for one user. Footprint is explicitly not a primary concern.
 - **Escape hatch (not a starting choice):** GraalVM native image (Spring Boot supports it) cuts
