@@ -1,0 +1,18 @@
+# Template for /etc/hauptbuch/application.yml on the Pi (root:hauptbuch, mode 0640 — see
+# deploy/README.md). Overrides src/main/resources/application.yaml's dev defaults. Never commit
+# the real file — it holds the DB password and, optionally, the Anthropic API key.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/hauptbuch
+    username: hauptbuch
+    password: CHANGE_ME
+
+hauptbuch:
+  receipts:
+    storage-root: /var/lib/hauptbuch/receipts
+
+# Optional (CLAUDE.md §1.8): only needed if you want the env fallback instead of setting the key
+# via the masked Settings UI, which is the normal path and covers key rotation without a restart.
+# Leave unset (or delete the line) to rely on the UI-stored key only.
+# ANTHROPIC_API_KEY: CHANGE_ME

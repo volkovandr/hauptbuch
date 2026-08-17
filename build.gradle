@@ -3,6 +3,7 @@ import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
 plugins {
 	id 'java'
+	id 'application'
 	id 'jvm-test-suite'
 	id 'jacoco'
 	id 'org.springframework.boot' version '4.1.0'
@@ -20,6 +21,12 @@ java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(25)
 	}
+}
+
+// Deployment (tech-stack.md §7): the Pi runs `installDist`'s exploded, non-fat distribution via
+// systemd, not a Docker image — the `application` plugin's start script needs a main class.
+application {
+	mainClass = 'volkovandr.hauptbuch.HauptbuchApplication'
 }
 
 repositories {

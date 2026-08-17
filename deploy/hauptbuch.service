@@ -1,0 +1,28 @@
+[Unit]
+Description=Hauptbuch ledger
+# Best-effort ordering only: PostgreSQL is native on the Pi and managed by its own unit, but
+# hauptbuch does not hard-require postgresql.service to exist under that name — Restart=on-failure
+# below covers a DB that isn't up yet at boot.
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=hauptbuch
+Group=hauptbuch
+WorkingDirectory=/opt/hauptbuch
+# /etc/hauptbuch/ carries application.yml (DB creds, ANTHROPIC_API_KEY, receipts storage-root) —
+# see deploy/application.yml.example. A trailing slash tells Spring Boot to treat this as a
+# directory and look for application.yml (and application-<profile>.yml) inside it; values there
+# take priority over src/main/resources/application.yaml on the classpath.
+ExecStart=/opt/hauptbuch/bin/hauptbuch --spring.config.additional-location=file:/etc/hauptbuch/
+Restart=on-failure
+RestartSec=5
+
+# Modest hardening — a single-user appliance doesn't need much, but these are free.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/hauptbuch
+
+[Install]
+WantedBy=multi-user.target
