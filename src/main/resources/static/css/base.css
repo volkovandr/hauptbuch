@@ -14,6 +14,12 @@
  * Split across base.css (this file) / shell.css / accounts.css / register.css — see layout.html.
  */
 :root {
+  /* Pin Safari to its light native-widget palette (datalist popups, scrollbars, date inputs) —
+   * the app is light-only and declares no dark theme, so leaving this unset lets Safari guess and
+   * flicker between palettes, which made the category/account/payee/tag datalist suggestion popup
+   * unreadable (issue 13). */
+  color-scheme: light;
+
   /* Ledger-paper palette */
   --paper: #fbfaf6; /* warm ledger stock */
   --paper-edge: #f2efe6; /* the bound edge / app bar */
