@@ -94,6 +94,53 @@
     stage.style.setProperty("--receipt-skew", (Number(tools.skew.value) || 0) + "deg");
   }
 
+  function clampChannel(value) {
+    return value < 0 ? 0 : value > 255 ? 255 : value;
+  }
+
+  /**
+   * Bakes grayscale/brightness/contrast into `canvas`'s own pixels, in place. `ctx.filter` (the CSS
+   * Filter Effects string built by filterString()) is Chrome/Firefox-only — Safari has never
+   * implemented the canvas-context filter API, so it silently no-ops there (issue 12). These are the
+   * same three W3C Filter Effects formulas, applied manually via getImageData/putImageData, which is
+   * universally supported. Order and per-stage clamping match the native filter chain: grayscale
+   * (Rec. 709 luma), then brightness (per-channel multiply), then contrast (per-channel scale around
+   * the 128 midpoint).
+   */
+  function bakeFilters(canvas) {
+    var brightness = pct(tools.brightness.value);
+    var contrast = pct(tools.contrast.value);
+    var grayscale = tools.grayscale.checked;
+    if (!grayscale && brightness === 1 && contrast === 1) return; // Neutral — leave pixels untouched.
+
+    var ctx = canvas.getContext("2d");
+    var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    var data = imageData.data;
+    for (var i = 0; i < data.length; i += 4) {
+      var r = data[i];
+      var g = data[i + 1];
+      var b = data[i + 2];
+
+      if (grayscale) {
+        var luma = clampChannel(0.2126 * r + 0.7152 * g + 0.0722 * b);
+        r = g = b = luma;
+      }
+
+      r = clampChannel(r * brightness);
+      g = clampChannel(g * brightness);
+      b = clampChannel(b * brightness);
+
+      r = clampChannel((r - 128) * contrast + 128);
+      g = clampChannel((g - 128) * contrast + 128);
+      b = clampChannel((b - 128) * contrast + 128);
+
+      data[i] = r;
+      data[i + 1] = g;
+      data[i + 2] = b;
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
   /** Show the "downscaled for the AI" note when the crop's long edge exceeds the cap. */
   function showDownscaleNote(width, height) {
     if (!downscaleNote) return;
@@ -167,6 +214,7 @@
     if (!cropper) return;
     var cropped = cropper.getCroppedCanvas();
     if (!cropped) return;
+    bakeFilters(cropped); // Manual pixel bake — works on Safari, unlike ctx.filter (issue 12).
 
     var longest = Math.max(cropped.width, cropped.height);
     var scale = longest > LONG_EDGE_CAP ? LONG_EDGE_CAP / longest : 1; // Never upscale.
@@ -184,7 +232,6 @@
     // White ground so the triangular gaps the shear opens aren't black in the (alpha-less) JPEG.
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, out.width, out.height);
-    ctx.filter = filterString(); // Bake the same filters the preview showed.
     ctx.translate(0, shear < 0 ? extra : 0);
     ctx.transform(1, shear, 0, 1, 0, 0);
     ctx.drawImage(cropped, 0, 0, outWidth, outHeight);
