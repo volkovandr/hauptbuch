@@ -1,8 +1,14 @@
 package volkovandr.hauptbuch.receipts;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import volkovandr.hauptbuch.operations.SplitEntry;
+import volkovandr.hauptbuch.operations.SplitLineAmounts;
 import volkovandr.hauptbuch.operations.SplitLineDraft;
 
 /**
@@ -53,7 +59,68 @@ final class ReceiptSplitEntries {
         null,
         null,
         List.of(),
-        lines);
+        mergedLines(lines));
+  }
+
+  /**
+   * Sum lines that resolve to the same posting identity into one draft (issue 15): grouping by
+   * every field that would otherwise land on a distinct posting — the category/transfer-target id,
+   * transfer direction, attributed person and their direction/revive choice, tag set, and note — so
+   * a receipt's repeated same-category items (the common case) book as a single summed posting
+   * instead of one per line, while any line carrying its own tag or note (operator-added detail
+   * that summing would otherwise discard) always keeps its own posting. First-occurrence order is
+   * preserved. A group whose lines net to exactly zero (e.g. an item fully cancelled by its own
+   * storno) is dropped rather than booked as a meaningless zero-amount posting. Scoped to the
+   * receipt-confirm path only — {@code DockSplitService}, the shared commit path a manually-typed
+   * register split also uses, receives already-merged drafts and takes no change of its own.
+   */
+  private static List<SplitLineDraft> mergedLines(List<SplitLineDraft> lines) {
+    Map<MergeKey, SplitLineDraft> merged = new LinkedHashMap<>();
+    for (SplitLineDraft line : lines) {
+      merged.merge(MergeKey.of(line), line, ReceiptSplitEntries::combine);
+    }
+    return merged.values().stream().filter(ReceiptSplitEntries::isNonZero).toList();
+  }
+
+  private static boolean isNonZero(SplitLineDraft line) {
+    return SplitLineAmounts.parseSignedAmount(line.amount()).signum() != 0;
+  }
+
+  /** Sum two same-key drafts' typed amounts; every other field is identical by construction. */
+  private static SplitLineDraft combine(SplitLineDraft first, SplitLineDraft second) {
+    BigDecimal sum =
+        SplitLineAmounts.parseSignedAmount(first.amount())
+            .add(SplitLineAmounts.parseSignedAmount(second.amount()));
+    return new SplitLineDraft(
+        first.categoryId(),
+        SplitLineAmounts.formatSignedAmount(sum),
+        first.note(),
+        first.transferDirection(),
+        first.personName(),
+        first.personDirection(),
+        first.personRevive(),
+        first.tagIds());
+  }
+
+  /** Everything about a draft that determines which posting it books to, except its amount. */
+  private record MergeKey(
+      Long categoryId,
+      String transferDirection,
+      String personName,
+      String personDirection,
+      String personRevive,
+      String note,
+      Set<Long> tags) {
+    static MergeKey of(SplitLineDraft line) {
+      return new MergeKey(
+          line.categoryId(),
+          line.transferDirection(),
+          line.personName(),
+          line.personDirection(),
+          line.personRevive(),
+          line.note(),
+          new TreeSet<>(line.tagIds()));
+    }
   }
 
   /**
