@@ -244,11 +244,15 @@
               <!-- The paperclip (register §7, plan stage 9g): this row was booked from a receipt;
                    click through to its committed view. Deliberately AFTER the edit button —
                    keyboard.js activates a row's FIRST link or button on Enter, and Enter on a
-                   register row must keep meaning "edit this transaction". -->
+                   register row must keep meaning "edit this transaction". Carries the `committed`
+                   filter explicitly (issue tracker #10) — a bare id would default the processing
+                   screen's filter to the work queue, which excludes committed receipts and leaves
+                   its Prev/Next dead; `range=all` since the receipt's own capture date has nothing
+                   to do with this jump. -->
               <a
                 class="register__receipt"
                 th:if="${r.receiptId() != null}"
-                th:href="@{/receipts/{id}(id=${r.receiptId()})}"
+                th:href="@{/receipts/{id}(id=${r.receiptId()},state='committed',range='all')}"
                 title="Open the receipt this was booked from"
                 >📎</a
               >

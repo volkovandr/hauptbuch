@@ -151,6 +151,28 @@ class ReceiptProcessingScreenIntegrationTest {
   }
 
   @Test
+  void neighboursResolveWhenTheUrlCarriesNonDefaultFilter() throws Exception {
+    long first = upload();
+    long second = upload();
+    setState(first, "committed");
+    setState(second, "committed");
+
+    // Opened with the filter actually active on the list it came from (committed) — not the
+    // default work-queue filter, which excludes committed receipts and would otherwise leave
+    // neighbours unresolved (issue tracker #10). Default capture order is newest-first, so the
+    // later upload's "next" neighbour is the earlier one.
+    mockMvc
+        .perform(get("/receipts/" + second + "?state=committed&range=d90"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    containsString(
+                        "href=\"/receipts/" + first + "?state=committed&amp;range=d90\"")))
+        .andExpect(content().string(containsString("data-receipt-next")));
+  }
+
+  @Test
   void deleteNavigatesToTheNextReceiptThenBackToTheRegister() throws Exception {
     long first = upload();
     long second = upload();
@@ -211,5 +233,13 @@ class ReceiptProcessingScreenIntegrationTest {
         .param("id", id)
         .query(Boolean.class)
         .single();
+  }
+
+  private void setState(long id, String state) {
+    jdbcClient
+        .sql("update receipt set state = :state where receipt_id = :id")
+        .param("state", state)
+        .param("id", id)
+        .update();
   }
 }
