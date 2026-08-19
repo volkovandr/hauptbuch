@@ -1,6 +1,6 @@
 # Receipt commit should create one posting per category (summed), not one per line item
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: medium
 Area: Receipts — commit posting generation (`ReceiptSplitEntries`, `DockSplitService`) × register
@@ -158,3 +158,13 @@ typed line, with no combining, regardless of how many lines share a category.
   changes.
 - Cross-currency receipt commits — out of scope because receipt confirm does not produce them
   today.
+
+---
+
+Fixed 2026-08-19 (stage/9h, b2875dd): `ReceiptSplitEntries` now groups lines by category/transfer/
+person identity + tags + note and sums each group's typed amount into one draft before handing
+lines to `DockSplitService`, exactly per the agent brief above. `/code-review` caught one real gap
+not covered by the brief — a merge group that nets to exactly zero (e.g. an item fully cancelled by
+its own storno) would have booked a meaningless zero-amount posting, since nothing downstream
+rejects one. Fixed by dropping any merged group whose sum is exactly zero, with a test covering it.
+`./gradlew check` is green.
