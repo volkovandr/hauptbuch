@@ -1,6 +1,6 @@
 # Grayscale/brightness/contrast bake silently no-ops on Safari (no `CanvasRenderingContext2D.filter` support)
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: medium
 Area: Receipts — image pre-processing editor (`receipt-editor.js`, Cropper.js leaf)
@@ -136,3 +136,9 @@ same day via caniuse (Safari has never shipped `CanvasRenderingContext2D.filter`
 independently found a related but distinct Safari-specific rendering bug in issue 13. Moved
 directly to `ready-for-agent` — root cause is confirmed (not a guess) and the fix path has no open
 design questions, but the owner has deferred implementation for now.
+
+Fixed 2026-08-19 (stage/9h, a455978): `save()` now bakes grayscale/brightness/contrast into the
+cropped canvas's own pixels via getImageData/putImageData before the existing scale/shear draw,
+instead of relying on `ctx.filter`. `/code-review` ran clean (no findings). Manual cross-browser
+verification (Chrome vs. Safari, per the issue's own acceptance criteria) is still owed by the
+owner — this repo has no JS test tier for this leaf (CLAUDE.md §1.6).
