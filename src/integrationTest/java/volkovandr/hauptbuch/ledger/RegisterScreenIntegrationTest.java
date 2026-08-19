@@ -253,7 +253,12 @@ class RegisterScreenIntegrationTest {
         .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("register__receipt")))
-        .andExpect(content().string(containsString("/receipts/" + receipt)));
+        // The paperclip's target is always a committed receipt — carrying that filter (rather than
+        // a bare id) keeps the processing screen's Prev/Next resolvable (issue tracker #10); `all`
+        // for range since the receipt's own capture date is unrelated to this jump.
+        .andExpect(
+            content()
+                .string(containsString("/receipts/" + receipt + "?state=committed&amp;range=all")));
   }
 
   @Test

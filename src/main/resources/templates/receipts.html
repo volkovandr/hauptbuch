@@ -186,7 +186,7 @@
             th:each="r : ${receipts}"
             data-kbd-row
             data-receipt-row
-            th:attr="data-receipt-id=${r.receiptId()},data-receipt-state=${r.state()},data-receipt-open=@{/receipts/{id}(id=${r.receiptId()})}"
+            th:attr="data-receipt-id=${r.receiptId()},data-receipt-state=${r.state()},data-receipt-open=@{/receipts/{id}(id=${r.receiptId()},state=${stateFilter},range=${rangeFilter})}"
             tabindex="-1"
           >
             <td class="receipts__thumb">

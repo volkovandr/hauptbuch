@@ -134,8 +134,31 @@ class ReceiptRegisterScreenIntegrationTest {
         // The thumbnail is a plain preview (no full-image link — that moved to the menu, so it no
         // longer competes with the row's double-click).
         .andExpect(content().string(containsString("/receipts/" + id + "/thumb")))
-        // Double-click opens the processing screen; the row carries its URL for the keyboard leaf.
-        .andExpect(content().string(containsString("data-receipt-open=\"/receipts/" + id + "\"")));
+        // Double-click opens the processing screen; the row carries its URL for the keyboard leaf,
+        // including the active filter (issue tracker #10) so the processing screen resolves
+        // prev/next over the same filter the row was opened from.
+        .andExpect(
+            content()
+                .string(
+                    containsString(
+                        "data-receipt-open=\"/receipts/" + id + "?state=queue&amp;range=d90\"")));
+  }
+
+  @Test
+  void registerRowOpenLinkCarriesNonDefaultFilter() throws Exception {
+    long id = upload();
+    setState(id, "committed");
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH).param("state", "committed").param("range", "y1"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    containsString(
+                        "data-receipt-open=\"/receipts/"
+                            + id
+                            + "?state=committed&amp;range=y1\"")));
   }
 
   @Test
