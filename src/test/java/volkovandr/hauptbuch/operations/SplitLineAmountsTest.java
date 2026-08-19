@@ -118,4 +118,23 @@ class SplitLineAmountsTest {
     assertThat(SplitLineAmounts.amountText(new BigDecimal("-3"), INCOME)).isEqualTo("3,00");
     assertThat(SplitLineAmounts.amountText(new BigDecimal("3"), INCOME)).isEqualTo("-3,00");
   }
+
+  // ── format signed amount (the inverse of parseSignedAmount, issue 15's receipt-line merge) ────
+
+  @Test
+  void formatSignedAmountRendersaPositiveValueAsaBareMagnitude() {
+    assertThat(SplitLineAmounts.formatSignedAmount(new BigDecimal("20"))).isEqualTo("20,00");
+  }
+
+  @Test
+  void formatSignedAmountRendersaNegativeValueWithaStornoSign() {
+    assertThat(SplitLineAmounts.formatSignedAmount(new BigDecimal("-5"))).isEqualTo("-5,00");
+  }
+
+  @Test
+  void formatSignedAmountRoundTripsThroughParseSignedAmount() {
+    BigDecimal value = new BigDecimal("-12.5");
+    assertThat(SplitLineAmounts.parseSignedAmount(SplitLineAmounts.formatSignedAmount(value)))
+        .isEqualByComparingTo(value);
+  }
 }

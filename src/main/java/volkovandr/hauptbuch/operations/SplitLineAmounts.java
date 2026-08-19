@@ -135,6 +135,19 @@ public final class SplitLineAmounts {
   }
 
   /**
+   * The typed text for a signed amount, inverting {@link #parseSignedAmount}: a non-negative value
+   * renders as a bare magnitude, a negative one as a leading {@code −} storno. Unlike {@link
+   * #amountText}, there is no category-type/direction flip here — this is for recombining several
+   * lines' already-typed (storno-signed) amounts back into one typed line, e.g. receipt confirm's
+   * same-leg merge (issue 15), where the group shares one category/direction so summing the typed
+   * values directly is equivalent to summing each line's signed contribution.
+   */
+  public static String formatSignedAmount(BigDecimal value) {
+    String magnitude = MoneyFormat.number(value.abs(), FRACTION_DIGITS);
+    return value.signum() < 0 ? "-" + magnitude : magnitude;
+  }
+
+  /**
    * The magnitude the user would type for a category leg (the mixed-split rule), inverting {@link
    * #signedContribution}: an income leg's typed value is {@code −amount}, an expense leg's is
    * {@code +amount}; a negative result is a storno and carries a leading {@code −}.
