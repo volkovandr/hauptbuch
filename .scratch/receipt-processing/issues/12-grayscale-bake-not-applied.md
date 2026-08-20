@@ -142,3 +142,22 @@ cropped canvas's own pixels via getImageData/putImageData before the existing sc
 instead of relying on `ctx.filter`. `/code-review` ran clean (no findings). Manual cross-browser
 verification (Chrome vs. Safari, per the issue's own acceptance criteria) is still owed by the
 owner — this repo has no JS test tier for this leaf (CLAUDE.md §1.6).
+
+### Apparent regression on the Pi (2026-08-19) — stale cached script, not a code defect
+
+Owner reported the fix working on localhost but the Pi still saving colour scans. Verified against
+the running Pi over HTTP: `/js/receipt-editor.js` is byte-identical to the fixed source, so the
+deploy is correct. Measuring the stored images settles it — receipt 17's `edited` copy is
+721x1568 (cropped and downscaled from a 4080x3072 original, long edge exactly at the 1568 cap) yet
+its mean per-pixel R/G/B spread is 28.0 against the original's 28.4: crop and downscale ran, the
+filter step did nothing. That is the *pre-fix* code path, which `bakeFilters` cannot produce.
+
+Root cause: Spring Boot sends **no `Cache-Control`** for static resources by default, so browsers
+pick a freshness lifetime heuristically from `Last-Modified`. On localhost `bootRun` rewrites the
+file seconds before each test, so Safari always revalidates; on the Pi the file had been unchanged
+for a day and Safari kept its own copy across the deploy.
+
+Fixed in `application.yaml` (`spring.web.resources`): the content-hash resource chain gives every
+asset a hashed URL (`/js/keyboard-<md5>.js`) which templates already pick up through Thymeleaf
+`@{...}`, served with a one-year immutable cache. A deploy that changes a file changes its URL, so
+the stale copy is unreachable. Guarded by `ShellIntegrationTest.assetsAreContentHashedAndCachedForever`.
