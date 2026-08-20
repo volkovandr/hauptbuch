@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Safari datalist probe</title>
+    <style>
+      body {
+        font: 15px/1.45 -apple-system, system-ui, sans-serif;
+        max-width: 46rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      h1 { font-size: 1.3rem; }
+      .case { border-top: 1px solid #ccc; padding: 0.9rem 0; }
+      .case h2 { font-size: 0.95rem; margin: 0 0 0.35rem; }
+      .case p { margin: 0 0 0.5rem; color: #555; font-size: 0.85rem; }
+      input { width: 100%; font: inherit; }
+
+      /* ── B: the app's real .input rules, copied verbatim from base.css ───────── */
+      .app-input {
+        font: inherit;
+        width: 100%;
+        padding: 0.4rem 0.5rem;
+        border: 1.5px solid #cfc9b8;
+        background: #fbfaf6;
+        color: #1c1c1c;
+      }
+      /* ── C: background only ──────────────────────────────────────────────────── */
+      .bg-only { background: #fbfaf6; }
+      /* ── D: border only ──────────────────────────────────────────────────────── */
+      .border-only { border: 1.5px solid #cfc9b8; }
+      /* ── E: app input, but ask WebKit for the native textfield appearance back ── */
+      .app-input.native { -webkit-appearance: textfield; appearance: auto; }
+      /* ── F: app input, but force the WebKit list button to paint ─────────────── */
+      .app-input.listbtn::-webkit-list-button {
+        -webkit-appearance: list-button;
+        display: block;
+        opacity: 1;
+        width: 1em;
+        height: 1em;
+      }
+      /* ── G: same as B but inside a light-pinned scope (the issue-13 fix) ─────── */
+      .pinned { color-scheme: light; }
+    </style>
+  </head>
+  <body>
+    <h1>Safari <code>&lt;datalist&gt;</code> probe</h1>
+    <p>
+      For <strong>each</strong> box below, answer two things:
+      <strong>(1)</strong> is a ▾ arrow drawn inside the field?
+      <strong>(2)</strong> type <code>Food</code> — does a suggestion popup appear? Then clear it and
+      type <code>Milk</code> — does one appear?
+    </p>
+
+    <datalist id="opts">
+      <option value="Food"></option>
+      <option value="Food - Milk"></option>
+      <option value="Food - Bread"></option>
+      <option value="Communications &amp; Media - Internet &amp; Phone"></option>
+      <option value="Cash (EUR)"></option>
+      <option value="Girocard (EUR)"></option>
+    </datalist>
+
+    <div class="case">
+      <h2>A — bare input, no CSS at all</h2>
+      <p>Baseline: what Safari does with an untouched datalist input.</p>
+      <input list="opts" />
+    </div>
+
+    <div class="case">
+      <h2>B — the app's real <code>.input</code> styles</h2>
+      <p>Exactly what the register/category fields look like today.</p>
+      <input class="app-input" list="opts" />
+    </div>
+
+    <div class="case">
+      <h2>C — background only</h2>
+      <p>Isolates whether a custom <code>background</code> alone kills the native ▾.</p>
+      <input class="bg-only" list="opts" />
+    </div>
+
+    <div class="case">
+      <h2>D — border only</h2>
+      <p>Isolates whether a custom <code>border</code> alone kills the native ▾.</p>
+      <input class="border-only" list="opts" />
+    </div>
+
+    <div class="case">
+      <h2>E — app styles + <code>appearance</code> restored</h2>
+      <p>Candidate fix 1: ask WebKit to keep painting the native textfield chrome.</p>
+      <input class="app-input native" list="opts" />
+    </div>
+
+    <div class="case">
+      <h2>F — app styles + forced <code>::-webkit-list-button</code></h2>
+      <p>Candidate fix 2: un-hide WebKit's datalist dropdown button explicitly.</p>
+      <input class="app-input listbtn" list="opts" />
+    </div>
+
+    <div class="case pinned">
+      <h2>G — app styles inside <code>color-scheme: light</code></h2>
+      <p>The issue-13 fix, scoped here. Compare against B.</p>
+      <input class="app-input" list="opts" />
+    </div>
+
+    <div class="case">
+      <h2>H — bare input with <code>autocomplete="off"</code></h2>
+      <p>Every app field carries this. Compare against A.</p>
+      <input list="opts" autocomplete="off" />
+    </div>
+
+    <div class="case">
+      <h2>I — pre-filled value (like the Account field's default)</h2>
+      <p>Does the popup ever open while the field already holds a matching value?</p>
+      <input class="app-input" list="opts" value="Cash (EUR)" />
+    </div>
+  </body>
+</html>
