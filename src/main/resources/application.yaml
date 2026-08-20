@@ -17,6 +17,26 @@ spring:
     multipart:
       max-file-size: 16MB
       max-request-size: 20MB
+  # Static assets are content-hashed (/js/keyboard.js -> /js/keyboard-<md5>.js) and served with a
+  # one-year immutable cache. Every template already links them through Thymeleaf `@{...}`, which
+  # Spring's ResourceUrlEncodingFilter rewrites to the hashed URL, so a deploy that changes a file
+  # changes its URL and the browser cannot reuse the old copy.
+  #
+  # Without this Spring Boot sends NO Cache-Control at all, leaving browsers to guess a freshness
+  # lifetime from Last-Modified. On the Pi that guess kept Safari running a pre-fix receipt-editor.js
+  # after the deploy — the receipt was cropped and downscaled by the new pipeline but saved in colour,
+  # because the old copy's grayscale/contrast bake was the `ctx.filter` no-op (issue 12 regression).
+  web:
+    resources:
+      chain:
+        strategy:
+          content:
+            enabled: true
+            paths: /**
+      cache:
+        cachecontrol:
+          max-age: 365d
+          cache-public: true
 
 # Receipt image storage (ARCH-07, stage 9b). Dev default: a throwaway local directory (git-ignored).
 # The Pi deployment overrides hauptbuch.receipts.storage-root via environment to its data dir; tests

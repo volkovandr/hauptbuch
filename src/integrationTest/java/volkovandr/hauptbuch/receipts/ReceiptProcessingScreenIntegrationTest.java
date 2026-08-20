@@ -58,7 +58,8 @@ class ReceiptProcessingScreenIntegrationTest {
         .andExpect(content().string(containsString("Prepare for analysis")))
         // The editor form and its Save/Cancel are present (hidden until edit mode).
         .andExpect(content().string(containsString("data-receipt-cropper")))
-        .andExpect(content().string(containsString("/js/cropper.min.js")));
+        // Content-hashed by the cache-busting resource chain (see ShellIntegrationTest).
+        .andExpect(content().string(containsString("/js/cropper.min-")));
   }
 
   @Test
