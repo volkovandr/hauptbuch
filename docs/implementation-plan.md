@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.40
-**Date:** 2026-08-05
+**Status:** Draft v0.41
+**Date:** 2026-08-21
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md` (the five authoritative design docs)
@@ -23,6 +23,10 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.41 (2026-08-21):** **9h complete — all of stage 9 (Receipts) complete** (owner-confirmed).
+  No scope change (routine). The stage-9 sub-plan `implementation-plan-stage-9.md` is deleted; its
+  summary is folded into §2's Stage 9 entry (the stage-7/8 pattern). Next: stage 13 (bank statement
+  reconciliation).
 - **v0.40 (2026-08-05):** **9h grilled & planned** (owner-confirmed; not yet implemented).
   Scope addition — **prompt caching for both modes**, partially overturning 9e's
   "no `cache_control`": single mode gets an **Analyse / Analyse (cached)** button pair,
@@ -471,12 +475,12 @@ Six ordered sub-stages, each green and demoable (7-series cadence):
 Deferred to `potential-feature-ideas.md`: the equal/shares/exact split calculator, per-group
 "simplify debts", groups/trips, and MCP exposure of debts.
 
-### Stage 9 — Receipts (merged; subsumes former stages 10–12)
-The whole receipt loop — capture → pre-process → AI parse → post-process → confirm — as one stage.
-The former stages 9–12 were horizontal layers, none independently usable; merged, the work slices
-*vertically* instead, each slice an end-to-end path with a real caller and test. **Detailed in the
-dedicated sub-plan `implementation-plan-stage-9.md`** (the stage-7 pattern; deleted on completion,
-summary folded back). Eight ordered sub-stages, each green and owner-confirmed:
+### Stage 9 — Receipts (merged; subsumes former stages 10–12) ✅ **complete**
+The whole receipt loop — capture → pre-process → AI parse → post-process → confirm → batch — as one
+stage. The former stages 9–12 were horizontal layers, none independently usable; merged, the work
+sliced *vertically* instead, each slice an end-to-end path with a real caller and test (the stage-7
+pattern; detail lived in `implementation-plan-stage-9.md`, deleted on completion, summary folded back
+here). Eight ordered sub-stages, each shipped green and owner-confirmed:
 
 - **9a — Docs.** ✅ Schema ratified into the data-model doc; scope changes recorded; ARCH-08 reworded.
 - **9b — Walking skeleton.** ✅ Capture (mobile camera + PC upload) → `new` → receipt register
@@ -491,10 +495,16 @@ summary folded back). Eight ordered sub-stages, each green and owner-confirmed:
 - **9f — Post-process.** ✅ Image left, full split toolkit right; `remaining 0,00 ✓`; redistribute-tax.
 - **9g — Confirm & reopen.** ✅ Confirm-time transaction creation via `operations`; 1:0..1 link, jump
   both ways; reopen/re-enter (soft-delete + re-book). MockMvc acceptance for the money flow.
-- **9h — Batch.** Multi-select → one Batches API request (−50 %), poller, per-receipt distribution.
+- **9h — Batch.** ✅ `ReceiptBatchClient` (Batches API) beside the unchanged 9e `ReceiptParser`
+  seam; register multi-select → **Process** claims `pre_processed` members and submits one batch
+  (−50 %); prompt caching for both modes (single mode gains **Analyse** / **Analyse (cached)**;
+  batch always caches); 30 s poller resumes on boot, distributes results per-receipt through the
+  9e lenient-seeding path; frozen `parse_cost` = standard rates × 0.5; submit failure fails all
+  members; no batch cancel (per-receipt soft-delete is the escape hatch).
 
-Deferred to §14: duplicate detection + link-to-existing (the matcher arrives with stage 13, which
-shares it; Q-RX-2 moot until then).
+Deferred to §14 during the stage: duplicate detection + link-to-existing (the matcher arrives with
+stage 13, which shares it; Q-RX-2 moot until then), SSE for the status poll (T-RX-1, only if 2 s
+polling grates), cross-currency receipt commits.
 
 ### Stage 13 — Bank statement reconciliation (rough)
 The `statements` module (§5.8): PDF-first extraction, matching statement lines against existing
