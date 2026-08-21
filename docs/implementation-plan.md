@@ -1,7 +1,7 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.41
+**Status:** Draft v0.42
 **Date:** 2026-08-21
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
@@ -23,6 +23,8 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.42 (2026-08-21):** **Payee editor page** (create/edit/merge/delete) added to §14's Data
+  lifecycle backlog, deferred from `potential-feature-ideas.md`.
 - **v0.41 (2026-08-21):** **9h complete — all of stage 9 (Receipts) complete** (owner-confirmed).
   No scope change (routine). The stage-9 sub-plan `implementation-plan-stage-9.md` is deleted; its
   summary is folded into §2's Stage 9 entry (the stage-7/8 pattern). Next: stage 13 (bank statement
@@ -550,7 +552,10 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
 - **Data lifecycle:** Money-history importer + canonical import representation (FR-IMP-01–04, gated on
   Q9 — export format); generic CSV importer (FR-IMP-05); **full** data-management operations suite —
   merge categories/payees/people/accounts, bulk re-tag/re-categorize (FR-DM; grows the `operations`
-  module from its stage-6 subdivision seed).
+  module from its stage-6 subdivision seed). **Payee editor page** — a dedicated payee list/edit
+  screen (create has little value, payees already create inline during entry; edit and especially
+  merge are the real need) — merge is an instance of the FR-DM suite above, the editor screen itself
+  is net-new UI; deferred from `potential-feature-ideas.md` (2026-08-21).
 - **Investments:** manual holdings/positions contributing to net worth (FR-INV, "Could").
 - **Exposure & integrations:** MCP server (FR-MCP; Q11 scope must be settled first); Telegram
   quick-capture bot (FR-TG, "Could").
