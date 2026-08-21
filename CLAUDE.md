@@ -206,6 +206,19 @@ Full detail in `docs/data-model.md`. The traps:
   "Lifecycle").
 - **Tests are the living spec.** When you return to a module, the tests state what it does — write
   them that way.
+- **Logging:** SLF4J + Logback via Spring Boot's defaults — no structured/JSON output, no
+  correlation ids, no custom file appender or rotation (the Pi deployment runs under systemd;
+  journald already gives timestamped, rotated, `journalctl`-filterable logs for a single-process
+  app). Level ladder: **ERROR** = an unexpected exception needing investigation; **WARN** = an
+  expected failure that was handled (an external call failed and the operation degraded
+  gracefully); **INFO** = a rare/structural business event worth a permanent record — creating or
+  deleting a person/account/category/receipt, an AI call's outcome (cost/tokens), a batch's
+  submit/finish; **DEBUG** = verbose diagnostic detail, off by default — a routine/high-frequency
+  operation (e.g. recording/editing/voiding a transaction) even though it's still a domain
+  operation, and anything genuinely verbose (an AI call's raw request/response text). A log line
+  never contains a secret (the AI API key, NFR-04) or ledger contents beyond an id and the one
+  identifying amount if there is one (ARCH-08 in spirit) — no full posting/leg detail, no raw
+  image bytes.
 
 ---
 
