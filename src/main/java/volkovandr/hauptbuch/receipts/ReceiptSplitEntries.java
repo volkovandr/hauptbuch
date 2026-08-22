@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.receipts;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -45,6 +46,7 @@ final class ReceiptSplitEntries {
         lines.add(lineOf(line));
       }
     }
+    List<SplitLineDraft> booked = mergedLines(lines);
     return new SplitEntry(
         null,
         ReceiptEditorText.parseDate(form.date()),
@@ -58,8 +60,32 @@ final class ReceiptSplitEntries {
         null,
         null,
         null,
-        List.of(),
-        mergedLines(lines));
+        sharedTags(booked),
+        booked);
+  }
+
+  /**
+   * The tags every booked line carries (issue 20) — the entry's transaction-level ids, which {@code
+   * DockSplitService} puts on the <em>funding</em> leg alone. A receipt has no header tag field, so
+   * the rule derives one: tag every item of a vacation receipt {@code Trips:France-2026} and the
+   * paying account's posting carries it too, which is what makes it visible in the register (the
+   * row renders the tags of its own posting, so line-only tags never showed). Where the items
+   * differ only what they all share lands there, and nothing does when any line is untagged.
+   *
+   * <p>Intersected over the lines that actually <em>book</em> — after the same-identity merge and
+   * after zero-netting groups are dropped — so an item fully cancelled by its own storno does not
+   * constrain what the funding leg is tagged with. First-occurrence order is kept, as everywhere
+   * else here.
+   */
+  private static List<Long> sharedTags(List<SplitLineDraft> booked) {
+    if (booked.isEmpty()) {
+      return List.of();
+    }
+    Set<Long> shared = new LinkedHashSet<>(booked.get(0).tagIds());
+    for (SplitLineDraft line : booked) {
+      shared.retainAll(line.tagIds());
+    }
+    return List.copyOf(shared);
   }
 
   /**
@@ -126,8 +152,8 @@ final class ReceiptSplitEntries {
   /**
    * One draft line as a split line. A beneficiary line carries no id (its per-currency debt leaf is
    * provisioned at commit); a category or transfer line carries the resolved account id, and the
-   * transfer direction is what tells the two apart downstream. The line's own tags ride along —
-   * receipts have no transaction-level tag field, so nothing lands on the funding leg.
+   * transfer direction is what tells the two apart downstream. The line's own tags ride along, and
+   * what every booked line shares also reaches the funding leg — see {@link #sharedTags}.
    */
   private static SplitLineDraft lineOf(WorkingLine line) {
     return new SplitLineDraft(
