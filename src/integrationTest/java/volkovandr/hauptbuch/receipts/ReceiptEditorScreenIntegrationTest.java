@@ -40,6 +40,19 @@ class ReceiptEditorScreenIntegrationTest {
 
   private static final Path STORAGE_ROOT = tempRoot();
 
+  /** A response whose tags cell echoes a tag path the operator has since created. */
+  private static final String TAGGED_RESPONSE =
+      """
+      merchant:
+        name: Total Tankstelle
+      transaction:
+        date: 2026-07-21
+        totalAmount: 42.14
+        currency: EUR
+      items[1]{name,totalPrice,category,tags}:
+        Diesel Fuel,42.14,Fuel,"Trips:France-2026"
+      """;
+
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
 
@@ -262,6 +275,97 @@ class ReceiptEditorScreenIntegrationTest {
   }
 
   // ── seeding + helpers ───────────────────────────────────────────────────────
+
+  // ── Re-seed from the stored AI response (issue tracker receipt-processing/19) ──
+
+  /**
+   * The reported case, end to end: a receipt whose response named a tag the taxonomy did not have
+   * at analysis time was seeded tag-less and silently so. Once the tag exists, re-seeding the very
+   * same stored text — no API call — attaches it, and the stale lines it replaces are gone.
+   */
+  @Test
+  void reSeedAttachesTagThatDidNotExistAtAnalysisTime() throws Exception {
+    long pay = account("Cash", "asset", "EUR");
+    long fuel = account("Fuel", "expense", "EUR");
+    final long trip = tag("France-2026", tag("Trips", null));
+    long id = processedReceipt(pay, "42.14", "EUR");
+    // What the first, tag-less seeding left behind: the response was good, the tag was not there.
+    line(id, "Stale line", "42.14", fuel, null, null);
+
+    mockMvc
+        .perform(post("/receipts/" + id + "/reparse").param("rawText", TAGGED_RESPONSE))
+        .andExpect(status().is3xxRedirection());
+
+    assertThat(state(id)).isEqualTo("processed");
+    assertThat(linesOf(id)).extracting(ReceiptLineRow::description).containsExactly("Diesel Fuel");
+    assertThat(lineTagIdsOf(id)).containsExactly(trip);
+  }
+
+  /** The stored response is the only copy — an empty submit must not overwrite it. */
+  @Test
+  void reSeedWithBlankTextLeavesTheStoredResponseAndLinesAlone() throws Exception {
+    long pay = account("Cash", "asset", "EUR");
+    long id = processedReceipt(pay, "42.14", "EUR");
+    storeRaw(id, TAGGED_RESPONSE);
+    line(id, "Reviewed line", "42.14", null, null, null);
+
+    mockMvc
+        .perform(post("/receipts/" + id + "/reparse").param("rawText", "   "))
+        .andExpect(status().is3xxRedirection());
+
+    assertThat(state(id)).isEqualTo("processed");
+    assertThat(rawOf(id)).isEqualTo(TAGGED_RESPONSE);
+    assertThat(linesOf(id))
+        .extracting(ReceiptLineRow::description)
+        .containsExactly("Reviewed line");
+  }
+
+  private long tag(String name, Long parentId) {
+    return jdbcClient
+        .sql("insert into tag (name, parent_id) values (:n, :p) returning tag_id")
+        .param("n", name)
+        .param("p", parentId)
+        .query(Long.class)
+        .single();
+  }
+
+  private void storeRaw(long receiptId, String raw) {
+    jdbcClient
+        .sql("update receipt set parse_raw = :raw where receipt_id = :id")
+        .param("raw", raw)
+        .param("id", receiptId)
+        .update();
+  }
+
+  private String rawOf(long receiptId) {
+    return jdbcClient
+        .sql("select parse_raw from receipt where receipt_id = :id")
+        .param("id", receiptId)
+        .query(String.class)
+        .single();
+  }
+
+  private String state(long receiptId) {
+    return jdbcClient
+        .sql("select state from receipt where receipt_id = :id")
+        .param("id", receiptId)
+        .query(String.class)
+        .single();
+  }
+
+  private List<Long> lineTagIdsOf(long receiptId) {
+    return jdbcClient
+        .sql(
+            """
+            select t.tag_id from receipt_line_tag t
+            join receipt_line l on l.receipt_line_id = t.receipt_line_id
+            where l.receipt_id = :id
+            order by t.tag_id
+            """)
+        .param("id", receiptId)
+        .query(Long.class)
+        .list();
+  }
 
   private long account(String name, String type, String currency) {
     return jdbcClient

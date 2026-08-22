@@ -220,6 +220,55 @@ class ReceiptAnalyseScreenIntegrationTest {
         .andExpect(content().string(Matchers.containsString("/reparse")));
   }
 
+  /**
+   * Issue tracker receipt-processing/19: the failed view's edit-and-re-parse affordance, extended
+   * to a processed receipt so its stored response can be re-seeded against today's taxonomy.
+   */
+  @Test
+  void processedScreenRevealsTheStoredResponseForReSeeding() throws Exception {
+    long id = seed("processed");
+    storeRaw(id, "tags: Trips:France-2026");
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(Matchers.containsString("edit and re-seed")))
+        .andExpect(content().string(Matchers.containsString("tags: Trips:France-2026")))
+        .andExpect(content().string(Matchers.containsString("/reparse")));
+  }
+
+  /** A committed receipt's lines back a real transaction — it gets no re-seed panel at all. */
+  @Test
+  void committedScreenOffersNoReSeedPanel() throws Exception {
+    long id = seed("committed");
+    storeRaw(id, "tags: Trips:France-2026");
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(Matchers.not(Matchers.containsString("/reparse"))));
+  }
+
+  @Test
+  void reparseFromProcessedCallsTheWorkerAndRedirects() throws Exception {
+    long id = seed("processed");
+
+    mockMvc
+        .perform(post("/receipts/" + id + "/reparse").param("rawText", "tags: Trips:France-2026"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrlPattern("/receipts/" + id + "*"));
+
+    verify(receiptAnalyser).reparse(id, "tags: Trips:France-2026");
+  }
+
+  private void storeRaw(long receiptId, String raw) {
+    jdbcClient
+        .sql("update receipt set parse_raw = :raw where receipt_id = :id")
+        .param("raw", raw)
+        .param("id", receiptId)
+        .update();
+  }
+
   @Test
   void reparseCallsTheWorkerAndRedirects() throws Exception {
     long id = seed("failed");

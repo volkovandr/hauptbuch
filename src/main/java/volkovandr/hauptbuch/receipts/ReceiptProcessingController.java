@@ -197,11 +197,13 @@ class ReceiptProcessingController {
   }
 
   /**
-   * Re-seed a {@code failed} receipt from the operator-edited parser response (owner feedback
-   * 2026-08-02) — no new API call. When the model returned slightly-malformed TOON, editing the
-   * stored text and re-decoding is faster and cheaper than re-prompting. Redirects to the screen,
-   * which shows {@code processed} on success or the still-{@code failed} view (with the edited text
-   * kept) when the edit still will not decode.
+   * Re-seed a {@code failed} or {@code processed} receipt from the operator-edited parser response
+   * (owner feedback 2026-08-02; widened to {@code processed} by issue tracker
+   * receipt-processing/19) — no new API call. When the model returned slightly-malformed TOON,
+   * editing the stored text and re-decoding is faster and cheaper than re-prompting; when it
+   * returned good text that named a tag/category/person the taxonomy did not have yet, re-seeding
+   * applies it now that it does. Redirects to the screen, which shows {@code processed} on success
+   * or the {@code failed} view (with the edited text kept) when the edit will not decode.
    */
   @PostMapping("/receipts/{id}/reparse")
   String reparse(
