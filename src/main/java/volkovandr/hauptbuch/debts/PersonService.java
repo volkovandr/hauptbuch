@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.ReservedNamePrefix;
@@ -22,6 +24,8 @@ import volkovandr.hauptbuch.debts.repository.PersonRepository;
 @Transactional
 public class PersonService {
 
+  private static final Logger LOG = LoggerFactory.getLogger(PersonService.class);
+
   private final PersonRepository personRepository;
   private final AccountOwnerRepository accountOwnerRepository;
 
@@ -36,7 +40,9 @@ public class PersonService {
       throw new IllegalArgumentException("Person name cannot be blank");
     }
     ReservedNamePrefix.check(name);
-    return personRepository.insert(name.strip());
+    Person person = personRepository.insert(name.strip());
+    LOG.info("Person created: id={}, name={}", person.personId(), person.name());
+    return person;
   }
 
   /** Rename a person. Works on both live and soft-deleted persons. */
@@ -72,6 +78,7 @@ public class PersonService {
     }
 
     personRepository.softDelete(personId);
+    LOG.info("Person deleted: id={}, name={}", person.personId(), person.name());
   }
 
   /**

@@ -1,6 +1,8 @@
 package volkovandr.hauptbuch.debts;
 
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
@@ -23,6 +25,8 @@ import volkovandr.hauptbuch.debts.repository.PersonRepository;
  */
 @Service
 public class PersonProvisioningService {
+
+  private static final Logger LOG = LoggerFactory.getLogger(PersonProvisioningService.class);
 
   private static final String ACCOUNT_NAME_PREFIX = "personal";
 
@@ -72,11 +76,11 @@ public class PersonProvisioningService {
     Person person =
         switch (personService.matchExact(trimmedName)) {
           case PersonMatch.Live live -> live.person();
-          case PersonMatch.NotFound ignored -> personRepository.insert(trimmedName);
+          case PersonMatch.NotFound ignored -> createPerson(trimmedName);
           case PersonMatch.DeletedOnly deletedOnly ->
               revive
                   ? personRepository.revive(deletedOnly.person().personId())
-                  : personRepository.insert(trimmedName);
+                  : createPerson(trimmedName);
           case PersonMatch.Ambiguous ignored ->
               throw new IllegalArgumentException(
                   "More than one person named '"
@@ -96,6 +100,17 @@ public class PersonProvisioningService {
   @Transactional
   public Account ensureLeaf(Long personId, String currencyCode) {
     return ensureLeafAccount(personId, currencyCode);
+  }
+
+  /**
+   * Insert a person the auto-provisioning path has just conjured into existence. A person genuinely
+   * comes into being here too, not only via the People page's Create form, so this logs the same
+   * line {@link PersonService#create} does (observability/02).
+   */
+  private Person createPerson(String name) {
+    Person person = personRepository.insert(name);
+    LOG.info("Person created: id={}, name={}", person.personId(), person.name());
+    return person;
   }
 
   /**

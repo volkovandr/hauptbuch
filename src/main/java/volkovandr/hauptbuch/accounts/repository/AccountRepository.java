@@ -239,6 +239,28 @@ public class AccountRepository {
   }
 
   /**
+   * The live accounts among {@code accountIds} — the rows a {@link #softDelete} of the same list
+   * would actually stamp, read in one query rather than one per id. Empty {@code accountIds}
+   * short-circuits to an empty list (an {@code in ()} is invalid SQL).
+   */
+  public List<Account> findLiveByIds(List<Long> accountIds) {
+    if (accountIds.isEmpty()) {
+      return List.of();
+    }
+    return jdbcClient
+        .sql(
+            SELECT_ACCOUNT_COLUMNS
+                + """
+                from account
+                where account_id in (:accountIds)
+                  and deleted_at is null
+                """)
+        .param(ACCOUNT_IDS, accountIds)
+        .query(Account.class)
+        .list();
+  }
+
+  /**
    * Soft-delete a set of accounts by stamping {@code deleted_at} — the account-side of category
    * deletion (plan stage 6c). Unlike {@link #close}, this is not a display state the UI can undo;
    * the category screen offers no reopen for a deleted category. Postings are reassigned away first

@@ -1,6 +1,8 @@
 package volkovandr.hauptbuch.operations;
 
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
@@ -25,6 +27,8 @@ import volkovandr.hauptbuch.operations.repository.PostingReassignmentRepository;
  */
 @Service
 public class SubdivisionService {
+
+  private static final Logger LOG = LoggerFactory.getLogger(SubdivisionService.class);
 
   private final AccountService accountService;
   private final PostingReassignmentRepository postingReassignmentRepository;
@@ -53,7 +57,21 @@ public class SubdivisionService {
   @Transactional
   public SubdivisionResult subdivideAccount(long leafId, String childName, String catchAllName) {
     Account leaf = requireLeaf(leafId);
+    SubdivisionResult result = subdivide(leaf, childName, catchAllName);
+    // The "why" tying together the "Account opened" lines each new account already logged — so it
+    // names the catch-all too when there was one, and null when the leaf needed none.
+    LOG.info(
+        "Account subdivided: id={}, name={}, into={}, catchAll={}",
+        leafId,
+        leaf.name(),
+        childName,
+        result.catchAll() == null ? null : result.catchAll().name());
+    return result;
+  }
 
+  /** The mechanical half of {@link #subdivideAccount}, on an already-validated leaf. */
+  private SubdivisionResult subdivide(Account leaf, String childName, String catchAllName) {
+    long leafId = leaf.accountId();
     Account child = accountService.insertLeaf(childName, leaf.type(), leafId, leaf.currencyCode());
 
     List<Account> currencyLeaves =

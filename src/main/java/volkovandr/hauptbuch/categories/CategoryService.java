@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
@@ -30,6 +32,8 @@ import volkovandr.hauptbuch.operations.SubdivisionService;
  */
 @Service
 public class CategoryService {
+
+  private static final Logger LOG = LoggerFactory.getLogger(CategoryService.class);
 
   /** The catch-all sibling's name when subdividing a posted-to category leaf (data-model §6.5). */
   static final String UNCATEGORIZED = "Uncategorized";
@@ -102,6 +106,14 @@ public class CategoryService {
   @Transactional
   public Account createCategory(CategoryDraft draft) {
     validateDraft(draft);
+    Account created = insertCategory(draft);
+    // The "why" beside the backing account's own "Account opened" line (observability/02).
+    LOG.info("Category created: id={}, name={}", created.accountId(), created.name());
+    return created;
+  }
+
+  /** The mechanical half of {@link #createCategory}: plain leaf, or a subdivision of the parent. */
+  private Account insertCategory(CategoryDraft draft) {
     if (draft.parentId() == null) {
       return accountService.insertLeaf(draft.name(), draft.type(), null, baseCurrency());
     }
@@ -300,7 +312,8 @@ public class CategoryService {
    */
   @Transactional
   public void deleteCategory(long accountId, long targetLeafId) {
-    requireManageable(accountId);
+    Account category = requireManageable(accountId);
+    LOG.info("Category deleted: id={}, name={}", category.accountId(), category.name());
     // Capture the subtree before the deletion soft-deletes it (findSubtreeAccountIds is scoped to
     // live rows), so the AI-vocabulary config rows for the whole subtree can be swept with it
     // (data-model §13.3). The reassignment target keeps its own config — it survives the deletion.
