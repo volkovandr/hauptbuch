@@ -328,6 +328,104 @@ class ReceiptConfirmScreenIntegrationTest {
     assertThat(header(id, "state", String.class)).isEqualTo("processed");
   }
 
+  // ── Funding-leg tags (issue tracker receipt-processing/20) ──────────────────
+
+  /**
+   * The reported case, end to end: a receipt whose every item carries the same tag books that tag
+   * onto the paying account's posting too, so the register row — which renders the tags of its own
+   * posting — finally shows it without opening the transaction for editing.
+   */
+  @Test
+  void confirmTagsThePayingLegWithWhatEveryLineShares() throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long food = category("Food", "expense");
+    long trip = tag("France-2026", tag("Trips", null));
+    long id = processedReceipt(cash, "45.00", EUR);
+
+    mockMvc
+        .perform(
+            twoLineConfirm(id, cash, fuel, food)
+                .param("lineTag0", String.valueOf(trip))
+                .param("lineTag1", String.valueOf(trip)))
+        .andExpect(status().isOk());
+
+    long transactionId = header(id, "transaction_id", Long.class);
+    assertThat(tagsOnLeg(transactionId, cash)).containsExactly(trip);
+    // Per-line tagging is unchanged — the category legs keep their own.
+    assertThat(tagsOnLeg(transactionId, fuel)).containsExactly(trip);
+    assertThat(tagsOnLeg(transactionId, food)).containsExactly(trip);
+
+    // …and that is what the register row renders: the row's chip, "#" + the canonical label (the
+    // bare label also appears in the tag datalist, so the chip's "#" is what makes this specific).
+    mockMvc
+        .perform(get("/register").param("accountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("#Trips:France-2026")));
+  }
+
+  @Test
+  void confirmLeavesThePayingLegUntaggedWhenSomeLineCarriesNoTag() throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long food = category("Food", "expense");
+    long trip = tag("France-2026", tag("Trips", null));
+    long id = processedReceipt(cash, "45.00", EUR);
+
+    mockMvc
+        .perform(twoLineConfirm(id, cash, fuel, food).param("lineTag0", String.valueOf(trip)))
+        .andExpect(status().isOk());
+
+    long transactionId = header(id, "transaction_id", Long.class);
+    assertThat(tagsOnLeg(transactionId, cash)).isEmpty();
+    assertThat(tagsOnLeg(transactionId, fuel)).containsExactly(trip);
+
+    // No chip on the register row either — the counterpart to the shared-tag case above.
+    mockMvc
+        .perform(get("/register").param("accountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("#Trips:France-2026"))));
+  }
+
+  /** A two-line Confirm POST, ready for per-line {@code lineTag&lt;i&gt;} params. */
+  private MockHttpServletRequestBuilder twoLineConfirm(
+      long id, long accountId, long firstCategory, long secondCategory) {
+    return post("/receipts/" + id + "/confirm")
+        .param("date", DAY)
+        .param("accountId", String.valueOf(accountId))
+        .param("currencyCode", EUR)
+        .param("total", "45,00")
+        .param("lineDescription", "Diesel", "Bread")
+        .param("categoryText", "Fuel", "Food")
+        .param("lineCategoryId", String.valueOf(firstCategory), String.valueOf(secondCategory))
+        .param("lineCategoryType", "expense", "expense")
+        .param("lineAmount", "42,00", "3,00");
+  }
+
+  private long tag(String name, Long parentId) {
+    return jdbcClient
+        .sql("insert into tag (name, parent_id) values (:n, :p) returning tag_id")
+        .param("n", name)
+        .param("p", parentId)
+        .query(Long.class)
+        .single();
+  }
+
+  private List<Long> tagsOnLeg(long transactionId, long accountId) {
+    return jdbcClient
+        .sql(
+            """
+            select pt.tag_id from posting_tag pt
+            join posting p on p.posting_id = pt.posting_id
+            where p.transaction_id = :tx and p.account_id = :account
+            order by pt.tag_id
+            """)
+        .param("tx", transactionId)
+        .param("account", accountId)
+        .query(Long.class)
+        .list();
+  }
+
   // ── Reopen / re-enter ───────────────────────────────────────────────────────
 
   @Test

@@ -18,6 +18,7 @@ class ReceiptSplitEntriesTest {
   private static final long CASH = 1L;
   private static final long FUEL = 2L;
   private static final long SAVINGS = 3L;
+  private static final long FOOD = 4L;
   private static final long PAYEE = 9L;
 
   @Test
@@ -41,7 +42,6 @@ class ReceiptSplitEntriesTest {
     assertThat(entry.spendingCurrencyCode()).isNull();
     assertThat(entry.fundingTotal()).isNull();
     assertThat(entry.baseTotal()).isNull();
-    assertThat(entry.tagIds()).isEmpty(); // receipts have no transaction-level tag field
   }
 
   @Test
@@ -217,6 +217,77 @@ class ReceiptSplitEntriesTest {
 
     assertThat(entry.lines()).extracting(SplitLineDraft::categoryId).containsExactly(FUEL, SAVINGS);
     assertThat(entry.lines().get(0).amount()).isEqualTo("15,00");
+  }
+
+  // ── funding-leg tags: what every booked line shares (issue 20) ──────────────
+
+  /**
+   * The reported case: a vacation receipt with the same tag on every item showed no tag in the
+   * register, because the register renders the tags of the row's <em>own</em> posting — the paying
+   * account's leg — and Confirm left that leg untagged.
+   */
+  @Test
+  void fundingLegTakesTheTagEveryBookedLineShares() {
+    SplitEntry entry = entry(categoryLine("10,00", FUEL), categoryLine("5,50", FOOD));
+
+    assertThat(entry.tagIds()).containsExactly(7L);
+    // Per-line tagging is untouched by the rule.
+    assertThat(entry.lines()).allSatisfy(line -> assertThat(line.tagIds()).containsExactly(7L));
+  }
+
+  @Test
+  void fundingLegTakesOnlyTheTagsCommonToEveryLine() {
+    SplitEntry entry =
+        entry(
+            withTags(categoryLine("10,00", FUEL), 7L, 8L),
+            withTags(categoryLine("5,00", FOOD), 7L, 8L),
+            withTags(categoryLine("3,00", SAVINGS), 7L));
+
+    assertThat(entry.tagIds()).containsExactly(7L);
+  }
+
+  @Test
+  void fundingLegGetsNoTagsWhenSomeBookedLineCarriesNone() {
+    SplitEntry entry = entry(categoryLine("10,00", FUEL), withTags(categoryLine("5,00", FOOD)));
+
+    assertThat(entry.tagIds()).isEmpty();
+  }
+
+  @Test
+  void fundingLegGetsNoTagsWhenTheLinesShareNone() {
+    SplitEntry entry = entry(categoryLine("10,00", FUEL), withTags(categoryLine("5,00", FOOD), 8L));
+
+    assertThat(entry.tagIds()).isEmpty();
+  }
+
+  @Test
+  void singleLineReceiptPutsThatLinesTagsOnTheFundingLeg() {
+    SplitEntry entry = entry(categoryLine("42,14", FUEL));
+
+    assertThat(entry.tagIds()).containsExactly(7L);
+  }
+
+  /**
+   * A cancelled pair books no posting, so its tags (here: none) must not empty the intersection.
+   */
+  @Test
+  void lineThatNetsToZeroDoesNotReduceTheFundingLegsTags() {
+    SplitEntry entry =
+        entry(
+            categoryLine("10,00", FUEL),
+            withTags(categoryLine("3,00", FOOD)),
+            withTags(categoryLine("-3,00", FOOD)));
+
+    assertThat(entry.lines()).hasSize(1);
+    assertThat(entry.tagIds()).containsExactly(7L);
+  }
+
+  /** A person line is a receipt item like any other — its tags constrain the intersection too. */
+  @Test
+  void personLineParticipatesInTheIntersection() {
+    SplitEntry entry = entry(categoryLine("10,00", FUEL), personLine("Max", "FOR", "5,00"));
+
+    assertThat(entry.tagIds()).isEmpty();
   }
 
   // ── helpers ─────────────────────────────────────────────────────────────────
