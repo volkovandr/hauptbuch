@@ -435,11 +435,12 @@ public class AccountService {
    */
   @Transactional
   public void closeAccount(long accountId, LocalDate closedAt) {
-    requireManageable(accountId);
+    Account account = requireManageable(accountId);
     LocalDate effective = closedAt == null ? LocalDate.now() : closedAt;
     if (accountRepository.close(accountId, effective) == 0) {
       throw new IllegalStateException("Account " + accountId + " is already closed");
     }
+    LOG.info("Account closed: id={}, name={}", account.accountId(), account.name());
   }
 
   /**
@@ -451,10 +452,11 @@ public class AccountService {
    */
   @Transactional
   public void reopenAccount(long accountId) {
-    requireManageable(accountId);
+    Account account = requireManageable(accountId);
     if (accountRepository.reopen(accountId) == 0) {
       throw new IllegalStateException("Account " + accountId + " is not closed");
     }
+    LOG.info("Account reopened: id={}, name={}", account.accountId(), account.name());
   }
 
   /** The open-account rules: a name, a managed type, and — when given — a usable parent. */
