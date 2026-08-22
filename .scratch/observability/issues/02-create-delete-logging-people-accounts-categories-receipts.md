@@ -123,6 +123,7 @@ kind of rare structural event as it being opened, even though the original ticke
 and delete.
 
 The same session surfaced a genuine bug, filed separately as
-`category-management/05-category-undeletable-when-every-target-has-currency-leaves`: a category
+`category-management/05-category-undeletable-when-every-target-has-currency-leaves` and
+`category-management/06-empty-category-still-demands-reassignment-target`: a category
 whose siblings all carry auto-managed currency leaves has no offerable delete target, and an empty
 category is asked for a reassignment target it does not need.
