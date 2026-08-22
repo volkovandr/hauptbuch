@@ -535,6 +535,12 @@ table.receipts tbody td {
   resize: vertical;
 }
 
+/* A caution about the AI note's one sharp edge (an unknown tag is dropped silently) — amber, the
+   same caution hue as the sum check, not the destructive oxblood of `.warning`. */
+.receipt-edit__note-hint {
+  color: #b8860b;
+}
+
 .receipt-edit__actions {
   display: flex;
   gap: 0.5rem;

@@ -154,6 +154,12 @@
           <label class="receipt-edit__note"
             >AI note (optional — steers the parse, e.g. "this is fuel")
             <textarea name="aiNote" rows="3" data-receipt-ainote th:text="${receipt.aiNote()}"></textarea>
+            <!-- The seeder resolves an AI tag echo without creating anything (data-model §13.3), so
+                 a note naming a tag that does not exist yet is dropped silently. Until that is
+                 surfaced properly (receipt-processing/19), warn here. -->
+            <span class="receipt-edit__note-hint"
+              >If you ask to add a tag, make sure this tag exists already!</span
+            >
           </label>
 
           <p class="receipt-edit__downscale muted" data-receipt-downscale hidden>
