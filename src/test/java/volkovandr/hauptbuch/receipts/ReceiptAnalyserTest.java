@@ -98,10 +98,14 @@ class ReceiptAnalyserTest {
     when(promptBuilder.userText(any())).thenReturn("Parse this receipt.");
   }
 
-  private static Receipt failedReceipt(String rawParse) {
+  private static Receipt parsedReceipt(String state, String rawParse) {
+    return parsedReceipt(state, rawParse, null);
+  }
+
+  private static Receipt parsedReceipt(String state, String rawParse, Long transactionId) {
     return new Receipt(
         ID,
-        "failed",
+        state,
         null,
         "mobile",
         "orig.jpg",
@@ -115,7 +119,7 @@ class ReceiptAnalyserTest {
         null,
         null,
         null,
-        null,
+        transactionId,
         null,
         "was bad",
         10,
@@ -129,6 +133,11 @@ class ReceiptAnalyserTest {
         null,
         null,
         null);
+  }
+
+  /** The same receipt, already backing a booked transaction — the reopened shape (9g). */
+  private static Receipt bookedReceipt(String state, String rawParse) {
+    return parsedReceipt(state, rawParse, 77L);
   }
 
   @Test
@@ -236,7 +245,8 @@ class ReceiptAnalyserTest {
 
   @Test
   void reparseProcessesEditedTextWithoutCallingTheApi() {
-    when(receiptService.findById(ID)).thenReturn(Optional.of(failedReceipt("bad,toon")));
+    when(receiptService.findById(ID))
+        .thenReturn(Optional.of(parsedReceipt(ReceiptState.FAILED, "bad,toon")));
     ParsedReceipt parsed = new ParsedReceipt(null, null, List.of());
     when(decoder.decode("fixed \"good, toon\"")).thenReturn(Optional.of(parsed));
     SeededReceipt seeded =
@@ -258,7 +268,8 @@ class ReceiptAnalyserTest {
 
   @Test
   void reparseKeepsFailedWhenEditedTextStillUndecodable() {
-    when(receiptService.findById(ID)).thenReturn(Optional.of(failedReceipt("bad,toon")));
+    when(receiptService.findById(ID))
+        .thenReturn(Optional.of(parsedReceipt(ReceiptState.FAILED, "bad,toon")));
     when(decoder.decode("still bad")).thenReturn(Optional.empty());
 
     assertThat(analyser().reparse(ID, "still bad")).isFalse();
@@ -267,8 +278,80 @@ class ReceiptAnalyserTest {
     verify(analysisService, never()).applyProcessed(anyLong(), any(), any(), any());
   }
 
+  /**
+   * Issue tracker receipt-processing/19: a {@code processed} receipt re-seeds from its stored
+   * response too, so a response that named a tag which did not exist at analysis time can be
+   * applied once the tag does — without paying for the parse again.
+   */
   @Test
-  void reparseIgnoresReceiptThatIsNotFailed() {
+  void reparseReSeedsProcessedReceiptWithoutCallingTheApi() {
+    when(receiptService.findById(ID))
+        .thenReturn(Optional.of(parsedReceipt(ReceiptState.PROCESSED, "tags: Trips:France-2026")));
+    ParsedReceipt parsed = new ParsedReceipt(null, null, List.of());
+    when(decoder.decode("tags: Trips:France-2026")).thenReturn(Optional.of(parsed));
+    SeededReceipt seeded =
+        new SeededReceipt(
+            new ParsedHeader(null, null, null, null, null, null, null, null, null), List.of());
+    when(seeder.seed(parsed)).thenReturn(seeded);
+
+    assertThat(analyser().reparse(ID, "tags: Trips:France-2026")).isTrue();
+
+    verifyNoInteractions(receiptParser);
+    verify(analysisService)
+        .applyProcessed(
+            eq(ID),
+            eq(new ReceiptParseResult("tags: Trips:France-2026", 10, 5, 0, 0)),
+            eq(new BigDecimal("0.006")),
+            eq(seeded));
+  }
+
+  /** A committed receipt's lines back a real transaction — re-seeding must not touch them. */
+  @Test
+  void reparseIgnoresCommittedReceipt() {
+    when(receiptService.findById(ID))
+        .thenReturn(Optional.of(parsedReceipt(ReceiptState.COMMITTED, "good toon")));
+
+    assertThat(analyser().reparse(ID, "anything")).isFalse();
+
+    verifyNoInteractions(decoder);
+    verify(analysisService, never()).applyProcessed(anyLong(), any(), any(), any());
+    verify(analysisService, never()).failUndecodable(anyLong(), any(), any(), any());
+  }
+
+  /**
+   * A blank submit (the operator cleared the textarea, or the param never arrived) would decode to
+   * nothing and land the receipt in {@code failed} with {@code parse_raw} emptied — destroying the
+   * only copy of a response that cannot be got back without paying for the parse again.
+   */
+  @Test
+  void reparseIgnoresBlankEditedTextRatherThanWipingTheStoredResponse() {
+    assertThat(analyser().reparse(ID, "   ")).isFalse();
+    assertThat(analyser().reparse(ID, null)).isFalse();
+
+    verifyNoInteractions(receiptService, decoder);
+    verify(analysisService, never()).applyProcessed(anyLong(), any(), any(), any());
+    verify(analysisService, never()).failUndecodable(anyLong(), any(), any(), any());
+  }
+
+  /**
+   * A reopened receipt is {@code processed} again but still backs a live transaction, and an
+   * undecodable edit would strand it in {@code failed} — away from the transaction link and the
+   * transaction-aware delete rung. Re-seeding is refused while the link stands.
+   */
+  @Test
+  void reparseIgnoresReopenedReceiptStillLinkedToTransaction() {
+    when(receiptService.findById(ID))
+        .thenReturn(Optional.of(bookedReceipt(ReceiptState.PROCESSED, "good toon")));
+
+    assertThat(analyser().reparse(ID, "anything")).isFalse();
+
+    verifyNoInteractions(decoder);
+    verify(analysisService, never()).applyProcessed(anyLong(), any(), any(), any());
+    verify(analysisService, never()).failUndecodable(anyLong(), any(), any(), any());
+  }
+
+  @Test
+  void reparseIgnoresReceiptThatIsNeitherFailedNorProcessed() {
     when(receiptService.findById(ID)).thenReturn(Optional.of(receipt())); // state = processing
 
     assertThat(analyser().reparse(ID, "anything")).isFalse();

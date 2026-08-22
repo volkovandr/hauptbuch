@@ -350,6 +350,29 @@ class ReceiptConfirmScreenIntegrationTest {
     assertThat(isVoided(transactionId)).isFalse();
   }
 
+  /**
+   * Issue tracker receipt-processing/19: a reopened receipt is {@code processed} again but its
+   * transaction still stands, so it gets no re-seed panel — an undecodable edit would strand it in
+   * {@code failed}, away from the transaction link and the transaction-aware delete rung.
+   */
+  @Test
+  void reopenedReceiptOffersNoReSeedPanelWhileItsTransactionStands() throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(cash, "42.14", EUR);
+    mockMvc.perform(confirm(id, cash, "42,14", fuel, "42,14")).andExpect(status().isOk());
+
+    mockMvc
+        .perform(post("/receipts/" + id + "/reopen"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("/reparse"))));
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("/reparse"))));
+  }
+
   @Test
   void reEnteringVoidsThePredecessorAndRepointsTheLink() throws Exception {
     long cash = openAccount("Cash", EUR);

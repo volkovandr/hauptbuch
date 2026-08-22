@@ -404,6 +404,42 @@
         th:if="${receipt.parseCost() != null}"> · $<span class="num" th:text="${receipt.parseCost()}">0.006</span></span
       >.
     </p>
+
+    <!-- Re-seed (issue tracker #19): the same <details>/textarea/re-parse block the failed view has,
+         extended to a processed receipt. Seeding resolves tags, categories and people against the
+         taxonomy as it stands NOW, so a response naming a tag that did not exist when the receipt
+         was analysed applies once the tag does — without paying for the parse again. Collapsed, so
+         the button is unreachable until the panel is opened. Never on a receipt whose lines back a
+         transaction — committed, or reopened and still linked: an undecodable edit would strand it
+         in `failed`, away from the transaction link and its delete rung. Pure <details>, no JS. -->
+    <details
+      class="receipt-details"
+      th:if="${receipt.state() == 'processed' and receipt.transactionId() == null}"
+    >
+      <summary>AI response — edit and re-seed</summary>
+      <p class="muted">
+        The model's returned text is below. Re-seeding decodes it again and rebuilds the lines from
+        it, resolving tags, categories and people against the taxonomy as it stands now — no new
+        request is sent to the model, and the token counts and cost above do not change. Because the
+        model is not re-run, an edited AI note has no effect here.
+      </p>
+      <p class="warning">
+        Re-seeding replaces the lines and the parsed header fields above, discarding manual edits to
+        them. If your edited text cannot be decoded, the receipt moves to Failed — keeping the text,
+        so you can fix it there.
+      </p>
+      <form method="post" th:action="@{/receipts/{id}/reparse(id=${receipt.receiptId()})}">
+        <input type="hidden" name="state" th:value="${stateFilter}" />
+        <input type="hidden" name="range" th:value="${rangeFilter}" />
+        <textarea
+          name="rawText"
+          rows="16"
+          class="input ai-prompt-preview"
+          th:text="${receipt.parseRaw()}"
+        ></textarea>
+        <p class="actions"><button type="submit" class="btn">Re-seed from this text</button></p>
+      </form>
+    </details>
   </div>
 
   <!-- The Confirm / Reopen response: the pane (the primary swap) plus the chrome out-of-band, so the

@@ -272,8 +272,10 @@ public class ReceiptRepository {
   /**
    * Apply a successful, decoded parse (9e): store the raw body, the usage counts, the frozen cost,
    * and the seeded header, and flip to {@code processed} — clearing any prior {@code parse_error}.
-   * Scoped to a still-live receipt: a receipt soft-deleted mid-flight is left untouched (the worker
-   * then abandons the result). Returns the rows affected.
+   * Scoped to a still-live, not-yet-{@code committed} receipt: one soft-deleted mid-flight, or
+   * committed between the caller's state check and this write (the operator's re-seed racing
+   * Confirm, receipt-processing/19), is left untouched — its lines back a booked transaction and
+   * the caller then abandons the result. Returns the rows affected.
    */
   public int applyProcessed(
       long receiptId, ReceiptParseResult usage, BigDecimal parseCost, ParsedHeader header) {
@@ -292,7 +294,7 @@ public class ReceiptRepository {
               receipt_number = :receiptNumber,
               total_amount = :totalAmount, currency_code = :currencyCode,
               account_id = :accountId
-            where receipt_id = :id and deleted_at is null
+            where receipt_id = :id and state <> 'committed' and deleted_at is null
             """)
         .param("id", receiptId)
         .param("parseRaw", usage.rawToon())
@@ -333,7 +335,8 @@ public class ReceiptRepository {
   /**
    * Fail a parse whose body came back but could not be decoded (9e): the raw body <em>is</em> kept
    * (audit) along with its usage and computed cost, the reason is recorded, and the receipt moves
-   * to {@code failed}. Scoped to a live receipt.
+   * to {@code failed}. Scoped to a live, not-yet-{@code committed} receipt, for the same reason
+   * {@link #applyProcessed} is: a committed receipt's draft is the record of what was booked.
    */
   public int failUndecodable(
       long receiptId, String parseError, ReceiptParseResult usage, BigDecimal parseCost) {
@@ -346,7 +349,7 @@ public class ReceiptRepository {
               tokens_in = :tokensIn, tokens_out = :tokensOut,
               tokens_cache_write = :tokensCacheWrite, tokens_cache_read = :tokensCacheRead,
               parse_cost = :parseCost
-            where receipt_id = :id and deleted_at is null
+            where receipt_id = :id and state <> 'committed' and deleted_at is null
             """)
         .param("id", receiptId)
         .param(PARSE_ERROR, parseError)

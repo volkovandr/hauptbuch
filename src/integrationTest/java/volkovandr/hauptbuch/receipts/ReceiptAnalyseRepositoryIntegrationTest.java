@@ -79,6 +79,51 @@ class ReceiptAnalyseRepositoryIntegrationTest {
     assertThat(r.currencyCode()).isEqualTo("EUR");
   }
 
+  /**
+   * Issue tracker receipt-processing/19: the result writes refuse a committed receipt, so an
+   * operator's re-seed racing a Confirm cannot flip a booked receipt back to {@code processed} and
+   * delete the draft lines its transaction was built from.
+   */
+  @Test
+  void applyProcessedLeavesCommittedReceiptUntouched() {
+    long id = committed();
+    ReceiptParseResult usage = new ReceiptParseResult("re-seeded body", 1, 1, 0, 0);
+    ParsedHeader header = new ParsedHeader(null, null, null, null, null, null, null, null, null);
+
+    int rows = receiptRepository.applyProcessed(id, usage, new BigDecimal("0.001"), header);
+
+    assertThat(rows).isZero();
+    Receipt r = receiptRepository.findById(id).orElseThrow();
+    assertThat(r.state()).isEqualTo("committed");
+    assertThat(r.parseRaw()).isEqualTo("the booked body");
+  }
+
+  @Test
+  void failUndecodableLeavesCommittedReceiptUntouched() {
+    long id = committed();
+
+    int rows =
+        receiptRepository.failUndecodable(
+            id, "Could not decode", new ReceiptParseResult("junk", 0, 0, 0, 0), BigDecimal.ZERO);
+
+    assertThat(rows).isZero();
+    Receipt r = receiptRepository.findById(id).orElseThrow();
+    assertThat(r.state()).isEqualTo("committed");
+    assertThat(r.parseRaw()).isEqualTo("the booked body");
+  }
+
+  /** A receipt already booked: past every result write, with the response that produced it. */
+  private long committed() {
+    long id = preProcessed();
+    jdbcClient
+        .sql(
+            "update receipt set state = 'committed', parse_raw = 'the booked body'"
+                + " where receipt_id = :id")
+        .param("id", id)
+        .update();
+    return id;
+  }
+
   @Test
   void failUndecodableKeepsRawAndUsageButFails() {
     long id = preProcessed();

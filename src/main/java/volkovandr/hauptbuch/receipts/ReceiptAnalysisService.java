@@ -42,14 +42,14 @@ public class ReceiptAnalysisService {
 
   /**
    * Persist a successful, decoded parse: the header + telemetry on the receipt (→ {@code
-   * processed}), then the seeded draft lines and their tags. A receipt soft-deleted mid-flight
-   * fails the header update (zero rows) and its lines are not written.
+   * processed}), then the seeded draft lines and their tags. A receipt soft-deleted — or committed
+   * — mid-flight fails the header update (zero rows) and its lines are not written.
    */
   public void applyProcessed(
       long receiptId, ReceiptParseResult usage, BigDecimal cost, SeededReceipt seeded) {
     int updated = receiptRepository.applyProcessed(receiptId, usage, cost, seeded.header());
     if (updated == 0) {
-      return; // deleted mid-flight — abandon the result (data-model §13.1)
+      return; // deleted or committed mid-flight — abandon the result (data-model §13.1)
     }
     receiptLineRepository.deleteByReceiptId(receiptId);
     for (ReceiptLineDraft line : seeded.lines()) {
