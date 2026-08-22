@@ -143,7 +143,7 @@ public class ReceiptAnalyser {
             orZero(receipt.tokensOut()),
             orZero(receipt.tokensCacheWrite()),
             orZero(receipt.tokensCacheRead()));
-    return applyParsed(
+    return applyParsedAndLog(
         receiptId, result, receipt.parseCost(), "Could not decode the edited response");
   }
 
@@ -190,7 +190,29 @@ public class ReceiptAnalyser {
             result.tokensCacheWrite(),
             result.tokensCacheRead());
 
-    applyParsed(receipt.receiptId(), result, cost, "Could not decode the parser response");
+    applyParsedAndLog(receipt.receiptId(), result, cost, "Could not decode the parser response");
+  }
+
+  /**
+   * {@link #applyParsed} plus the "processing finished" INFO line on success — the shape both
+   * single-item callers need (run's fresh parse and reparse's re-seed), never the batch poller's
+   * per-member call into {@link #applyParsed} directly.
+   */
+  private boolean applyParsedAndLog(
+      long receiptId, ReceiptParseResult result, BigDecimal cost, String undecodableReason) {
+    boolean processed = applyParsed(receiptId, result, cost, undecodableReason);
+    if (processed) {
+      LOG.info(
+          "Receipt {} processed: tokensIn={} tokensOut={} tokensCacheWrite={} tokensCacheRead={} "
+              + "cost={}",
+          receiptId,
+          result.tokensIn(),
+          result.tokensOut(),
+          result.tokensCacheWrite(),
+          result.tokensCacheRead(),
+          cost);
+    }
+    return processed;
   }
 
   /** On boot, fail orphaned single-mode {@code processing} rows (data-model §13.1). */
