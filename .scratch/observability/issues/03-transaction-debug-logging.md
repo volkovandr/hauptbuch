@@ -1,6 +1,6 @@
 # Transaction DEBUG logging (record / edit / void)
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: high
 Area: `ledger` — `LedgerService`
