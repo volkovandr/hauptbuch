@@ -60,8 +60,15 @@ class AnthropicReceiptBatchClient implements ReceiptBatchClient {
                       .build())
               .build());
     }
+    LOG.debug(
+        "Batch submit request: model={} cachePrompt=true items={} systemPrompt={}",
+        submission.model(),
+        submission.items().size(),
+        submission.systemPrompt());
     try {
-      return batches(submission.apiKey()).create(params.build()).id();
+      String batchId = batches(submission.apiKey()).create(params.build()).id();
+      LOG.debug("Batch submit response: batchId={}", batchId);
+      return batchId;
     } catch (AnthropicException e) {
       throw new ReceiptParseException("Batch submit failed: " + e.getMessage(), e);
     }
@@ -69,12 +76,15 @@ class AnthropicReceiptBatchClient implements ReceiptBatchClient {
 
   @Override
   public Optional<List<ReceiptBatchOutcome>> poll(String batchId, String apiKey) {
+    LOG.debug("Batch poll request: batchId={}", batchId);
     try {
       MessageBatch batch = batches(apiKey).retrieve(batchId);
       if (!MessageBatch.ProcessingStatus.ENDED.equals(batch.processingStatus())) {
         return Optional.empty(); // still in progress (or canceling) — poll again next tick
       }
-      return Optional.of(collectResults(batchId, apiKey));
+      List<ReceiptBatchOutcome> outcomes = collectResults(batchId, apiKey);
+      LOG.debug("Batch poll response: batchId={} members={}", batchId, outcomes.size());
+      return Optional.of(outcomes);
     } catch (NotFoundException e) {
       // The batch is gone — nothing will ever come back, so the caller fails every member (§9h).
       throw new ReceiptParseException("Batch poll failed: " + e.getMessage(), e);
@@ -110,14 +120,15 @@ class AnthropicReceiptBatchClient implements ReceiptBatchClient {
     }
     MessageBatchResult result = response.result();
     if (result.isSucceeded()) {
-      return Optional.of(
-          ReceiptBatchOutcome.succeeded(
-              receiptId, AnthropicPrompts.resultOf(result.asSucceeded().message())));
+      ReceiptParseResult parsed = AnthropicPrompts.resultOf(result.asSucceeded().message());
+      LOG.debug("Batch member {} response: {}", receiptId, parsed.rawToon());
+      return Optional.of(ReceiptBatchOutcome.succeeded(receiptId, parsed));
     }
     if (result.isErrored()) {
+      String errorText = errorText(result.asErrored());
+      LOG.debug("Batch member {} response failed: {}", receiptId, errorText);
       return Optional.of(
-          ReceiptBatchOutcome.failed(
-              receiptId, "The batch request errored: " + errorText(result.asErrored())));
+          ReceiptBatchOutcome.failed(receiptId, "The batch request errored: " + errorText));
     }
     if (result.isExpired()) {
       return Optional.of(

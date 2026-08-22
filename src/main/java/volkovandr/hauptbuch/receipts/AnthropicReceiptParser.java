@@ -4,6 +4,8 @@ import com.anthropic.errors.AnthropicException;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import java.util.Base64;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,6 +23,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 class AnthropicReceiptParser implements ReceiptParser {
+
+  private static final Logger LOG = LoggerFactory.getLogger(AnthropicReceiptParser.class);
 
   private final AnthropicClients clients;
   private final AnthropicProperties properties;
@@ -45,12 +49,22 @@ class AnthropicReceiptParser implements ReceiptParser {
                     request.userText()))
             .build();
 
+    LOG.debug(
+        "Analyse request: model={} cachePrompt={} systemPrompt={} note={}",
+        request.model(),
+        request.cachePrompt(),
+        request.systemPrompt(),
+        request.userText());
+
     try {
       Message response = clients.forKey(request.apiKey()).messages().create(params);
-      return AnthropicPrompts.resultOf(response);
+      ReceiptParseResult result = AnthropicPrompts.resultOf(response);
+      LOG.debug("Analyse response: {}", result.rawToon());
+      return result;
     } catch (AnthropicException e) {
       // Any SDK/transport failure (network, auth, overloaded) becomes our parse failure; a
       // non-SDK RuntimeException bubbles to the worker's own guard, which also fails the receipt.
+      LOG.debug("Analyse response failed: {}", e.getMessage());
       throw new ReceiptParseException("Receipt parse call failed: " + e.getMessage(), e);
     }
   }

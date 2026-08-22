@@ -1,6 +1,6 @@
 # AI-interaction and batch logging for receipts (it costs money)
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: high
 Area: Receipts — AI parser + batch client (`ReceiptAnalyser`, `AnthropicReceiptParser`,

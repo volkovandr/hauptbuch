@@ -145,6 +145,11 @@ public class ReceiptBatchAnalyser {
                   AnthropicPrompts.EDITED_MEDIA_TYPE,
                   items));
       analysisService.assignBatch(sending, batchId);
+      LOG.info(
+          "Batch {} submitted: receipts={} model={} cached=true",
+          batchId,
+          sending.size(),
+          config.model());
     } catch (ReceiptParseException e) {
       LOG.warn("Batch submit failed for {} receipt(s)", receiptIds.size(), e);
       analysisService.failClaimed(receiptIds, e.getMessage());
@@ -198,6 +203,13 @@ public class ReceiptBatchAnalyser {
    */
   private void distribute(String batchId, List<ReceiptBatchOutcome> outcomes, AiSettings config) {
     Set<Long> members = analysisService.batchMemberIds(batchId);
+    int succeeded = 0;
+    int failed = 0;
+    int tokensIn = 0;
+    int tokensOut = 0;
+    int tokensCacheWrite = 0;
+    int tokensCacheRead = 0;
+    BigDecimal cost = BigDecimal.ZERO;
     for (ReceiptBatchOutcome outcome : outcomes) {
       long receiptId = outcome.receiptId();
       if (!members.contains(receiptId)) {
@@ -207,10 +219,26 @@ public class ReceiptBatchAnalyser {
       }
       if (outcome.isSucceeded()) {
         ReceiptParseResult result = outcome.result();
-        receiptAnalyser.applyParsed(
-            receiptId, result, costOf(config, result), "Could not decode the parser response");
+        BigDecimal memberCost = costOf(config, result);
+        cost = cost.add(memberCost);
+        tokensIn += result.tokensIn();
+        tokensOut += result.tokensOut();
+        tokensCacheWrite += result.tokensCacheWrite();
+        tokensCacheRead += result.tokensCacheRead();
+        // succeeded/failed here track whether the receipt actually landed processed, not just
+        // whether the API returned a body — an undecodable TOON body still leaves the receipt
+        // failed even though the call succeeded and was billed.
+        boolean processed =
+            receiptAnalyser.applyParsed(
+                receiptId, result, memberCost, "Could not decode the parser response");
+        if (processed) {
+          succeeded++;
+        } else {
+          failed++;
+        }
       } else {
         analysisService.failTransport(receiptId, outcome.failure());
+        failed++;
       }
     }
     int stranded =
@@ -218,6 +246,18 @@ public class ReceiptBatchAnalyser {
     if (stranded > 0) {
       LOG.warn("Batch {} ended without a result for {} receipt(s)", batchId, stranded);
     }
+    LOG.info(
+        "Batch {} finished: receipts={} succeeded={} failed={} tokensIn={} tokensOut={} "
+            + "tokensCacheWrite={} tokensCacheRead={} cost={}",
+        batchId,
+        members.size(),
+        succeeded,
+        failed + stranded,
+        tokensIn,
+        tokensOut,
+        tokensCacheWrite,
+        tokensCacheRead,
+        cost);
   }
 
   /** The frozen cost of a batch member: the configured rates, halved by the batch discount. */
