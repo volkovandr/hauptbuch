@@ -113,7 +113,50 @@ class DeletionServiceTest {
   }
 
   @Test
+  void deletesPostinglessSubtreeWithNoTarget() {
+    // The reported case (category-management/06): a category that has never been posted to has
+    // nothing to reassign, so it deletes outright with no destination asked for.
+    List<Long> subtree = List.of(FOOD_ID, MILK_ID);
+    when(accountService.findSubtreeAccountIds(FOOD_ID)).thenReturn(subtree);
+    when(accountService.hasAnyPostings(subtree)).thenReturn(false);
+
+    deletionService.deleteCategory(FOOD_ID, null);
+
+    verify(postingReassignmentRepository, never()).reassignPostings(anyList(), anyLong());
+    verify(accountService).softDelete(subtree);
+  }
+
+  @Test
+  void rejectsMissingTargetWhenTheSubtreeCarriesPostings() {
+    // Postings are never dropped: without a target there is nowhere for them to go.
+    List<Long> subtree = List.of(FOOD_ID, MILK_ID);
+    when(accountService.findSubtreeAccountIds(FOOD_ID)).thenReturn(subtree);
+    when(accountService.hasAnyPostings(subtree)).thenReturn(true);
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> deletionService.deleteCategory(FOOD_ID, null))
+        .withMessageContaining("postings");
+
+    verify(postingReassignmentRepository, never()).reassignPostings(anyList(), anyLong());
+    verify(accountService, never()).softDelete(anyList());
+  }
+
+  @Test
+  void rejectsSubtreeRootThatIsNoLongerLive() {
+    // The walk is scoped to live rows, so an empty subtree means the root is already deleted — a
+    // double-submit or a back-button re-post. It must not report success having changed nothing.
+    when(accountService.findSubtreeAccountIds(FOOD_ID)).thenReturn(List.of());
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> deletionService.deleteCategory(FOOD_ID, null))
+        .withMessageContaining("No live category");
+
+    verify(accountService, never()).softDelete(anyList());
+  }
+
+  @Test
   void rejectsUnknownTarget() {
+    when(accountService.findSubtreeAccountIds(FOOD_ID)).thenReturn(List.of(FOOD_ID));
     when(accountService.findById(TARGET_ID)).thenReturn(Optional.empty());
 
     assertThatExceptionOfType(IllegalArgumentException.class)

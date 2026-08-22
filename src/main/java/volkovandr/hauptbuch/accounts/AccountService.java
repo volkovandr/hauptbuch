@@ -147,9 +147,18 @@ public class AccountService {
     return stamped;
   }
 
-  /** Whether any live posting hits this account (leaves-only guard). */
+  /** Whether any posting — live or voided — has ever hit this account (leaves-only guard). */
   public boolean hasPostings(long accountId) {
     return accountRepository.hasPostings(accountId);
+  }
+
+  /**
+   * Whether any posting — live or voided — has ever hit any of these accounts. The subtree-wide
+   * question category deletion asks: a subtree nothing was ever filed under has nothing to
+   * reassign, so it deletes with no target.
+   */
+  public boolean hasAnyPostings(List<Long> accountIds) {
+    return accountRepository.hasAnyPostings(accountIds);
   }
 
   /**

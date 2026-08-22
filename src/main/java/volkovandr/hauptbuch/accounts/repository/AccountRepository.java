@@ -289,6 +289,21 @@ public class AccountRepository {
     return jdbcClient.sql("select distinct account_id from posting").query(Long.class).list();
   }
 
+  /**
+   * Whether any posting — live or voided — has ever hit <em>any</em> of these accounts: the batched
+   * {@link #hasPostings} that asks a whole subtree in one query, so category deletion can tell an
+   * empty subtree (deletes outright) from one whose postings need a home. Empty {@code accountIds}
+   * short-circuits to {@code false} (an {@code in ()} is invalid SQL).
+   */
+  public boolean hasAnyPostings(List<Long> accountIds) {
+    return !accountIds.isEmpty()
+        && jdbcClient
+            .sql("select exists(select 1 from posting where account_id in (:accountIds))")
+            .param(ACCOUNT_IDS, accountIds)
+            .query(Boolean.class)
+            .single();
+  }
+
   /** Whether any posting — live or voided — has ever hit this account (leaves-only guard). */
   public boolean hasPostings(long accountId) {
     return jdbcClient

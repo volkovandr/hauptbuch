@@ -36,19 +36,52 @@ public class DeletionService {
   /**
    * Delete a category subtree, reassigning every posting under it onto {@code targetLeafId}.
    *
+   * <p>A subtree no posting has ever hit — live or voided — has nothing to reassign, so it deletes
+   * with no target at all ({@code targetLeafId} {@code null}). A subtree that does carry postings
+   * still requires one: dropping the postings silently is never the answer.
+   *
    * @param subtreeRootId the category to delete; its whole subtree goes with it
-   * @param targetLeafId the surviving leaf that receives every reassigned posting
-   * @throws IllegalArgumentException if the target does not exist, is not a leaf, or is the subtree
-   *     root or one of its descendants
+   * @param targetLeafId the surviving leaf that receives every reassigned posting, or {@code null}
+   *     when the subtree carries no postings
+   * @throws IllegalArgumentException if the subtree root is not a live category, the target is
+   *     absent while the subtree carries postings, or the target does not exist, is not a leaf, or
+   *     is the subtree root or one of its descendants
    */
   @Transactional
-  public void deleteCategory(long subtreeRootId, long targetLeafId) {
+  public void deleteCategory(long subtreeRootId, Long targetLeafId) {
+    // The walk is scoped to live rows and always includes the root, so an empty subtree means the
+    // root is already gone (a double-submit, or a back-button re-post of the delete form). Say so
+    // rather than reassigning and stamping nothing and reporting success.
+    List<Long> subtree = accountService.findSubtreeAccountIds(subtreeRootId);
+    if (subtree.isEmpty()) {
+      throw new IllegalArgumentException(
+          "No live category with id " + subtreeRootId + " — it may already have been deleted");
+    }
+
+    if (targetLeafId == null) {
+      if (accountService.hasAnyPostings(subtree)) {
+        throw new IllegalArgumentException(
+            "This category carries postings — a category to move them to is required");
+      }
+      accountService.softDelete(subtree);
+      return;
+    }
+
+    requireUsableTarget(targetLeafId, subtree);
+    postingReassignmentRepository.reassignPostings(subtree, targetLeafId);
+    accountService.softDelete(subtree);
+  }
+
+  /**
+   * The target must be a live account outside the subtree being deleted, and a leaf once that
+   * deletion has happened — postings land only on leaves (data-model §5).
+   */
+  private void requireUsableTarget(long targetLeafId, List<Long> subtree) {
     Account target =
         accountService
             .findById(targetLeafId)
             .orElseThrow(() -> new IllegalArgumentException("No account with id " + targetLeafId));
 
-    List<Long> subtree = accountService.findSubtreeAccountIds(subtreeRootId);
     if (subtree.contains(targetLeafId)) {
       throw new IllegalArgumentException(
           "Target '"
@@ -66,8 +99,5 @@ public class DeletionService {
       throw new IllegalArgumentException(
           "Target '" + target.name() + "' is not a leaf — postings can only land on a leaf");
     }
-
-    postingReassignmentRepository.reassignPostings(subtree, targetLeafId);
-    accountService.softDelete(subtree);
   }
 }
