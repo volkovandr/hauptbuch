@@ -1,6 +1,6 @@
 # Create/delete logging for people, accounts, categories, and receipts
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: high
 Area: Cross-cutting — `accounts`, `categories`, `debts`, `receipts` service layers

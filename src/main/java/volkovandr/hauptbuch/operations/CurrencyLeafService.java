@@ -1,6 +1,8 @@
 package volkovandr.hauptbuch.operations;
 
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
@@ -33,6 +35,8 @@ import volkovandr.hauptbuch.operations.repository.PostingReassignmentRepository;
  */
 @Service
 public class CurrencyLeafService {
+
+  private static final Logger LOG = LoggerFactory.getLogger(CurrencyLeafService.class);
 
   private final AccountService accountService;
   private final PostingReassignmentRepository postingReassignmentRepository;
@@ -98,6 +102,15 @@ public class CurrencyLeafService {
 
   /** An auto-managed currency leaf under the parent, named after {@code currencyCode} itself. */
   private Account currencyLeaf(Account parent, String currencyCode) {
-    return accountService.insertCurrencyLeaf(currencyCode, parent.type(), parent.accountId());
+    Account leaf =
+        accountService.insertCurrencyLeaf(currencyCode, parent.type(), parent.accountId());
+    // The one point that decides a category needs a currency it has no leaf for, so the one place
+    // the "why" beside the leaf's own "Account opened" line belongs (observability/02).
+    LOG.info(
+        "Category currency leaf provisioned: id={}, category={}, currency={}",
+        leaf.accountId(),
+        parent.name(),
+        currencyCode);
+    return leaf;
   }
 }

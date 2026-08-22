@@ -206,6 +206,30 @@ class AccountRepositoryIntegrationTest {
   }
 
   @Test
+  void findLiveByIdsReturnsOnlyTheRowsSoftDeleteWouldStamp() {
+    long parent = accountRepository.insert(draft("Food", EXPENSE, null));
+    long milk = accountRepository.insert(childDraft("Milk", EXPENSE, parent));
+    long gone = accountRepository.insert(childDraft("Gone", EXPENSE, parent));
+    jdbcClient
+        .sql("update account set deleted_at = now() where account_id = :id")
+        .param("id", gone)
+        .update();
+
+    List<Account> live = accountRepository.findLiveByIds(List.of(parent, milk, gone));
+
+    assertThat(live).extracting(Account::accountId).containsExactlyInAnyOrder(parent, milk);
+    assertThat(live).extracting(Account::name).containsExactlyInAnyOrder("Food", "Milk");
+    // The same list the soft-delete then stamps — the count and the rows read back agree.
+    assertThat(accountRepository.softDelete(List.of(parent, milk, gone))).isEqualTo(live.size());
+    assertThat(accountRepository.findLiveByIds(List.of(parent, milk, gone))).isEmpty();
+  }
+
+  @Test
+  void findLiveByIdsShortCircuitsOnEmptyInput() {
+    assertThat(accountRepository.findLiveByIds(List.of())).isEmpty();
+  }
+
+  @Test
   void currencyLeafRoundTripsMarkedAndFindableAmongChildren() {
     long parent = accountRepository.insert(draft("Food", EXPENSE, null));
     long eurLeaf = accountRepository.insert(currencyLeafDraft(EUR, parent));

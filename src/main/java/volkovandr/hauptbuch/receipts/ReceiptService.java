@@ -10,6 +10,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.ledger.LedgerService;
@@ -30,6 +32,8 @@ import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
 @Service
 @Transactional
 public class ReceiptService {
+
+  private static final Logger LOG = LoggerFactory.getLogger(ReceiptService.class);
 
   /** Source tag for a phone capture (data-model §13.1 {@code source} check). */
   public static final String SOURCE_MOBILE = "mobile";
@@ -68,7 +72,13 @@ public class ReceiptService {
    */
   public Receipt capture(byte[] imageBytes, String source) {
     String originalPath = receiptStorage.storeOriginal(imageBytes);
-    return receiptRepository.insertCaptured(source, originalPath);
+    Receipt receipt = receiptRepository.insertCaptured(source, originalPath);
+    LOG.info(
+        "Receipt uploaded: id={}, size={} bytes, path={}",
+        receipt.receiptId(),
+        imageBytes.length,
+        originalPath);
+    return receipt;
   }
 
   /** A live receipt by id, or empty. */
@@ -237,6 +247,10 @@ public class ReceiptService {
     if (removeFiles) {
       receiptStorage.deleteFiles(receipt.originalPath(), receipt.editedPath());
     }
+    // Every rung of the ladder lands here, so one line per receipt covers the single delete, the
+    // selection loop, and 9g's committed rung alike; whether the files went with it is a real fork
+    // in behaviour, so the line carries it (observability/02).
+    LOG.info("Receipt deleted: id={}, filesRemoved={}", receipt.receiptId(), removeFiles);
   }
 
   /**

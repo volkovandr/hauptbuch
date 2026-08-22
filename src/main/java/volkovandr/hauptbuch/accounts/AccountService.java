@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +34,8 @@ import volkovandr.hauptbuch.accounts.repository.AccountRepository;
  */
 @Service
 public class AccountService {
+
+  private static final Logger LOG = LoggerFactory.getLogger(AccountService.class);
 
   /**
    * The stored register hues (register §2.8), as degrees on the HSL wheel, in assignment order —
@@ -133,7 +137,14 @@ public class AccountService {
    */
   @Transactional
   public int softDelete(List<Long> accountIds) {
-    return accountRepository.softDelete(accountIds);
+    // Read the names before the stamp — the bulk update returns only a count, and a cascading
+    // category delete wants one line per account rather than one for the batch.
+    List<Account> deleting = accountRepository.findLiveByIds(accountIds);
+    int stamped = accountRepository.softDelete(accountIds);
+    for (Account account : deleting) {
+      LOG.info("Account soft-deleted: id={}, name={}", account.accountId(), account.name());
+    }
+    return stamped;
   }
 
   /** Whether any live posting hits this account (leaves-only guard). */
@@ -153,7 +164,7 @@ public class AccountService {
         accountRepository.insert(
             new Account(
                 null, name, type, parentId, currencyCode, null, null, null, null, false, false));
-    return accountRepository.findById(accountId).orElseThrow();
+    return readBackAndLogOpened(accountId);
   }
 
   /**
@@ -180,7 +191,7 @@ public class AccountService {
                 null,
                 true,
                 false));
-    return accountRepository.findById(accountId).orElseThrow();
+    return readBackAndLogOpened(accountId);
   }
 
   /**
@@ -197,7 +208,19 @@ public class AccountService {
         accountRepository.insert(
             new Account(
                 null, name, "asset", null, currencyCode, null, null, null, null, false, true));
-    return accountRepository.findById(accountId).orElseThrow();
+    return readBackAndLogOpened(accountId);
+  }
+
+  /**
+   * Read back a just-inserted account and log the generic "opened" line every account creation
+   * gets, whichever module asked for it. The calling module logs its own "why" line beside it, so
+   * the two together read as the causal chain the log exists for (observability/02) — this is the
+   * one place that pattern is written down; the other sites only point back here.
+   */
+  private Account readBackAndLogOpened(long accountId) {
+    Account account = accountRepository.findById(accountId).orElseThrow();
+    LOG.info("Account opened: id={}, name={}", account.accountId(), account.name());
+    return account;
   }
 
   /**
@@ -370,12 +393,15 @@ public class AccountService {
                 false,
                 false));
 
+    // Read back and log before the opening balance is posted, not after: the account exists first,
+    // so whatever that transaction logs belongs under this line, not above it.
+    Account account = readBackAndLogOpened(accountId);
     if (draft.openingBalance() != null && draft.openingBalance().signum() != 0) {
       openingBalanceRecorder
           .getObject()
           .recordOpeningBalance(accountId, draft.openingBalance(), openedAt);
     }
-    return accountRepository.findById(accountId).orElseThrow();
+    return account;
   }
 
   /**
