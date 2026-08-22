@@ -270,26 +270,32 @@ public class CategoryService {
   }
 
   /**
-   * The live leaf categories that may receive a deleted subtree's postings: same type as the
-   * category being deleted, a leaf (postings land only on leaves, data-model §5), and outside the
-   * subtree itself (a target within the subtree would be deleted too). The leaf-only picker for the
-   * delete panel (plan stage 6c).
+   * The delete panel's state for one category (plan stage 6c): whether the deletion needs a
+   * reassignment target at all, and the live leaves that may receive the subtree's postings.
    *
-   * <p>"Leaf" is judged against the state <em>after</em> the deletion, counting <em>every</em> live
-   * child — including {@code CurrencyLeafService}'s hidden auto-managed currency leaves, which are
-   * never individually offered as a target (they are excluded from {@link #manageableCategories()})
-   * but still hold real postings, so a category that has them is not a safe direct-posting target
-   * (data-model §6.5). E.g. deleting {@code M&Ms} leaves {@code Sweets} childless — {@code Sweets}
-   * may receive the postings.
+   * <p>A target is needed only when some posting — live or voided — has ever hit the subtree; a
+   * category nothing was ever filed under deletes outright (issue category-management/06).
+   *
+   * <p>An offerable target has the same type as the category being deleted, is a leaf (postings
+   * land only on leaves, data-model §5), and lies outside the subtree itself (a target within the
+   * subtree would be deleted too). "Leaf" is judged against the state <em>after</em> the deletion,
+   * counting <em>every</em> live child — including {@code CurrencyLeafService}'s hidden
+   * auto-managed currency leaves, which are never individually offered as a target (they are
+   * excluded from {@link #manageableCategories()}) but still hold real postings, so a category that
+   * has them is not a safe direct-posting target (data-model §6.5). E.g. deleting {@code M&Ms}
+   * leaves {@code Sweets} childless — {@code Sweets} may receive the postings.
    */
-  public List<AccountNode> deleteTargetOptions(long subtreeRootId) {
+  public CategoryDeletePanel deletePanel(long subtreeRootId) {
     Account root = requireManageable(subtreeRootId);
-    Set<Long> subtree = Set.copyOf(accountService.findSubtreeAccountIds(subtreeRootId));
-    return manageableCategories().stream()
-        .filter(n -> root.type().equals(n.account().type()))
-        .filter(n -> !subtree.contains(n.account().accountId()))
-        .filter(n -> isLeafAfterDeletion(n.account().accountId(), subtree))
-        .toList();
+    List<Long> subtreeIds = accountService.findSubtreeAccountIds(subtreeRootId);
+    Set<Long> subtree = Set.copyOf(subtreeIds);
+    List<AccountNode> targets =
+        manageableCategories().stream()
+            .filter(n -> root.type().equals(n.account().type()))
+            .filter(n -> !subtree.contains(n.account().accountId()))
+            .filter(n -> isLeafAfterDeletion(n.account().accountId(), subtree))
+            .toList();
+    return new CategoryDeletePanel(accountService.hasAnyPostings(subtreeIds), targets);
   }
 
   /**
@@ -305,21 +311,25 @@ public class CategoryService {
    * Delete a category and its whole subtree (plan stage 6c), reassigning every posting under it
    * onto the chosen surviving {@code targetLeafId}. Unlike an account (closed/reopened), a category
    * is truly removed — the mechanical cascade and target validation live in {@link
-   * DeletionService}.
+   * DeletionService}, including the rule that a postingless subtree needs no target at all ({@code
+   * targetLeafId} {@code null}).
    *
-   * @throws IllegalArgumentException if the category is not one this screen manages, or the target
-   *     is invalid (not a leaf, or within the subtree being deleted)
+   * @throws IllegalArgumentException if the category is not one this screen manages, the target is
+   *     absent while the subtree carries postings, or the target is invalid (not a leaf, or within
+   *     the subtree being deleted)
    */
   @Transactional
-  public void deleteCategory(long accountId, long targetLeafId) {
+  public void deleteCategory(long accountId, Long targetLeafId) {
     Account category = requireManageable(accountId);
-    LOG.info("Category deleted: id={}, name={}", category.accountId(), category.name());
     // Capture the subtree before the deletion soft-deletes it (findSubtreeAccountIds is scoped to
     // live rows), so the AI-vocabulary config rows for the whole subtree can be swept with it
     // (data-model §13.3). The reassignment target keeps its own config — it survives the deletion.
     List<Long> subtree = accountService.findSubtreeAccountIds(accountId);
     deletionService.deleteCategory(accountId, targetLeafId);
     categoryAiConfigRepository.deleteByAccountIds(subtree);
+    // Logged only once the deletion has actually happened — a refused delete (no target for a
+    // posted-to subtree) must not leave a permanent "Category deleted" behind it (CLAUDE.md §5).
+    LOG.info("Category deleted: id={}, name={}", category.accountId(), category.name());
   }
 
   private void validateDraft(CategoryDraft draft) {

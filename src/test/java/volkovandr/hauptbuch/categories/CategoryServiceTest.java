@@ -32,7 +32,7 @@ import volkovandr.hauptbuch.operations.SubdivisionService;
  * child of a childless leaf or an already-subdivided parent is a plain insert, and the
  * type/parent-type validation rejects bad input before any write. Also covers the currency-leaf
  * filtering of {@link CategoryService#manageableCategories()} and {@link
- * CategoryService#deleteTargetOptions(long)}.
+ * CategoryService#deletePanel(long)}.
  */
 @ExtendWith(MockitoExtension.class)
 class CategoryServiceTest {
@@ -260,7 +260,44 @@ class CategoryServiceTest {
         .isThrownBy(() -> categoryService.deleteCategory(FOOD_ID, MILK_ID))
         .withMessageContaining("No manageable category");
 
-    verify(deletionService, never()).deleteCategory(anyLong(), anyLong());
+    verify(deletionService, never()).deleteCategory(anyLong(), any());
+  }
+
+  @Test
+  void deleteWithNoTargetStillSweepsSubtreeAiConfig() {
+    // A postingless category deletes with no destination (category-management/06) — the INFO log
+    // and the AI-vocabulary sweep must happen on that path too.
+    when(accountService.findById(FOOD_ID))
+        .thenReturn(Optional.of(account(FOOD_ID, FOOD, EXPENSE, null)));
+    when(accountService.findSubtreeAccountIds(FOOD_ID)).thenReturn(List.of(FOOD_ID, MILK_ID));
+
+    categoryService.deleteCategory(FOOD_ID, null);
+
+    verify(deletionService).deleteCategory(FOOD_ID, null);
+    verify(categoryAiConfigRepository).deleteByAccountIds(List.of(FOOD_ID, MILK_ID));
+  }
+
+  @Test
+  void deletePanelNeedsTargetOnlyWhenTheSubtreeCarriesPostings() {
+    when(accountService.findById(FOOD_ID))
+        .thenReturn(Optional.of(account(FOOD_ID, FOOD, EXPENSE, null)));
+    List<Long> subtree = List.of(FOOD_ID, MILK_ID);
+    when(accountService.findSubtreeAccountIds(FOOD_ID)).thenReturn(subtree);
+    when(accountService.findLiveByTypesWithDepth(List.of(INCOME, EXPENSE))).thenReturn(List.of());
+    when(accountService.hasAnyPostings(subtree)).thenReturn(true, false);
+
+    assertThat(categoryService.deletePanel(FOOD_ID).needsTarget()).isTrue();
+    assertThat(categoryService.deletePanel(FOOD_ID).needsTarget()).isFalse();
+  }
+
+  @Test
+  void deletePanelRefusesAccountsThisScreenDoesNotManage() {
+    when(accountService.findById(FOOD_ID))
+        .thenReturn(Optional.of(account(FOOD_ID, "Giro", "asset", null)));
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> categoryService.deletePanel(FOOD_ID))
+        .withMessageContaining("No manageable category");
   }
 
   // ── currency-leaf visibility (data-model §6.5, plan stage 7d.1 follow-up) ────
@@ -292,7 +329,7 @@ class CategoryServiceTest {
   }
 
   @Test
-  void deleteTargetOptionsNeverOffersCurrencyLeafItself() {
+  void deletePanelNeverOffersCurrencyLeafItself() {
     when(accountService.findById(MILK_ID))
         .thenReturn(Optional.of(account(MILK_ID, MILK, EXPENSE, null)));
     when(accountService.findSubtreeAccountIds(MILK_ID)).thenReturn(List.of(MILK_ID));
@@ -305,7 +342,7 @@ class CategoryServiceTest {
         .thenReturn(List.of(currencyLeaf(CURRENCY_LEAF_EUR_ID, EUR, EXPENSE, FOOD_ID)));
 
     List<Long> offeredIds =
-        categoryService.deleteTargetOptions(MILK_ID).stream()
+        categoryService.deletePanel(MILK_ID).targets().stream()
             .map(n -> n.account().accountId())
             .toList();
 
@@ -314,7 +351,7 @@ class CategoryServiceTest {
   }
 
   @Test
-  void deleteTargetOptionsExcludesCategoryThatStillHasCurrencyLeafChildren() {
+  void deletePanelExcludesCategoryThatStillHasCurrencyLeafChildren() {
     // "Fuel" has real postings, filed on its hidden EUR currency leaf — it is not a safe direct
     // target even though the leaf itself is never offered (plan stage 7d.1 follow-up): reassigning
     // postings straight onto "Fuel" would violate leaves-only, data-model §5.
@@ -332,7 +369,7 @@ class CategoryServiceTest {
         .thenReturn(List.of(currencyLeaf(CURRENCY_LEAF_EUR_ID, EUR, EXPENSE, FUEL_ID)));
 
     // Food (a genuine, childless leaf) is offered; Fuel (only currency-leaf children) is not.
-    assertThat(categoryService.deleteTargetOptions(MILK_ID))
+    assertThat(categoryService.deletePanel(MILK_ID).targets())
         .extracting(n -> n.account().accountId())
         .containsExactly(FOOD_ID);
   }

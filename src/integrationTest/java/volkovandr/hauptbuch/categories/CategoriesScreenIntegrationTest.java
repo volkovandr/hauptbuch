@@ -1,7 +1,9 @@
 package volkovandr.hauptbuch.categories;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -302,6 +304,97 @@ class CategoriesScreenIntegrationTest {
             .query(BigDecimal.class)
             .single();
     assertThat(groceriesBalance).isEqualByComparingTo("4.00");
+  }
+
+  @Test
+  void deletePanelDropsPostinglessCategoryWithNoTarget() throws Exception {
+    // The reported case (category-management/06): a just-created category is deleted from the edit
+    // screen without being asked for a destination, even though an eligible target exists.
+    long food = insertAccount(FOOD, EXPENSE);
+    insertAccount(GROCERIES, EXPENSE);
+
+    mockMvc
+        .perform(get(CATEGORY_PATH_PREFIX + food))
+        .andExpect(content().string(containsString("Delete this category")))
+        .andExpect(content().string(containsString("no postings to move")))
+        .andExpect(content().string(not(containsString("Move postings to"))));
+
+    mockMvc
+        .perform(post(CATEGORY_PATH_PREFIX + food + "/delete"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl(CATEGORIES_PATH));
+
+    List<String> live =
+        jdbcClient
+            .sql("select name from account where deleted_at is null and type = 'expense'")
+            .query(String.class)
+            .list();
+    assertThat(live).containsExactly(GROCERIES);
+  }
+
+  @Test
+  void deletePanelDropsPostinglessCategoryEvenWithNoTargetToOffer() throws Exception {
+    // The "create one first" refusal must not appear when there is nothing to move: this book has
+    // no other expense category at all, and the category still deletes.
+    long food = insertAccount(FOOD, EXPENSE);
+
+    mockMvc
+        .perform(get(CATEGORY_PATH_PREFIX + food))
+        .andExpect(content().string(not(containsString("create one first"))));
+
+    mockMvc
+        .perform(post(CATEGORY_PATH_PREFIX + food + "/delete"))
+        .andExpect(status().is3xxRedirection());
+
+    assertThat(
+            jdbcClient
+                .sql("select count(*) from account where deleted_at is null and type = 'expense'")
+                .query(Long.class)
+                .single())
+        .isZero();
+  }
+
+  @Test
+  void deletePanelStillDemandsTargetWhenTheSubtreeCarriesPostings() throws Exception {
+    long food = insertAccount(FOOD, EXPENSE);
+    long milk = insertChildAccount(MILK, EXPENSE, food);
+    long cash = insertAccount("Cash", "asset");
+    long txn = newTransaction();
+    insertPosting(txn, milk, "4.00");
+    insertPosting(txn, cash, "-4.00");
+    insertAccount(GROCERIES, EXPENSE);
+
+    mockMvc
+        .perform(get(CATEGORY_PATH_PREFIX + food))
+        .andExpect(content().string(containsString("Move postings to")));
+
+    // Posting the delete without a target is refused — the postings are never dropped. A plain
+    // (non-htmx) form post propagates, so the container's wrapper carries the cause.
+    assertThatThrownBy(() -> mockMvc.perform(post(CATEGORY_PATH_PREFIX + food + "/delete")))
+        .rootCause()
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("carries postings");
+
+    assertThat(accountIdNamed(FOOD)).isEqualTo(food);
+  }
+
+  @Test
+  void deletePanelDemandsTargetWhenOnlyPostingsAreVoided() throws Exception {
+    // Voided postings still need a home — deleted_at and lifecycle are orthogonal (data-model §5).
+    long food = insertAccount(FOOD, EXPENSE);
+    long cash = insertAccount("Cash", "asset");
+    long txn = newTransaction();
+    insertPosting(txn, food, "4.00");
+    insertPosting(txn, cash, "-4.00");
+    jdbcClient
+        .sql("update transaction set deleted_at = now() where transaction_id = :t")
+        .param("t", txn)
+        .update();
+    insertAccount(GROCERIES, EXPENSE);
+
+    mockMvc
+        .perform(get(CATEGORY_PATH_PREFIX + food))
+        .andExpect(content().string(containsString("Move postings to")));
   }
 
   @Test

@@ -240,8 +240,13 @@ shows up as a cross-currency transaction with a missing `base_amount`. There is 
 
 **Out of scope:**
 
-- Deleting a category that carries no postings at all — that is `category-management/06`, already
-  `ready-for-agent`. The two are independent; either may land first.
+- Deleting a category that carries no postings at all — that is `category-management/06`, now
+  **resolved** (landed 2026-08-22). The two are independent; 06 landed first. Note its one shape
+  change: `CategoryService.deleteTargetOptions` is now `CategoryService.deletePanel`, returning a
+  `CategoryDeletePanel(needsTarget, targets)` record. The leaf-eligibility logic this ticket must
+  change (`isLeafAfterDeletion`) is unchanged and still private to `CategoryService`;
+  `DeletionService.deleteCategory` now takes a nullable `Long targetLeafId`, so this ticket's
+  target validation applies whenever a target *is* supplied.
 - Changing category deletion from soft to hard, or adding reopen/undo for categories.
 - Widening `resolveCurrencyLeaf`'s contract to accept genuine groups.
 - Surfacing currency leaves anywhere in the UI — they stay hidden (data-model §6.5).

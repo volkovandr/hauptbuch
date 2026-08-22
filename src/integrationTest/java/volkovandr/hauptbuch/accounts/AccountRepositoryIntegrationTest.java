@@ -187,6 +187,18 @@ class AccountRepositoryIntegrationTest {
     assertThat(accountRepository.hasPostings(giro)).isTrue();
     assertThat(accountRepository.hasPostings(fresh)).isFalse();
     assertThat(accountRepository.findPostedAccountIds()).contains(giro).doesNotContain(fresh);
+
+    // The batched form asks a whole subtree at once: any hit anywhere in the list is enough.
+    assertThat(accountRepository.hasAnyPostings(List.of(fresh, giro))).isTrue();
+    assertThat(accountRepository.hasAnyPostings(List.of(fresh))).isFalse();
+    assertThat(accountRepository.hasAnyPostings(List.of())).isFalse();
+
+    // A voided transaction's postings still count — deleted_at is orthogonal (data-model §5).
+    jdbcClient
+        .sql("update transaction set deleted_at = now() where transaction_id = :id")
+        .param("id", txnId)
+        .update();
+    assertThat(accountRepository.hasAnyPostings(List.of(giro))).isTrue();
   }
 
   @Test

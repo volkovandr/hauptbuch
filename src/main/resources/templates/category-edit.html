@@ -108,25 +108,29 @@
     <section class="panel">
       <p class="eyebrow">Danger</p>
       <h2>Delete this category</h2>
-      <p class="muted">
+      <p class="muted" th:if="${deletePanel.needsTarget()}">
         Deletes this category and everything under it. Every posting filed here moves onto the
         category you pick below, which keeps its history.
       </p>
+      <p class="muted" th:unless="${deletePanel.needsTarget()}">
+        Deletes this category and everything under it. Nothing has ever been filed here, so there
+        are no postings to move.
+      </p>
       <p class="warning">This cannot be undone.</p>
-      <p class="muted" th:if="${#lists.isEmpty(deleteTargets)}">
+      <p class="muted" th:if="${deletePanel.needsTarget() and #lists.isEmpty(deletePanel.targets())}">
         No other leaf category of this type to move the postings to — create one first.
       </p>
       <form
-        th:unless="${#lists.isEmpty(deleteTargets)}"
+        th:unless="${deletePanel.needsTarget() and #lists.isEmpty(deletePanel.targets())}"
         method="post"
         th:action="@{/categories/{id}/delete(id=${category.accountId()})}"
         class="form"
       >
-        <div class="field">
+        <div class="field" th:if="${deletePanel.needsTarget()}">
           <label class="field__label" for="targetLeafId">Move postings to</label>
           <select id="targetLeafId" name="targetLeafId" class="input" required>
             <option
-              th:each="n : ${deleteTargets}"
+              th:each="n : ${deletePanel.targets()}"
               th:value="${n.account().accountId()}"
               th:text="${#strings.repeat('  ', n.depth()) + n.account().name()}"
             >
