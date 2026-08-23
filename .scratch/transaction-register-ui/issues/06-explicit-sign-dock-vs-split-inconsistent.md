@@ -96,3 +96,6 @@ though there the amount's explicit sign does re-enter, so that one genuinely wai
 above.
 
 ## Comments
+
+See also `transaction-register-ui/21` (unify the simple and split entry models): that refactor
+cannot proceed until this is settled, and settling it is listed there as a precondition.
