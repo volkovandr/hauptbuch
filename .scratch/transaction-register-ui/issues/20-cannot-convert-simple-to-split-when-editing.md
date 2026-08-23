@@ -14,3 +14,7 @@ Request: allow switching a simple transaction into split mode from its edit view
 ## Comments
 
 Filed 2026-08-21 from the `potential-feature-ideas.md` idea list.
+
+See also `transaction-register-ui/21` (unify the simple and split entry models): if a simple
+transaction becomes a one-line split, this stops being a feature to build — there is no conversion
+to perform, only a line to add.
