@@ -422,6 +422,13 @@ table.receipts tbody td {
   align-items: start;
 }
 
+/* The original/edited toggle under the scan (issue 22) — a quiet control that must not compete
+   with the image it sits beneath. */
+.receipt-process__image-toggle {
+  margin-top: 0.4rem;
+  text-align: center;
+}
+
 .receipt-process__image img {
   display: block;
   max-width: 100%;

@@ -193,6 +193,71 @@ class ReceiptProcessingScreenIntegrationTest {
 
   // ── helpers ──────────────────────────────────────────────────────────────────
 
+  @Test
+  void preProcessedReceiptOffersTheOriginalBehindToggle() throws Exception {
+    long id = uploadAndPreProcess();
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Show original")))
+        .andExpect(content().string(containsString("/receipts/" + id + "/image-view")));
+  }
+
+  @Test
+  void newReceiptOffersNoToggleBecauseThereIsNoEditedImage() throws Exception {
+    long id = upload();
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("Show original"))))
+        .andExpect(content().string(containsString("/receipts/" + id + "/image")));
+  }
+
+  @Test
+  void imageViewSwapsToTheOriginalAndOffersTheWayBack() throws Exception {
+    long id = uploadAndPreProcess();
+
+    mockMvc
+        .perform(get("/receipts/" + id + "/image-view").param("original", "true"))
+        .andExpect(status().isOk())
+        // The untouched scan, and a button that swaps the edited one back in.
+        .andExpect(content().string(containsString("/receipts/" + id + "/image\"")))
+        .andExpect(content().string(containsString("Show edited")))
+        .andExpect(content().string(containsString("original=false")));
+  }
+
+  @Test
+  void imageViewDefaultsBackToTheEditedImage() throws Exception {
+    long id = uploadAndPreProcess();
+
+    mockMvc
+        .perform(get("/receipts/" + id + "/image-view"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("/receipts/" + id + "/edited")))
+        .andExpect(content().string(containsString("Show original")));
+  }
+
+  @Test
+  void committedReceiptStillReachesTheOriginal() throws Exception {
+    long id = uploadAndPreProcess();
+    setState(id, "committed");
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Show original")));
+  }
+
+  @Test
+  void imageViewOfMissingReceiptFallsBackToTheRegister() throws Exception {
+    mockMvc
+        .perform(get("/receipts/999999/image-view"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/receipts"));
+  }
+
   private long upload() throws Exception {
     mockMvc
         .perform(multipart("/receipts/upload").file(ReceiptImages.jpegPart()))

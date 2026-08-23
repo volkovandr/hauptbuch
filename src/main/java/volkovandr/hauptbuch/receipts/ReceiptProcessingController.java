@@ -45,6 +45,9 @@ class ReceiptProcessingController {
   /** The default for every boolean request param here — an absent checkbox/button means "no". */
   private static final String FALSE = "false";
 
+  private static final String RECEIPT = "receipt";
+  private static final String SHOW_ORIGINAL = "showOriginal";
+
   private final ReceiptService receiptService;
   private final ReceiptAnalyser receiptAnalyser;
   private final ReceiptAnalysisService receiptAnalysisService;
@@ -229,6 +232,29 @@ class ReceiptProcessingController {
     model.addAttribute(STATE_FILTER, state);
     model.addAttribute(RANGE_FILTER, range);
     return VIEW + " :: deleteDialog";
+  }
+
+  /**
+   * Swap the image figure between the edited scan and the untouched original (issue 22). The
+   * original is immutable (ARCH-07) and outlives pre-processing, so a crop that cut off the date
+   * does not make it unreadable — this is the only way back to it once an edited image exists. A
+   * missing (or soft-deleted) receipt renders nothing rather than an error: the figure it would
+   * have replaced simply stays.
+   */
+  @GetMapping("/receipts/{id}/image-view")
+  String imageView(
+      @PathVariable long id,
+      @RequestParam(required = false, defaultValue = FALSE) boolean original,
+      Model model) {
+    return receiptService
+        .findById(id)
+        .map(
+            receipt -> {
+              model.addAttribute(RECEIPT, receipt);
+              model.addAttribute(SHOW_ORIGINAL, original);
+              return VIEW + " :: imageFigure(receipt=${receipt}, showOriginal=${showOriginal})";
+            })
+        .orElse(REDIRECT_REGISTER);
   }
 
   /**
@@ -512,7 +538,7 @@ class ReceiptProcessingController {
   private void addChrome(Receipt receipt, String state, String range, Model model) {
     long id = receipt.receiptId();
     model.addAttribute("id", id);
-    model.addAttribute("receipt", receipt);
+    model.addAttribute(RECEIPT, receipt);
     model.addAttribute(
         "neighbours",
         receiptService.neighbours(
@@ -525,7 +551,7 @@ class ReceiptProcessingController {
   private void addEditor(Receipt receipt, ReceiptEditorForm form, Model model) {
     boolean committed = ReceiptState.COMMITTED.equals(receipt.state());
     model.addAttribute("id", receipt.receiptId());
-    model.addAttribute("receipt", receipt);
+    model.addAttribute(RECEIPT, receipt);
     model.addAttribute("editor", receiptEditorService.panel(form));
     model.addAttribute(
         "register", registerService.view(new RegisterFilter(List.of(), null, null, null)));
