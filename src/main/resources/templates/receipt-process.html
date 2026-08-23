@@ -31,18 +31,8 @@
     <!-- ── The pre-process views: `new` and `pre_processed` (§6.1) ─────────────── -->
     <th:block th:if="${receipt.state() == 'new' or receipt.state() == 'pre_processed'}">
       <!-- READ view (image + note + the state's transition buttons) -->
-      <section
-        class="receipt-process__read"
-        data-receipt-read
-        th:with="imageUrl=${receipt.state() == 'pre_processed'}
-                   ? @{/receipts/{id}/edited(id=${receipt.receiptId()})}
-                   : @{/receipts/{id}/image(id=${receipt.receiptId()})}"
-      >
-        <figure class="receipt-process__image">
-          <a th:href="${imageUrl}" target="_blank" rel="noopener" title="View full size">
-            <img th:src="${imageUrl}" alt="Receipt scan" />
-          </a>
-        </figure>
+      <section class="receipt-process__read" data-receipt-read>
+        <div th:replace="~{:: imageFigure(receipt=${receipt}, showOriginal=false)}"></div>
 
         <div class="receipt-process__side">
           <p
@@ -195,11 +185,7 @@
       class="receipt-process__read receipt-process__read--data"
       th:if="${receipt.state() == 'processed' or receipt.state() == 'committed'}"
     >
-      <figure class="receipt-process__image">
-        <a th:href="@{/receipts/{id}/edited(id=${receipt.receiptId()})}" target="_blank" rel="noopener">
-          <img th:src="@{/receipts/{id}/edited(id=${receipt.receiptId()})}" alt="Receipt scan" />
-        </a>
-      </figure>
+      <div th:replace="~{:: imageFigure(receipt=${receipt}, showOriginal=false)}"></div>
       <div class="receipt-process__side">
         <div th:replace="~{:: pane}"></div>
       </div>
@@ -243,9 +229,7 @@
 
     <!-- ── failed: the reason + Retry (§3.1) ────────────────────────────────────── -->
     <section class="receipt-process__read" th:if="${receipt.state() == 'failed'}">
-      <figure class="receipt-process__image">
-        <img th:src="@{/receipts/{id}/edited(id=${receipt.receiptId()})}" alt="Receipt scan" />
-      </figure>
+      <div th:replace="~{:: imageFigure(receipt=${receipt}, showOriginal=false)}"></div>
       <div class="receipt-process__side">
         <p class="warning" th:text="${receipt.parseError()} ?: 'The parse failed.'">
           Could not decode the parser response.
@@ -292,6 +276,38 @@
     <script th:src="@{/js/cropper.min.js}"></script>
     <script th:src="@{/js/receipt-editor.js}"></script>
   </main>
+
+  <!-- ── The receipt image + original/edited toggle (issue 22) ────────────────────────────────────
+    ONE figure for every state that shows a scan. The original is never mutated (ARCH-07) and is
+    already served at /receipts/{id}/image, so an over-tight crop that hid the date stays readable:
+    the button swaps this fragment for the other variant. Shown only once an edited image exists —
+    before pre-process there is nothing to contrast with. The full-size click-through follows
+    whichever image is on screen. Not used by the transient `processing` view, whose greyed figure
+    is replaced wholesale when the poll completes. -->
+  <figure
+    th:fragment="imageFigure(receipt, showOriginal)"
+    id="receipt-image"
+    class="receipt-process__image"
+    th:with="imageUrl=${showOriginal or receipt.editedPath() == null}
+               ? @{/receipts/{id}/image(id=${receipt.receiptId()})}
+               : @{/receipts/{id}/edited(id=${receipt.receiptId()})}"
+  >
+    <a th:href="${imageUrl}" target="_blank" rel="noopener" title="View full size">
+      <img th:src="${imageUrl}" alt="Receipt scan" />
+    </a>
+    <figcaption class="receipt-process__image-toggle" th:if="${receipt.editedPath() != null}">
+      <button
+        type="button"
+        class="btn btn--ghost"
+        hx-target="#receipt-image"
+        hx-swap="outerHTML"
+        th:attr="hx-get=@{/receipts/{id}/image-view(id=${receipt.receiptId()}, original=${!showOriginal})}"
+        th:text="${showOriginal} ? 'Show edited' : 'Show original'"
+      >
+        Show original
+      </button>
+    </figcaption>
+  </figure>
 
   <!-- ── Common chrome: back, prev / next, state, delete ──────────────────────────────────────────
     A named fragment because Confirm and Reopen change two of its parts (the state badge and which
