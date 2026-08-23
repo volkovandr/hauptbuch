@@ -118,7 +118,7 @@
       </p>
       <p class="warning">This cannot be undone.</p>
       <p class="muted" th:if="${deletePanel.needsTarget() and #lists.isEmpty(deletePanel.targets())}">
-        No other leaf category of this type to move the postings to — create one first.
+        No other category of this type to move the postings to — create one first.
       </p>
       <form
         th:unless="${deletePanel.needsTarget() and #lists.isEmpty(deletePanel.targets())}"
