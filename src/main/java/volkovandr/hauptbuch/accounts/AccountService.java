@@ -129,9 +129,19 @@ public class AccountService {
   }
 
   /**
+   * The same subtree as {@link #findSubtreeAccountIds}, as full rows — what category deletion needs
+   * to group the subtree's postings by currency before reassigning them (a posting is denominated
+   * in its account's currency, data-model §6.5).
+   */
+  public List<Account> findSubtreeAccounts(long rootId) {
+    return accountRepository.findSubtreeAccounts(rootId);
+  }
+
+  /**
    * Soft-delete a set of accounts (plan stage 6c). Unlike {@link #closeAccount}, deletion is not a
-   * reversible display state — the caller must have reassigned any postings away first. Structural
-   * callers ({@code operations}) own their own validation; this is the mechanical stamp.
+   * reversible display state — the caller owns the fate of any postings still filed here, moving
+   * them within the same transaction. Structural callers ({@code operations}) own their own
+   * validation; this is the mechanical stamp.
    *
    * @return the number of rows stamped
    */

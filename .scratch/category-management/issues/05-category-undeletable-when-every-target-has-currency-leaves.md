@@ -1,6 +1,6 @@
 # A category can't be deleted when every other category of its type has currency leaves
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: high
 Area: Category management — `CategoryService.deleteTargetOptions`, `operations.DeletionService`,
@@ -200,28 +200,28 @@ applies when deciding whether a parent needs subdividing, and the two paths must
 
 **Acceptance criteria:**
 
-- [ ] A category whose only children are auto-managed currency leaves is offered as a delete target,
+- [x] A category whose only children are auto-managed currency leaves is offered as a delete target,
       and accepted server-side.
-- [ ] A category with real subcategories is neither offered nor accepted as a target.
-- [ ] The reported case reproduces green: on a book where every income category has been spent in at
+- [x] A category with real subcategories is neither offered nor accepted as a target.
+- [x] The reported case reproduces green: on a book where every income category has been spent in at
       least one currency, deleting an income category offers the other income categories.
-- [ ] Deleting a subtree holding postings in more than one currency files each posting on the
+- [x] Deleting a subtree holding postings in more than one currency files each posting on the
       target's leaf for that posting's own currency; every reassigned amount keeps its original
       currency.
-- [ ] After any such deletion, no posting references a non-leaf account — assert against the
+- [x] After any such deletion, no posting references a non-leaf account — assert against the
       leaves-only invariant, not just the happy path.
-- [ ] After any such deletion, no transaction becomes cross-currency without a frozen `base_amount`
+- [x] After any such deletion, no transaction becomes cross-currency without a frozen `base_amount`
       on every leg — assert against the conditional sum-to-zero invariant.
-- [ ] A target whose currencies already cover the subtree is not subdivided and gains no new leaf.
-- [ ] An empty currency leaf in the subtree provisions nothing on the target.
-- [ ] `DeletionService` rejects a target that is not a category, is of the wrong type, is inside the
+- [x] A target whose currencies already cover the subtree is not subdivided and gains no new leaf.
+- [x] An empty currency leaf in the subtree provisions nothing on the target.
+- [x] `DeletionService` rejects a target that is not a category, is of the wrong type, is inside the
       subtree, or still has real children — independently of what the offer list would have shown.
-- [ ] The order of resolve-then-reassign per currency is pinned by a test (Mockito `InOrder` in the
+- [x] The order of resolve-then-reassign per currency is pinned by a test (Mockito `InOrder` in the
       unit tier — CLAUDE.md §6's second sanctioned exception, an ordered multi-repository sequence).
-- [ ] `CategoryServiceTest.deleteTargetOptionsExcludesCategoryThatStillHasCurrencyLeafChildren` is
+- [x] `CategoryServiceTest.deleteTargetOptionsExcludesCategoryThatStillHasCurrencyLeafChildren` is
       inverted to assert the new rule, paired with a new case asserting a genuine group is still
       refused — so the pair reads as the new spec rather than a weakened test.
-- [ ] `./gradlew check` is fully green, with no tool weakened and no suppression added.
+- [x] `./gradlew check` is fully green, with no tool weakened and no suppression added.
 
 **Pre-flight before shipping — DONE 2026-08-22, both books clear. No action needed.**
 
@@ -251,3 +251,46 @@ shows up as a cross-currency transaction with a missing `base_amount`. There is 
 - Widening `resolveCurrencyLeaf`'s contract to accept genuine groups.
 - Surfacing currency leaves anywhere in the UI — they stay hidden (data-model §6.5).
 - Any change to the entry dock's own category resolution.
+
+## Resolution — 2026-08-23
+
+Fixed on branch `fix/category-05-currency-preserving-delete`.
+
+`DeletionService.deleteCategory` now reads the subtree as **rows** (a new `findSubtreeAccounts`
+walker beside the id one, sharing the same recursive CTE) so it knows each source account's
+currency, groups the subtree by currency, and — for each currency that actually carries postings —
+resolves the target through `CurrencyLeafService.resolveCurrencyLeaf` and reassigns that currency's
+sources onto the leaf it returns. Sequentially, one currency fully done before the next, so a later
+subdivision of the target carries the already-reassigned postings with it. It also validates its own
+target now: live, a category, the subtree root's own type, outside the subtree, and free of *real*
+subcategories. `CategoryService`'s offer filter counts only real children, so a posted-to category
+(which has hidden currency leaves) is offered again — the same "real children" test the create path
+already used.
+
+One thing the brief did not anticipate: **the subtree is soft-deleted before the routing runs**, not
+after. The target may be the deleted category's own parent (the `Sweets` case the offer rule
+explicitly allows), and `resolveCurrencyLeaf` reads *live* children — with the subtree still live it
+would hand back the doomed child as the parent's leaf for that currency and the postings would go
+down with it. Both halves are one transaction, so nothing is observable half-moved.
+`AccountService.softDelete`'s javadoc (which told callers to reassign first) was corrected to match.
+`DeletionServiceTest.deletesTheSubtreeBeforeRoutingSoTheTargetsChildrenAreOnlySurvivors` and the
+integration test `deleteMovesPostingsToTheDeletedCategorysOwnParent` pin it.
+
+The delete panel's "create one first" message dropped the word "leaf" — targets are no longer
+required to be childless leaves.
+
+Two points from the post-implementation code review, fixed on the same branch:
+
+- `DeletionService` now refuses an auto-managed **currency leaf** as the target. One passes every
+  other check (it is a live, childless `income`/`expense` account outside the subtree), and the UI
+  never offers one — but a hand-crafted post or an MCP call could name one, and routing onto it
+  would subdivide it into *nested* currency leaves, a shape §6.5 has no room for and no screen
+  shows.
+- `CategoryService.deleteCategory`'s `@throws` still documented the old "not a leaf" rule this
+  ticket inverts.
+
+Left alone: `CategoryService.deleteCategory` and `DeletionService.deleteCategory` each walk the
+subtree CTE once (ids, then rows) in the same transaction — two walks where one would do, but
+`CategoryService` needs its ids *before* the delete for the AI-vocabulary sweep, and it is at PMD's
+GodClass ceiling, so threading the rows through would cost more than the query saves.
+

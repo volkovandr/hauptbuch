@@ -276,14 +276,20 @@ public class CategoryService {
    * <p>A target is needed only when some posting — live or voided — has ever hit the subtree; a
    * category nothing was ever filed under deletes outright (issue category-management/06).
    *
-   * <p>An offerable target has the same type as the category being deleted, is a leaf (postings
-   * land only on leaves, data-model §5), and lies outside the subtree itself (a target within the
-   * subtree would be deleted too). "Leaf" is judged against the state <em>after</em> the deletion,
-   * counting <em>every</em> live child — including {@code CurrencyLeafService}'s hidden
-   * auto-managed currency leaves, which are never individually offered as a target (they are
-   * excluded from {@link #manageableCategories()}) but still hold real postings, so a category that
-   * has them is not a safe direct-posting target (data-model §6.5). E.g. deleting {@code M&Ms}
-   * leaves {@code Sweets} childless — {@code Sweets} may receive the postings.
+   * <p>An offerable target has the same type as the category being deleted, has no
+   * <em>subcategories</em> of its own, and lies outside the subtree itself (a target within the
+   * subtree would be deleted too). "No subcategories" is judged against the state <em>after</em>
+   * the deletion — e.g. deleting {@code M&Ms} leaves {@code Sweets} childless, so {@code Sweets}
+   * may receive the postings.
+   *
+   * <p>{@code CurrencyLeafService}'s hidden auto-managed currency leaves are not subcategories and
+   * do not disqualify a target (issue category-management/05): the deletion routes each posting
+   * onto the target's leaf for its own currency, so leaves-only still holds and the currency is
+   * preserved (data-model §6.5). Counting them would exclude every category that has ever been
+   * posted to, emptying the list. They are still never offered under their own identity — they are
+   * excluded from {@link #manageableCategories()}. This is the same "real children" test the
+   * <em>create</em> path applies when deciding whether a parent needs subdividing; the two must
+   * agree.
    */
   public CategoryDeletePanel deletePanel(long subtreeRootId) {
     Account root = requireManageable(subtreeRootId);
@@ -293,17 +299,19 @@ public class CategoryService {
         manageableCategories().stream()
             .filter(n -> root.type().equals(n.account().type()))
             .filter(n -> !subtree.contains(n.account().accountId()))
-            .filter(n -> isLeafAfterDeletion(n.account().accountId(), subtree))
+            .filter(n -> hasNoSubcategoriesAfterDeletion(n.account().accountId(), subtree))
             .toList();
     return new CategoryDeletePanel(accountService.hasAnyPostings(subtreeIds), targets);
   }
 
   /**
-   * Whether an account would still be a genuine leaf after the given subtree is deleted — counting
-   * every live child (real or currency leaf) except those about to be deleted with it.
+   * Whether an account would be free of real subcategories after the given subtree is deleted —
+   * counting live children that are neither about to be deleted with it nor auto-managed currency
+   * leaves (data-model §6.5).
    */
-  private boolean isLeafAfterDeletion(long accountId, Set<Long> deletedSubtree) {
+  private boolean hasNoSubcategoriesAfterDeletion(long accountId, Set<Long> deletedSubtree) {
     return accountService.findChildrenOf(accountId).stream()
+        .filter(child -> !child.currencyLeaf())
         .allMatch(child -> deletedSubtree.contains(child.accountId()));
   }
 
@@ -315,8 +323,8 @@ public class CategoryService {
    * targetLeafId} {@code null}).
    *
    * @throws IllegalArgumentException if the category is not one this screen manages, the target is
-   *     absent while the subtree carries postings, or the target is invalid (not a leaf, or within
-   *     the subtree being deleted)
+   *     absent while the subtree carries postings, or the target is invalid (not a live category of
+   *     the same type, one with subcategories of its own, or one within the subtree being deleted)
    */
   @Transactional
   public void deleteCategory(long accountId, Long targetLeafId) {

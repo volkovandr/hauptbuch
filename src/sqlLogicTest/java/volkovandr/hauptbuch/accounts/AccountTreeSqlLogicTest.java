@@ -66,6 +66,19 @@ class AccountTreeSqlLogicTest {
         .single();
   }
 
+  private long insertChildIn(String name, String type, long parentId, String currencyCode) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, parent_id, currency_code) "
+                + "values (:n, :t, :p, :c) returning account_id")
+        .param("n", name)
+        .param("t", type)
+        .param("p", parentId)
+        .param("c", currencyCode)
+        .query(Long.class)
+        .single();
+  }
+
   private long insertMarkedRoot(
       String name, String type, boolean currencyLeaf, boolean personLeaf) {
     return jdbcClient
@@ -224,6 +237,56 @@ class AccountTreeSqlLogicTest {
   @Test
   void subtreeOfNonExistentRootIsEmpty() {
     assertThat(accountRepository.findSubtreeAccountIds(-1L)).isEmpty();
+  }
+
+  // ── findSubtreeAccounts ───────────────────────────────────────────────────
+
+  @Test
+  void subtreeRowsCarryEachAccountsOwnCurrency() {
+    // Category deletion routes each posting to the target's leaf for *that posting's* currency
+    // (issue category-management/05), and a posting's currency is its account's — so the walk has
+    // to hand back the rows, not just the ids.
+    long food = insertRoot(FOOD, EXPENSE);
+    long eurLeaf = insertMarkedChild("EUR", EXPENSE, food, true, false);
+    long chfLeaf = insertChildIn("CHF", EXPENSE, food, "CHF");
+
+    List<Account> rows = accountRepository.findSubtreeAccounts(food);
+
+    assertThat(rows)
+        .extracting(Account::accountId, Account::currencyCode, Account::currencyLeaf)
+        .containsExactlyInAnyOrder(
+            tuple(food, EUR, false), tuple(eurLeaf, EUR, true), tuple(chfLeaf, "CHF", false));
+  }
+
+  @Test
+  void subtreeRowsGoArbitrarilyDeepAndStopAtTheSubtree() {
+    long food = insertRoot(FOOD, EXPENSE);
+    long sweets = insertChild(SWEETS, EXPENSE, food);
+    long mms = insertChild(MMS, EXPENSE, sweets);
+    long unrelated = insertRoot("Cash", ASSET);
+
+    assertThat(accountRepository.findSubtreeAccounts(food))
+        .extracting(Account::accountId)
+        .containsExactlyInAnyOrder(food, sweets, mms)
+        .doesNotContain(unrelated);
+  }
+
+  @Test
+  void subtreeRowsExcludeSoftDeletedDescendantsAndTheirChildren() {
+    long food = insertRoot(FOOD, EXPENSE);
+    long sweets = insertChild(SWEETS, EXPENSE, food);
+    insertChild(MMS, EXPENSE, sweets);
+    long milk = insertChild(MILK, EXPENSE, food);
+    softDelete(sweets);
+
+    assertThat(accountRepository.findSubtreeAccounts(food))
+        .extracting(Account::accountId)
+        .containsExactlyInAnyOrder(food, milk);
+  }
+
+  @Test
+  void subtreeRowsOfNonExistentRootAreEmpty() {
+    assertThat(accountRepository.findSubtreeAccounts(-1L)).isEmpty();
   }
 
   @Test

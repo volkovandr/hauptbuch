@@ -43,6 +43,7 @@ class CategoryServiceTest {
   private static final long CURRENCY_LEAF_EUR_ID = 4L;
   private static final long CURRENCY_LEAF_CHF_ID = 5L;
   private static final long FUEL_ID = 6L;
+  private static final long DIESEL_ID = 7L;
   private static final String EXPENSE = "expense";
   private static final String INCOME = "income";
   private static final String EUR = "EUR";
@@ -351,10 +352,11 @@ class CategoryServiceTest {
   }
 
   @Test
-  void deletePanelExcludesCategoryThatStillHasCurrencyLeafChildren() {
-    // "Fuel" has real postings, filed on its hidden EUR currency leaf — it is not a safe direct
-    // target even though the leaf itself is never offered (plan stage 7d.1 follow-up): reassigning
-    // postings straight onto "Fuel" would violate leaves-only, data-model §5.
+  void deletePanelOffersCategoryWhoseOnlyChildrenAreCurrencyLeaves() {
+    // "Fuel" has real postings, filed on its hidden EUR currency leaf. It is still a valid target
+    // (issue category-management/05): the deletion routes each posting onto Fuel's leaf for its
+    // own currency, never onto Fuel itself, so leaves-only holds (data-model §5/§6.5). Counting
+    // currency leaves as children excluded every posted-to category and emptied the list.
     when(accountService.findById(MILK_ID))
         .thenReturn(Optional.of(account(MILK_ID, MILK, EXPENSE, null)));
     when(accountService.findSubtreeAccountIds(MILK_ID)).thenReturn(List.of(MILK_ID));
@@ -368,10 +370,33 @@ class CategoryServiceTest {
     when(accountService.findChildrenOf(FUEL_ID))
         .thenReturn(List.of(currencyLeaf(CURRENCY_LEAF_EUR_ID, EUR, EXPENSE, FUEL_ID)));
 
-    // Food (a genuine, childless leaf) is offered; Fuel (only currency-leaf children) is not.
     assertThat(categoryService.deletePanel(MILK_ID).targets())
         .extracting(n -> n.account().accountId())
-        .containsExactly(FOOD_ID);
+        .containsExactly(FOOD_ID, FUEL_ID);
+  }
+
+  @Test
+  void deletePanelExcludesCategoryThatStillHasRealSubcategories() {
+    // The other half of the same rule: a genuine group is refused. Its subcategories are where the
+    // postings belong, and the deletion cannot guess which one (data-model §5).
+    when(accountService.findById(MILK_ID))
+        .thenReturn(Optional.of(account(MILK_ID, MILK, EXPENSE, null)));
+    when(accountService.findSubtreeAccountIds(MILK_ID)).thenReturn(List.of(MILK_ID));
+    when(accountService.findLiveByTypesWithDepth(List.of(INCOME, EXPENSE)))
+        .thenReturn(
+            List.of(
+                node(FOOD_ID, FOOD, EXPENSE, null),
+                node(FUEL_ID, "Fuel", EXPENSE, null),
+                node(DIESEL_ID, "Diesel", EXPENSE, FUEL_ID)));
+    when(accountService.findChildrenOf(FOOD_ID)).thenReturn(List.of());
+    when(accountService.findChildrenOf(FUEL_ID))
+        .thenReturn(List.of(account(DIESEL_ID, "Diesel", EXPENSE, FUEL_ID)));
+    when(accountService.findChildrenOf(DIESEL_ID)).thenReturn(List.of());
+
+    // Fuel is a group; Diesel, its childless leaf, is offered in its place.
+    assertThat(categoryService.deletePanel(MILK_ID).targets())
+        .extracting(n -> n.account().accountId())
+        .containsExactly(FOOD_ID, DIESEL_ID);
   }
 
   // ── resolveCategory (the dock's category field, register §3.5) ───────────────

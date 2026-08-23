@@ -47,6 +47,26 @@ public class AccountRepository {
              opened_at, closed_at, deleted_at, currency_leaf, person_leaf
       """;
 
+  /**
+   * The live subtree of {@code :rootId} — the root itself and every live descendant to arbitrary
+   * depth (data-model §5). Shared by the two subtree walkers, which differ only in what they select
+   * from it. A soft-deleted account cuts the walk: its own descendants are not reached.
+   */
+  private static final String SUBTREE_CTE =
+      """
+      with recursive subtree as (
+        select account_id
+        from account
+        where account_id = :rootId
+          and deleted_at is null
+        union all
+        select a.account_id
+        from account a
+        join subtree on a.parent_id = subtree.account_id
+        where a.deleted_at is null
+      )
+      """;
+
   private final JdbcClient jdbcClient;
 
   AccountRepository(JdbcClient jdbcClient) {
@@ -218,23 +238,26 @@ public class AccountRepository {
    */
   public List<Long> findSubtreeAccountIds(long rootId) {
     return jdbcClient
-        .sql(
-            """
-            with recursive subtree as (
-              select account_id
-              from account
-              where account_id = :rootId
-                and deleted_at is null
-              union all
-              select a.account_id
-              from account a
-              join subtree on a.parent_id = subtree.account_id
-              where a.deleted_at is null
-            )
-            select account_id from subtree
-            """)
+        .sql(SUBTREE_CTE + "select account_id from subtree")
         .param(ROOT_ID, rootId)
         .query(Long.class)
+        .list();
+  }
+
+  /**
+   * The same subtree as {@link #findSubtreeAccountIds}, as full rows. Category deletion needs each
+   * account's own currency, because a posting carries none of its own — it is denominated in its
+   * account's currency, and the deletion routes it to the target's leaf for that same currency
+   * (data-model §6.5, issue category-management/05).
+   */
+  public List<Account> findSubtreeAccounts(long rootId) {
+    return jdbcClient
+        .sql(
+            SUBTREE_CTE
+                + SELECT_ACCOUNT_COLUMNS
+                + "from account where account_id in (select account_id from subtree)")
+        .param(ROOT_ID, rootId)
+        .query(Account.class)
         .list();
   }
 

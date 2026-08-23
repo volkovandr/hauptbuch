@@ -53,6 +53,53 @@ class CategoriesScreenIntegrationTest {
   private static final String INSERT_POSTING =
       "insert into posting (transaction_id, account_id, amount) values (:t, :a, :amt)";
   private static final String AMT = "amt";
+  private static final String CASH = "Cash";
+  private static final String ASSET = "asset";
+  private static final String CHF = "CHF";
+  private static final String TARGET_LEAF_ID = "targetLeafId";
+
+  /**
+   * Sum-to-zero, conditional on currency mix (data-model §8 invariant 1) — the detector for a
+   * posting re-filed onto a leaf of the wrong currency: its transaction turns cross-currency with
+   * no frozen {@code base_amount} on any leg. Counts the offending live transactions.
+   */
+  private static final String SUM_TO_ZERO_VIOLATIONS =
+      """
+      with live as (
+        select p.transaction_id, p.amount, p.base_amount, a.currency_code
+        from posting p
+        join transaction t on p.transaction_id = t.transaction_id
+        join account a on p.account_id = a.account_id
+        where t.deleted_at is null
+      ),
+      per_txn as (
+        select transaction_id,
+               count(distinct currency_code)               as currencies,
+               sum(amount)                                 as native_sum,
+               sum(base_amount)                            as base_sum,
+               count(*) filter (where base_amount is null) as missing_base
+        from live
+        group by transaction_id
+      )
+      select count(*)
+      from per_txn
+      where (currencies = 1 and native_sum <> 0)
+         or (currencies > 1 and (missing_base > 0 or base_sum <> 0 or base_sum is null))
+      """;
+
+  /**
+   * Leaves-only for accounts (data-model §8 invariant 2): no posting may reference an account that
+   * is some <em>live</em> account's parent. Scoped to live children the way {@code
+   * findParentAccountIds} is — a parent whose children were all just deleted is a leaf again.
+   */
+  private static final String LEAVES_ONLY_VIOLATIONS =
+      """
+      select count(*)
+      from posting p
+      where p.account_id in (
+        select parent_id from account where parent_id is not null and deleted_at is null
+      )
+      """;
 
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
@@ -95,6 +142,16 @@ class CategoriesScreenIntegrationTest {
         .single();
   }
 
+  private long insertAccountIn(String name, String type, String currencyCode) {
+    return jdbcClient
+        .sql("insert into account (name, type, currency_code) values (:n, :t, :c) " + RETURNING_ID)
+        .param("n", name)
+        .param("t", type)
+        .param("c", currencyCode)
+        .query(Long.class)
+        .single();
+  }
+
   private long insertCurrencyLeafAccount(String currencyCode, String type, long parentId) {
     return jdbcClient
         .sql(
@@ -122,6 +179,43 @@ class CategoriesScreenIntegrationTest {
         .sql("insert into transaction (date) values ('2026-07-01') returning transaction_id")
         .query(Long.class)
         .single();
+  }
+
+  private BigDecimal balanceOf(long accountId) {
+    return jdbcClient
+        .sql("select coalesce(sum(amount), 0) from posting where account_id = :id")
+        .param("id", accountId)
+        .query(BigDecimal.class)
+        .single();
+  }
+
+  private long currencyLeafOf(long categoryId, String currencyCode) {
+    return jdbcClient
+        .sql(
+            "select account_id from account "
+                + "where parent_id = :p and currency_code = :c and deleted_at is null")
+        .param("p", categoryId)
+        .param("c", currencyCode)
+        .query(Long.class)
+        .single();
+  }
+
+  private long childCountOf(long accountId) {
+    return jdbcClient
+        .sql("select count(*) from account where parent_id = :p and deleted_at is null")
+        .param("p", accountId)
+        .query(Long.class)
+        .single();
+  }
+
+  /** The book's two structural invariants, asserted after a deletion has moved postings around. */
+  private void assertNoInvariantViolations() {
+    assertThat(jdbcClient.sql(SUM_TO_ZERO_VIOLATIONS).query(Long.class).single())
+        .as("sum-to-zero violations")
+        .isZero();
+    assertThat(jdbcClient.sql(LEAVES_ONLY_VIOLATIONS).query(Long.class).single())
+        .as("leaves-only violations")
+        .isZero();
   }
 
   @Test
@@ -158,7 +252,7 @@ class CategoriesScreenIntegrationTest {
     long foodId = accountIdNamed(FOOD);
 
     // Give Food a posting so the next child triggers subdivision.
-    long cash = insertAccount("Cash", "asset");
+    long cash = insertAccount(CASH, ASSET);
     long txn = newTransaction();
     insertPosting(txn, foodId, "5.00");
     insertPosting(txn, cash, "-5.00");
@@ -203,7 +297,7 @@ class CategoriesScreenIntegrationTest {
     long food = insertAccount(FOOD, EXPENSE);
     long eurLeaf = insertCurrencyLeafAccount(EUR, EXPENSE, food);
     long chfLeaf = insertCurrencyLeafAccount("CHF", EXPENSE, food);
-    long cash = insertAccount("Cash", "asset");
+    long cash = insertAccount(CASH, ASSET);
     long firstSpend = newTransaction();
     insertPosting(firstSpend, eurLeaf, "10.00");
     insertPosting(firstSpend, cash, "-10.00");
@@ -270,7 +364,7 @@ class CategoriesScreenIntegrationTest {
   void deletePanelMovesPostingsAndRemovesTheSubtree() throws Exception {
     long food = insertAccount(FOOD, EXPENSE);
     long milk = insertChildAccount(MILK, EXPENSE, food);
-    long cash = insertAccount("Cash", "asset");
+    long cash = insertAccount(CASH, ASSET);
     long txn = newTransaction();
     insertPosting(txn, milk, "4.00");
     insertPosting(txn, cash, "-4.00");
@@ -285,7 +379,7 @@ class CategoriesScreenIntegrationTest {
     mockMvc
         .perform(
             post(CATEGORY_PATH_PREFIX + food + "/delete")
-                .param("targetLeafId", String.valueOf(groceries)))
+                .param(TARGET_LEAF_ID, String.valueOf(groceries)))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl(CATEGORIES_PATH));
 
@@ -304,6 +398,160 @@ class CategoriesScreenIntegrationTest {
             .query(BigDecimal.class)
             .single();
     assertThat(groceriesBalance).isEqualByComparingTo("4.00");
+  }
+
+  @Test
+  void deletePanelOffersCategoryWhoseOnlyChildrenAreCurrencyLeaves() throws Exception {
+    // The reported case (issue category-management/05): Groceries has been spent in EUR, so it
+    // carries a hidden currency leaf. It must still be offered — and accepted — as a target, or a
+    // book that uses more than one currency ends up with no offerable target at all.
+    long food = insertAccount(FOOD, EXPENSE);
+    long cash = insertAccount(CASH, ASSET);
+    long txn = newTransaction();
+    insertPosting(txn, food, "4.00");
+    insertPosting(txn, cash, "-4.00");
+    long groceries = insertAccount(GROCERIES, EXPENSE);
+    long groceriesEur = insertCurrencyLeafAccount(EUR, EXPENSE, groceries);
+    long spent = newTransaction();
+    insertPosting(spent, groceriesEur, "7.00");
+    insertPosting(spent, cash, "-7.00");
+
+    mockMvc
+        .perform(get(CATEGORY_PATH_PREFIX + food))
+        .andExpect(content().string(containsString(GROCERIES)));
+
+    mockMvc
+        .perform(
+            post(CATEGORY_PATH_PREFIX + food + "/delete")
+                .param(TARGET_LEAF_ID, String.valueOf(groceries)))
+        .andExpect(status().is3xxRedirection());
+
+    // Food's posting joined the existing EUR leaf — not Groceries itself, which is a parent.
+    assertThat(balanceOf(groceriesEur)).isEqualByComparingTo("11.00");
+    assertThat(balanceOf(groceries)).isEqualByComparingTo("0.00");
+    assertNoInvariantViolations();
+  }
+
+  @Test
+  void deleteFilesEachCurrencysPostingsOnTheTargetsLeafForThatCurrency() throws Exception {
+    // A posting is denominated in its account's currency, so moving a CHF posting onto a EUR
+    // category would silently reinterpret the amount. Each currency goes to the target's leaf for
+    // that same currency, provisioned on first use (data-model §6.5).
+    long food = insertAccount(FOOD, EXPENSE);
+    long foodEur = insertCurrencyLeafAccount(EUR, EXPENSE, food);
+    long foodChf = insertCurrencyLeafAccount(CHF, EXPENSE, food);
+    long cashEur = insertAccount(CASH, ASSET);
+    long eurTxn = newTransaction();
+    insertPosting(eurTxn, foodEur, "4.00");
+    insertPosting(eurTxn, cashEur, "-4.00");
+    long cashChf = insertAccountIn("Cash CHF", ASSET, CHF);
+    long chfTxn = newTransaction();
+    insertPosting(chfTxn, foodChf, "9.00");
+    insertPosting(chfTxn, cashChf, "-9.00");
+    long groceries = insertAccount(GROCERIES, EXPENSE);
+
+    mockMvc
+        .perform(
+            post(CATEGORY_PATH_PREFIX + food + "/delete")
+                .param(TARGET_LEAF_ID, String.valueOf(groceries)))
+        .andExpect(status().is3xxRedirection());
+
+    // Groceries was a plain EUR leaf; the CHF postings forced it to subdivide into currency
+    // leaves, carrying the EUR ones it had just received into the EUR leaf with it.
+    assertThat(balanceOf(currencyLeafOf(groceries, EUR))).isEqualByComparingTo("4.00");
+    assertThat(balanceOf(currencyLeafOf(groceries, CHF))).isEqualByComparingTo("9.00");
+    assertThat(balanceOf(groceries)).isEqualByComparingTo("0.00");
+    assertNoInvariantViolations();
+  }
+
+  @Test
+  void deleteProvisionsNothingForCurrencyLeavesThatCarryNoPostings() throws Exception {
+    // A leaf appears only when it is spent (data-model §6.5): an empty CHF leaf in the subtree
+    // must not conjure a CHF leaf on the target.
+    long food = insertAccount(FOOD, EXPENSE);
+    long foodEur = insertCurrencyLeafAccount(EUR, EXPENSE, food);
+    insertCurrencyLeafAccount(CHF, EXPENSE, food);
+    long cash = insertAccount(CASH, ASSET);
+    long txn = newTransaction();
+    insertPosting(txn, foodEur, "4.00");
+    insertPosting(txn, cash, "-4.00");
+    long groceries = insertAccount(GROCERIES, EXPENSE);
+
+    mockMvc
+        .perform(
+            post(CATEGORY_PATH_PREFIX + food + "/delete")
+                .param(TARGET_LEAF_ID, String.valueOf(groceries)))
+        .andExpect(status().is3xxRedirection());
+
+    // Groceries stayed a plain leaf and took the EUR postings directly — no leaves were spawned.
+    assertThat(balanceOf(groceries)).isEqualByComparingTo("4.00");
+    assertThat(childCountOf(groceries)).isZero();
+    assertNoInvariantViolations();
+  }
+
+  @Test
+  void deleteMovesPostingsToTheDeletedCategorysOwnParent() throws Exception {
+    // Deleting M&Ms leaves Sweets childless, so Sweets is a valid target — the postings must land
+    // on Sweets itself, not on the doomed child that is still live when the routing runs.
+    long sweets = insertAccount("Sweets", EXPENSE);
+    long mms = insertChildAccount("M&Ms", EXPENSE, sweets);
+    long cash = insertAccount(CASH, ASSET);
+    long txn = newTransaction();
+    insertPosting(txn, mms, "3.00");
+    insertPosting(txn, cash, "-3.00");
+
+    mockMvc
+        .perform(
+            post(CATEGORY_PATH_PREFIX + mms + "/delete")
+                .param(TARGET_LEAF_ID, String.valueOf(sweets)))
+        .andExpect(status().is3xxRedirection());
+
+    assertThat(balanceOf(sweets)).isEqualByComparingTo("3.00");
+    assertNoInvariantViolations();
+  }
+
+  @Test
+  void deleteRefusesTargetWithRealSubcategoriesEvenWhenPostedDirectly() {
+    // The offer list never shows a genuine group, but the operation validates its own target — the
+    // same POST is reachable by hand and, in time, from the MCP surface (CLAUDE.md §1.7).
+    long food = insertAccount(FOOD, EXPENSE);
+    long cash = insertAccount(CASH, ASSET);
+    long txn = newTransaction();
+    insertPosting(txn, food, "4.00");
+    insertPosting(txn, cash, "-4.00");
+    long groceries = insertAccount(GROCERIES, EXPENSE);
+    insertChildAccount("Bread", EXPENSE, groceries);
+
+    assertThatThrownBy(
+            () ->
+                mockMvc.perform(
+                    post(CATEGORY_PATH_PREFIX + food + "/delete")
+                        .param(TARGET_LEAF_ID, String.valueOf(groceries))))
+        .rootCause()
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("subcategories");
+
+    assertThat(accountIdNamed(FOOD)).isEqualTo(food);
+  }
+
+  @Test
+  void deleteRefusesTargetThatIsNotCategory() {
+    long food = insertAccount(FOOD, EXPENSE);
+    long cash = insertAccount(CASH, ASSET);
+    long txn = newTransaction();
+    insertPosting(txn, food, "4.00");
+    insertPosting(txn, cash, "-4.00");
+
+    assertThatThrownBy(
+            () ->
+                mockMvc.perform(
+                    post(CATEGORY_PATH_PREFIX + food + "/delete")
+                        .param(TARGET_LEAF_ID, String.valueOf(cash))))
+        .rootCause()
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining(ASSET);
+
+    assertThat(accountIdNamed(FOOD)).isEqualTo(food);
   }
 
   @Test
@@ -358,7 +606,7 @@ class CategoriesScreenIntegrationTest {
   void deletePanelStillDemandsTargetWhenTheSubtreeCarriesPostings() throws Exception {
     long food = insertAccount(FOOD, EXPENSE);
     long milk = insertChildAccount(MILK, EXPENSE, food);
-    long cash = insertAccount("Cash", "asset");
+    long cash = insertAccount(CASH, ASSET);
     long txn = newTransaction();
     insertPosting(txn, milk, "4.00");
     insertPosting(txn, cash, "-4.00");
@@ -382,7 +630,7 @@ class CategoriesScreenIntegrationTest {
   void deletePanelDemandsTargetWhenOnlyPostingsAreVoided() throws Exception {
     // Voided postings still need a home — deleted_at and lifecycle are orthogonal (data-model §5).
     long food = insertAccount(FOOD, EXPENSE);
-    long cash = insertAccount("Cash", "asset");
+    long cash = insertAccount(CASH, ASSET);
     long txn = newTransaction();
     insertPosting(txn, food, "4.00");
     insertPosting(txn, cash, "-4.00");
