@@ -244,3 +244,12 @@ Two things beyond the brief's letter, both in its spirit:
 
 `receipt_line.amount`'s stale V12 comment is corrected on `ReceiptLine`'s javadoc and in data-model
 §13.2 (migrations are forward-only, so the applied file is untouched).
+
+A review pass then found one real defect and fixed it (52d9e10): `SplitCurrencyContext.view()`
+formatted the *parsed* totals, so a field nothing had reached rendered `0,00` instead of blank —
+against the acceptance criterion, and worse, non-blank on the next round-trip, which killed the
+proposal permanently rather than merely letting it go stale. The context now carries the raw text
+beside the parsed number. The register's base total had the same latent shape and is fixed with it.
+The same pass moved the header's three total fields and the per-currency remaining readouts into
+`fragments/split-currency-header.html`, shared by both surfaces like the per-line fragment already
+was, rather than leaving a hand-copied twin.
