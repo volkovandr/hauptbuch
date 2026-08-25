@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import volkovandr.hauptbuch.operations.SplitCurrency;
 import volkovandr.hauptbuch.operations.SplitEntry;
 import volkovandr.hauptbuch.operations.SplitLineAmounts;
 import volkovandr.hauptbuch.operations.SplitLineDraft;
@@ -26,8 +27,14 @@ import volkovandr.hauptbuch.operations.SplitLineDraft;
  *
  * <p>Always a <em>new</em> transaction ({@code transactionId} is null) — a re-entry voids its
  * predecessor and books afresh (the settled no-drift-check, plan §9g), it never re-threads in
- * place. Single-currency by construction: the Confirm gate refuses a header currency that differs
- * from the paying account's, so no spending currency or header totals are ever set here.
+ * place.
+ *
+ * <p><strong>Cross-currency (issue receipts/23).</strong> When the receipt's currency differs from
+ * the paying account's, the entry carries the spending currency and the two header totals, and
+ * {@code DockSplitService.crossCurrencyLegs} books it: funding leg pinned to the totals, category
+ * legs in the spending currency with base allocated proportionally. {@code spendingCurrencyCode} is
+ * set <em>only</em> when it actually differs, so a same-currency receipt keeps booking through the
+ * untouched single-currency path with all three fields null.
  */
 final class ReceiptSplitEntries {
 
@@ -38,8 +45,10 @@ final class ReceiptSplitEntries {
    *
    * @param receipt the receipt as just saved — the source of the resolved header payee
    * @param form the submitted editor state, which owns the date, account, note, and lines
+   * @param currency the header currency state the editor resolved, which decides whether this books
+   *     through the cross-currency path and supplies its two totals
    */
-  static SplitEntry of(Receipt receipt, ReceiptEditorForm form) {
+  static SplitEntry of(Receipt receipt, ReceiptEditorForm form, SplitCurrency currency) {
     List<SplitLineDraft> lines = new ArrayList<>();
     for (WorkingLine line : WorkingLine.from(form)) {
       if (!line.isEmpty()) {
@@ -47,6 +56,7 @@ final class ReceiptSplitEntries {
       }
     }
     List<SplitLineDraft> booked = mergedLines(lines);
+    boolean cross = currency.crossCurrency();
     return new SplitEntry(
         null,
         ReceiptEditorText.parseDate(form.date()),
@@ -57,9 +67,9 @@ final class ReceiptSplitEntries {
         receipt.payeeId(),
         null,
         ReceiptEditorText.blankToNull(form.note()),
-        null,
-        null,
-        null,
+        cross ? currency.spendingCurrencyCode() : null,
+        cross ? currency.fundingTotal() : null,
+        cross && currency.neitherIsBase() ? currency.baseTotal() : null,
         sharedTags(booked),
         booked);
   }

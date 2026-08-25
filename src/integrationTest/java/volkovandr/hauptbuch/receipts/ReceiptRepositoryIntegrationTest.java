@@ -233,7 +233,9 @@ class ReceiptRepositoryIntegrationTest {
             "EUR",
             new BigDecimal("42.14"),
             "Company car",
-            "BEL-4711"));
+            "BEL-4711",
+            null,
+            null));
 
     Receipt saved = receiptRepository.findById(r.receiptId()).orElseThrow();
     assertThat(saved.receiptDate()).isEqualTo(LocalDate.parse("2026-08-03"));
@@ -241,6 +243,69 @@ class ReceiptRepositoryIntegrationTest {
     assertThat(saved.totalAmount()).isEqualByComparingTo("42.14");
     assertThat(saved.note()).isEqualTo("Company car"); // the V15 column
     assertThat(saved.receiptNumber()).isEqualTo("BEL-4711");
+    // A same-currency receipt leaves the V17 columns NULL — the untouched commit path.
+    assertThat(saved.fundingTotal()).isNull();
+    assertThat(saved.baseTotal()).isNull();
+  }
+
+  @Test
+  void saveEditorHeaderRoundTripsTheCrossCurrencyTotals() {
+    Receipt r = receiptRepository.insertCaptured("pc", "originals/2026/08/b.jpg");
+
+    // A USD receipt off a CHF card in a EUR book (issue receipts/23): the funding total is the
+    // operator's overtypeable estimate, the base total the frozen conversion fact (V17).
+    receiptRepository.saveEditorHeader(
+        r.receiptId(),
+        new ReceiptHeaderDraft(
+            LocalDate.parse("2026-08-03"),
+            null,
+            null,
+            "USD",
+            new BigDecimal("42.14"),
+            null,
+            null,
+            new BigDecimal("40.00"),
+            new BigDecimal("38.05")));
+
+    Receipt saved = receiptRepository.findById(r.receiptId()).orElseThrow();
+    assertThat(saved.fundingTotal()).isEqualByComparingTo("40.00");
+    assertThat(saved.baseTotal()).isEqualByComparingTo("38.05");
+  }
+
+  @Test
+  void saveEditorHeaderClearsTheCrossCurrencyTotalsWhenTheyGoAway() {
+    Receipt r = receiptRepository.insertCaptured("pc", "originals/2026/08/c.jpg");
+    receiptRepository.saveEditorHeader(
+        r.receiptId(),
+        new ReceiptHeaderDraft(
+            LocalDate.parse("2026-08-03"),
+            null,
+            null,
+            "USD",
+            new BigDecimal("42.14"),
+            null,
+            null,
+            new BigDecimal("40.00"),
+            new BigDecimal("38.05")));
+
+    // Switching the paying account back to the receipt's own currency must not leave a stale
+    // funding total behind — the header update writes both columns unconditionally.
+    receiptRepository.saveEditorHeader(
+        r.receiptId(),
+        new ReceiptHeaderDraft(
+            LocalDate.parse("2026-08-03"),
+            null,
+            null,
+            "EUR",
+            new BigDecimal("42.14"),
+            null,
+            null,
+            null,
+            null));
+
+    Receipt saved = receiptRepository.findById(r.receiptId()).orElseThrow();
+    assertThat(saved.fundingTotal()).isNull();
+    assertThat(saved.baseTotal()).isNull();
   }
 
   @Test

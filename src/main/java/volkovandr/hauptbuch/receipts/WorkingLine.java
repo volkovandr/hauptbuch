@@ -135,16 +135,8 @@ record WorkingLine(
         form.tagsAt(i));
   }
 
-  /** Re-emit a flat form from the header fields and a working-line list. */
-  static ReceiptEditorForm toForm(
-      String date,
-      String payeeText,
-      Long accountId,
-      String currencyCode,
-      String total,
-      String headerNote,
-      String receiptNumber,
-      List<WorkingLine> lines) {
+  /** Re-emit a flat form from the header and a working-line list. */
+  static ReceiptEditorForm toForm(ReceiptEditorHeader header, List<WorkingLine> lines) {
     List<String> description = new ArrayList<>();
     List<String> categoryText = new ArrayList<>();
     List<String> categoryId = new ArrayList<>();
@@ -172,13 +164,15 @@ record WorkingLine(
       tags.add(line.tags());
     }
     return new ReceiptEditorForm(
-        date,
-        payeeText,
-        accountId,
-        currencyCode,
-        total,
-        headerNote,
-        receiptNumber,
+        header.date(),
+        header.payeeText(),
+        header.accountId(),
+        header.currencyCode(),
+        header.total(),
+        header.fundingTotal(),
+        header.baseTotal(),
+        header.note(),
+        header.receiptNumber(),
         description,
         categoryText,
         categoryId,

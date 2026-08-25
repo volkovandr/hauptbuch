@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.receipts;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -58,16 +59,24 @@ class ReceiptEditorSeeder {
       working.add(seedLine(line, paths));
     }
     return WorkingLine.toForm(
-        receipt.receiptDate() == null ? "" : receipt.receiptDate().toString(),
-        payeeText(receipt),
-        receipt.accountId(),
-        headerCurrency(receipt),
-        receipt.totalAmount() == null
-            ? ""
-            : MoneyFormat.number(receipt.totalAmount(), FRACTION_DIGITS),
-        ReceiptEditorText.orEmpty(receipt.note()),
-        ReceiptEditorText.orEmpty(receipt.receiptNumber()),
+        new ReceiptEditorHeader(
+            receipt.receiptDate() == null ? "" : receipt.receiptDate().toString(),
+            payeeText(receipt),
+            receipt.accountId(),
+            headerCurrency(receipt),
+            amountText(receipt.totalAmount()),
+            // The persisted cross-currency totals (issue receipts/23, decision 2), so reopening a
+            // processed receipt shows the funding total the operator overtyped rather than a fresh
+            // proposal derived from today's rates.
+            amountText(receipt.fundingTotal()),
+            amountText(receipt.baseTotal()),
+            ReceiptEditorText.orEmpty(receipt.note()),
+            ReceiptEditorText.orEmpty(receipt.receiptNumber())),
         working);
+  }
+
+  private static String amountText(BigDecimal amount) {
+    return amount == null ? "" : MoneyFormat.number(amount, FRACTION_DIGITS);
   }
 
   private String payeeText(Receipt receipt) {

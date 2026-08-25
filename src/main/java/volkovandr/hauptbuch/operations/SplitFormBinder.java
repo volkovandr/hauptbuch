@@ -106,8 +106,12 @@ final class SplitFormBinder {
     return max;
   }
 
-  /** Rebuild the form with a pre-filled base total (the rate-derived header confirmation value). */
-  static SplitForm withBaseTotal(SplitForm form, String baseTotal) {
+  /**
+   * Rebuild the form with the header's cross-currency totals as {@link SplitCurrencyService} has
+   * just proposed them — each either what the operator typed or, when that was blank, the
+   * rate-derived value they are being asked to confirm (issue receipts/23, decision 6).
+   */
+  static SplitForm withTotals(SplitForm form, SplitTotals totals) {
     return new SplitForm(
         form.transactionId(),
         form.date(),
@@ -119,8 +123,8 @@ final class SplitFormBinder {
         form.note(),
         form.total(),
         form.spendingCurrencyCode(),
-        form.fundingTotal(),
-        baseTotal,
+        totals.fundingTotal(),
+        totals.baseTotal(),
         form.categoryText(),
         form.lineCategoryId(),
         form.lineCategoryType(),

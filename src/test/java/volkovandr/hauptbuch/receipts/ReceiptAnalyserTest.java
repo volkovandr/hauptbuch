@@ -86,6 +86,8 @@ class ReceiptAnalyserTest {
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 
@@ -127,6 +129,8 @@ class ReceiptAnalyserTest {
         0,
         0,
         new BigDecimal("0.006"),
+        null,
+        null,
         null,
         null,
         null,

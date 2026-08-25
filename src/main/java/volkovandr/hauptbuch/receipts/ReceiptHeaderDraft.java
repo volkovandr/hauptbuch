@@ -17,6 +17,11 @@ import java.time.LocalDate;
  * @param totalAmount the editable grand total, or null when the operator left it blank
  * @param note the header note (9g), copied to {@code transaction.note} at Confirm; null when blank
  * @param receiptNumber the printed receipt/Beleg number (9g); null when blank
+ * @param fundingTotal what comes off the paying account in its own currency (issue receipts/23);
+ *     null for a single-currency receipt, and an operator-overtypeable estimate otherwise — which
+ *     is exactly why it is persisted rather than re-proposed on every reopen (decision 2)
+ * @param baseTotal the base-currency figure freezing the conversion (issue receipts/23); null
+ *     unless the receipt is cross-currency and neither leg is the book's base currency
  */
 public record ReceiptHeaderDraft(
     LocalDate receiptDate,
@@ -25,4 +30,6 @@ public record ReceiptHeaderDraft(
     String currencyCode,
     BigDecimal totalAmount,
     String note,
-    String receiptNumber) {}
+    String receiptNumber,
+    BigDecimal fundingTotal,
+    BigDecimal baseTotal) {}

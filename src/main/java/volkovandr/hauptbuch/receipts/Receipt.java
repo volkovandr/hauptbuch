@@ -49,6 +49,11 @@ import java.time.OffsetDateTime;
  *     until then ({@code merchantText} stays the parse fact)
  * @param note the operator's header note (9g), copied to {@code transaction.note} at Confirm; null
  *     until entered. Distinct from {@code aiNote}, which steers the parse rather than the booking
+ * @param fundingTotal what actually comes off the paying account, in <em>its</em> currency (issue
+ *     receipts/23); null unless the receipt is cross-currency. An overtypeable estimate at review
+ *     time — the card's real charge is on a statement that has not arrived (decision 1)
+ * @param baseTotal the base-currency figure freezing that conversion (issue receipts/23); null
+ *     unless the receipt is cross-currency <em>and</em> neither leg is the book's base currency
  */
 public record Receipt(
     Long receiptId,
@@ -79,7 +84,9 @@ public record Receipt(
     LocalTime receiptTime,
     String receiptNumber,
     Long payeeId,
-    String note) {
+    String note,
+    BigDecimal fundingTotal,
+    BigDecimal baseTotal) {
 
   /** The image path actually shown: the edited derivative when present, else the raw original. */
   public String displayPath() {

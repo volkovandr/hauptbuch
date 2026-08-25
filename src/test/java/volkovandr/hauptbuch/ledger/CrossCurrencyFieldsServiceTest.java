@@ -141,4 +141,84 @@ class CrossCurrencyFieldsServiceTest {
 
     assertThat(fields.neitherIsBase()).isFalse();
   }
+
+  // ── The funding-total proposal (issue receipts/23) ──────────────────────────
+  // Rates are stored only against base, so spending → funding triangulates through it. The two-
+  // currency cases (one leg IS the base) collapse to a single lookup in the corresponding
+  // direction.
+
+  @Test
+  void proposesFundingTotalFromSpendingWhenFundingIsBase() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
+    when(exchangeRateService.rateAsOf(CHF, DATE)).thenReturn(Optional.of(new BigDecimal("0.95")));
+
+    assertThat(service.prefillFundingTotal(EUR, CHF, DATE, "10")).isEqualTo("9,50");
+  }
+
+  @Test
+  void proposesFundingTotalFromSpendingWhenSpendingIsBase() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
+    when(exchangeRateService.rateAsOf(CHF, DATE)).thenReturn(Optional.of(new BigDecimal("0.95")));
+
+    assertThat(service.prefillFundingTotal(CHF, EUR, DATE, "9,50")).isEqualTo("10,00");
+  }
+
+  @Test
+  void proposesFundingTotalThroughBaseWhenNeitherLegIsBase() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
+    when(exchangeRateService.rateAsOf(USD, DATE)).thenReturn(Optional.of(new BigDecimal("0.90")));
+    when(exchangeRateService.rateAsOf(CHF, DATE)).thenReturn(Optional.of(new BigDecimal("0.95")));
+
+    // 10 USD → 9,00 EUR → 9,00 / 0,95 = 9,4736… CHF
+    assertThat(service.prefillFundingTotal(CHF, USD, DATE, "10")).isEqualTo("9,47");
+  }
+
+  @Test
+  void proposesNothingWhenTheSpendingLegHasNoStoredRate() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
+    when(exchangeRateService.rateAsOf(USD, DATE)).thenReturn(Optional.empty());
+
+    assertThat(service.prefillFundingTotal(CHF, USD, DATE, "10")).isNull();
+  }
+
+  @Test
+  void proposesNothingWhenTheFundingLegHasNoStoredRate() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
+    when(exchangeRateService.rateAsOf(USD, DATE)).thenReturn(Optional.of(new BigDecimal("0.90")));
+    when(exchangeRateService.rateAsOf(CHF, DATE)).thenReturn(Optional.empty());
+
+    assertThat(service.prefillFundingTotal(CHF, USD, DATE, "10")).isNull();
+  }
+
+  @Test
+  void proposesNothingWithoutBaseCurrencySet() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.empty());
+
+    assertThat(service.prefillFundingTotal(CHF, USD, DATE, "10")).isNull();
+  }
+
+  @Test
+  void proposesNothingForBlankOrMalformedSpendingTotal() {
+    assertThat(service.prefillFundingTotal(CHF, USD, DATE, null)).isNull();
+    assertThat(service.prefillFundingTotal(CHF, USD, DATE, "  ")).isNull();
+    assertThat(service.prefillFundingTotal(CHF, USD, DATE, "abc")).isNull();
+  }
+
+  @Test
+  void proposesNothingWithoutDate() {
+    assertThat(service.prefillFundingTotal(CHF, USD, null, "10")).isNull();
+  }
+
+  @Test
+  void proposesNothingWhenBothLegsShareCurrency() {
+    assertThat(service.prefillFundingTotal(CHF, CHF, DATE, "10")).isNull();
+  }
+
+  @Test
+  void proposalStripsAnExplicitSignBeforeConverting() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
+    when(exchangeRateService.rateAsOf(CHF, DATE)).thenReturn(Optional.of(new BigDecimal("0.95")));
+
+    assertThat(service.prefillFundingTotal(EUR, CHF, DATE, "+10")).isEqualTo("9,50");
+  }
 }

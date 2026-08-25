@@ -1,7 +1,6 @@
 package volkovandr.hauptbuch.operations;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -9,7 +8,6 @@ import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountEntryLabel;
 import volkovandr.hauptbuch.accounts.AccountService;
-import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 
 /**
@@ -29,7 +27,9 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
  * and base/spending), and prints a {@code remaining} in every currency in play — all proportional
  * to the spending remaining, so they reach zero together. The committed base amounts are frozen
  * with a last-line residual (see {@link DockSplitService}); the readout uses the fixed rate, which
- * agrees to the minor unit once the lines balance.
+ * agrees to the minor unit once the lines balance. That whole rule lives in {@link
+ * SplitCurrencyService} (issue receipts/23, decision 4), which the receipt post-process editor
+ * reads too, so the two surfaces' headers cannot drift apart.
  */
 @Component
 class SplitPanelAssembler {
@@ -37,28 +37,32 @@ class SplitPanelAssembler {
   /** German entry is to the minor unit; two places covers EUR/CHF/USD. */
   private static final int FRACTION_DIGITS = 2;
 
-  /** Intermediate scale for the shared-rate division before rounding derived amounts. */
-  private static final int RATE_SCALE = 10;
-
   private final AccountService accountService;
-  private final SettingsService settingsService;
   private final SplitTagPills tagPills;
   private final TransactionCurrencyResolver transactionCurrencyResolver;
+  private final SplitCurrencyService splitCurrencyService;
 
   SplitPanelAssembler(
       AccountService accountService,
-      SettingsService settingsService,
       SplitTagPills tagPills,
-      TransactionCurrencyResolver transactionCurrencyResolver) {
+      TransactionCurrencyResolver transactionCurrencyResolver,
+      SplitCurrencyService splitCurrencyService) {
     this.accountService = accountService;
-    this.settingsService = settingsService;
     this.tagPills = tagPills;
     this.transactionCurrencyResolver = transactionCurrencyResolver;
+    this.splitCurrencyService = splitCurrencyService;
   }
 
   /** Build the panel view model for the current form state, optionally carrying a message. */
   SplitPanel panel(SplitForm form, String error) {
-    CurrencyContext ctx = resolveCurrencyContext(form);
+    SplitCurrencyContext ctx =
+        splitCurrencyService.resolve(
+            new SplitCurrencyQuery(
+                fundingCurrency(form),
+                form.spendingCurrencyCode(),
+                form.total(),
+                form.fundingTotal(),
+                form.baseTotal()));
     int count = SplitLineArrays.lineCount(form);
     Map<Long, String> labels = tagPills.labelsFor(form);
     List<SplitLineView> lines = new ArrayList<>();
@@ -82,8 +86,8 @@ class SplitPanelAssembler {
               SplitLineArrays.at(form.linePersonRevive(), i),
               amount,
               SplitLineArrays.at(form.lineNote(), i),
-              ctx.derived(magnitude, ctx.rateSpendingToFunding()),
-              ctx.derived(magnitude, ctx.rateSpendingToBase()),
+              ctx.derivedFunding(magnitude),
+              ctx.derivedBase(magnitude),
               tagPills.pills(SplitLineArrays.tagsAt(form.lineTagIds(), i), labels)));
     }
 
@@ -101,7 +105,7 @@ class SplitPanelAssembler {
         form.payeeText(),
         form.note(),
         MoneyFormat.number(total, FRACTION_DIGITS),
-        currencyView(ctx, netMagnitude),
+        ctx.view(netMagnitude),
         lines,
         MoneyFormat.number(remaining, FRACTION_DIGITS),
         remaining.signum() == 0,
@@ -109,67 +113,6 @@ class SplitPanelAssembler {
         direction(net),
         tagPills.pills(form.tagId(), labels),
         error);
-  }
-
-  /** The cross-currency header view for the panel — single-currency when the currencies match. */
-  private SplitCurrency currencyView(CurrencyContext ctx, BigDecimal netMagnitude) {
-    if (!ctx.cross()) {
-      return SplitCurrency.singleCurrency(ctx.funding());
-    }
-    BigDecimal remainingFunding = ctx.fundingTotal().subtract(ctx.fundingOf(netMagnitude));
-    BigDecimal remainingBase =
-        ctx.baseTotal().subtract(ctx.derivedValue(netMagnitude, ctx.rateSpendingToBase()));
-    return new SplitCurrency(
-        true,
-        ctx.funding(),
-        ctx.spending(),
-        ctx.base(),
-        ctx.neitherIsBase(),
-        MoneyFormat.number(ctx.fundingTotal(), FRACTION_DIGITS),
-        MoneyFormat.number(ctx.baseTotal(), FRACTION_DIGITS),
-        MoneyFormat.number(remainingFunding, FRACTION_DIGITS),
-        MoneyFormat.number(remainingBase, FRACTION_DIGITS),
-        ctx.rateSpendingToFunding().toPlainString(),
-        ctx.rateSpendingToBase().toPlainString());
-  }
-
-  /**
-   * Resolve the panel's currency state from the funding account and the spending selector: whether
-   * it is cross-currency, the three currencies, and the shared rate (funding-per-spending,
-   * base-per-spending) derived from the header totals (register §3.8a).
-   */
-  private CurrencyContext resolveCurrencyContext(SplitForm form) {
-    String funding = fundingCurrency(form);
-    String spending = blankToNull(form.spendingCurrencyCode());
-    boolean cross = spending != null && !funding.isBlank() && !spending.equals(funding);
-    if (!cross) {
-      return CurrencyContext.singleCurrency(funding);
-    }
-
-    String base = settingsService.baseCurrency().orElse(funding);
-    boolean neitherIsBase = !funding.equals(base) && !spending.equals(base);
-    BigDecimal totalSpending = lenientParse(form.total());
-    BigDecimal fundingTotal = lenientParse(form.fundingTotal());
-    BigDecimal baseTotal;
-    if (funding.equals(base)) {
-      baseTotal = fundingTotal;
-    } else if (spending.equals(base)) {
-      baseTotal = totalSpending;
-    } else {
-      baseTotal = lenientParse(form.baseTotal());
-    }
-    BigDecimal rateSpendingToFunding = ratio(fundingTotal, totalSpending);
-    BigDecimal rateSpendingToBase = ratio(baseTotal, totalSpending);
-    return new CurrencyContext(
-        true,
-        funding,
-        spending,
-        base,
-        neitherIsBase,
-        fundingTotal,
-        baseTotal,
-        rateSpendingToFunding,
-        rateSpendingToBase);
   }
 
   /**
@@ -208,13 +151,6 @@ class SplitPanelAssembler {
     return accountService.findById(form.accountId()).map(AccountEntryLabel::format).orElse(null);
   }
 
-  private static BigDecimal ratio(BigDecimal numerator, BigDecimal denominator) {
-    if (denominator.signum() == 0) {
-      return BigDecimal.ZERO;
-    }
-    return numerator.divide(denominator, RATE_SCALE, RoundingMode.HALF_UP);
-  }
-
   /**
    * Append a blank line whose amount defaults to "the rest" — {@code total − allocated} in the
    * spending currency (register §3.10) — so the last line closes the gap. Returns a new form; the
@@ -249,61 +185,5 @@ class SplitPanelAssembler {
       return "pay";
     }
     return sign > 0 ? "receive" : "none";
-  }
-
-  private static String blankToNull(String value) {
-    return value == null || value.isBlank() ? null : value;
-  }
-
-  /**
-   * The resolved currency state used to derive the panel's cross-currency readouts. For a
-   * single-currency split the rates are zero and the derived helpers return {@code ""}.
-   */
-  private record CurrencyContext(
-      boolean cross,
-      String funding,
-      String spending,
-      String base,
-      boolean neitherIsBase,
-      BigDecimal fundingTotal,
-      BigDecimal baseTotal,
-      BigDecimal rateSpendingToFunding,
-      BigDecimal rateSpendingToBase) {
-
-    static CurrencyContext singleCurrency(String funding) {
-      return new CurrencyContext(
-          false,
-          funding,
-          funding,
-          funding,
-          false,
-          BigDecimal.ZERO,
-          BigDecimal.ZERO,
-          BigDecimal.ZERO,
-          BigDecimal.ZERO);
-    }
-
-    /** A derived amount as a German string, or {@code ""} when single-currency. */
-    String derived(BigDecimal spendingMagnitude, BigDecimal rate) {
-      if (!cross || spendingMagnitude.signum() == 0) {
-        return "";
-      }
-      return MoneyFormat.number(derivedValue(spendingMagnitude, rate), FRACTION_DIGITS);
-    }
-
-    BigDecimal derivedValue(BigDecimal spendingMagnitude, BigDecimal rate) {
-      return spendingMagnitude.multiply(rate).setScale(FRACTION_DIGITS, RoundingMode.HALF_UP);
-    }
-
-    BigDecimal fundingOf(BigDecimal spendingMagnitude) {
-      return derivedValue(spendingMagnitude, rateSpendingToFunding);
-    }
-
-    /**
-     * The amount that hits the funding account: converted when cross, the spending net otherwise.
-     */
-    BigDecimal fundingNet(BigDecimal spendingMagnitude) {
-      return cross ? fundingOf(spendingMagnitude) : spendingMagnitude;
-    }
   }
 }

@@ -317,6 +317,29 @@ class ReceiptProcessingController {
   }
 
   /**
+   * Recompute the editor's currency layout (issue receipts/23) — the receipts twin of {@code
+   * /register/split/currency}. Fired by the Account select, the Currency picker, and each of the
+   * three totals, because every one of them can change whether the receipt is cross-currency or
+   * what a blank total should be proposed as. A blank funding total is proposed from the receipt's
+   * total via {@code rate_as_of}, and a blank base total from that funding total; a total the
+   * operator typed is left alone. Nothing is persisted — Save still owns that.
+   */
+  @PostMapping("/receipts/{id}/lines/currency")
+  String currency(
+      @PathVariable long id,
+      @RequestParam MultiValueMap<String, String> params,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      Model model) {
+    return renderEditor(
+        id,
+        receiptEditorService.proposeTotals(ReceiptEditorForm.bind(params)),
+        state,
+        range,
+        model);
+  }
+
+  /**
    * Remove a draft line from the editor (§9f). Re-renders the whole editor from the unsaved state.
    */
   @PostMapping("/receipts/{id}/lines/remove-line")

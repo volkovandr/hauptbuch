@@ -179,7 +179,19 @@
              against (register §3.10). Editable: change it and remaining updates live (keyboard.js
              reads data-split-total). The committed funding leg is the signed sum of the lines, which
              may differ — the "Save and update amount" path. -->
-        <div class="field field--amount">
+        <!-- Each of the three totals also re-renders the panel on `change` (issue receipts/23,
+             decision 7): a blank total is proposed from the one it derives from — funding from
+             spending, base from funding — and the currency is normally picked BEFORE anything is
+             typed, so without these triggers the proposal would never fire. A total the operator
+             typed is never overwritten by a later proposal. -->
+        <div
+          class="field field--amount"
+          hx-post="/register/split/currency"
+          hx-trigger="change"
+          hx-include="closest form"
+          hx-target="#entry-dock"
+          hx-swap="outerHTML"
+        >
           <label class="field__label" for="split-total">
             <span th:if="${!panel.currency().crossCurrency()}">Total</span>
             <span th:if="${panel.currency().crossCurrency()}" th:text="'Total (' + ${panel.currency().spendingCurrencyCode()} + ')'">Total (USD)</span>
@@ -200,7 +212,15 @@
         <!-- Cross-currency header (register §3.8a): the funding-currency total off the account, and
              — only when neither leg is the base currency — the base-currency total (pre-filled from
              rate_as_of, confirmable). The funding leg is pinned to these; only base sums to zero. -->
-        <div class="field field--amount" th:if="${panel.currency().crossCurrency()}">
+        <div
+          class="field field--amount"
+          th:if="${panel.currency().crossCurrency()}"
+          hx-post="/register/split/currency"
+          hx-trigger="change"
+          hx-include="closest form"
+          hx-target="#entry-dock"
+          hx-swap="outerHTML"
+        >
           <label class="field__label" for="split-funding-total" th:text="'Off account (' + ${panel.currency().fundingCurrencyCode()} + ')'">Off account (CHF)</label>
           <input
             id="split-funding-total"
@@ -212,7 +232,15 @@
             th:value="${panel.currency().fundingTotal()}"
           />
         </div>
-        <div class="field field--amount" th:if="${panel.currency().neitherIsBase()}">
+        <div
+          class="field field--amount"
+          th:if="${panel.currency().neitherIsBase()}"
+          hx-post="/register/split/currency"
+          hx-trigger="change"
+          hx-include="closest form"
+          hx-target="#entry-dock"
+          hx-swap="outerHTML"
+        >
           <label class="field__label" for="split-base-total" th:text="'Base (' + ${panel.currency().baseCurrencyCode()} + ')'">Base (EUR)</label>
           <input
             id="split-base-total"

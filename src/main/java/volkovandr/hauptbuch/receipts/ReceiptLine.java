@@ -11,7 +11,11 @@ import java.math.BigDecimal;
  * @param receiptLineId surrogate PK; null before persistence
  * @param receiptId the owning receipt
  * @param description the line description (item name, quantity folded in as {@code N× …})
- * @param amount the line amount in the paying account's native currency
+ * @param amount the line amount in the <em>receipt's</em> own currency ({@code
+ *     receipt.currency_code}) — the paying account's only when the two agree. A cross-currency
+ *     receipt (issue receipts/23) stores its lines exactly as printed and converts once, at the
+ *     header. The V12 migration's column comment predates that and reads "native currency of the
+ *     paying account"; migrations are forward-only, so this is where the meaning is recorded
  * @param accountId a category leaf or a real transfer target, or null (uncategorised)
  * @param personId set ⇒ a beneficiary leg into the person's debt leaf
  * @param note a free-text note, or null

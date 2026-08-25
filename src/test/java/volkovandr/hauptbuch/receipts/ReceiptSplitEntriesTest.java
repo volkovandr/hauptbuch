@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import volkovandr.hauptbuch.operations.SplitCurrency;
 import volkovandr.hauptbuch.operations.SplitEntry;
 import volkovandr.hauptbuch.operations.SplitLineDraft;
 
@@ -20,6 +21,13 @@ class ReceiptSplitEntriesTest {
   private static final long SAVINGS = 3L;
   private static final long FOOD = 4L;
   private static final long PAYEE = 9L;
+  private static final String EUR = "EUR";
+  private static final String USD = "USD";
+  private static final String CHF = "CHF";
+
+  /** The header a same-currency receipt resolves to — the ≥95% path. */
+  private static final SplitCurrency SINGLE_CURRENCY =
+      new SplitCurrency(false, EUR, EUR, EUR, false, "", "", "", "", "0", "0");
 
   @Test
   void headerBecomesTheFundingLegAndTransactionNote() {
@@ -34,13 +42,39 @@ class ReceiptSplitEntriesTest {
   }
 
   @Test
-  void singleCurrencyByConstruction() {
+  void sameCurrencyReceiptCarriesNoCrossCurrencyFields() {
     SplitEntry entry = entry(categoryLine("42,14", FUEL));
 
-    // The gate refuses a header currency other than the paying account's, so the cross-currency
-    // fields have nothing to carry (a cross-currency receipt commit is backlogged, plan §14).
+    // All three null keeps the entry on DockSplitService's untouched single-currency path.
     assertThat(entry.spendingCurrencyCode()).isNull();
     assertThat(entry.fundingTotal()).isNull();
+    assertThat(entry.baseTotal()).isNull();
+  }
+
+  @Test
+  void crossCurrencyReceiptCarriesTheSpendingCurrencyAndBothTotals() {
+    // A CHF card paying a USD receipt in a EUR book: both totals ride along (issue receipts/23).
+    SplitEntry entry =
+        crossEntry(
+            new SplitCurrency(true, CHF, USD, EUR, true, "40,00", "38,00", "", "", "0", "0"),
+            categoryLine("42,14", FUEL));
+
+    assertThat(entry.spendingCurrencyCode()).isEqualTo(USD);
+    assertThat(entry.fundingTotal()).isEqualTo("40,00");
+    assertThat(entry.baseTotal()).isEqualTo("38,00");
+  }
+
+  @Test
+  void crossCurrencyReceiptWhoseLegIsBaseCarriesNoBaseTotal() {
+    // A CHF card paying a EUR receipt: EUR IS the base, so the base total is its own total and
+    // DockSplitService derives it rather than being handed a redundant third number.
+    SplitEntry entry =
+        crossEntry(
+            new SplitCurrency(true, CHF, EUR, EUR, false, "40,00", "42,14", "", "", "0", "0"),
+            categoryLine("42,14", FUEL));
+
+    assertThat(entry.spendingCurrencyCode()).isEqualTo(EUR);
+    assertThat(entry.fundingTotal()).isEqualTo("40,00");
     assertThat(entry.baseTotal()).isNull();
   }
 
@@ -292,11 +326,27 @@ class ReceiptSplitEntriesTest {
 
   // ── helpers ─────────────────────────────────────────────────────────────────
 
+  /** A same-currency receipt — the untouched single-currency commit path. */
   private static SplitEntry entry(WorkingLine... lines) {
+    return crossEntry(SINGLE_CURRENCY, lines);
+  }
+
+  /** A receipt whose header resolved to {@code currency}, carrying whatever totals it holds. */
+  private static SplitEntry crossEntry(SplitCurrency currency, WorkingLine... lines) {
     ReceiptEditorForm form =
         WorkingLine.toForm(
-            "2026-08-03", "Rewe", CASH, "EUR", "42,14", "Weekly shop", "B-42", List.of(lines));
-    return ReceiptSplitEntries.of(receiptWithPayee(), form);
+            new ReceiptEditorHeader(
+                "2026-08-03",
+                "Rewe",
+                CASH,
+                currency.spendingCurrencyCode(),
+                "42,14",
+                currency.fundingTotal(),
+                currency.baseTotal(),
+                "Weekly shop",
+                "B-42"),
+            List.of(lines));
+    return ReceiptSplitEntries.of(receiptWithPayee(), form, currency);
   }
 
   private static WorkingLine categoryLine(String amount, long categoryId) {
@@ -410,6 +460,8 @@ class ReceiptSplitEntriesTest {
         null,
         null,
         PAYEE,
+        null,
+        null,
         null);
   }
 }
