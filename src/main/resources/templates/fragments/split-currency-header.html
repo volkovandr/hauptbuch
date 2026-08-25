@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<!--
+  The cross-currency header of a multi-line entry (register §3.8a/§3.10, issue receipts/23) — the
+  three total fields and the per-currency remaining readouts, shared verbatim by the register's
+  split panel and the receipts post-process editor. The sibling of fragments/line-editor.html: those
+  two surfaces already share every LINE, and the header is the same markup for the same reason —
+  one receipt billed in one currency and paid from an account in another must look and behave the
+  same whichever screen it was entered on (CLAUDE.md §0: one way to do a thing).
+
+  The server-side rule behind `currency` is likewise single: operations.SplitCurrencyService.
+
+  Parameterised only where the two surfaces genuinely differ:
+    • idPrefix    — `split` / `receipt`, so the ids and their <label for> stay unique per surface
+    • currencyUrl — the endpoint that re-renders the panel (/register/split/currency or
+                    /receipts/{id}/lines/currency)
+    • panelTarget — what that endpoint swaps (#entry-dock or #receipt-editor)
+
+  Every one of the three totals re-renders on `change` (issue receipts/23, decision 7): a blank
+  total is proposed from the one it derives from — funding from spending, base from funding — and
+  the currency is normally picked BEFORE anything is typed, so without these triggers the proposal
+  would never fire. A total the operator typed is never overwritten by a later proposal.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <th:block th:fragment="totals(currency, total, idPrefix, currencyUrl, panelTarget)">
+      <!-- The total the entry should come to — the reference the `remaining` readout counts
+           against, in the SPENDING currency (what the receipt is billed in). Editable: a mis-read
+           total is fixable, and keyboard.js reads data-split-total to update remaining live. -->
+      <div
+        class="field field--amount"
+        hx-trigger="change"
+        hx-include="closest form"
+        hx-swap="outerHTML"
+        th:attr="hx-post=${currencyUrl}, hx-target=${panelTarget}"
+      >
+        <label class="field__label" th:for="${idPrefix} + '-total'">
+          <span th:if="${!currency.crossCurrency()}">Total</span>
+          <span
+            th:if="${currency.crossCurrency()}"
+            th:text="'Total (' + ${currency.spendingCurrencyCode()} + ')'"
+            >Total (USD)</span
+          >
+        </label>
+        <input
+          name="total"
+          class="input num"
+          inputmode="decimal"
+          autocomplete="off"
+          placeholder="20,00"
+          data-split-total-input
+          th:id="${idPrefix} + '-total'"
+          th:value="${total}"
+          th:attr="data-split-total=${total}"
+        />
+      </div>
+
+      <!-- What actually comes off the paying account, in ITS currency. Pre-filled from rate_as_of
+           and overtypeable (issue receipts/23, decision 1): at review time the operator does not
+           know the card's real charge — the statement has not arrived — and booking that estimate
+           is accepted. Blank when no stored rate could propose one; Confirm then blocks. -->
+      <div
+        class="field field--amount"
+        th:if="${currency.crossCurrency()}"
+        hx-trigger="change"
+        hx-include="closest form"
+        hx-swap="outerHTML"
+        th:attr="hx-post=${currencyUrl}, hx-target=${panelTarget}"
+      >
+        <label
+          class="field__label"
+          th:for="${idPrefix} + '-funding-total'"
+          th:text="'Off account (' + ${currency.fundingCurrencyCode()} + ')'"
+          >Off account (CHF)</label
+        >
+        <input
+          name="fundingTotal"
+          class="input num"
+          inputmode="decimal"
+          autocomplete="off"
+          placeholder="100,00"
+          th:id="${idPrefix} + '-funding-total'"
+          th:value="${currency.fundingTotal()}"
+        />
+      </div>
+
+      <!-- The base-currency total, only when NEITHER leg is the book's base — otherwise that leg's
+           own total already is the base figure. The funding leg is pinned to these two; only base
+           sums to zero (data-model §6.4). -->
+      <div
+        class="field field--amount"
+        th:if="${currency.neitherIsBase()}"
+        hx-trigger="change"
+        hx-include="closest form"
+        hx-swap="outerHTML"
+        th:attr="hx-post=${currencyUrl}, hx-target=${panelTarget}"
+      >
+        <label
+          class="field__label"
+          th:for="${idPrefix} + '-base-total'"
+          th:text="'Base (' + ${currency.baseCurrencyCode()} + ')'"
+          >Base (EUR)</label
+        >
+        <input
+          name="baseTotal"
+          class="input num"
+          inputmode="decimal"
+          autocomplete="off"
+          placeholder="95,00"
+          th:id="${idPrefix} + '-base-total'"
+          th:value="${currency.baseTotal()}"
+        />
+      </div>
+    </th:block>
+
+    <!-- The other currencies in play, beside the surface's own primary (spending) remaining. All
+         reach zero together, since one rate links them. keyboard.js rewrites both spans live. -->
+    <th:block th:fragment="remaining(currency)">
+      <span class="split-status__remaining muted" th:if="${currency.crossCurrency()}">
+        <span data-split-remaining-funding th:text="${currency.remainingFunding()}">0,00</span>
+        <span th:text="${currency.fundingCurrencyCode()}">CHF</span>
+      </span>
+      <span class="split-status__remaining muted" th:if="${currency.neitherIsBase()}">
+        <span data-split-remaining-base th:text="${currency.remainingBase()}">0,00</span>
+        <span th:text="${currency.baseCurrencyCode()}">EUR</span>
+      </span>
+    </th:block>
+  </body>
+</html>

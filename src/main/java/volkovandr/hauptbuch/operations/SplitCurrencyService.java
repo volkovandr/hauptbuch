@@ -63,8 +63,8 @@ public class SplitCurrencyService {
     boolean neitherIsBase = !funding.equals(base) && !spending.equals(base);
     BigDecimal totalSpending = lenientParse(query.total());
     BigDecimal totalFunding = lenientParse(query.fundingTotal());
-    BigDecimal totalBase =
-        resolvedBaseTotal(funding, spending, base, totalSpending, totalFunding, query.baseTotal());
+    String baseText = baseTotalSource(funding, spending, base, query);
+    BigDecimal totalBase = lenientParse(baseText);
     return new SplitCurrencyContext(
         true,
         funding,
@@ -73,29 +73,27 @@ public class SplitCurrencyService {
         neitherIsBase,
         totalFunding,
         totalBase,
+        query.fundingTotal(),
+        baseText,
         ratio(totalFunding, totalSpending),
         ratio(totalBase, totalSpending));
   }
 
   /**
-   * The base-currency total: when one leg already <em>is</em> the base currency that leg's own
-   * total is it, and the separate base field never renders. Only when neither is does the operator
-   * supply a third number.
+   * Which field the base-currency total comes from: when one leg already <em>is</em> the base
+   * currency that leg's own total is it, and the separate base field never renders. Only when
+   * neither is does the operator supply a third number. Returned as the raw text so a blank stays
+   * blank all the way to the rendered field.
    */
-  private static BigDecimal resolvedBaseTotal(
-      String funding,
-      String spending,
-      String base,
-      BigDecimal totalSpending,
-      BigDecimal totalFunding,
-      String baseTotal) {
+  private static String baseTotalSource(
+      String funding, String spending, String base, SplitCurrencyQuery query) {
     if (funding.equals(base)) {
-      return totalFunding;
+      return query.fundingTotal();
     }
     if (spending.equals(base)) {
-      return totalSpending;
+      return query.total();
     }
-    return lenientParse(baseTotal);
+    return query.baseTotal();
   }
 
   /**

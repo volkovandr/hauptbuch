@@ -24,12 +24,7 @@
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
 - **v0.43 (2026-08-25):** **Cross-currency receipt commits leave §14** and ship (issue
-  receipts/23): the receipt post-process editor gains the register split panel's cross-currency
-  header, and the Confirm gate's flat refusal becomes a validation. The header-state rule is
-  promoted to a public `operations` service both entry surfaces read, so exactly one implementation
-  exists; the rate proposals (funding from spending, base from funding) live in
-  `ledger.CrossCurrencyFieldsService` and now fire on both surfaces. Adds `receipt.funding_total`
-  and `receipt.base_total` (V17).
+  receipts/23). Adds `receipt.funding_total` and `receipt.base_total` (V17).
 - **v0.42 (2026-08-21):** **Payee editor page** (create/edit/merge/delete) added to §14's Data
   lifecycle backlog, deferred from `potential-feature-ideas.md`.
 - **v0.41 (2026-08-21):** **9h complete — all of stage 9 (Receipts) complete** (owner-confirmed).
@@ -59,7 +54,7 @@ it shipped. "Stage N complete" needs no recap here.
   no reviewed-marker). Entity changes (V14, data-model v0.11): `receipt.payee_id`,
   `receipt_line.ai_target_text`. The header total becomes **editable**; the split panel is reused
   as a **shared line-editor core**; ⇄ Redistribute is a **per-line** action (no Tax detection);
-  **cross-currency receipt commits deferred** to §14 — since shipped (issue receipts/23). Details in the
+  **cross-currency receipt commits deferred** to §14 (Save warns, Confirm blocks). Details in the
   sub-plan §9f; receipt doc v0.5.
 - **v0.35 (2026-08-02):** **9e complete** (owner-confirmed) — single-receipt analyse shipped. Scope
   addition from owner feedback: the receipt-parser **system prompt is operator-editable** (new

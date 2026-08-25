@@ -662,79 +662,12 @@
       </div>
       <div th:replace="~{fragments/currency-picker :: dialogMount('receipt-currency')}"></div>
 
-      <!-- The receipt total (editable — a mis-read total is fixable). remaining counts against it.
-           Its `change` also re-renders, because a blank funding total is proposed FROM it. -->
+      <!-- The three header totals — the SAME fragment the register's split panel renders (issue
+           receipts/23), the sibling of the shared per-line rows below. The receipt's own total is
+           editable because a mis-read total is fixable; `remaining` counts against it. -->
       <div
-        class="field field--amount"
-        hx-trigger="change"
-        hx-include="closest form"
-        hx-target="#receipt-editor"
-        hx-swap="outerHTML"
-        th:attr="hx-post=@{/receipts/{id}/lines/currency(id=${id})}"
-      >
-        <label class="field__label" for="receipt-total">
-          <span th:if="${!editor.currency().crossCurrency()}">Total</span>
-          <span th:if="${editor.currency().crossCurrency()}" th:text="'Total (' + ${editor.currency().spendingCurrencyCode()} + ')'">Total (USD)</span>
-        </label>
-        <input
-          id="receipt-total"
-          name="total"
-          class="input num"
-          inputmode="decimal"
-          autocomplete="off"
-          placeholder="20,00"
-          th:value="${editor.total()}"
-          th:attr="data-split-total=${editor.total()}"
-          data-split-total-input
-        />
-      </div>
-
-      <!-- Cross-currency header (issue receipts/23), matching split-panel.html field for field.
-           `Off account` is PROPOSED from rate_as_of and overtypeable: at review time the operator
-           does not know the card's real charge — the statement has not arrived — and booking that
-           estimate is accepted (decision 1). `Base` appears only when neither leg is the book's
-           base currency, and is proposed from the funding total in turn. Both persist with Save,
-           so an overtyped estimate survives a reopen. -->
-      <div
-        class="field field--amount"
-        th:if="${editor.currency().crossCurrency()}"
-        hx-trigger="change"
-        hx-include="closest form"
-        hx-target="#receipt-editor"
-        hx-swap="outerHTML"
-        th:attr="hx-post=@{/receipts/{id}/lines/currency(id=${id})}"
-      >
-        <label class="field__label" for="receipt-funding-total" th:text="'Off account (' + ${editor.currency().fundingCurrencyCode()} + ')'">Off account (CHF)</label>
-        <input
-          id="receipt-funding-total"
-          name="fundingTotal"
-          class="input num"
-          inputmode="decimal"
-          autocomplete="off"
-          placeholder="100,00"
-          th:value="${editor.currency().fundingTotal()}"
-        />
-      </div>
-      <div
-        class="field field--amount"
-        th:if="${editor.currency().neitherIsBase()}"
-        hx-trigger="change"
-        hx-include="closest form"
-        hx-target="#receipt-editor"
-        hx-swap="outerHTML"
-        th:attr="hx-post=@{/receipts/{id}/lines/currency(id=${id})}"
-      >
-        <label class="field__label" for="receipt-base-total" th:text="'Base (' + ${editor.currency().baseCurrencyCode()} + ')'">Base (EUR)</label>
-        <input
-          id="receipt-base-total"
-          name="baseTotal"
-          class="input num"
-          inputmode="decimal"
-          autocomplete="off"
-          placeholder="95,00"
-          th:value="${editor.currency().baseTotal()}"
-        />
-      </div>
+        th:replace="~{fragments/split-currency-header :: totals(currency=${editor.currency()}, total=${editor.total()}, idPrefix='receipt', currencyUrl=@{/receipts/{id}/lines/currency(id=${id})}, panelTarget='#receipt-editor')}"
+      ></div>
 
       <!-- The printed receipt/Beleg number (plan §9g): prefilled from the parse, editable, saved
            with the header. A reference the operator may want to keep even when the AI misread it. -->
@@ -815,16 +748,9 @@
             >✓</span
           >
         </span>
-        <!-- The other currencies in play (issue receipts/23) — all reach zero together, since one
-             rate links them. Same markup the register's split status bar uses. -->
-        <span class="split-status__remaining muted" th:if="${editor.currency().crossCurrency()}">
-          <span data-split-remaining-funding th:text="${editor.currency().remainingFunding()}">0,00</span>
-          <span th:text="${editor.currency().fundingCurrencyCode()}">CHF</span>
-        </span>
-        <span class="split-status__remaining muted" th:if="${editor.currency().neitherIsBase()}">
-          <span data-split-remaining-base th:text="${editor.currency().remainingBase()}">0,00</span>
-          <span th:text="${editor.currency().baseCurrencyCode()}">EUR</span>
-        </span>
+        <th:block
+          th:replace="~{fragments/split-currency-header :: remaining(currency=${editor.currency()})}"
+        ></th:block>
         <span class="split-status__hint muted" th:if="${editor.status() == 'none'}">no total set</span>
       </div>
 

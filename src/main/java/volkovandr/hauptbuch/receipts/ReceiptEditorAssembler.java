@@ -49,16 +49,25 @@ class ReceiptEditorAssembler {
     this.splitCurrencyService = splitCurrencyService;
   }
 
+  /**
+   * The cross-currency header state for a form, resolved against the paying account's currency.
+   * Exposed on its own because Save needs only this — deciding whether the two header totals are
+   * still live — and assembling the whole panel to reach it would do every line's view, tag lookup
+   * and account lookup for two booleans.
+   */
+  SplitCurrencyContext currency(ReceiptEditorForm form) {
+    return splitCurrencyService.resolve(
+        new SplitCurrencyQuery(
+            fundingCurrency(form),
+            form.currencyCode(),
+            form.total(),
+            form.fundingTotal(),
+            form.baseTotal()));
+  }
+
   /** Assemble the editor view model for the current form state. */
   ReceiptEditor panel(ReceiptEditorForm form) {
-    SplitCurrencyContext ctx =
-        splitCurrencyService.resolve(
-            new SplitCurrencyQuery(
-                fundingCurrency(form),
-                form.currencyCode(),
-                form.total(),
-                form.fundingTotal(),
-                form.baseTotal()));
+    SplitCurrencyContext ctx = currency(form);
     Map<Long, String> labels = tagLabels(form);
     List<ReceiptEditorLine> lines = new ArrayList<>();
     BigDecimal net = BigDecimal.ZERO;

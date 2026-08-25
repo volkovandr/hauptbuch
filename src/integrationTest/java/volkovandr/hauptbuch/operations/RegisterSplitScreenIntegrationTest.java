@@ -541,6 +541,74 @@ class RegisterSplitScreenIntegrationTest {
   }
 
   @Test
+  void currencyEndpointProposesTheFundingTotalFromTheSpendingTotal() throws Exception {
+    long chfCard = openAccount("Cash CHF", "CHF", "500");
+    long food = insertCategory("Food", "expense");
+    // 1 CHF = 0,95 EUR and 1 USD = 0,90 EUR on the day: 90 USD → 81 EUR → 85,26 CHF off the card.
+    insertRate("CHF", "0.95");
+    insertRate("USD", "0.90");
+
+    mockMvc
+        .perform(
+            post("/register/split/currency")
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(chfCard))
+                .param("spendingCurrencyCode", "USD")
+                .param("total", "90")
+                .param("fundingTotal", "")
+                .param("baseTotal", "")
+                .param("categoryText", "Food")
+                .param("lineCategoryId", String.valueOf(food))
+                .param("lineCategoryType", "expense")
+                .param("lineAmount", "90")
+                .param("viewAccountId", String.valueOf(chfCard)))
+        .andExpect(status().isOk())
+        // The funding total is proposed from the spending total (issue receipts/23, decision 6)…
+        .andExpect(content().string(containsString("value=\"85,26\"")))
+        // …and the base total in turn from that funding total.
+        .andExpect(content().string(containsString("value=\"81,00\"")));
+  }
+
+  @Test
+  void currencyEndpointLeavesTotalsTheOperatorTypedAlone() throws Exception {
+    long chfCard = openAccount("Cash CHF", "CHF", "500");
+    long food = insertCategory("Food", "expense");
+    insertRate("CHF", "0.95");
+    insertRate("USD", "0.90");
+
+    mockMvc
+        .perform(
+            post("/register/split/currency")
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(chfCard))
+                .param("spendingCurrencyCode", "USD")
+                .param("total", "90")
+                .param("fundingTotal", "88,00") // the real charge, with the bank's markup
+                .param("baseTotal", "83,50")
+                .param("categoryText", "Food")
+                .param("lineCategoryId", String.valueOf(food))
+                .param("lineCategoryType", "expense")
+                .param("lineAmount", "90")
+                .param("viewAccountId", String.valueOf(chfCard)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("value=\"88,00\"")))
+        .andExpect(content().string(containsString("value=\"83,50\"")))
+        .andExpect(content().string(not(containsString("value=\"85,26\""))));
+  }
+
+  /** A carry-forward rate for the spend date: units of base per 1 unit of {@code currency}. */
+  private void insertRate(String currency, String rate) {
+    jdbcClient
+        .sql(
+            "insert into exchange_rate (currency_code, date, rate, source)"
+                + " values (:currency, :day, :rate, 'manual')")
+        .param("currency", currency)
+        .param("day", LocalDate.parse(SPEND_DAY))
+        .param("rate", new BigDecimal(rate))
+        .update();
+  }
+
+  @Test
   void crossCurrencySplitCommitsBalancedInBaseAndReopensForEdit() throws Exception {
     long chfCard = openAccount("Cash CHF", "CHF", "500");
     long food = insertCategory("Food", "expense");
