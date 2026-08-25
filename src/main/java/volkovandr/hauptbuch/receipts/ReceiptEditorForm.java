@@ -12,17 +12,21 @@ import org.springframework.util.MultiValueMap;
  * would fail to bind. The form is the single source of truth — everything submitted is re-emitted
  * so resolved ids survive a re-render.
  *
- * <p>Receipts-local rather than reusing {@code operations.SplitForm}: there is no funding person,
- * no cross-currency totals, and no register view-filter here, and {@code SplitFormBinder} is
- * module-internal to {@code operations}. Only the per-line field <em>names</em> are shared (that is
- * the fragment contract), so binding here reads the same names the register does plus this
- * surface's own {@code lineAiTargetText} provenance carrier.
+ * <p>Receipts-local rather than reusing {@code operations.SplitForm}: there is no funding person
+ * and no register view-filter here, and {@code SplitFormBinder} is module-internal to {@code
+ * operations}. Only the per-line field <em>names</em> are shared (that is the fragment contract),
+ * so binding here reads the same names the register does plus this surface's own {@code
+ * lineAiTargetText} provenance carrier.
  *
  * @param date raw {@code yyyy-MM-dd} booking date (or blank)
  * @param payeeText the payee picker text
  * @param accountId the chosen paying account id, or null
  * @param currencyCode the chosen header currency
- * @param total the editable total as typed
+ * @param total the editable total as typed, in the receipt's own (spending) currency
+ * @param fundingTotal the cross-currency total off the paying account, as typed (issue
+ *     receipts/23); blank for a single-currency receipt
+ * @param baseTotal the cross-currency base-currency total, as typed (issue receipts/23); blank
+ *     unless neither leg is the book's base currency
  * @param note the header note (9g) — persisted on Save, copied to {@code transaction.note} at
  *     Confirm
  * @param receiptNumber the printed receipt/Beleg number (9g) — prefilled from the parse, editable
@@ -45,6 +49,8 @@ public record ReceiptEditorForm(
     Long accountId,
     String currencyCode,
     String total,
+    String fundingTotal,
+    String baseTotal,
     String note,
     String receiptNumber,
     List<String> lineDescription,
@@ -111,6 +117,8 @@ public record ReceiptEditorForm(
         ReceiptEditorText.parseId(params.getFirst("accountId")),
         params.getFirst("currencyCode"),
         params.getFirst("total"),
+        params.getFirst("fundingTotal"),
+        params.getFirst("baseTotal"),
         params.getFirst("note"),
         params.getFirst("receiptNumber"),
         strings(params, "lineDescription"),

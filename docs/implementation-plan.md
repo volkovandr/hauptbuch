@@ -1,7 +1,7 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.42
+**Status:** Draft v0.43
 **Date:** 2026-08-21
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
@@ -23,6 +23,13 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.43 (2026-08-25):** **Cross-currency receipt commits leave §14** and ship (issue
+  receipts/23): the receipt post-process editor gains the register split panel's cross-currency
+  header, and the Confirm gate's flat refusal becomes a validation. The header-state rule is
+  promoted to a public `operations` service both entry surfaces read, so exactly one implementation
+  exists; the rate proposals (funding from spending, base from funding) live in
+  `ledger.CrossCurrencyFieldsService` and now fire on both surfaces. Adds `receipt.funding_total`
+  and `receipt.base_total` (V17).
 - **v0.42 (2026-08-21):** **Payee editor page** (create/edit/merge/delete) added to §14's Data
   lifecycle backlog, deferred from `potential-feature-ideas.md`.
 - **v0.41 (2026-08-21):** **9h complete — all of stage 9 (Receipts) complete** (owner-confirmed).
@@ -52,7 +59,7 @@ it shipped. "Stage N complete" needs no recap here.
   no reviewed-marker). Entity changes (V14, data-model v0.11): `receipt.payee_id`,
   `receipt_line.ai_target_text`. The header total becomes **editable**; the split panel is reused
   as a **shared line-editor core**; ⇄ Redistribute is a **per-line** action (no Tax detection);
-  **cross-currency receipt commits deferred** to §14 (Save warns, Confirm blocks). Details in the
+  **cross-currency receipt commits deferred** to §14 — since shipped (issue receipts/23). Details in the
   sub-plan §9f; receipt doc v0.5.
 - **v0.35 (2026-08-02):** **9e complete** (owner-confirmed) — single-receipt analyse shipped. Scope
   addition from owner feedback: the receipt-parser **system prompt is operator-editable** (new
@@ -506,7 +513,8 @@ here). Eight ordered sub-stages, each shipped green and owner-confirmed:
 
 Deferred to §14 during the stage: duplicate detection + link-to-existing (the matcher arrives with
 stage 13, which shares it; Q-RX-2 moot until then), SSE for the status poll (T-RX-1, only if 2 s
-polling grates), cross-currency receipt commits.
+polling grates). Cross-currency receipt commits were also deferred here, and have since shipped
+(issue receipts/23).
 
 ### Stage 13 — Bank statement reconciliation (rough)
 The `statements` module (§5.8): PDF-first extraction, matching statement lines against existing
@@ -537,10 +545,7 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
   phone grid is a fixed 90-day, newest-first, all-states list; controls to filter or re-sort it are
   deferred (stage 9b). **Receipt register search + column re-sort** — the §5.2 fuzzy search
   (merchant + AI note + line text) and re-sortable columns arrive with the first parsed data
-  (9c/9e), not in the 9b skeleton. **Cross-currency receipt commits** — a receipt whose currency
-  differs from the paying account's (foreign card payments): post-process (9f) warns at Save,
-  Confirm (9g) blocks until they match; committing through the dock's cross-currency path (with a
-  funding-total field) is deferred until the need is real.
+  (9c/9e), not in the 9b skeleton.
 - **Auth / LAN-open stance:** the app is unauthenticated and open on the LAN; receipts (capture
   surface, image serving) do not change this. Minimal auth is tracked under *Ops & hardening* below
   (ARCH-04) and is the prerequisite for any non-localhost exposure.

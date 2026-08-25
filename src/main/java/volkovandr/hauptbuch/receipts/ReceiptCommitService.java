@@ -69,7 +69,8 @@ public class ReceiptCommitService {
    */
   public long confirm(long receiptId, ReceiptEditorForm form) {
     Receipt receipt = requireProcessed(receiptId);
-    List<String> problems = receiptConfirmGate.problems(form, receiptEditorService.panel(form));
+    ReceiptEditor editor = receiptEditorService.panel(form);
+    List<String> problems = receiptConfirmGate.problems(form, editor);
     if (!problems.isEmpty()) {
       throw new ReceiptConfirmException(problems);
     }
@@ -79,7 +80,10 @@ public class ReceiptCommitService {
     if (receipt.transactionId() != null) {
       dockCommitService.voidTransactionIfLive(receipt.transactionId());
     }
-    long transactionId = dockSplitService.commit(ReceiptSplitEntries.of(saved, form));
+    // The same resolved header the gate just judged decides how this books (issue receipts/23):
+    // cross-currency ⇒ the spending currency and the two totals ride along to DockSplitService.
+    long transactionId =
+        dockSplitService.commit(ReceiptSplitEntries.of(saved, form, editor.currency()));
     receiptRepository.markCommitted(receiptId, transactionId);
     return transactionId;
   }

@@ -199,7 +199,9 @@ public class ReceiptRepository {
                    currency_code = :currencyCode,
                    total_amount = :totalAmount,
                    note = :note,
-                   receipt_number = :receiptNumber
+                   receipt_number = :receiptNumber,
+                   funding_total = :fundingTotal,
+                   base_total = :baseTotal
              where receipt_id = :id and deleted_at is null
             """)
         .param("receiptDate", header.receiptDate())
@@ -209,6 +211,8 @@ public class ReceiptRepository {
         .param("totalAmount", header.totalAmount())
         .param("note", header.note())
         .param("receiptNumber", header.receiptNumber())
+        .param("fundingTotal", header.fundingTotal())
+        .param("baseTotal", header.baseTotal())
         .param("id", receiptId)
         .update();
   }

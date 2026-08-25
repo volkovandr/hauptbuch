@@ -41,6 +41,8 @@ class ReceiptTest {
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 

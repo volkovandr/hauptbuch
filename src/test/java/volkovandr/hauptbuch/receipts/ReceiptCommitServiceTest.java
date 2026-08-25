@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.operations.DockCommitService;
 import volkovandr.hauptbuch.operations.DockSplitService;
+import volkovandr.hauptbuch.operations.SplitCurrency;
 import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
 
 /**
@@ -46,6 +47,7 @@ class ReceiptCommitServiceTest {
   void confirmSavesTheDraftThenBooksItAndLinksTheTransaction() {
     Receipt processed = receipt("processed", null);
     when(receiptService.findById(RECEIPT_ID)).thenReturn(Optional.of(processed));
+    when(receiptEditorService.panel(any())).thenReturn(editor());
     when(receiptConfirmGate.problems(any(), any())).thenReturn(List.of());
     when(dockSplitService.commit(any())).thenReturn(NEW_TXN);
 
@@ -64,6 +66,7 @@ class ReceiptCommitServiceTest {
     // A reopened receipt keeps its transaction link — that is what makes this a re-entry.
     when(receiptService.findById(RECEIPT_ID))
         .thenReturn(Optional.of(receipt("processed", OLD_TXN)));
+    when(receiptEditorService.panel(any())).thenReturn(editor());
     when(receiptConfirmGate.problems(any(), any())).thenReturn(List.of());
     when(dockSplitService.commit(any())).thenReturn(NEW_TXN);
 
@@ -133,8 +136,28 @@ class ReceiptCommitServiceTest {
 
   // ── helpers ─────────────────────────────────────────────────────────────────
 
+  /**
+   * The assembled readout Confirm passes to the gate and then reads the header currency off — a
+   * same-currency receipt here, so the entry books through the single-currency path.
+   */
+  private static ReceiptEditor editor() {
+    return new ReceiptEditor(
+        null,
+        "",
+        1L,
+        new SplitCurrency(false, "EUR", "EUR", "EUR", false, "", "", "", "", "0", "0"),
+        "10,00",
+        "",
+        "",
+        "0,00",
+        true,
+        "ok",
+        List.of());
+  }
+
   private static ReceiptEditorForm form() {
-    return WorkingLine.toForm("2026-08-03", "", 1L, "EUR", "10,00", "", "", List.of());
+    return WorkingLine.toForm(
+        new ReceiptEditorHeader("2026-08-03", "", 1L, "EUR", "10,00", "", "", "", ""), List.of());
   }
 
   private static Receipt receipt(String state, Long transactionId) {
@@ -155,6 +178,8 @@ class ReceiptCommitServiceTest {
         null,
         1L,
         transactionId,
+        null,
+        null,
         null,
         null,
         null,

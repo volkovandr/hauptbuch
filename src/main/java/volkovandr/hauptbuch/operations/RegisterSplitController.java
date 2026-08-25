@@ -49,6 +49,7 @@ class RegisterSplitController {
   private final RegisterService registerService;
   private final AccountService accountService;
   private final DockAmountFieldsService dockAmountFieldsService;
+  private final SplitCurrencyService splitCurrencyService;
 
   RegisterSplitController(
       DockSplitService dockSplitService,
@@ -56,13 +57,15 @@ class RegisterSplitController {
       SplitTagPills tagPills,
       RegisterService registerService,
       AccountService accountService,
-      DockAmountFieldsService dockAmountFieldsService) {
+      DockAmountFieldsService dockAmountFieldsService,
+      SplitCurrencyService splitCurrencyService) {
     this.dockSplitService = dockSplitService;
     this.assembler = assembler;
     this.tagPills = tagPills;
     this.registerService = registerService;
     this.accountService = accountService;
     this.dockAmountFieldsService = dockAmountFieldsService;
+    this.splitCurrencyService = splitCurrencyService;
   }
 
   /**
@@ -172,21 +175,25 @@ class RegisterSplitController {
 
   /**
    * Recompute the split header's currency layout (register §3.8a/§3.10): the spending-currency
-   * selector's own change, or the funding account's, re-renders the whole panel so the funding/base
-   * total fields appear or hide and the derived per-line columns refresh. A blank base total is
-   * pre-filled from {@code rate_as_of} (confirmable) when neither leg is the base currency.
+   * selector's own change, the funding account's, or a change to any of the three totals (issue
+   * receipts/23, decision 7) re-renders the whole panel so the funding/base total fields appear or
+   * hide and the derived per-line columns refresh. Either total, while still blank, is pre-filled
+   * from {@code rate_as_of} (confirmable) — the spending total feeds the funding proposal, which in
+   * turn feeds the base one. A total already typed is left alone.
    */
   @PostMapping("/register/split/currency")
   String currency(@RequestParam MultiValueMap<String, String> params, Model model) {
     SplitForm form = SplitFormBinder.bind(params);
-    String baseTotal =
-        dockAmountFieldsService.splitBaseTotalPrefill(
-            form.accountId(),
-            form.spendingCurrencyCode(),
-            form.date(),
-            form.fundingTotal(),
-            form.baseTotal());
-    return renderPanel(SplitFormBinder.withBaseTotal(form, baseTotal), null, PANEL_DIRECT, model);
+    SplitTotals totals =
+        splitCurrencyService.proposeTotals(
+            new SplitTotalsQuery(
+                form.accountId(),
+                form.spendingCurrencyCode(),
+                form.date(),
+                form.total(),
+                form.fundingTotal(),
+                form.baseTotal()));
+    return renderPanel(SplitFormBinder.withTotals(form, totals), null, PANEL_DIRECT, model);
   }
 
   /**

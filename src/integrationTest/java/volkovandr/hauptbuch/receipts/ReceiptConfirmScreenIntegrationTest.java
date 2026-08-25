@@ -157,19 +157,121 @@ class ReceiptConfirmScreenIntegrationTest {
     assertThat(lineCount(id)).isEqualTo(1);
   }
 
+  // ── Cross-currency (issue receipts/23) ──────────────────────────────────────
+
   @Test
-  void confirmRefusesCrossCurrencyReceiptAsNotImplemented() throws Exception {
-    long cash = openAccount("Cash", EUR);
+  void crossCurrencyConfirmPinsTheFundingLegToTheHeaderTotals() throws Exception {
+    // A CHF receipt paid from a EUR card, in a EUR book: EUR is the base, so the funding total is
+    // the base figure too and no third field is asked for.
+    long card = openAccount("Card", EUR);
     long fuel = category("Fuel", "expense");
-    long id = processedReceipt(cash, "42.14", CHF);
+    long id = processedReceipt(card, "42.14", CHF);
 
     mockMvc
-        .perform(confirm(id, cash, CHF, "42,14", fuel, "42,14"))
+        .perform(confirm(id, card, CHF, "42,14", fuel, "42,14").param("fundingTotal", "45,00"))
+        .andExpect(status().isOk());
+
+    long transactionId = header(id, "transaction_id", Long.class);
+    assertThat(header(id, "state", String.class)).isEqualTo("committed");
+    // The funding leg carries what came off the card; the category leg is in the receipt's own
+    // currency, routed to the auto-provisioned CHF leaf under Fuel (data-model §6.5).
+    assertThat(legsOf(transactionId))
+        .containsExactlyInAnyOrder(leg(card, "-45.00"), leg(chfLeafUnder(fuel), "42.14"));
+    // Σ base_amount = 0 exactly (data-model §6.4) — what makes the cross-currency booking legal.
+    assertThat(baseSumOf(transactionId)).isEqualByComparingTo("0.00");
+    // Both header totals persisted, so a reopen shows the operator's number, not a fresh proposal.
+    assertThat(header(id, "funding_total", BigDecimal.class)).isEqualByComparingTo("45.00");
+  }
+
+  @Test
+  void openingCrossCurrencyReceiptProposesTheFundingTotalWithoutAnyInteraction() throws Exception {
+    long card = openAccount("Card", CHF);
+    long id = processedReceipt(card, "42.14", EUR);
+    insertRate(CHF, "0.95");
+
+    // The AI already detected the foreign card, so the receipt is cross-currency on first open —
+    // the field must arrive filled, not blank waiting to be poked.
+    mockMvc
+        .perform(get("/receipts/" + id))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("not implemented yet")));
+        .andExpect(content().string(containsString("Off account (CHF)")))
+        .andExpect(content().string(containsString("value=\"44,36\"")));
+
+    // A proposal is a display value only — nothing is written until Save.
+    assertThat(header(id, "funding_total", BigDecimal.class)).isNull();
+  }
+
+  @Test
+  void crossCurrencyConfirmIsBlockedUntilTheFundingTotalIsSupplied() throws Exception {
+    long card = openAccount("Card", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(card, "42.14", CHF);
+
+    // No rate is stored for CHF, so nothing could be proposed and the field stayed blank.
+    mockMvc
+        .perform(confirm(id, card, CHF, "42,14", fuel, "42,14"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("came off the account")));
 
     assertThat(header(id, "state", String.class)).isEqualTo("processed");
     assertThat(header(id, "transaction_id", Long.class)).isNull();
+  }
+
+  @Test
+  void pickingAnAccountInAnotherCurrencyRevealsThePrefilledFundingTotal() throws Exception {
+    long card = openAccount("Card", CHF);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(card, "42.14", EUR);
+    // 1 CHF = 0,95 EUR on the receipt's date, so 42,14 EUR ⇒ 44,36 CHF off the card.
+    insertRate(CHF, "0.95");
+
+    mockMvc
+        .perform(
+            post("/receipts/" + id + "/lines/currency")
+                .param("date", DAY)
+                .param("accountId", String.valueOf(card))
+                .param("currencyCode", EUR)
+                .param("total", "42,14")
+                .param("fundingTotal", "")
+                .param("lineDescription", "Diesel")
+                .param("categoryText", "Fuel")
+                .param("lineCategoryId", String.valueOf(fuel))
+                .param("lineCategoryType", "expense")
+                .param("lineAmount", "42,14"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Off account (CHF)")))
+        .andExpect(content().string(containsString("value=\"44,36\"")))
+        // The per-line derived cell renders beside the (still EUR) amount input.
+        .andExpect(content().string(containsString("Amount (EUR)")))
+        // …and nothing is persisted by a currency round-trip.
+        .andExpect(content().string(not(containsString("Saved."))));
+
+    assertThat(header(id, "funding_total", BigDecimal.class)).isNull();
+  }
+
+  @Test
+  void typedFundingTotalIsNeverOverwrittenByLaterProposal() throws Exception {
+    long card = openAccount("Card", CHF);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(card, "42.14", EUR);
+    insertRate(CHF, "0.95");
+
+    mockMvc
+        .perform(
+            post("/receipts/" + id + "/lines/currency")
+                .param("date", DAY)
+                .param("accountId", String.valueOf(card))
+                .param("currencyCode", EUR)
+                .param("total", "42,14")
+                .param("fundingTotal", "44,90") // the real charge, with the bank's markup
+                .param("lineDescription", "Diesel")
+                .param("categoryText", "Fuel")
+                .param("lineCategoryId", String.valueOf(fuel))
+                .param("lineCategoryType", "expense")
+                .param("lineAmount", "42,14"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("value=\"44,90\"")))
+        .andExpect(content().string(not(containsString("value=\"44,36\""))));
   }
 
   @Test
@@ -820,5 +922,43 @@ class ReceiptConfirmScreenIntegrationTest {
 
   private static String leg(long accountId, String amount) {
     return accountId + " " + new BigDecimal(amount).stripTrailingZeros().toPlainString();
+  }
+
+  /**
+   * The transaction's {@code Σ base_amount}, which a cross-currency booking must drive to exactly
+   * zero (data-model §6.4) — the last category leg absorbing the rounding residual.
+   */
+  private BigDecimal baseSumOf(long transactionId) {
+    return jdbcClient
+        .sql("select coalesce(sum(base_amount), 0) from posting where transaction_id = :id")
+        .param("id", transactionId)
+        .query(BigDecimal.class)
+        .single();
+  }
+
+  /**
+   * The per-currency leaf {@code CurrencyLeafService} provisioned under a category on first use.
+   */
+  private long chfLeafUnder(long categoryId) {
+    return jdbcClient
+        .sql(
+            "select account_id from account"
+                + " where parent_id = :parent and currency_code = :currency")
+        .param("parent", categoryId)
+        .param("currency", CHF)
+        .query(Long.class)
+        .single();
+  }
+
+  /** A carry-forward rate for the receipt's date: units of base per 1 unit of {@code currency}. */
+  private void insertRate(String currency, String rate) {
+    jdbcClient
+        .sql(
+            "insert into exchange_rate (currency_code, date, rate, source)"
+                + " values (:currency, :day, :rate, 'manual')")
+        .param("currency", currency)
+        .param("day", LocalDate.parse(DAY))
+        .param("rate", new BigDecimal(rate))
+        .update();
   }
 }

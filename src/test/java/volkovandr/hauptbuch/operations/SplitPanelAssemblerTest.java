@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.debts.PersonService;
+import volkovandr.hauptbuch.ledger.CrossCurrencyFieldsService;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.ledger.TransactionTag;
@@ -39,6 +40,7 @@ class SplitPanelAssemblerTest {
   @Mock private AccountService accountService;
   @Mock private SettingsService settingsService;
   @Mock private LedgerService ledgerService;
+  @Mock private CrossCurrencyFieldsService crossCurrencyFieldsService;
 
   @Mock private PersonService personService;
 
@@ -49,9 +51,9 @@ class SplitPanelAssemblerTest {
     assembler =
         new SplitPanelAssembler(
             accountService,
-            settingsService,
             new SplitTagPills(ledgerService),
-            new TransactionCurrencyResolver(personService, settingsService));
+            new TransactionCurrencyResolver(personService, settingsService),
+            new SplitCurrencyService(accountService, settingsService, crossCurrencyFieldsService));
     lenient().when(accountService.findById(CASH_ID)).thenReturn(Optional.of(account(CASH_ID, EUR)));
     lenient().when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
     lenient().when(ledgerService.labelsForTagIds(any())).thenReturn(Map.of());

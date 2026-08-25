@@ -8,7 +8,11 @@ import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.debts.PersonMatch;
 import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.PayeeService;
+import volkovandr.hauptbuch.operations.SplitCurrency;
+import volkovandr.hauptbuch.operations.SplitCurrencyService;
 import volkovandr.hauptbuch.operations.SplitLineAmounts;
+import volkovandr.hauptbuch.operations.SplitTotals;
+import volkovandr.hauptbuch.operations.SplitTotalsQuery;
 import volkovandr.hauptbuch.receipts.repository.ReceiptLineRepository;
 import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
 import volkovandr.hauptbuch.shared.MoneyFormat;
@@ -22,8 +26,12 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
  *
  * <p>Drafts store the <em>semantic</em> category id (what {@code /categories/resolve} yields), not
  * a currency leaf: the per-currency leaf is resolved at 9g's Confirm "at post time", so Save stores
- * each line's resolved id directly, or resolves a person name → id for a beneficiary. Single-
- * currency only this slice (cross-currency receipt commits are backlogged, plan §14).
+ * each line's resolved id directly, or resolves a person name → id for a beneficiary.
+ *
+ * <p>A receipt billed in another currency than the paying account's carries two more header numbers
+ * (issue receipts/23) — what came off the account and the base figure freezing the conversion. Both
+ * are proposed from the rate feed while blank ({@link #proposeTotals}) and persisted by Save, so an
+ * overtyped estimate survives a reopen.
  */
 @Service
 @Transactional
@@ -37,6 +45,7 @@ public class ReceiptEditorService {
   private final PayeeService payeeService;
   private final ReceiptRepository receiptRepository;
   private final ReceiptLineRepository receiptLineRepository;
+  private final SplitCurrencyService splitCurrencyService;
 
   ReceiptEditorService(
       ReceiptEditorSeeder seeder,
@@ -44,23 +53,53 @@ public class ReceiptEditorService {
       PersonService personService,
       PayeeService payeeService,
       ReceiptRepository receiptRepository,
-      ReceiptLineRepository receiptLineRepository) {
+      ReceiptLineRepository receiptLineRepository,
+      SplitCurrencyService splitCurrencyService) {
     this.seeder = seeder;
     this.assembler = assembler;
     this.personService = personService;
     this.payeeService = payeeService;
     this.receiptRepository = receiptRepository;
     this.receiptLineRepository = receiptLineRepository;
+    this.splitCurrencyService = splitCurrencyService;
   }
 
-  /** Build the editor form from a receipt's header and its stored draft lines. */
+  /**
+   * Build the editor form from a receipt's header and its stored draft lines.
+   *
+   * <p>A cross-currency receipt gets its blank totals proposed here too (issue receipts/23), so
+   * opening one the AI already detected as foreign-card shows the {@code Off account} figure
+   * immediately rather than an empty required field the operator must poke to fill. Anything
+   * already persisted is left exactly as it was saved — the proposal only ever fills a blank.
+   */
   public ReceiptEditorForm seed(Receipt receipt, List<ReceiptLine> lines) {
-    return seeder.seed(receipt, lines);
+    return proposeTotals(seeder.seed(receipt, lines));
   }
 
   /** Assemble the editor view model for the current form state. */
   public ReceiptEditor panel(ReceiptEditorForm form) {
     return assembler.panel(form);
+  }
+
+  /**
+   * Fill whichever cross-currency header total is still blank from the rate feed (issue
+   * receipts/23) and return the form carrying them — the editor's currency round-trip. The
+   * proposals themselves are {@code operations}' one rule, shared with the register's split panel,
+   * so the two surfaces cannot propose different numbers.
+   */
+  public ReceiptEditorForm proposeTotals(ReceiptEditorForm form) {
+    SplitTotals totals =
+        splitCurrencyService.proposeTotals(
+            new SplitTotalsQuery(
+                form.accountId(),
+                form.currencyCode(),
+                ReceiptEditorText.parseDate(form.date()),
+                form.total(),
+                form.fundingTotal(),
+                form.baseTotal()));
+    return WorkingLine.toForm(
+        ReceiptEditorHeader.withTotals(form, totals.fundingTotal(), totals.baseTotal()),
+        WorkingLine.from(form));
   }
 
   /** Append a blank line whose amount defaults to "the rest" (total − allocated), if positive. */
@@ -136,6 +175,10 @@ public class ReceiptEditorService {
         ReceiptEditorText.blankToNull(form.payeeText()) == null
             ? null
             : payeeService.resolvePayee(null, form.payeeText());
+    // The cross-currency totals persist only while the header actually IS cross-currency (issue
+    // receipts/23): switching the paying account back to the receipt's own currency must clear
+    // them, or a single-currency receipt would carry a stale funding total nothing renders.
+    SplitCurrency currency = assembler.panel(form).currency();
     receiptRepository.saveEditorHeader(
         receiptId,
         new ReceiptHeaderDraft(
@@ -143,11 +186,11 @@ public class ReceiptEditorService {
             payeeId,
             form.accountId(),
             ReceiptEditorText.blankToNull(form.currencyCode()),
-            ReceiptEditorText.blankToNull(form.total()) == null
-                ? null
-                : ReceiptEditorText.parse(form.total()),
+            amountOrNull(form.total()),
             ReceiptEditorText.blankToNull(form.note()),
-            ReceiptEditorText.blankToNull(form.receiptNumber())));
+            ReceiptEditorText.blankToNull(form.receiptNumber()),
+            currency.crossCurrency() ? amountOrNull(form.fundingTotal()) : null,
+            currency.neitherIsBase() ? amountOrNull(form.baseTotal()) : null));
 
     receiptLineRepository.deleteByReceiptId(receiptId);
     int sortOrder = 0;
@@ -161,6 +204,11 @@ public class ReceiptEditorService {
       }
       sortOrder++;
     }
+  }
+
+  /** A typed header amount, or null when the operator left the field blank. */
+  private static BigDecimal amountOrNull(String text) {
+    return ReceiptEditorText.blankToNull(text) == null ? null : ReceiptEditorText.parse(text);
   }
 
   private ReceiptLineDraft draftOf(WorkingLine line, int sortOrder) {
@@ -191,14 +239,6 @@ public class ReceiptEditorService {
   }
 
   private static ReceiptEditorForm reform(ReceiptEditorForm form, List<WorkingLine> working) {
-    return WorkingLine.toForm(
-        form.date(),
-        form.payeeText(),
-        form.accountId(),
-        form.currencyCode(),
-        form.total(),
-        form.note(),
-        form.receiptNumber(),
-        working);
+    return WorkingLine.toForm(ReceiptEditorHeader.of(form), working);
   }
 }

@@ -10,15 +10,18 @@ import volkovandr.hauptbuch.operations.SplitCurrency;
  * is the single source of truth exactly as the register's split panel is. The per-line rows reuse
  * the shared line-editor core; the header + readouts are this surface's own.
  *
- * <p>Single-currency only in this slice: a cross-currency receipt commit is deferred to the backlog
- * (plan §14), so {@code currency} is always {@link SplitCurrency}'s single-currency shape and the
- * cross-currency chrome never renders. {@code remaining}/{@code balanced}/{@code status} are the
- * server-authoritative readout the keyboard.js leaf also recomputes live from {@code data-split-*}.
+ * <p>{@code currency} carries the full cross-currency header state (issue receipts/23): a receipt
+ * billed in another currency than the paying account's reveals the register's own funding/base
+ * total fields and per-line derived columns, resolved by the same {@code SplitCurrencyService} the
+ * split panel reads. A same-currency receipt gets {@link SplitCurrency}'s single-currency shape and
+ * no chrome at all. {@code remaining}/{@code balanced}/{@code status} are the server-authoritative
+ * readout the keyboard.js leaf also recomputes live from {@code data-split-*}.
  *
  * @param date the booking date to prefill
  * @param payeeText the payee picker text (prefilled from the receipt's merchant on first open)
  * @param accountId the selected paying account, or null when the book has no accounts
- * @param currency the (single-currency) header currency state the shared fragment reads
+ * @param currency the header currency state the shared fragment reads — single-currency, or the
+ *     full cross-currency header when the paying account's currency differs from the receipt's
  * @param total the editable total, German-formatted; the reference the remaining counts against
  * @param note the header note (9g) — free text, copied to {@code transaction.note} at Confirm
  * @param receiptNumber the printed receipt/Beleg number (9g) — prefilled from the parse, editable
@@ -26,8 +29,6 @@ import volkovandr.hauptbuch.operations.SplitCurrency;
  * @param balanced whether {@code remaining} is zero (drives the ✓ state)
  * @param status {@code ok} (lines sum to the total), {@code warn} (they diverge), or {@code none}
  *     (no total to check against) — the neutral "no total" hint
- * @param currencyMismatch whether the chosen currency differs from the paying account's — warned at
- *     Save, never blocked here (9g's Confirm hard-blocks); a display cue only
  * @param lines the editable rows (view + ghost)
  */
 public record ReceiptEditor(
@@ -41,7 +42,6 @@ public record ReceiptEditor(
     String remaining,
     boolean balanced,
     String status,
-    boolean currencyMismatch,
     List<ReceiptEditorLine> lines) {
 
   /** {@link #status()}: there is no total to check the lines against — the neutral hint. */

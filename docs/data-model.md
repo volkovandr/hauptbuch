@@ -943,6 +943,12 @@ create table receipt (
                                           -- omission): edited in post-process, copied to
                                           -- transaction.note at Confirm; NOT ai_note (prompt
                                           -- guidance) — the two never mix
+  -- cross-currency header (receipts/23): both NULL for a same-currency receipt
+  funding_total  numeric(19,4),           -- what comes off the paying account, in ITS currency —
+                                          -- proposed from rate_as_of, overtypeable, an accepted
+                                          -- estimate until the statement arrives (stage 13)
+  base_total     numeric(19,4),           -- the base figure freezing the conversion (§6.4); only
+                                          -- when neither leg is the base currency
   transaction_id bigint references transaction(transaction_id),  -- NULL until committed
   deleted_at     timestamptz                              -- orthogonal soft-delete (§3.5)
 );
@@ -969,7 +975,10 @@ create table receipt_line (
   receipt_line_id bigint generated always as identity primary key,
   receipt_id      bigint not null references receipt(receipt_id),
   description     text,
-  amount          numeric(19,4) not null,   -- native currency of the paying account
+  amount          numeric(19,4) not null,   -- the RECEIPT's own currency (receipt.currency_code),
+                                            -- which is the paying account's only when the two
+                                            -- agree — a cross-currency receipt (receipts/23) keeps
+                                            -- its lines as printed and converts at the header
   account_id      bigint references account(account_id),  -- the line's target: a category (semantic
                                             -- node; per-currency leaf resolved at commit, §6.5) OR
                                             -- a real account — a transfer leg, e.g. supermarket
