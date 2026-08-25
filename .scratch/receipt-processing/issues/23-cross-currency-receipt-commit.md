@@ -1,6 +1,6 @@
 # A receipt in a currency other than the paying account's cannot be booked
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: high
 Area: Receipts — post-process editor + Confirm gate; register split panel; `ledger` rate prefill
@@ -220,3 +220,27 @@ already shows the amount in the transaction's currency, the account's currency a
 currency, and any of them can be altered"). That is correct, and it collapsed an earlier draft in
 which only receipts gained the funding proposal: the surfaces differ only in *which* number is known
 first, not in how the totals behave, so decision 6 makes the prefill rule one rule for both.
+
+Resolved 2026-08-25 on branch `issue/receipts-23-cross-currency-commit` (eee63c8). All eleven
+grilled decisions implemented as written; nothing re-litigated.
+
+The shape that fell out: the header-state rule moved from `SplitPanelAssembler`'s private
+`CurrencyContext` into a public `operations.SplitCurrencyService` (+ `SplitCurrencyContext`,
+`SplitCurrencyQuery`, `SplitTotals`, `SplitTotalsQuery`), which both assemblers now read — one
+implementation, as decision 4 demanded. `ledger.CrossCurrencyFieldsService` gained
+`prefillFundingTotal` beside `prefillBase`, triangulating spending → base → funding because rates
+are stored only against base; `SplitCurrencyService.proposeTotals` chains the two so a blank
+funding total is proposed from the spending total and a blank base total from the funding one, on
+both surfaces.
+
+Two things beyond the brief's letter, both in its spirit:
+
+- The proposal also fires at **seed** time, not only on the currency round-trip, so a receipt the AI
+  already detected as foreign-card opens with `Off account` filled rather than an empty required
+  field the operator must poke.
+- The transfer-line currency check is **unconditional** rather than cross-currency-only.
+  `DockSplitService.resolveLine` refuses a wrong-currency transfer target on the single-currency
+  path too, so scoping the check to cross-currency would have left that raw throw reachable.
+
+`receipt_line.amount`'s stale V12 comment is corrected on `ReceiptLine`'s javadoc and in data-model
+§13.2 (migrations are forward-only, so the applied file is untouched).
