@@ -175,83 +175,13 @@
           </datalist>
         </div>
 
-        <!-- The total the receipt should come to — the reference the `remaining` readout counts
-             against (register §3.10). Editable: change it and remaining updates live (keyboard.js
-             reads data-split-total). The committed funding leg is the signed sum of the lines, which
-             may differ — the "Save and update amount" path. -->
-        <!-- Each of the three totals also re-renders the panel on `change` (issue receipts/23,
-             decision 7): a blank total is proposed from the one it derives from — funding from
-             spending, base from funding — and the currency is normally picked BEFORE anything is
-             typed, so without these triggers the proposal would never fire. A total the operator
-             typed is never overwritten by a later proposal. -->
+        <!-- The three header totals (register §3.10/§3.8a) — shared verbatim with the receipts
+             post-process editor, the sibling of the shared per-line fragment below. The committed
+             funding leg is the signed sum of the lines, which may differ from the reference total
+             typed here: that is the "Save and update amount" path. -->
         <div
-          class="field field--amount"
-          hx-post="/register/split/currency"
-          hx-trigger="change"
-          hx-include="closest form"
-          hx-target="#entry-dock"
-          hx-swap="outerHTML"
-        >
-          <label class="field__label" for="split-total">
-            <span th:if="${!panel.currency().crossCurrency()}">Total</span>
-            <span th:if="${panel.currency().crossCurrency()}" th:text="'Total (' + ${panel.currency().spendingCurrencyCode()} + ')'">Total (USD)</span>
-          </label>
-          <input
-            id="split-total"
-            name="total"
-            class="input num"
-            inputmode="decimal"
-            autocomplete="off"
-            placeholder="20,00"
-            th:value="${panel.total()}"
-            th:attr="data-split-total=${panel.total()}"
-            data-split-total-input
-          />
-        </div>
-
-        <!-- Cross-currency header (register §3.8a): the funding-currency total off the account, and
-             — only when neither leg is the base currency — the base-currency total (pre-filled from
-             rate_as_of, confirmable). The funding leg is pinned to these; only base sums to zero. -->
-        <div
-          class="field field--amount"
-          th:if="${panel.currency().crossCurrency()}"
-          hx-post="/register/split/currency"
-          hx-trigger="change"
-          hx-include="closest form"
-          hx-target="#entry-dock"
-          hx-swap="outerHTML"
-        >
-          <label class="field__label" for="split-funding-total" th:text="'Off account (' + ${panel.currency().fundingCurrencyCode()} + ')'">Off account (CHF)</label>
-          <input
-            id="split-funding-total"
-            name="fundingTotal"
-            class="input num"
-            inputmode="decimal"
-            autocomplete="off"
-            placeholder="100,00"
-            th:value="${panel.currency().fundingTotal()}"
-          />
-        </div>
-        <div
-          class="field field--amount"
-          th:if="${panel.currency().neitherIsBase()}"
-          hx-post="/register/split/currency"
-          hx-trigger="change"
-          hx-include="closest form"
-          hx-target="#entry-dock"
-          hx-swap="outerHTML"
-        >
-          <label class="field__label" for="split-base-total" th:text="'Base (' + ${panel.currency().baseCurrencyCode()} + ')'">Base (EUR)</label>
-          <input
-            id="split-base-total"
-            name="baseTotal"
-            class="input num"
-            inputmode="decimal"
-            autocomplete="off"
-            placeholder="95,00"
-            th:value="${panel.currency().baseTotal()}"
-          />
-        </div>
+          th:replace="~{fragments/split-currency-header :: totals(currency=${panel.currency()}, total=${panel.total()}, idPrefix='split', currencyUrl='/register/split/currency', panelTarget='#entry-dock')}"
+        ></div>
 
         <div class="field">
           <label class="field__label" for="split-note">Note</label>
@@ -345,15 +275,9 @@
           <span th:if="${panel.currency().crossCurrency()}" th:text="${panel.currency().spendingCurrencyCode()}">USD</span>
           <span data-split-remaining-check aria-hidden="true" th:attr="style=${panel.balanced()} ? '' : 'display:none'">✓</span>
         </span>
-        <!-- The other currencies in play (register §3.8a) — all reach zero together. -->
-        <span class="split-status__remaining muted" th:if="${panel.currency().crossCurrency()}">
-          <span data-split-remaining-funding th:text="${panel.currency().remainingFunding()}">0,00</span>
-          <span th:text="${panel.currency().fundingCurrencyCode()}">CHF</span>
-        </span>
-        <span class="split-status__remaining muted" th:if="${panel.currency().neitherIsBase()}">
-          <span data-split-remaining-base th:text="${panel.currency().remainingBase()}">0,00</span>
-          <span th:text="${panel.currency().baseCurrencyCode()}">EUR</span>
-        </span>
+        <th:block
+          th:replace="~{fragments/split-currency-header :: remaining(currency=${panel.currency()})}"
+        ></th:block>
         <span class="split-status__direction muted" data-split-direction th:switch="${panel.direction()}">
           <span th:case="'pay'" th:text="'You will pay ' + ${panel.netDisplay()} + ' ' + ${panel.currency().fundingCurrencyCode()}">You will pay 17,00</span>
           <span th:case="'receive'" th:text="'You will receive ' + ${panel.netDisplay()} + ' ' + ${panel.currency().fundingCurrencyCode()}">You will receive 17,00</span>

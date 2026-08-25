@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.debts.PersonMatch;
 import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.PayeeService;
-import volkovandr.hauptbuch.operations.SplitCurrency;
+import volkovandr.hauptbuch.operations.SplitCurrencyContext;
 import volkovandr.hauptbuch.operations.SplitCurrencyService;
 import volkovandr.hauptbuch.operations.SplitLineAmounts;
 import volkovandr.hauptbuch.operations.SplitTotals;
@@ -178,7 +178,7 @@ public class ReceiptEditorService {
     // The cross-currency totals persist only while the header actually IS cross-currency (issue
     // receipts/23): switching the paying account back to the receipt's own currency must clear
     // them, or a single-currency receipt would carry a stale funding total nothing renders.
-    SplitCurrency currency = assembler.panel(form).currency();
+    SplitCurrencyContext currency = assembler.currency(form);
     receiptRepository.saveEditorHeader(
         receiptId,
         new ReceiptHeaderDraft(
@@ -189,7 +189,7 @@ public class ReceiptEditorService {
             amountOrNull(form.total()),
             ReceiptEditorText.blankToNull(form.note()),
             ReceiptEditorText.blankToNull(form.receiptNumber()),
-            currency.crossCurrency() ? amountOrNull(form.fundingTotal()) : null,
+            currency.cross() ? amountOrNull(form.fundingTotal()) : null,
             currency.neitherIsBase() ? amountOrNull(form.baseTotal()) : null));
 
     receiptLineRepository.deleteByReceiptId(receiptId);

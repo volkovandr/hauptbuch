@@ -28,6 +28,12 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
  * @param fundingTotal the funding-currency total as a number
  * @param baseTotal the base-currency total as a number — the funding or spending total itself when
  *     that leg already is the base currency
+ * @param fundingTotalText the funding total exactly as it reached the header: what the operator
+ *     typed, what the rate feed proposed, or blank when neither happened. Kept beside the parsed
+ *     number because a blank field must render <em>blank</em> — formatting the parsed zero back out
+ *     would show a number nobody entered, and (being non-blank on the next round-trip) would block
+ *     every later proposal for good
+ * @param baseTotalText the base total as it reached the header, for the same reason
  * @param rateSpendingToFunding funding units per 1 spending unit, from the totals
  * @param rateSpendingToBase base units per 1 spending unit, from the totals
  */
@@ -39,6 +45,8 @@ public record SplitCurrencyContext(
     boolean neitherIsBase,
     BigDecimal fundingTotal,
     BigDecimal baseTotal,
+    String fundingTotalText,
+    String baseTotalText,
     BigDecimal rateSpendingToFunding,
     BigDecimal rateSpendingToBase) {
 
@@ -55,6 +63,8 @@ public record SplitCurrencyContext(
         false,
         BigDecimal.ZERO,
         BigDecimal.ZERO,
+        "",
+        "",
         BigDecimal.ZERO,
         BigDecimal.ZERO);
   }
@@ -93,12 +103,23 @@ public record SplitCurrencyContext(
         spendingCurrencyCode,
         baseCurrencyCode,
         neitherIsBase,
-        MoneyFormat.number(fundingTotal, FRACTION_DIGITS),
-        MoneyFormat.number(baseTotal, FRACTION_DIGITS),
+        totalField(fundingTotalText, fundingTotal),
+        totalField(baseTotalText, baseTotal),
         MoneyFormat.number(remainingFunding, FRACTION_DIGITS),
         MoneyFormat.number(remainingBase, FRACTION_DIGITS),
         rateSpendingToFunding.toPlainString(),
         rateSpendingToBase.toPlainString());
+  }
+
+  /**
+   * A total field's value: the parsed number normalised for display, or {@code ""} when nothing has
+   * reached the field yet. Never a formatted zero standing in for "empty".
+   */
+  private static String totalField(String text, BigDecimal value) {
+    if (text == null || text.isBlank()) {
+      return "";
+    }
+    return MoneyFormat.number(value, FRACTION_DIGITS);
   }
 
   private String derived(BigDecimal spendingMagnitude, BigDecimal rate) {

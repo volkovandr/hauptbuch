@@ -218,6 +218,21 @@ class ReceiptConfirmScreenIntegrationTest {
   }
 
   @Test
+  void withNoStoredRateTheFundingFieldRendersBlankRatherThanGuessing() throws Exception {
+    long card = openAccount("Card", CHF);
+    long id = processedReceipt(card, "42.14", EUR);
+    // Deliberately no exchange_rate row: nothing can be proposed on or before the receipt's date.
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Off account (CHF)")))
+        // The field renders EMPTY, not a formatted zero. "0,00" would be a number nobody entered —
+        // and, being non-blank, would stop the proposal ever firing again once a rate does exist.
+        .andExpect(content().string(not(containsString("value=\"0,00\""))));
+  }
+
+  @Test
   void pickingAnAccountInAnotherCurrencyRevealsThePrefilledFundingTotal() throws Exception {
     long card = openAccount("Card", CHF);
     long fuel = category("Fuel", "expense");

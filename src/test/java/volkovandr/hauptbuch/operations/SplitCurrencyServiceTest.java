@@ -135,6 +135,30 @@ class SplitCurrencyServiceTest {
   }
 
   @Test
+  void totalNoRateCouldProposeStaysBlankRatherThanReadingZero() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
+
+    // Nothing could be proposed, so both fields must render EMPTY. A formatted "0,00" would be a
+    // number the operator never entered — and, being non-blank, would block every later proposal.
+    SplitCurrency view =
+        service.resolve(new SplitCurrencyQuery(CHF, USD, "90", "", "")).view(BigDecimal.ZERO);
+
+    assertThat(view.fundingTotal()).isEmpty();
+    assertThat(view.baseTotal()).isEmpty();
+  }
+
+  @Test
+  void typedTotalIsStillNormalisedForDisplay() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
+
+    SplitCurrency view =
+        service.resolve(new SplitCurrencyQuery(CHF, USD, "90", "100", "95")).view(BigDecimal.ZERO);
+
+    assertThat(view.fundingTotal()).isEqualTo("100,00");
+    assertThat(view.baseTotal()).isEqualTo("95,00");
+  }
+
+  @Test
   void unsetBaseCurrencyFallsBackToTheFundingLeg() {
     when(settingsService.baseCurrency()).thenReturn(Optional.empty());
 
