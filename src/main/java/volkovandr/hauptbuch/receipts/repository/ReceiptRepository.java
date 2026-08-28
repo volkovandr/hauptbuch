@@ -57,6 +57,19 @@ public class ReceiptRepository {
   }
 
   /**
+   * How many live receipts have been analyzed — a parse response is stored ({@code parse_raw is not
+   * null}), which is true for {@code processed} and {@code committed} receipts and robust to a
+   * reopened one. Excludes {@code new}, {@code pre_processed} and transport-failed receipts. Feeds
+   * the landing-page tracking-stats line (CONTEXT.md "Tracking stats").
+   */
+  public long countAnalyzed() {
+    return jdbcClient
+        .sql("select count(*) from receipt where deleted_at is null and parse_raw is not null")
+        .query(Long.class)
+        .single();
+  }
+
+  /**
    * The PC register list (§5): live receipts whose state is in {@code states} and captured on or
    * after {@code from}. A null {@code from} is open-ended (the "everything" date-range option,
    * §9b). The register's date filter is preset lower-bounds only (last 90 days / last year /

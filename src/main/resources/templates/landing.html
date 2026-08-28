@@ -18,6 +18,16 @@
       </h1>
       <h1 th:unless="${displayName != null and !displayName.isBlank()}">Welcome</h1>
       <p class="lede">Your general ledger — double-entry, multi-currency, kept by hand.</p>
+      <!--
+        Tracking-stats line (CONTEXT.md "Tracking stats", issue landing-page/02): lazy-loaded so a
+        full-page open pays nothing for it. Reads as a continuation of the header; the fragment is
+        empty on a book with no transactions. Only mounted once the base currency is set.
+      -->
+      <div
+        th:if="${baseCurrencySet}"
+        th:attr="hx-get=@{/overview/tracking-stats}"
+        hx-trigger="load"
+      ></div>
     </div>
 
     <section class="panel" th:unless="${baseCurrencySet}">

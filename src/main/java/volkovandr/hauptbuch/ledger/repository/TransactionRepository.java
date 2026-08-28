@@ -192,6 +192,33 @@ public class TransactionRepository {
         .collect(Collectors.toMap(IdDate::transactionId, IdDate::date));
   }
 
+  /** How many transactions are live (not soft-deleted), any lifecycle. */
+  public long countLive() {
+    return jdbcClient
+        .sql("select count(*) from transaction where deleted_at is null")
+        .query(Long.class)
+        .single();
+  }
+
+  /**
+   * The earliest booking date among live transactions, or empty when there are none — the anchor
+   * for the landing-page "keeping track for X" span (CONTEXT.md "Tracking stats"). A plain
+   * ordered-limit read rather than {@code min(date)} so a book with no transactions yields no row
+   * rather than a single null.
+   */
+  public Optional<LocalDate> earliestLiveDate() {
+    return jdbcClient
+        .sql(
+            """
+            select date from transaction
+            where deleted_at is null
+            order by date
+            limit 1
+            """)
+        .query(LocalDate.class)
+        .optional();
+  }
+
   /** Soft-delete a transaction (and, by the join, its postings). Returns rows affected. */
   public int softDelete(long transactionId) {
     return jdbcClient

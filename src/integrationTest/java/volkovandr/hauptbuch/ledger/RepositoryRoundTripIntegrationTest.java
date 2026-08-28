@@ -260,6 +260,31 @@ class RepositoryRoundTripIntegrationTest {
     assertThat(transactionRepository.findDatesByIds(List.of())).isEmpty();
   }
 
+  /**
+   * The landing-page tracking-stats primitives (CONTEXT.md "Tracking stats"): {@code countLive}
+   * ignores soft-deleted rows, {@code earliestLiveDate} returns the earliest live booking date and
+   * is empty on a book with none. Each test rolls back, so the transaction table starts empty.
+   */
+  @Test
+  void countLiveAndEarliestLiveDateIgnoreSoftDeletedTransactions() {
+    assertThat(transactionRepository.countLive()).isZero();
+    assertThat(transactionRepository.earliestLiveDate()).isEmpty();
+
+    transactionRepository.insertTransaction(
+        new Transaction(null, LocalDate.of(2024, 3, 15), null, null, CONFIRMED, null, null, null));
+    transactionRepository.insertTransaction(
+        new Transaction(null, LocalDate.of(2025, 11, 2), null, null, CONFIRMED, null, null, null));
+    long voidedEarliest =
+        transactionRepository.insertTransaction(
+            new Transaction(
+                null, LocalDate.of(2023, 1, 1), null, null, CONFIRMED, null, null, null));
+    transactionRepository.softDelete(voidedEarliest);
+
+    assertThat(transactionRepository.countLive()).isEqualTo(2);
+    // The soft-deleted 2023 row is the earliest by date but must not anchor the span.
+    assertThat(transactionRepository.earliestLiveDate()).contains(LocalDate.of(2024, 3, 15));
+  }
+
   @Test
   void settingsRowExistsAndDisplayNameUpdates() {
     settingsRepository.updateDisplayName("Andrey");

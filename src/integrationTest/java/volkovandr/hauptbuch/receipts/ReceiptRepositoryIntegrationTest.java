@@ -109,6 +109,35 @@ class ReceiptRepositoryIntegrationTest {
     assertThat(ids).contains(keep).doesNotContain(other, deleted);
   }
 
+  /**
+   * The landing-page tracking-stats count (CONTEXT.md "Tracking stats"): a receipt is "analyzed"
+   * once a parse response is stored, and soft-deleted receipts never count. Each test rolls back,
+   * so the receipt table starts empty.
+   */
+  @Test
+  void countAnalyzedIgnoresUnanalyzedAndDeletedReceipts() {
+    assertThat(receiptRepository.countAnalyzed()).isZero();
+
+    capturedWithState("new");
+    capturedWithState("pre_processed");
+    long analyzed = capturedWithState("processed");
+    long committed = capturedWithState("committed");
+    long analyzedThenDeleted = capturedWithState("processed");
+    setParseRaw(analyzed, committed, analyzedThenDeleted);
+    receiptRepository.softDelete(analyzedThenDeleted);
+
+    assertThat(receiptRepository.countAnalyzed()).isEqualTo(2);
+  }
+
+  private void setParseRaw(long... receiptIds) {
+    for (long id : receiptIds) {
+      jdbcClient
+          .sql("update receipt set parse_raw = '{\"ok\":true}' where receipt_id = :id")
+          .param("id", id)
+          .update();
+    }
+  }
+
   @Test
   void registerFilterAppliesTheCaptureDateLowerBound() {
     // Midday captures so a reasonable session-timezone offset can't shift them across a day
