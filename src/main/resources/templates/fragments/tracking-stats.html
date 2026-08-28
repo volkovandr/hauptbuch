@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<!--
+  Landing-page tracking-stats line (CONTEXT.md "Tracking stats"). Lazy-loaded by landing.html via
+  hx-get on load, so a plain full-page open pays nothing for it. The `stats` model attribute is
+  absent — and this fragment then renders nothing — on a book with no live transactions. When there
+  are transactions but no analyzed receipt, `receiptsPhrase` is null and the clause is dropped.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <th:block th:fragment="stats">
+      <p class="muted tracking-stats" th:if="${stats}">
+        Keeping track of your finances for
+        <span th:text="${stats.durationPhrase()}">2 years and 8 months</span> —
+        <span th:text="${stats.transactionsPhrase()}">1.234 transactions</span
+        ><th:block th:if="${stats.receiptsPhrase()}"
+          >, <span th:text="${stats.receiptsPhrase()}">800 receipts analyzed (2,5 GB)</span></th:block
+        >.
+      </p>
+    </th:block>
+  </body>
+</html>

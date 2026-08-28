@@ -112,6 +112,12 @@ h2 {
   color: var(--ink-soft);
 }
 
+/* Landing-page tracking-stats line — a caption under the lede, not body text. */
+.tracking-stats {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+}
+
 /* ── Buttons: stamped, rectilinear controls — no rounded corners, ink on wash ──────────── */
 .btn {
   font: inherit;
