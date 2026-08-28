@@ -54,3 +54,23 @@ _Avoid_: custom node, term, rule engine
 Freetext guidance the operator attaches to one receipt before analysis to steer that one parse
 ("this is fuel"). Travels with the receipt; retained for re-analysis and audit.
 _Avoid_: prompt, comment
+
+### Landing page
+
+**Pinned account**:
+An `asset`/`liability` account the operator has flagged (`account.show_on_main_page`) to appear in
+the landing page's Balances panel with its current balance. Opt-in, per-account, toggled on the
+account editor. Closed and soft-deleted accounts never show even while flagged; the flag persists.
+_Avoid_: favourite, starred, watched
+
+**Balances panel**:
+The landing-page list of pinned accounts — each account's native balance, a base-currency figure
+in brackets for non-base accounts, and a base-currency Total row when two or more are pinned. A
+convenience readout ("how much money do I have"), not a balance sheet and not net worth.
+_Avoid_: dashboard, overview, net worth, balance sheet
+
+**Tracking stats**:
+The single muted landing-page line above the Balances panel: how long the book has been kept (since
+the earliest transaction), the live transaction count, and the analyzed-receipt count with total
+receipt-image storage size. Derived aggregates only — never per-transaction detail.
+_Avoid_: dashboard, metrics, summary
