@@ -1,6 +1,6 @@
 # Landing page: tracking-stats line
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: low
 Area: Landing page (`ledger` template), new stats surface in `analytics`
@@ -131,3 +131,26 @@ Grilling session 2026-08-28, decisions:
   receipt clause at zero analyzed receipts.
 - Tests: unit for the formatters + service, integration for the scalar queries + storage size +
   fragment controller. No `sqlLogicTest` — the queries are one-table scalar aggregates.
+
+### Implemented — branch `stage/landing-page`, commit `7c6a9a7` (2026-08-28)
+
+Built to the brief. `./gradlew check` green. Notes:
+
+- `analytics` activated with `TrackingStatsText` / `TrackingStats` / `TrackingStatsService` /
+  `TrackingStatsController` (`GET /overview/tracking-stats`, htmx fragment). New module edges
+  `analytics → ledger` and `analytics → receipts`; `ModularityTests` stays green.
+- Ledger primitives: `LedgerStatsService` over `TransactionRepository.countLive()` /
+  `earliestLiveDate()` (an `order by date limit 1`, not `min(date)`, so an empty book yields no
+  row rather than a single null).
+- Receipt primitives: `ReceiptStatsService` over `ReceiptRepository.countAnalyzed()` and a new
+  `ReceiptStorageFootprint` (the tree walk was split out of `ReceiptStorage` — adding it there
+  tripped PMD `GodClass`). The walk uses `walkFileTree`, reads size from the already-loaded
+  attributes (one stat per file), and skips an entry that vanishes mid-walk so a concurrent
+  re-crop can't 500 the landing page (code-review finding).
+- `humaniseBytes` promotes at the rounding boundary — `999.99 kB` reads `1,0 MB`, not
+  `1.000,0 kB` (code-review finding).
+- `landing.html` lazy-loads the fragment under the lede, gated on `baseCurrencySet`.
+- Code-review finding on the per-page-load walk cost (two→one stat now) left as-is otherwise;
+  caching stays deferred per the brief.
+
+Pending owner review of the branch.
