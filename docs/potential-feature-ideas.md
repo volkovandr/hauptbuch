@@ -18,8 +18,3 @@ Three connected features:
 * The account list should display all account balances
 * The not-editable accounts should be displayed as well, e.g. opening balances, or the aggregated income and expenses accounts
 * The total assets and total liabilities should be displayed at the bottom of the list, so that the user can see that the balance sheet is balanced.
-
-## Receipts page
-
-* When editing an analyzed receipt, the field widths are adjusted depending on the size of the content. This looks bad, and it is not necessary because their initial size is already good enough. 
-  We should set it in the way that they do not change their sizes, but at the same time the app still looks fine on smaller screens. (Owner is exploring a CSS-only fix directly.)
