@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<!--
+  Backup screen (.scratch/backup/issues/01-database-backups.md).
+
+    • A backup is a pg_dump custom-format file in the configured directory. There is no backup
+      table: it would be inside every dump, so restoring an old backup would restore a stale list
+      of backups. The filename carries the kind and the timestamp.
+    • Manual backups are never swept; automatic ones are kept to the newest N. That difference is
+      the reason the listing shows the kind at all.
+    • Restore is NOT a button. It has to drop and recreate the live database, which the app cannot
+      do to its own connection — so each row offers the exact commands to copy instead.
+
+  Standard server-rendered form POSTs with redirect-after-post; no bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+
+    <section class="panel">
+      <p class="eyebrow">Backups</p>
+
+      <p class="backup-flash" th:if="${backupMessage}" th:text="${backupMessage}">Backup taken.</p>
+      <p class="backup-flash backup-flash--error" th:if="${backupError}" th:text="${backupError}">
+        Something went wrong.
+      </p>
+
+      <p class="muted">
+        A dump of the <span class="num" th:text="${databaseName}">hauptbuch</span> database, written
+        to <span class="num" th:text="${storageRoot}">/var/lib/hauptbuch/backups</span>.
+        Receipt images are <strong>not</strong> included — copy them separately.
+      </p>
+
+      <form method="post" th:action="@{/backup}" class="form">
+        <p class="actions"><button type="submit" class="btn">Take a backup now</button></p>
+      </form>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">On disk</p>
+
+      <p class="muted" th:if="${#lists.isEmpty(backups)}">No backups yet.</p>
+
+      <ul class="backup-list" th:unless="${#lists.isEmpty(backups)}">
+        <li th:each="b : ${backups}">
+          <details class="backup">
+            <summary class="backup__summary">
+              <span
+                class="backup__when num"
+                th:text="${#temporals.format(b.takenAt(), 'dd.MM.yyyy HH:mm')}"
+                >29.08.2026 13:45</span
+              >
+              <span
+                class="backup__kind"
+                th:classappend="${b.kind().name() == 'MANUAL'} ? 'backup__kind--manual'"
+                th:text="${b.kind().label()}"
+                >Manual</span
+              >
+              <span class="backup__size num" th:text="${b.sizeLabel()}">72,0 kB</span>
+            </summary>
+
+            <div class="backup__detail">
+              <p class="backup__links">
+                <a class="btn" th:href="@{/backup/{name}/download(name=${b.fileName()})}"
+                  >Download</a
+                >
+              </p>
+
+              <p class="muted">
+                To restore this backup, stop the service and replace the database. This cannot be
+                done from here — the app is connected to the database it would have to drop.
+              </p>
+              <pre
+                class="backup__restore"
+                th:text="|sudo systemctl stop hauptbuch
+sudo -u postgres dropdb ${databaseName}
+sudo -u postgres createdb ${databaseName} --owner=${databaseUser}
+sudo -u postgres pg_restore --dbname=${databaseName} --no-owner ${storageRoot}/${b.fileName()}
+sudo systemctl start hauptbuch|"
+              >commands</pre>
+
+              <form
+                method="post"
+                th:action="@{/backup/{name}/delete(name=${b.fileName()})}"
+                class="form"
+              >
+                <p class="actions">
+                  <button type="submit" class="btn btn--danger">Delete this backup</button>
+                </p>
+              </form>
+            </div>
+          </details>
+        </li>
+      </ul>
+    </section>
+  </main>
+</html>

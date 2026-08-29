@@ -135,6 +135,71 @@ ssh <pi-user>@<pi-host> sudo systemctl restart hauptbuch
 `/etc/hauptbuch/application.yml` and `/var/lib/hauptbuch/` are untouched by a redeploy — only
 `/opt/hauptbuch/` (the code) is replaced.
 
+**When a release adds config, merge it in.** Because your `application.yml` is never overwritten, a
+redeploy that introduces new settings leaves them at the packaged defaults, which are tuned for dev
+rather than the Pi. The backup settings are the current example: without a `hauptbuch.backup` block
+the root defaults to `./.local-backups`, resolved against `WorkingDirectory=/opt/hauptbuch` — which
+`ProtectSystem=strict` makes read-only, since the unit only grants write access to
+`/var/lib/hauptbuch`. Taking a backup then fails with a read-only-filesystem error naming that
+path. Diff your file against `deploy/application.yml.example` after a redeploy and copy across
+anything new.
+
+## Backup and restore
+
+The app takes its own database backups: a `pg_dump` custom-format file per backup, written to
+`/var/lib/hauptbuch/backups` (inside the data dir the unit already lists in `ReadWritePaths`, so no
+unit change is needed). Configured under `hauptbuch.backup` in `/etc/hauptbuch/application.yml` —
+see `deploy/application.yml.example`.
+
+- **By hand:** Settings → Manage backups → *Take a backup now*.
+- **Automatically:** one per night at `daily-cron` (03:00 by default), plus a catch-up at startup if
+  the Pi was off when it was due.
+- **Retention:** automatic backups are kept to `keep-automatic` (30 by default); the oldest beyond
+  that are deleted after each scheduled run. **Manual backups are never swept** — delete them
+  yourself from the listing. A sweep never empties the directory.
+
+`pg_dump` must be on `PATH` — it comes with the `postgresql` packages already installed above, and
+must be at least the server's major version.
+
+### Three things these backups do not do
+
+1. **Receipt images are not included.** The dump is the database only. A restored ledger can
+   reference images that are gone, and viewing such a receipt will error. Copy the image tree
+   separately:
+
+   ```bash
+   # on the dev machine — the receipts tree is not in any dump
+   rsync -av <pi-user>@<pi-host>:/var/lib/hauptbuch/receipts/ ./receipts-backup/
+   ```
+
+2. **They are on the same SD card as the database.** They survive deleting the wrong thing; they do
+   not survive the card dying. Use the per-backup *Download* button to keep a copy elsewhere.
+
+3. **A dump contains the Anthropic API key.** The key lives in the `settings` row (NFR-04,
+   data-model §3.8), so every dump carries it. The backup directory is created owner-only; treat a
+   downloaded dump as a secret.
+
+### Restoring
+
+There is deliberately **no restore button**. A restore has to drop and recreate the live database,
+which the app cannot do to the connection it is holding open, and the unit denies it the privilege
+to stop and start itself. The backup screen shows these commands per backup with the filename
+already filled in — copy them from there rather than retyping:
+
+```bash
+# on the Pi
+sudo systemctl stop hauptbuch
+sudo -u postgres dropdb hauptbuch
+sudo -u postgres createdb hauptbuch --owner=hauptbuch
+sudo -u postgres pg_restore --dbname=hauptbuch --no-owner \
+  /var/lib/hauptbuch/backups/hauptbuch-<yyyyMMdd>-<HHmmss>-<kind>.dump
+sudo systemctl start hauptbuch
+```
+
+Restoring an **older** dump into a **newer** app is a forward migration, not a rollback: Flyway
+applies any migrations added since, on the next start. That is fine, and it is one-way — take a
+fresh backup first if you might want to come back.
+
 # Accessing from the outside
 
 On any machine of the same LAN where the Pi is, open the browser and go to `http://<pi-host>:8080/`. You should see the app's login page. 
