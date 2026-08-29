@@ -8,7 +8,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  * The landing page (plan stage 5) — the "Hello, %name%" greeting that reads the display name from
- * the book's {@link Settings}.
+ * the book's {@link Settings}, the lazy-loaded tracking-stats line, and the Balances panel of
+ * pinned accounts (CONTEXT.md "Balances panel", issue landing-page/01) when one or more is pinned.
  *
  * <p>Lives in {@code ledger}, not {@code web}, because it reads settings and the shell module
  * ({@code web}) must not depend on feature modules — feature controllers depend on the shell's
@@ -20,9 +21,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 class LandingController {
 
   private final SettingsService settingsService;
+  private final BalancesPanelService balancesPanelService;
 
-  LandingController(SettingsService settingsService) {
+  LandingController(SettingsService settingsService, BalancesPanelService balancesPanelService) {
     this.settingsService = settingsService;
+    this.balancesPanelService = balancesPanelService;
   }
 
   /**
@@ -42,6 +45,7 @@ class LandingController {
     Settings settings = settingsService.get();
     model.addAttribute("displayName", settings.displayName());
     model.addAttribute("baseCurrencySet", settings.baseCurrency() != null);
+    balancesPanelService.current().ifPresent(panel -> model.addAttribute("balancesPanel", panel));
     model.addAttribute("nav", volkovandr.hauptbuch.web.NavItem.sectionsFor("/"));
     model.addAttribute("title", "Hauptbuch");
     return "landing";

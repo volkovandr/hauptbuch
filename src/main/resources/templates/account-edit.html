@@ -63,6 +63,21 @@
             </label>
           </div>
         </div>
+        <div class="field">
+          <label class="receipt-edit__toggle">
+            <input
+              type="checkbox"
+              name="showOnMainPage"
+              value="true"
+              th:checked="${account.showOnMainPage()}"
+            />
+            Show on the main page
+          </label>
+          <p class="muted">
+            Pins this account and its balance to the landing page's Balances panel. Closed accounts
+            drop off the panel; the setting is kept.
+          </p>
+        </div>
         <p class="actions">
           <button type="submit" class="btn">Save</button>
           <a th:href="@{/accounts}">Back to accounts</a>

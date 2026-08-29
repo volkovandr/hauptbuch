@@ -258,6 +258,50 @@ class AccountsScreenIntegrationTest {
   }
 
   @Test
+  void showOnMainPageCheckboxRoundTripsThroughTheEditForm() throws Exception {
+    mockMvc
+        .perform(
+            post(ACCOUNTS_PATH)
+                .param(NAME, GIRO)
+                .param(TYPE, ASSET)
+                .param(CURRENCY_CODE, EUR)
+                .param(OPENED_AT, OPENED_DAY))
+        .andExpect(status().is3xxRedirection());
+    long accountId = accountIdNamed(GIRO);
+
+    // The edit form offers the checkbox, unchecked by default.
+    mockMvc
+        .perform(get(ACCOUNT_PATH_PREFIX + accountId))
+        .andExpect(content().string(containsString("Show on the main page")));
+
+    // Check it.
+    mockMvc
+        .perform(
+            post(ACCOUNT_PATH_PREFIX + accountId)
+                .param(NAME, GIRO)
+                .param("hue", "210")
+                .param("showOnMainPage", "true"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl(ACCOUNTS_PATH));
+    assertThat(pinnedFlag(accountId)).isTrue();
+
+    // Save again with the box unchecked (no param) — the flag clears.
+    mockMvc
+        .perform(post(ACCOUNT_PATH_PREFIX + accountId).param(NAME, GIRO).param("hue", "210"))
+        .andExpect(status().is3xxRedirection());
+    assertThat(pinnedFlag(accountId)).isFalse();
+  }
+
+  private boolean pinnedFlag(long accountId) {
+    return Boolean.TRUE.equals(
+        jdbcClient
+            .sql("select show_on_main_page from account where account_id = :id")
+            .param("id", accountId)
+            .query(Boolean.class)
+            .single());
+  }
+
+  @Test
   void closedAccountStaysListedTaggedClosed() throws Exception {
     mockMvc
         .perform(

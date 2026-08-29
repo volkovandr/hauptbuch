@@ -153,7 +153,8 @@ class ReceiptEditorAssemblerTest {
   }
 
   private static Account account(String currency) {
-    return new Account(CARD, "Card", "asset", null, currency, null, null, null, null, false, false);
+    return new Account(
+        CARD, "Card", "asset", null, currency, null, null, null, null, false, false, false);
   }
 
   private static WorkingLine line(String amount) {

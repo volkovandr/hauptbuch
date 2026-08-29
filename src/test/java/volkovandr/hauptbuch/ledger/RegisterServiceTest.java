@@ -78,7 +78,8 @@ class RegisterServiceTest {
   }
 
   private static Account ownAccount(long id, String name) {
-    return new Account(id, name, ASSET, null, EUR, 210, LocalDate.now(), null, null, false, false);
+    return new Account(
+        id, name, ASSET, null, EUR, 210, LocalDate.now(), null, null, false, false, false);
   }
 
   private static Account closed(long id, String name) {
@@ -93,11 +94,13 @@ class RegisterServiceTest {
         LocalDate.now(),
         null,
         false,
+        false,
         false);
   }
 
   private static Account personLeaf(long id, String name) {
-    return new Account(id, name, ASSET, null, EUR, null, LocalDate.now(), null, null, false, true);
+    return new Account(
+        id, name, ASSET, null, EUR, null, LocalDate.now(), null, null, false, true, false);
   }
 
   private RegisterFilter defaultFilter() {

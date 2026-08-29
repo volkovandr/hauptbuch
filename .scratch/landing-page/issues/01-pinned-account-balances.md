@@ -1,6 +1,6 @@
 # Landing page: pinned account balances
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: low
 Area: Landing page (`ledger`), account editor (`accounts`)
@@ -137,3 +137,34 @@ Grilling session 2026-08-28, decisions:
   `accounts`; migration `V18`.
 - Tests: `sqlLogicTest` for the balance query, unit for the service, `integrationTest` for the
   controller and the `accounts` write path. TDD the SQL first.
+
+### Implemented — branch `stage/landing-page` (2026-08-29)
+
+Built to the brief. `./gradlew check` green. Notes:
+
+- Migration `V18__account_show_on_main_page.sql` adds `account.show_on_main_page boolean not null
+  default false`. `Account` gains a trailing `boolean showOnMainPage`; all `new Account(...)` sites
+  updated (the currency-leaf/person-leaf trailing-boolean pattern).
+- `accounts` write path: `AccountService.updateAccount` took a fourth `showOnMainPage` arg and calls
+  the new `AccountRepository.updateShowOnMainPage`; `AccountsController` binds a
+  `required=false, defaultValue="false"` checkbox param; `account-edit.html` gains the "Show on the
+  main page" checkbox in the existing Name & colour form.
+- **Deviation from the sketch:** the balance readout is a *single* query, not a two-step "accounts
+  read API → per-id balance". `ledger.repository.PinnedBalanceRepository.findPinnedBalances()` joins
+  `account` → `posting`/`transaction`, filters pinned + open + live, `left join` + `coalesce` so a
+  zero-posting account still yields a row, and `sum(...) filter (where transaction.deleted_at is
+  null)` scopes to live postings — the same cross-module SQL shape `debts`' `AccountOwnerRepository`
+  already uses. This is why the sqlLogic acceptance list could name "a closed account excluded"
+  under the balance query. `PinnedBalance` is the row record.
+- `ledger.BalancesPanelService` (alongside `LandingController`) values the non-base bracket and the
+  Total via `ExchangeRateService.rateAsOf(currency, today)` + `SettingsService.baseCurrency()`,
+  returning `Optional<BalancesPanel>` — empty when no base currency or nothing pinned. Missing rate →
+  `(—)` bracket and the Total row suppressed entirely. Total row only when ≥ 2 pinned.
+- `landing.html` renders the `.panel` headed "Balances" below the greeting/tracking-stats line;
+  reuses `.acct-list`/`.acct`/`.swatch`; rows link to `/register?accountId=<id>` (plain navigation).
+- Tests: `PinnedBalanceSqlLogicTest` (7 crafted cases), `BalancesPanelServiceTest` (unit),
+  `AccountRepositoryIntegrationTest` + `AccountServiceTest` (flag round-trip),
+  `AccountsScreenIntegrationTest` (checkbox), `LandingBalancesPanelIntegrationTest` (panel via
+  MockMvc).
+
+Pending owner review of the branch.

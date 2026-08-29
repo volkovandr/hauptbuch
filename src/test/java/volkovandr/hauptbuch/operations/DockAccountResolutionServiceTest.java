@@ -34,7 +34,7 @@ class DockAccountResolutionServiceTest {
       new DockAccountResolutionService(accountService, personResolutionService);
 
   private static Account cash() {
-    return new Account(1L, "Cash", "asset", null, EUR, 210, null, null, null, false, false);
+    return new Account(1L, "Cash", "asset", null, EUR, 210, null, null, null, false, false, false);
   }
 
   @Test

@@ -182,7 +182,18 @@ public class AccountService {
     long accountId =
         accountRepository.insert(
             new Account(
-                null, name, type, parentId, currencyCode, null, null, null, null, false, false));
+                null,
+                name,
+                type,
+                parentId,
+                currencyCode,
+                null,
+                null,
+                null,
+                null,
+                false,
+                false,
+                false));
     return readBackAndLogOpened(accountId);
   }
 
@@ -209,6 +220,7 @@ public class AccountService {
                 null,
                 null,
                 true,
+                false,
                 false));
     return readBackAndLogOpened(accountId);
   }
@@ -226,7 +238,18 @@ public class AccountService {
     long accountId =
         accountRepository.insert(
             new Account(
-                null, name, "asset", null, currencyCode, null, null, null, null, false, true));
+                null,
+                name,
+                "asset",
+                null,
+                currencyCode,
+                null,
+                null,
+                null,
+                null,
+                false,
+                true,
+                false));
     return readBackAndLogOpened(accountId);
   }
 
@@ -410,6 +433,7 @@ public class AccountService {
                 null,
                 null,
                 false,
+                false,
                 false));
 
     // Read back and log before the opening balance is posted, not after: the account exists first,
@@ -424,16 +448,17 @@ public class AccountService {
   }
 
   /**
-   * Update an account's freely-editable fields: display name and stored hue. Type, currency, and
-   * parent are immutable through the UI — postings inherit the account's currency, and re-parenting
-   * a posted-to account would break leaves-only (data-model §5); the stage-6b subdivision operation
-   * is the sanctioned path for that.
+   * Update an account's freely-editable fields: display name, stored hue, and whether it is pinned
+   * to the landing page's Balances panel (CONTEXT.md "Pinned account", issue landing-page/01).
+   * Type, currency, and parent are immutable through the UI — postings inherit the account's
+   * currency, and re-parenting a posted-to account would break leaves-only (data-model §5); the
+   * stage-6b subdivision operation is the sanctioned path for that.
    *
    * @throws IllegalArgumentException if the account does not exist, is not one the screen manages,
    *     the name is blank, or the hue is off the colour wheel
    */
   @Transactional
-  public void updateAccount(long accountId, String name, Integer hue) {
+  public void updateAccount(long accountId, String name, Integer hue, boolean showOnMainPage) {
     if (name == null || name.isBlank()) {
       throw new IllegalArgumentException("An account needs a name");
     }
@@ -443,6 +468,7 @@ public class AccountService {
     }
     requireManageable(accountId);
     accountRepository.updateNameAndHue(accountId, name, hue);
+    accountRepository.updateShowOnMainPage(accountId, showOnMainPage);
   }
 
   /**

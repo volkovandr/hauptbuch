@@ -44,7 +44,7 @@ public class AccountRepository {
   private static final String SELECT_ACCOUNT_COLUMNS =
       """
       select account_id, name, type, parent_id, currency_code, hue,
-             opened_at, closed_at, deleted_at, currency_leaf, person_leaf
+             opened_at, closed_at, deleted_at, currency_leaf, person_leaf, show_on_main_page
       """;
 
   /**
@@ -93,7 +93,8 @@ public class AccountRepository {
             """
             select child.account_id, child.name, child.type, child.parent_id,
                    child.currency_code, child.hue, child.opened_at, child.closed_at,
-                   child.deleted_at, child.currency_leaf, child.person_leaf
+                   child.deleted_at, child.currency_leaf, child.person_leaf,
+                   child.show_on_main_page
             from account child
             join account parent on child.parent_id = parent.account_id
             where parent.name = :parentName
@@ -191,6 +192,7 @@ public class AccountRepository {
             with recursive tree as (
               select account_id, name, type, parent_id, currency_code, hue,
                      opened_at, closed_at, deleted_at, currency_leaf, person_leaf,
+                     show_on_main_page,
                      0 as depth,
                      array[name] as sort_path
               from account
@@ -200,6 +202,7 @@ public class AccountRepository {
               union all
               select a.account_id, a.name, a.type, a.parent_id, a.currency_code, a.hue,
                      a.opened_at, a.closed_at, a.deleted_at, a.currency_leaf, a.person_leaf,
+                     a.show_on_main_page,
                      tree.depth + 1,
                      tree.sort_path || a.name
               from account a
@@ -207,7 +210,8 @@ public class AccountRepository {
               where a.deleted_at is null
             )
             select account_id, name, type, parent_id, currency_code, hue,
-                   opened_at, closed_at, deleted_at, currency_leaf, person_leaf, depth
+                   opened_at, closed_at, deleted_at, currency_leaf, person_leaf,
+                   show_on_main_page, depth
             from tree
             order by type, sort_path
             """)
@@ -226,7 +230,8 @@ public class AccountRepository {
                         rs.getObject("closed_at", LocalDate.class),
                         rs.getObject("deleted_at", OffsetDateTime.class),
                         rs.getBoolean("currency_leaf"),
-                        rs.getBoolean("person_leaf")),
+                        rs.getBoolean("person_leaf"),
+                        rs.getBoolean("show_on_main_page")),
                     rs.getInt("depth")))
         .list();
   }
@@ -434,6 +439,19 @@ public class AccountRepository {
         .sql("update account set name = :name, hue = :hue where account_id = :accountId")
         .param(NAME, name)
         .param(HUE, hue)
+        .param(ACCOUNT_ID, accountId)
+        .update();
+  }
+
+  /**
+   * Set whether this account is pinned to the landing page's Balances panel (CONTEXT.md "Pinned
+   * account", issue landing-page/01). Written only from the account editor; the flag is left as-is
+   * when the account is closed or deleted.
+   */
+  public int updateShowOnMainPage(long accountId, boolean showOnMainPage) {
+    return jdbcClient
+        .sql("update account set show_on_main_page = :showOnMainPage where account_id = :accountId")
+        .param("showOnMainPage", showOnMainPage)
         .param(ACCOUNT_ID, accountId)
         .update();
   }

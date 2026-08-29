@@ -110,6 +110,23 @@
   margin: 0.5rem 0;
 }
 
+/* ── Landing-page Balances panel (issue landing-page/01) ──────────────────
+   Reuses .acct-list / .acct / .swatch / .acct__name; only the right-aligned
+   amount column and the Total line are panel-specific. */
+.balances__amount {
+  margin-left: auto;
+  padding-left: 1rem;
+}
+
+.balances__total {
+  display: flex;
+  justify-content: space-between;
+  margin: 0.6rem 0 0;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--rule);
+  font-weight: 500;
+}
+
 /* ── People screen (stage 8d) ─────────────────────────────────────────── */
 .people-list {
   list-style: none;
