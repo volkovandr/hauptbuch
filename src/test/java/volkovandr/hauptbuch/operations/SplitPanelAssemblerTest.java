@@ -60,7 +60,8 @@ class SplitPanelAssemblerTest {
   }
 
   private static Account account(long id, String currency) {
-    return new Account(id, "n", "asset", null, currency, null, null, null, null, false, false);
+    return new Account(
+        id, "n", "asset", null, currency, null, null, null, null, false, false, false);
   }
 
   private static SplitForm form(String total, List<String> types, List<String> amounts) {

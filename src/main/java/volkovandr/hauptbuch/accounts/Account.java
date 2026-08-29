@@ -36,6 +36,10 @@ import java.time.OffsetDateTime;
  *     the dock's Account picker, the accounts screen, and transfer-target resolution, since a
  *     person is reached by the {@code for}/{@code by} sigils, never by its cosmetic {@code
  *     personal.<CUR>} name. {@code false} for every other account.
+ * @param showOnMainPage whether the operator has pinned this account to the landing page's Balances
+ *     panel (CONTEXT.md "Pinned account", issue landing-page/01) — opt-in, default {@code false},
+ *     toggled only on the account editor and only for {@code asset}/{@code liability} accounts. The
+ *     flag persists while the account is closed or soft-deleted; the panel filters those at render.
  */
 public record Account(
     Long accountId,
@@ -48,4 +52,5 @@ public record Account(
     LocalDate closedAt,
     OffsetDateTime deletedAt,
     boolean currencyLeaf,
-    boolean personLeaf) {}
+    boolean personLeaf,
+    boolean showOnMainPage) {}

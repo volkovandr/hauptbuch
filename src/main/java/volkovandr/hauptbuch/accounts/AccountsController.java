@@ -123,13 +123,18 @@ class AccountsController {
     return REDIRECT_TO_LIST;
   }
 
-  /** Save the freely-editable fields: display name and stored hue. */
+  /**
+   * Save the freely-editable fields: display name, stored hue, and whether the account is pinned to
+   * the landing page's Balances panel (CONTEXT.md "Pinned account"). An unchecked checkbox posts no
+   * value, so the flag defaults to {@code false}.
+   */
   @PostMapping("/accounts/{accountId}")
   String updateAccount(
       @PathVariable long accountId,
       @RequestParam String name,
-      @RequestParam(required = false) Integer hue) {
-    accountService.updateAccount(accountId, name, hue);
+      @RequestParam(required = false) Integer hue,
+      @RequestParam(required = false, defaultValue = "false") boolean showOnMainPage) {
+    accountService.updateAccount(accountId, name, hue, showOnMainPage);
     return REDIRECT_TO_LIST;
   }
 

@@ -64,7 +64,8 @@ class SettleUpServiceTest {
   }
 
   private static Account own(long id, String name, String currency) {
-    return new Account(id, name, "asset", null, currency, null, null, null, null, false, false);
+    return new Account(
+        id, name, "asset", null, currency, null, null, null, null, false, false, false);
   }
 
   private void stubBaseEur() {

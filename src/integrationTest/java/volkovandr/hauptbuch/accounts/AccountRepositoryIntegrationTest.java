@@ -41,20 +41,32 @@ class AccountRepositoryIntegrationTest {
   @Autowired CurrencyOptionRepository currencyOptionRepository;
 
   private Account draft(String name, String type, Integer hue) {
-    return new Account(null, name, type, null, EUR, hue, OPENED, null, null, false, false);
+    return new Account(null, name, type, null, EUR, hue, OPENED, null, null, false, false, false);
   }
 
   private Account childDraft(String name, String type, long parentId) {
-    return new Account(null, name, type, parentId, EUR, null, null, null, null, false, false);
+    return new Account(
+        null, name, type, parentId, EUR, null, null, null, null, false, false, false);
   }
 
   private Account personLeafDraft(String name) {
-    return new Account(null, name, ASSET, null, EUR, null, null, null, null, false, true);
+    return new Account(null, name, ASSET, null, EUR, null, null, null, null, false, true, false);
   }
 
   private Account currencyLeafDraft(String currencyCode, long parentId) {
     return new Account(
-        null, currencyCode, EXPENSE, parentId, currencyCode, null, null, null, null, true, false);
+        null,
+        currencyCode,
+        EXPENSE,
+        parentId,
+        currencyCode,
+        null,
+        null,
+        null,
+        null,
+        true,
+        false,
+        false);
   }
 
   @Test
@@ -125,6 +137,18 @@ class AccountRepositoryIntegrationTest {
     assertThat(loaded.hue()).isEqualTo(30);
     assertThat(loaded.type()).isEqualTo(ASSET);
     assertThat(loaded.openedAt()).isEqualTo(OPENED);
+  }
+
+  @Test
+  void showOnMainPageDefaultsFalseAndRoundTripsBothWays() {
+    long id = accountRepository.insert(draft(GIRO, ASSET, 210));
+    assertThat(accountRepository.findById(id).orElseThrow().showOnMainPage()).isFalse();
+
+    assertThat(accountRepository.updateShowOnMainPage(id, true)).isEqualTo(1);
+    assertThat(accountRepository.findById(id).orElseThrow().showOnMainPage()).isTrue();
+
+    assertThat(accountRepository.updateShowOnMainPage(id, false)).isEqualTo(1);
+    assertThat(accountRepository.findById(id).orElseThrow().showOnMainPage()).isFalse();
   }
 
   @Test

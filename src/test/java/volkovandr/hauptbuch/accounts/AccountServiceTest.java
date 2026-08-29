@@ -61,7 +61,7 @@ class AccountServiceTest {
   }
 
   private static Account account(long id, String name, String type, Integer hue) {
-    return new Account(id, name, type, null, EUR, hue, OPENED, null, null, false, false);
+    return new Account(id, name, type, null, EUR, hue, OPENED, null, null, false, false, false);
   }
 
   private void stubInsertReturning(long id) {
@@ -205,7 +205,18 @@ class AccountServiceTest {
     Account fresh = account(3L, GIRO, ASSET, 30);
     Account closed =
         new Account(
-            4L, "Old", ASSET, null, EUR, 140, OPENED, LocalDate.of(2026, 7, 2), null, false, false);
+            4L,
+            "Old",
+            ASSET,
+            null,
+            EUR,
+            140,
+            OPENED,
+            LocalDate.of(2026, 7, 2),
+            null,
+            false,
+            false,
+            false);
     when(accountRepository.findLiveByTypes(any()))
         .thenReturn(List.of(parent, posted, fresh, closed));
     when(accountRepository.findPostedAccountIds()).thenReturn(List.of(2L));
@@ -219,9 +230,20 @@ class AccountServiceTest {
     when(accountRepository.findById(NEW_ID))
         .thenReturn(Optional.of(account(NEW_ID, GIRO, ASSET, 210)));
 
-    accountService.updateAccount(NEW_ID, "Girokonto", 30);
+    accountService.updateAccount(NEW_ID, "Girokonto", 30, true);
 
     verify(accountRepository).updateNameAndHue(NEW_ID, "Girokonto", 30);
+    verify(accountRepository).updateShowOnMainPage(NEW_ID, true);
+  }
+
+  @Test
+  void roundTripsTheShowOnMainPageFlagWhenCleared() {
+    when(accountRepository.findById(NEW_ID))
+        .thenReturn(Optional.of(account(NEW_ID, GIRO, ASSET, 210)));
+
+    accountService.updateAccount(NEW_ID, GIRO, 210, false);
+
+    verify(accountRepository).updateShowOnMainPage(NEW_ID, false);
   }
 
   @Test
@@ -230,16 +252,17 @@ class AccountServiceTest {
         .thenReturn(Optional.of(account(NEW_ID, "Opening Balances EUR", "equity", null)));
 
     assertThatExceptionOfType(IllegalArgumentException.class)
-        .isThrownBy(() -> accountService.updateAccount(NEW_ID, "Renamed", null))
+        .isThrownBy(() -> accountService.updateAccount(NEW_ID, "Renamed", null, false))
         .withMessageContaining("not edited here");
 
     verify(accountRepository, never()).updateNameAndHue(anyLong(), any(), any());
+    verify(accountRepository, never()).updateShowOnMainPage(anyLong(), anyBoolean());
   }
 
   @Test
   void rejectsHueOffTheColourWheel() {
     assertThatExceptionOfType(IllegalArgumentException.class)
-        .isThrownBy(() -> accountService.updateAccount(NEW_ID, GIRO, 360))
+        .isThrownBy(() -> accountService.updateAccount(NEW_ID, GIRO, 360, false))
         .withMessageContaining("colour wheel");
   }
 
@@ -275,7 +298,7 @@ class AccountServiceTest {
   void insertCurrencyLeafIsNamedAfterTheBareCurrencyCodeAndMarked() {
     Account chfLeaf =
         new Account(
-            NEW_ID, "CHF", "expense", PARENT_ID, "CHF", null, null, null, null, true, false);
+            NEW_ID, "CHF", "expense", PARENT_ID, "CHF", null, null, null, null, true, false, false);
     when(accountRepository.insert(any())).thenReturn(NEW_ID);
     when(accountRepository.findById(NEW_ID)).thenReturn(Optional.of(chfLeaf));
 
@@ -355,7 +378,7 @@ class AccountServiceTest {
   }
 
   private static Account personLeaf(long id, String name) {
-    return new Account(id, name, ASSET, null, EUR, null, null, null, null, false, true);
+    return new Account(id, name, ASSET, null, EUR, null, null, null, null, false, true, false);
   }
 
   @Test
@@ -395,7 +418,7 @@ class AccountServiceTest {
   @Test
   void doesNotResolveClosedOwnAccount() {
     Account closed =
-        new Account(3L, "Old", ASSET, null, EUR, 140, OPENED, OPENED, null, false, false);
+        new Account(3L, "Old", ASSET, null, EUR, 140, OPENED, OPENED, null, false, false, false);
     when(accountRepository.findLiveByTypes(any())).thenReturn(List.of(closed));
 
     assertThat(accountService.findOwnAccountByName("Old")).isEmpty();
@@ -405,7 +428,8 @@ class AccountServiceTest {
 
   private static AccountNode categoryNode(long id, String name, Long parentId, int depth) {
     return new AccountNode(
-        new Account(id, name, EXPENSE, parentId, EUR, null, OPENED, null, null, false, false),
+        new Account(
+            id, name, EXPENSE, parentId, EUR, null, OPENED, null, null, false, false, false),
         depth);
   }
 
@@ -422,6 +446,7 @@ class AccountServiceTest {
             null,
             null,
             true,
+            false,
             false),
         1);
   }

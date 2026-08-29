@@ -40,7 +40,8 @@ class DockAmountFieldsServiceTest {
           accountService, currencyService, crossCurrencyFieldsService, transactionCurrencyResolver);
 
   private static Account account(long id, String currency) {
-    return new Account(id, "n", "asset", null, currency, null, null, null, null, false, false);
+    return new Account(
+        id, "n", "asset", null, currency, null, null, null, null, false, false, false);
   }
 
   private static DockEntryForm form(

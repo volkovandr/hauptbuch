@@ -65,12 +65,23 @@ class DeletionServiceTest {
 
   private static Account account(long id, String name, Long parentId, String currencyCode) {
     return new Account(
-        id, name, EXPENSE, parentId, currencyCode, null, null, null, null, false, false);
+        id, name, EXPENSE, parentId, currencyCode, null, null, null, null, false, false, false);
   }
 
   private static Account currencyLeaf(long id, String currencyCode, long parentId) {
     return new Account(
-        id, currencyCode, EXPENSE, parentId, currencyCode, null, null, null, null, true, false);
+        id,
+        currencyCode,
+        EXPENSE,
+        parentId,
+        currencyCode,
+        null,
+        null,
+        null,
+        null,
+        true,
+        false,
+        false);
   }
 
   /** A childless expense leaf in EUR, offered as the destination. */
@@ -278,7 +289,8 @@ class DeletionServiceTest {
         .thenReturn(
             Optional.of(
                 new Account(
-                    TARGET_ID, "Cash", "asset", null, EUR, null, null, null, null, false, false)));
+                    TARGET_ID, "Cash", "asset", null, EUR, null, null, null, null, false, false,
+                    false)));
 
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> deletionService.deleteCategory(FOOD_ID, TARGET_ID))
@@ -295,7 +307,7 @@ class DeletionServiceTest {
         .thenReturn(
             Optional.of(
                 new Account(
-                    TARGET_ID, "Salary", "income", null, EUR, null, null, null, null, false,
+                    TARGET_ID, "Salary", "income", null, EUR, null, null, null, null, false, false,
                     false)));
 
     assertThatExceptionOfType(IllegalArgumentException.class)
@@ -339,6 +351,7 @@ class DeletionServiceTest {
             null,
             OffsetDateTime.now(),
             false,
+            false,
             false);
     when(accountService.findById(TARGET_ID)).thenReturn(Optional.of(deleted));
 
@@ -355,7 +368,8 @@ class DeletionServiceTest {
         .thenReturn(
             List.of(
                 new Account(
-                    FOOD_ID, "Cash", "asset", null, EUR, null, null, null, null, false, false)));
+                    FOOD_ID, "Cash", "asset", null, EUR, null, null, null, null, false, false,
+                    false)));
 
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> deletionService.deleteCategory(FOOD_ID, TARGET_ID))

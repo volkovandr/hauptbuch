@@ -25,7 +25,7 @@ class AccountDetectionRepositoryIntegrationTest {
 
   private long asset(String name) {
     return accountRepository.insert(
-        new Account(null, name, "asset", null, "EUR", null, null, null, null, false, false));
+        new Account(null, name, "asset", null, "EUR", null, null, null, null, false, false, false));
   }
 
   @Test

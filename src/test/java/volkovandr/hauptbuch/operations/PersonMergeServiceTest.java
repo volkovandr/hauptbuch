@@ -61,7 +61,18 @@ class PersonMergeServiceTest {
 
   private static Account leaf(long id, String currency) {
     return new Account(
-        id, "personal." + currency, "asset", null, currency, null, null, null, null, false, true);
+        id,
+        "personal." + currency,
+        "asset",
+        null,
+        currency,
+        null,
+        null,
+        null,
+        null,
+        false,
+        true,
+        false);
   }
 
   private void stubLive(long personId, String name) {

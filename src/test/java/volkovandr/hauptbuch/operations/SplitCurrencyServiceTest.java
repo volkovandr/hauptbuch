@@ -46,7 +46,7 @@ class SplitCurrencyServiceTest {
 
   private static Account account(String currency) {
     return new Account(
-        CARD_ID, "Card", "asset", null, currency, null, null, null, null, false, false);
+        CARD_ID, "Card", "asset", null, currency, null, null, null, null, false, false, false);
   }
 
   // ── the header state (decision 4) ────────────────────────────────────────────

@@ -235,7 +235,8 @@ class ReceiptConfirmGateTest {
   }
 
   private static Account account(long id, String name, String currency) {
-    return new Account(id, name, "asset", null, currency, null, null, null, null, false, false);
+    return new Account(
+        id, name, "asset", null, currency, null, null, null, null, false, false, false);
   }
 
   private static WorkingLine categoryLine(String amount, Long categoryId) {
