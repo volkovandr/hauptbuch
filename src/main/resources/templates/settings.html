@@ -168,5 +168,18 @@
         <p class="actions"><a class="btn" th:href="@{/receipts/ai-prompt}">Edit parse prompt</a></p>
       </div>
     </section>
+
+    <!--
+      Backups (.scratch/backup/issues/01-database-backups.md). Its own page rather than a panel
+      here: it carries a listing, per-backup actions, and the restore commands.
+    -->
+    <section class="panel">
+      <p class="eyebrow">Backups</p>
+      <p class="muted">
+        Database dumps you can take by hand or leave to the nightly job — and download to keep
+        somewhere other than this machine.
+      </p>
+      <p class="actions"><a class="btn" th:href="@{/backup}">Manage backups</a></p>
+    </section>
   </main>
 </html>

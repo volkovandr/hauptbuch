@@ -42,6 +42,15 @@ spring:
 # The Pi deployment overrides hauptbuch.receipts.storage-root via environment to its data dir; tests
 # point it at a temp directory.
 hauptbuch:
+  # Database backups (.scratch/backup/issues/01-database-backups.md). `automatic` is OFF here on
+  # purpose: this file is on the classpath in dev AND in the test suites, and neither has any
+  # business shelling out to pg_dump on every context start. The Pi's /etc/hauptbuch/application.yml
+  # turns it on — see deploy/application.yml.example.
+  backup:
+    storage-root: ./.local-backups
+    keep-automatic: 30
+    automatic: false
+    daily-cron: "0 0 3 * * *"
   receipts:
     storage-root: ./.local-receipts
     # Receipt-parse max_tokens (stage 9e/9h). On Sonnet-family models this budget is shared with

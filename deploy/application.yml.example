@@ -9,6 +9,16 @@ spring:
     password: CHANGE_ME
 
 hauptbuch:
+  # Database backups. `automatic` is off in the packaged defaults and turned on HERE, on the Pi:
+  # a nightly pg_dump plus a catch-up if the Pi was off at 03:00. Manual backups taken from the
+  # screen are never swept; automatic ones are kept to `keep-automatic`.
+  # The directory sits under the data dir the systemd unit already lists in ReadWritePaths.
+  # NOTE: a dump contains the settings row, and so the Anthropic API key — guard these files.
+  backup:
+    storage-root: /var/lib/hauptbuch/backups
+    keep-automatic: 30
+    automatic: true
+    daily-cron: "0 0 3 * * *"
   receipts:
     storage-root: /var/lib/hauptbuch/receipts
 

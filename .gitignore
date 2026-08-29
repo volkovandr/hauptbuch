@@ -56,3 +56,6 @@ application-secret*.yml
 
 # Receipt image storage (dev local root, stage 9b)
 .local-receipts/
+
+# Database backups (dev local root)
+.local-backups/

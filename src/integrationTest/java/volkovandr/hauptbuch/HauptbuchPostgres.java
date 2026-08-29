@@ -17,11 +17,28 @@ import org.testcontainers.utility.DockerImageName;
  *
  * <p>Exposed to Spring via a {@code @ServiceConnection} bean in {@link
  * TestcontainersConfiguration}; integration tests import that configuration.
+ *
+ * <p><strong>{@code max_connections} is raised above the Postgres default of 100.</strong> Spring
+ * caches one context per distinct test configuration, each holding its own Hikari pool of up to ten
+ * connections, and every one of them points at this single container. At around ten distinct
+ * configurations the suite exhausted the default and unrelated classes started failing to boot with
+ * {@code FATAL: sorry, too many clients already} — a failure that looks nothing like its cause. The
+ * ceiling is lifted here rather than by shrinking each pool, so the app under test keeps its real
+ * pool settings.
+ *
+ * <p>Note that {@code withCommand} <em>replaces</em> the container's command rather than adding to
+ * it, and {@code PostgreSQLContainer}'s constructor sets {@code postgres -c fsync=off}. So that
+ * flag has to be repeated here — dropping it would quietly make every commit in the suite fsync to
+ * disk.
  */
 final class HauptbuchPostgres {
 
+  private static final String MAX_CONNECTIONS = "300";
+
   static final PostgreSQLContainer INSTANCE =
-      new PostgreSQLContainer(DockerImageName.parse("postgres:17-alpine")).withReuse(false);
+      new PostgreSQLContainer(DockerImageName.parse("postgres:17-alpine"))
+          .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=" + MAX_CONNECTIONS)
+          .withReuse(false);
 
   static {
     INSTANCE.start();
