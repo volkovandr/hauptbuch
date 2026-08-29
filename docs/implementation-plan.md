@@ -560,8 +560,10 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
 - **Exposure & integrations:** MCP server (FR-MCP; Q11 scope must be settled first); Telegram
   quick-capture bot (FR-TG, "Could").
 - **Ops & hardening:** minimal auth (ARCH-04 — prerequisite for any non-localhost, Telegram, or MCP
-  exposure); Docker/compose for the Pi (ARCH-01); documented backups + export (NFR-03); HTTPS reverse
-  proxy (ARCH-05).
+  exposure); Docker/compose for the Pi (ARCH-01); one-click data **+ attachments** export — the
+  remaining half of NFR-03, the backup/restore half having been specced as `pg_dump`-to-file in
+  `.scratch/backup/issues/01-database-backups.md` (triaged 2026-08-29); HTTPS reverse proxy
+  (ARCH-05).
 - **Testing — browser smoke (Playwright): dropped for the foreseeable future** (owner decision,
   2026-07-05). The money-critical flows the tech-stack doc earmarked for Playwright (transaction
   entry→commit, receipt review→commit, statement match→confirm) are instead covered end-to-end at
