@@ -227,14 +227,16 @@
   max-width: 22rem;
 }
 
-.phone-qr p {
+.phone-qr .muted {
   margin: 0;
 }
 
 /* The URL is there to be read off and typed, so it gets the same face the ledger uses for figures
-   transcribed by hand, and breaks rather than overflowing a narrow window. */
+   transcribed by hand, and breaks rather than overflowing a narrow window. The gap below it is
+   what separates it from the caption — keep this selector at least as specific as the reset above,
+   or the shorthand there silently wins. */
 .phone-qr__url {
   font-family: var(--font-num);
   overflow-wrap: anywhere;
-  margin-bottom: 0.3rem;
+  margin: 0 0 0.3rem;
 }

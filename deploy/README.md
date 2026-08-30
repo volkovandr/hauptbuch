@@ -219,8 +219,13 @@ address your browser actually used — path prefix included:
 - `X-Forwarded-Host`
 - `X-Forwarded-Prefix` — needed if the app is served under a path, e.g. `/pi/hauptbuch`
 
-The app trusts them because it is LAN-only and single-user: no redirect or auth surface consumes
-these values, so the worst a spoofed header can do is put a wrong QR on your own landing page.
+The app trusts these headers, which is a deliberate LAN-only decision. Be aware of what that means:
+`ForwardedHeaderFilter` rewrites the scheme, host, port and context path of the **whole** request
+before any screen renders — not just the QR panel — so anyone who can reach the app directly can
+send them and change every link and redirect in that one response. Nothing is stored and no other
+visitor is affected, and a browser cannot set them cross-origin, so a spoof is self-inflicted and
+lasts exactly one request. That is an acceptable trade on a single-user home network; it would not
+be once the app is exposed beyond it, which is what ARCH-04/ARCH-05 are for.
 
 If the proxy cannot be made to send them, set `hauptbuch.public-base-url` in
 `/etc/hauptbuch/application.yml` to the URL you want encoded (see `application.yml.example`); it

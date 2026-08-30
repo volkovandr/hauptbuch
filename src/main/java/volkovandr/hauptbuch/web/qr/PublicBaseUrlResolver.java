@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -41,22 +42,23 @@ public class PublicBaseUrlResolver {
   private static final Pattern LOOPBACK_IPV4 =
       Pattern.compile("127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
 
-  private final String override;
+  /** The validated, normalised override, or empty when unset, blank, or unusable. */
+  private final Optional<String> override;
 
-  PublicBaseUrlResolver(PublicBaseUrlProperties properties) {
-    this.override = properties.publicBaseUrl();
+  /**
+   * The override is a startup-fixed value, so it is parsed and judged <em>once</em> here rather
+   * than on every landing render — including the WARN for a value that cannot be used, which
+   * describes a condition that will not change until someone edits the config and restarts.
+   */
+  PublicBaseUrlResolver(@Value("${hauptbuch.public-base-url:}") String configuredBaseUrl) {
+    this.override = normalise(configuredBaseUrl);
   }
 
-  /** The public base URL for this request, or empty when none can usefully be offered. */
-  public Optional<String> resolve(HttpServletRequest request) {
-    return fromOverride().or(() -> fromRequest(request));
-  }
-
-  private Optional<String> fromOverride() {
-    if (override == null || override.isBlank()) {
+  private static Optional<String> normalise(String configured) {
+    if (configured == null || configured.isBlank()) {
       return Optional.empty();
     }
-    String candidate = override.trim();
+    String candidate = configured.trim();
     if (!isAbsoluteHttpUrl(candidate)) {
       LOG.warn(
           "Ignoring hauptbuch.public-base-url: '{}' is not an absolute http(s) URL;"
@@ -65,6 +67,11 @@ public class PublicBaseUrlResolver {
       return Optional.empty();
     }
     return Optional.of(withSingleTrailingSlash(candidate));
+  }
+
+  /** The public base URL for this request, or empty when none can usefully be offered. */
+  public Optional<String> resolve(HttpServletRequest request) {
+    return override.or(() -> fromRequest(request));
   }
 
   private static boolean isAbsoluteHttpUrl(String candidate) {

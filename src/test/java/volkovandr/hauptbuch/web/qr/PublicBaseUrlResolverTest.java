@@ -20,11 +20,10 @@ import org.springframework.mock.web.MockHttpServletRequest;
 @SuppressWarnings("PMD.AvoidUsingHardCodedIP")
 class PublicBaseUrlResolverTest {
 
-  private static final PublicBaseUrlResolver RESOLVER =
-      new PublicBaseUrlResolver(new PublicBaseUrlProperties(null));
+  private static final PublicBaseUrlResolver RESOLVER = new PublicBaseUrlResolver(null);
 
   private static PublicBaseUrlResolver withOverride(String override) {
-    return new PublicBaseUrlResolver(new PublicBaseUrlProperties(override));
+    return new PublicBaseUrlResolver(override);
   }
 
   private static MockHttpServletRequest request(String scheme, String host, int port) {
