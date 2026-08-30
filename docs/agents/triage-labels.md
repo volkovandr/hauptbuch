@@ -27,8 +27,11 @@ during triage:
 | fixed and confirmed | `resolved` |
 
 `resolved` is the closed-and-fixed state, mandated by `CLAUDE.md` §9 — a fixed issue is marked, never
-deleted. Set it when the change is merged **and** the owner has confirmed it; an implementation note
-appended under `## Comments` while the branch is still under review leaves the `Status:` line alone.
+deleted. **The owner's confirmation is the trigger** (`CLAUDE.md` §7.6 — the owner ticks the box, not
+the agent); the merge and push that follow are theirs and mechanical, so record the branch and
+commits in the issue rather than waiting on them. Until that confirmation the `Status:` line stays
+where it is, however green the build: an implementation note appended under `## Comments` is how
+finished-but-unconfirmed work is recorded.
 
 ## Category — the `Category:` line
 

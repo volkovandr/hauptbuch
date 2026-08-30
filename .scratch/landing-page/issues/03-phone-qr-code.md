@@ -1,6 +1,6 @@
 # Landing page: QR code to open the app on the phone
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: low
 Area: Landing page (`ledger`), UI shell (`web`), Pi deployment (`deploy/`)
@@ -212,9 +212,9 @@ and MockMvc does not: `Host: raspberrypi:8099` rendered the panel and encoded
 `X-Forwarded-Host: homenet` + `X-Forwarded-Prefix: /pi/hauptbuch` encoded
 `http://homenet/pi/hauptbuch/`.
 
-**Still owed:** an actual phone scanning an actual code. The encoding is proven by decode
-round-trip and the URL by the checks above, but that the printed code scans off the owner's screen
-at 140 px is theirs to confirm.
+**Owner-confirmed 2026-08-30:** opened the landing page at the machine's LAN address, the phone
+read the QR and followed the link. That closes the one thing no test could establish — that the
+code scans off a real screen at 140 px.
 
 #### Review pass — four defects found and fixed
 
@@ -251,4 +251,15 @@ module-internal under `ApplicationModules.verify()`.
    `--hauptbuch.public-base-url=nonsense-not-a-url`: exactly one WARN, on the `main` thread at
    startup, unchanged after five landing renders, with the URL correctly derived from the request
    instead.
+
+### Resolved (2026-08-30)
+
+Owner-confirmed working end to end: scanned from the landing page served at the machine's LAN
+address, the phone opened the app. Two commits on branch `issue/phone-qr-code` — `898fb02` (the
+build) and `6b050b9` (the four review fixes) — awaiting the owner's own merge and push.
+
+One thing surfaced while confirming, and it is behaving as designed rather than as a defect: the
+panel is invisible at `http://localhost:8080/`, which is decision 3 in the brief. Looking at the
+app over loopback is the normal dev habit, so expect to reach for the LAN address (or
+`hauptbuch.public-base-url`, which is honoured even on loopback) to see it locally.
 
