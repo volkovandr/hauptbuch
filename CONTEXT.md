@@ -74,3 +74,15 @@ The single muted landing-page line above the Balances panel: how long the book h
 the earliest transaction), the live transaction count, and the analyzed-receipt count with total
 receipt-image storage size. Derived aggregates only — never per-transaction detail.
 _Avoid_: dashboard, metrics, summary
+
+**Public base URL**:
+The URL a phone on the same LAN can reach the app at, ending in a single `/` — derived from the
+incoming request (gateway `X-Forwarded-*` headers included, so a path prefix survives) unless
+`hauptbuch.public-base-url` overrides it. Unresolvable when the request came in on loopback.
+_Avoid_: external URL, host, address, canonical URL
+
+**Phone QR panel**:
+The landing-page panel headed "Open on your phone": a QR code of the public base URL plus the same
+URL in plain text. A convenience for getting the phone to the capture surface — it carries no
+credential and grants nothing the LAN did not already grant.
+_Avoid_: pairing, login QR, share link

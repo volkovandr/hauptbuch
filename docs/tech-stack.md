@@ -250,6 +250,23 @@ where breakage costs money-correctness or real time: receipt review → commit, 
 confirm, transaction entry. **Do not unit-test templates.** This is the deliberate 80/20 — lighter
 UI coverage is accepted (per owner's stance).
 
+### 4.5 QR code rendering — ZXing `core`, server-side, inline SVG
+
+The landing page shows a QR of the app's own LAN URL so the phone (the capture device) gets there by
+camera rather than by typing (`.scratch/landing-page/issues/03-phone-qr-code.md`). Encoded with
+**`com.google.zxing:core`** — pure Java, no transitive dependencies — and emitted as an **inline
+`<svg>`** built from the `BitMatrix`. `com.google.zxing:javase` is deliberately *not* added: it
+exists for raster output through `ImageIO`/AWT, which would mean a second endpoint, an image format,
+and cache questions, for a code that scales better as vector markup anyway.
+
+Rejected: a client-side JS QR library (bespoke JS is confined to the two sanctioned leaves — §4.3 and
+§5.1 — and this is neither), and hand-rolling the encoder (Reed-Solomon, masking and version
+selection is a few hundred lines of fiddly bit-twiddling to own forever for one code on one page).
+
+The URL itself is read off the incoming request with `server.forward-headers-strategy: framework`, so
+a gateway's `X-Forwarded-Proto`/`-Host`/`-Prefix` survive into it; `hauptbuch.public-base-url`
+overrides when a gateway cannot be made to send them.
+
 ---
 
 ## 5. Receipt image handling
@@ -339,6 +356,8 @@ Both stay in Java — no Python anywhere.
 | Long lists | Bounded views + htmx chunks | Virtualization | Unneeded; view is naturally bounded |
 | Image edit | Client-side canvas (Cropper.js) | Server-side processing | Keeps Pi clean; no Python; isolated leaf |
 | Image edit | Manual only, client-side | AI-assisted / auto-applied transforms | Auto image fixes are unreliable; validating an AI crop takes longer than just cropping |
+| QR codes | ZXing `core`, inline SVG | Client-side JS QR library | Bespoke JS is confined to the two sanctioned leaves |
+| QR codes | ZXing `core`, inline SVG | Hand-rolled encoder | Hundreds of lines of Reed-Solomon/masking to own forever for one code |
 
 ---
 
