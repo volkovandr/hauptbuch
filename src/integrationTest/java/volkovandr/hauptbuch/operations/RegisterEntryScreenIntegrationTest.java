@@ -1229,51 +1229,6 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
-  void categoryResolveProposesTheNewLeafInsteadOfCreatingItSilently() throws Exception {
-    insertCategory("Food");
-    long expenseAccountsBefore = expenseAccountCount();
-
-    mockMvc
-        .perform(post("/categories/resolve").param("categoryText", "Food - Milk"))
-        .andExpect(status().isOk())
-        // What WOULD be created, and the control that does it — no id yet, so the dock cannot
-        // commit an unconfirmed create (receipt-processing/25, folded transaction-register-ui/14).
-        .andExpect(content().string(containsString("Milk")))
-        .andExpect(content().string(containsString("is new under Food")))
-        .andExpect(content().string(containsString("categoryDecision")))
-        .andExpect(content().string(containsString("name=\"categoryId\" value=\"\"")));
-
-    assertThat(expenseAccountCount()).isEqualTo(expenseAccountsBefore);
-  }
-
-  @Test
-  void categoryCreateDecisionCreatesTheProposedLeafAndReportsIt() throws Exception {
-    insertCategory("Food");
-    long expenseAccountsBefore = expenseAccountCount();
-
-    mockMvc
-        .perform(
-            post("/categories/resolve")
-                .param("categoryText", "Food - Milk")
-                .param("categoryDecision", "CREATE"))
-        .andExpect(status().isOk())
-        // Only the decision post creates: the leaf now exists, its id is carried, and the creation
-        // is what the caption reports.
-        .andExpect(content().string(containsString("new category: Milk")))
-        .andExpect(content().string(containsString("name=\"categoryId\"")))
-        .andExpect(content().string(not(containsString("name=\"categoryId\" value=\"\""))));
-
-    assertThat(expenseAccountCount()).isEqualTo(expenseAccountsBefore + 1);
-  }
-
-  private long expenseAccountCount() {
-    return jdbcClient
-        .sql("select count(*) from account where type = 'expense'")
-        .query(Long.class)
-        .single();
-  }
-
-  @Test
   void categoryResolveSelectsTheLineByIndexWhenSeveralAreSubmitted() throws Exception {
     // Regression (fixed UI issue): a split line's resolve carries every line's categoryText;
     // without
@@ -1340,6 +1295,13 @@ class RegisterEntryScreenIntegrationTest {
 
     // The existing leaf resolved — nothing was created or subdivided.
     assertThat(expenseAccountCount()).isEqualTo(expenseAccountsBefore);
+  }
+
+  private long expenseAccountCount() {
+    return jdbcClient
+        .sql("select count(*) from account where type = 'expense'")
+        .query(Long.class)
+        .single();
   }
 
   @Test

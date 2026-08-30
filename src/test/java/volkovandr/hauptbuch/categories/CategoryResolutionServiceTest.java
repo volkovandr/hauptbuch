@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,11 +29,17 @@ class CategoryResolutionServiceTest {
 
   private static final long FOOD_ID = 1L;
   private static final long MILK_ID = 2L;
+  private static final long CLOTHING_ID = 3L;
+  private static final long ADULT_ID = 4L;
+  private static final long KIDS_ID = 5L;
   private static final String EXPENSE = "expense";
   private static final String INCOME = "income";
   private static final String EUR = "EUR";
   private static final String FOOD = "Food";
   private static final String MILK = "Milk";
+  private static final String CLOTHING = "Clothing";
+  private static final String ADULT = "Adult";
+  private static final String ADULT_PATH = "Clothing - Adult";
   private static final String SEPARATOR = " - ";
   private static final List<String> MANAGEABLE = List.of(INCOME, EXPENSE);
 
@@ -145,6 +152,70 @@ class CategoryResolutionServiceTest {
               assertThat(resolved.categoryId()).isEqualTo(MILK_ID);
               assertThat(resolved.statusText()).contains(MILK);
             });
+  }
+
+  @Test
+  void resolveProposesChildUnderParentNamedByItsFullPath() {
+    // The datalist offers whole paths, so adding a third level means picking "Clothing - Adult" and
+    // typing " - Men" after it. The parent is therefore a PATH, and matching it by bare display
+    // name alone refused the very text the picker produces (owner report, 2026-08-30).
+    when(accountService.findPostableLeafPaths(MANAGEABLE, SEPARATOR))
+        .thenReturn(List.of(new AccountPath(ADULT_ID, ADULT_PATH)));
+    when(accountService.findLivePaths(MANAGEABLE, SEPARATOR))
+        .thenReturn(
+            List.of(new AccountPath(CLOTHING_ID, CLOTHING), new AccountPath(ADULT_ID, ADULT_PATH)));
+    when(categoryService.findById(ADULT_ID))
+        .thenReturn(Optional.of(account(ADULT_ID, ADULT, EXPENSE, CLOTHING_ID)));
+
+    // The confirm names the parent by its path, so a deep or duplicately named parent is
+    // unmistakable.
+    assertThat(resolutionService.resolveCategory("Clothing - Adult - Men", null))
+        .isEqualTo(new CategoryResolution.Pending("Men", ADULT_PATH));
+    verify(categoryService, never()).createCategory(any());
+  }
+
+  @Test
+  void resolveCreatesUnderParentNamedByItsFullPathEvenWhenThatParentHasChildren() {
+    // "Clothing - Adult" already has a child, so it is not a postable leaf and never appears in the
+    // leaf paths — adding a second child under it must still work.
+    when(accountService.findPostableLeafPaths(MANAGEABLE, SEPARATOR))
+        .thenReturn(List.of(new AccountPath(KIDS_ID, "Clothing - Adult - Kids")));
+    when(accountService.findLivePaths(MANAGEABLE, SEPARATOR))
+        .thenReturn(
+            List.of(
+                new AccountPath(CLOTHING_ID, CLOTHING),
+                new AccountPath(ADULT_ID, ADULT_PATH),
+                new AccountPath(KIDS_ID, "Clothing - Adult - Kids")));
+    when(categoryService.findById(ADULT_ID))
+        .thenReturn(Optional.of(account(ADULT_ID, ADULT, EXPENSE, CLOTHING_ID)));
+    when(categoryService.createCategory(new CategoryDraft("Men", EXPENSE, ADULT_ID)))
+        .thenReturn(account(MILK_ID, "Men", EXPENSE, ADULT_ID));
+
+    assertThat(
+            resolutionService.resolveCategory(
+                "Clothing - Adult - Men", CategoryResolutionService.DECISION_CREATE))
+        .isEqualTo(new CategoryResolution.Resolved(MILK_ID, "new category: Men"));
+  }
+
+  @Test
+  void resolveRefusesTheBareParentNameSharedByTwoCategories() {
+    // Two "Adult" categories under different parents: the bare name cannot say which, so it is
+    // refused rather than guessed at — the full path is how the user picks one.
+    when(accountService.findLivePaths(MANAGEABLE, SEPARATOR))
+        .thenReturn(
+            List.of(
+                new AccountPath(ADULT_ID, ADULT_PATH), new AccountPath(KIDS_ID, "Sports - Adult")));
+    when(categoryService.manageableCategories())
+        .thenReturn(
+            List.of(
+                node(ADULT_ID, ADULT, EXPENSE, CLOTHING_ID),
+                node(KIDS_ID, ADULT, EXPENSE, FOOD_ID)));
+
+    assertThat(resolutionService.resolveCategory("Adult - Men", null))
+        .isInstanceOfSatisfying(
+            CategoryResolution.Refused.class,
+            refused -> assertThat(refused.message()).contains("ambiguous"));
+    verify(categoryService, never()).createCategory(any());
   }
 
   @Test

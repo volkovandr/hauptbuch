@@ -97,13 +97,21 @@ public class CategoryResolutionService {
     }
   }
 
+  /**
+   * The refusal for text matching more than one category — by name or by path. The resolver never
+   * picks for the user (the same stance {@code debts} takes on two live people of one name).
+   */
+  private static IllegalArgumentException ambiguous(String text, String by) {
+    return new IllegalArgumentException(
+        "Category '" + text + "' is ambiguous — more than one category has that " + by);
+  }
+
   /** A posting leaf whose full {@code Parent - Child} path equals the text; empty if none match. */
   private OptionalLong matchLeafByPath(String path, List<AccountPath> leaves) {
     List<AccountPath> matches =
         leaves.stream().filter(l -> l.path().equalsIgnoreCase(path)).toList();
     if (matches.size() > 1) {
-      throw new IllegalArgumentException(
-          "Category '" + path + "' is ambiguous — more than one category has that path");
+      throw ambiguous(path, "path");
     }
     return matches.isEmpty() ? OptionalLong.empty() : OptionalLong.of(matches.get(0).accountId());
   }
@@ -142,25 +150,58 @@ public class CategoryResolutionService {
               + text
               + "' — pick an existing category, or create one as 'Parent - Child'");
     }
-    String parentName = text.substring(0, separator).strip();
+    String parentText = text.substring(0, separator).strip();
     String childName = text.substring(separator + PATH_SEPARATOR.length()).strip();
-    Account parent =
-        findManageableByName(parentName)
-            .orElseThrow(
-                () ->
-                    new IllegalArgumentException(
-                        "No existing category '"
-                            + parentName
-                            + "' to create '"
-                            + childName
-                            + "' under"));
+    List<AccountPath> paths =
+        accountService.findLivePaths(CategoryService.MANAGEABLE_TYPES, PATH_SEPARATOR);
+    Account parent = requireParent(parentText, childName, paths);
     if (!DECISION_CREATE.equals(decision)) {
-      return new CategoryResolution.Pending(childName, parent.name());
+      return new CategoryResolution.Pending(childName, pathOf(parent, paths));
     }
     Account created =
         categoryService.createCategory(
             new CategoryDraft(childName, parent.type(), parent.accountId()));
     return new CategoryResolution.Resolved(created.accountId(), "new category: " + created.name());
+  }
+
+  /**
+   * The category a new child would be created under, named either by its <em>full path</em> or by
+   * its bare display name.
+   *
+   * <p>The path form is what the field actually produces: the datalist offers whole paths, so
+   * adding a level means picking {@code Clothing - Adult} and typing {@code - Men} after it — which
+   * arrives here as the parent {@code Clothing - Adult}, three levels deep and quite possibly a
+   * group rather than a leaf. It is also the only way to say <em>which</em> {@code Adult} is meant
+   * when two categories share a name under different parents; the bare name stays supported for the
+   * shallow case, and stays refused when it is ambiguous.
+   */
+  private Account requireParent(String parentText, String childName, List<AccountPath> paths) {
+    List<AccountPath> byPath =
+        paths.stream().filter(p -> p.path().equalsIgnoreCase(parentText)).toList();
+    if (byPath.size() > 1) {
+      throw ambiguous(parentText, "path");
+    }
+    Optional<Account> parent =
+        byPath.isEmpty()
+            ? findManageableByName(parentText)
+            : categoryService.findById(byPath.get(0).accountId());
+    return parent.orElseThrow(
+        () ->
+            new IllegalArgumentException(
+                "No existing category '" + parentText + "' to create '" + childName + "' under"));
+  }
+
+  /**
+   * The parent's full path, for the confirm to name — so a create under a deeply nested or
+   * duplicately named parent says exactly which one it means. Falls back to the bare name if the
+   * parent somehow carries no path.
+   */
+  private static String pathOf(Account parent, List<AccountPath> paths) {
+    return paths.stream()
+        .filter(p -> p.accountId() == parent.accountId())
+        .map(AccountPath::path)
+        .findFirst()
+        .orElseGet(parent::name);
   }
 
   /**
@@ -175,8 +216,7 @@ public class CategoryResolutionService {
             .filter(a -> a.name().equalsIgnoreCase(name))
             .toList();
     if (matches.size() > 1) {
-      throw new IllegalArgumentException(
-          "Category '" + name + "' is ambiguous — more than one category has that name");
+      throw ambiguous(name, "name");
     }
     return matches.stream().findFirst();
   }
