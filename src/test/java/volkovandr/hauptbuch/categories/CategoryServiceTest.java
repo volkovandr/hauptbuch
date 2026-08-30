@@ -17,7 +17,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
-import volkovandr.hauptbuch.accounts.AccountPath;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.categories.repository.CategoryAiConfigRepository;
 import volkovandr.hauptbuch.ledger.SettingsService;
@@ -72,6 +71,14 @@ class CategoryServiceTest {
 
   private static Account account(long id, String name, String type, Long parentId) {
     return new Account(id, name, type, parentId, EUR, null, null, null, null, false, false, false);
+  }
+
+  private static AccountNode node(long id, String name, String type, Long parentId) {
+    return new AccountNode(account(id, name, type, parentId), parentId == null ? 0 : 1);
+  }
+
+  private static AccountNode nodeOf(Account account) {
+    return new AccountNode(account, 1);
   }
 
   private static Account currencyLeaf(long id, String currencyCode, String type, long parentId) {
@@ -397,114 +404,5 @@ class CategoryServiceTest {
     assertThat(categoryService.deletePanel(MILK_ID).targets())
         .extracting(n -> n.account().accountId())
         .containsExactly(FOOD_ID, DIESEL_ID);
-  }
-
-  // ── resolveCategory (the dock's category field, register §3.5) ───────────────
-
-  private static AccountNode node(long id, String name, String type, Long parentId) {
-    return new AccountNode(account(id, name, type, parentId), parentId == null ? 0 : 1);
-  }
-
-  private static AccountNode nodeOf(Account account) {
-    return new AccountNode(account, 1);
-  }
-
-  @Test
-  void resolveMatchesAnExistingLeafByItsPath() {
-    when(accountService.findPostableLeafPaths(List.of(INCOME, EXPENSE), " - "))
-        .thenReturn(List.of(new AccountPath(FOOD_ID, FOOD)));
-
-    // Case-insensitive match to the existing top-level leaf — no create.
-    assertThat(categoryService.resolveCategory("food")).isEqualTo(FOOD_ID);
-    verify(accountService, never()).insertLeaf(any(), any(), any(), any());
-  }
-
-  @Test
-  void resolveMatchesAnExistingNestedLeafByItsFullPath() {
-    // "Food - Milk" names the existing leaf Milk under Food — it resolves to Milk, never
-    // re-creating
-    // or subdividing (the datalist offers exactly these composed paths, issue 03).
-    when(accountService.findPostableLeafPaths(List.of(INCOME, EXPENSE), " - "))
-        .thenReturn(List.of(new AccountPath(MILK_ID, "Food - Milk")));
-
-    assertThat(categoryService.resolveCategory("Food - Milk")).isEqualTo(MILK_ID);
-    verify(accountService, never()).insertLeaf(any(), any(), any(), any());
-  }
-
-  @Test
-  void resolveMatchesNestedLeafTypedByItsBareName() {
-    // A leaf typed by its bare name (e.g. an edit-mode pre-fill) still resolves, though its offered
-    // path is the fuller "Food - Milk".
-    when(accountService.findPostableLeafPaths(List.of(INCOME, EXPENSE), " - "))
-        .thenReturn(List.of(new AccountPath(MILK_ID, "Food - Milk")));
-    when(accountService.findLiveByTypesWithDepth(List.of(INCOME, EXPENSE)))
-        .thenReturn(
-            List.of(node(FOOD_ID, FOOD, EXPENSE, null), node(MILK_ID, MILK, EXPENSE, FOOD_ID)));
-
-    assertThat(categoryService.resolveCategory("Milk")).isEqualTo(MILK_ID);
-    verify(accountService, never()).insertLeaf(any(), any(), any(), any());
-  }
-
-  @Test
-  void resolveRefusesNonLeafGroup() {
-    // Food is a group (its real child Milk makes it non-postable). Selecting it must not silently
-    // return the group's id only to have the commit reject the non-leaf posting (issue 03).
-    when(accountService.findPostableLeafPaths(List.of(INCOME, EXPENSE), " - "))
-        .thenReturn(List.of(new AccountPath(MILK_ID, "Food - Milk")));
-    when(accountService.findLiveByTypesWithDepth(List.of(INCOME, EXPENSE)))
-        .thenReturn(
-            List.of(node(FOOD_ID, FOOD, EXPENSE, null), node(MILK_ID, MILK, EXPENSE, FOOD_ID)));
-
-    assertThatExceptionOfType(IllegalArgumentException.class)
-        .isThrownBy(() -> categoryService.resolveCategory("Food"))
-        .withMessageContaining("group");
-    verify(accountService, never()).insertLeaf(any(), any(), any(), any());
-  }
-
-  @Test
-  void resolveCreatesChildUnderAnExistingParentFromParentChildText() {
-    // "Food - Milk": Food resolves to the existing parent, Milk is the new child (type inherited).
-    when(accountService.findPostableLeafPaths(List.of(INCOME, EXPENSE), " - "))
-        .thenReturn(List.of(new AccountPath(FOOD_ID, FOOD)));
-    when(accountService.findLiveByTypesWithDepth(List.of(INCOME, EXPENSE)))
-        .thenReturn(List.of(node(FOOD_ID, FOOD, EXPENSE, null)));
-    when(accountService.findById(FOOD_ID))
-        .thenReturn(Optional.of(account(FOOD_ID, FOOD, EXPENSE, null)));
-    when(accountService.findChildrenOf(FOOD_ID)).thenReturn(List.of());
-    when(accountService.hasPostings(FOOD_ID)).thenReturn(false);
-    when(accountService.insertLeaf(MILK, EXPENSE, FOOD_ID, EUR))
-        .thenReturn(account(MILK_ID, MILK, EXPENSE, FOOD_ID));
-
-    assertThat(categoryService.resolveCategory("Food - Milk")).isEqualTo(MILK_ID);
-  }
-
-  @Test
-  void resolveRejectsUnknownBareNameThatIsNotParentChild() {
-    when(accountService.findLiveByTypesWithDepth(List.of(INCOME, EXPENSE))).thenReturn(List.of());
-
-    assertThatExceptionOfType(IllegalArgumentException.class)
-        .isThrownBy(() -> categoryService.resolveCategory("Nonexistent"))
-        .withMessageContaining("Parent - Child");
-  }
-
-  @Test
-  void resolveRejectsParentChildWithUnknownParent() {
-    when(accountService.findLiveByTypesWithDepth(List.of(INCOME, EXPENSE))).thenReturn(List.of());
-
-    assertThatExceptionOfType(IllegalArgumentException.class)
-        .isThrownBy(() -> categoryService.resolveCategory("Ghost - Milk"))
-        .withMessageContaining("No existing category");
-  }
-
-  @Test
-  void resolveRejectsAnAmbiguousName() {
-    // A same-named income and expense category — the dock cannot guess which was meant.
-    when(accountService.findLiveByTypesWithDepth(List.of(INCOME, EXPENSE)))
-        .thenReturn(
-            List.of(node(FOOD_ID, "Bonus", INCOME, null), node(MILK_ID, "Bonus", EXPENSE, null)));
-
-    assertThatExceptionOfType(IllegalArgumentException.class)
-        .isThrownBy(() -> categoryService.resolveCategory("Bonus"))
-        .withMessageContaining("ambiguous");
   }
 }

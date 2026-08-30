@@ -1222,7 +1222,55 @@ class RegisterEntryScreenIntegrationTest {
         .perform(post("/categories/resolve").param("categoryText", "Food"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("name=\"categoryId\"")))
-        .andExpect(content().string(containsString("value=\"" + food + "\"")));
+        .andExpect(content().string(containsString("value=\"" + food + "\"")))
+        // A plain match says nothing: the input already shows what was picked, and a caption here
+        // was what squeezed the split row's fields (receipt-processing/25).
+        .andExpect(content().string(not(containsString("entry-dock__resolved"))));
+  }
+
+  @Test
+  void categoryResolveProposesTheNewLeafInsteadOfCreatingItSilently() throws Exception {
+    insertCategory("Food");
+    long expenseAccountsBefore = expenseAccountCount();
+
+    mockMvc
+        .perform(post("/categories/resolve").param("categoryText", "Food - Milk"))
+        .andExpect(status().isOk())
+        // What WOULD be created, and the control that does it — no id yet, so the dock cannot
+        // commit an unconfirmed create (receipt-processing/25, folded transaction-register-ui/14).
+        .andExpect(content().string(containsString("Milk")))
+        .andExpect(content().string(containsString("is new under Food")))
+        .andExpect(content().string(containsString("categoryDecision")))
+        .andExpect(content().string(containsString("name=\"categoryId\" value=\"\"")));
+
+    assertThat(expenseAccountCount()).isEqualTo(expenseAccountsBefore);
+  }
+
+  @Test
+  void categoryCreateDecisionCreatesTheProposedLeafAndReportsIt() throws Exception {
+    insertCategory("Food");
+    long expenseAccountsBefore = expenseAccountCount();
+
+    mockMvc
+        .perform(
+            post("/categories/resolve")
+                .param("categoryText", "Food - Milk")
+                .param("categoryDecision", "CREATE"))
+        .andExpect(status().isOk())
+        // Only the decision post creates: the leaf now exists, its id is carried, and the creation
+        // is what the caption reports.
+        .andExpect(content().string(containsString("new category: Milk")))
+        .andExpect(content().string(containsString("name=\"categoryId\"")))
+        .andExpect(content().string(not(containsString("name=\"categoryId\" value=\"\""))));
+
+    assertThat(expenseAccountCount()).isEqualTo(expenseAccountsBefore + 1);
+  }
+
+  private long expenseAccountCount() {
+    return jdbcClient
+        .sql("select count(*) from account where type = 'expense'")
+        .query(Long.class)
+        .single();
   }
 
   @Test
@@ -1282,11 +1330,7 @@ class RegisterEntryScreenIntegrationTest {
   void categoryResolveMatchesNestedLeafByItsFullPathWithoutCreating() throws Exception {
     long food = insertCategory("Food");
     long milk = accountService.insertLeaf("Milk", "expense", food, EUR).accountId();
-    long expenseAccountsBefore =
-        jdbcClient
-            .sql("select count(*) from account where type = 'expense'")
-            .query(Long.class)
-            .single();
+    long expenseAccountsBefore = expenseAccountCount();
 
     mockMvc
         .perform(post("/categories/resolve").param("categoryText", "Food - Milk"))
@@ -1295,12 +1339,7 @@ class RegisterEntryScreenIntegrationTest {
         .andExpect(content().string(containsString("value=\"" + milk + "\"")));
 
     // The existing leaf resolved — nothing was created or subdivided.
-    assertThat(
-            jdbcClient
-                .sql("select count(*) from account where type = 'expense'")
-                .query(Long.class)
-                .single())
-        .isEqualTo(expenseAccountsBefore);
+    assertThat(expenseAccountCount()).isEqualTo(expenseAccountsBefore);
   }
 
   @Test
@@ -1330,7 +1369,12 @@ class RegisterEntryScreenIntegrationTest {
         // accepting
         // the ghost as-is is immediately committable — no manual re-trigger of /categories/resolve.
         .andExpect(content().string(containsString("name=\"categoryId\"")))
-        .andExpect(content().string(containsString("value=\"" + fuel + "\"")));
+        .andExpect(content().string(containsString("value=\"" + fuel + "\"")))
+        // …and it must keep `data-counterpart-resolved` on the span it replaces: the resolve
+        // fragment's confirm buttons (person Restore/Create-new, the category create-confirm)
+        // target `closest [data-counterpart-resolved]`, so a ghost that dropped the hook would
+        // leave a later Create click pointing at nothing, aborted silently by htmx.
+        .andExpect(content().string(containsString("data-counterpart-resolved")));
   }
 
   @Test

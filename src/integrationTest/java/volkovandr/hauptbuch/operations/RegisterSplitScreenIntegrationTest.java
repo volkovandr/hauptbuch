@@ -917,6 +917,121 @@ class RegisterSplitScreenIntegrationTest {
         .andExpect(content().string(not(containsString("3.000,00"))));
   }
 
+  // ── inline category create, confirmed per line (receipt-processing/25) ────────
+
+  @Test
+  void resolvingaSplitLineProposesTheNewLeafAndConfirmingCreatesIt() throws Exception {
+    insertCategory("Food", "expense");
+    long expenseAccountsBefore = expenseAccountCount();
+
+    // Line 1 of two names a leaf that does not exist. It is proposed, not created — the line's
+    // hidden id stays empty, so the panel cannot commit it.
+    mockMvc
+        .perform(
+            post("/categories/resolve")
+                .param("categoryText", "Food", "Food - Milk")
+                .param("index", "1")
+                .param("fieldName", "lineCategoryId")
+                .param("typeFieldName", "lineCategoryType")
+                .param("directionFieldName", "lineTransferDirection")
+                .param("personFieldPrefix", "line"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("is new under Food")))
+        .andExpect(content().string(containsString("name=\"lineCategoryId\" value=\"\"")));
+    assertThat(expenseAccountCount()).isEqualTo(expenseAccountsBefore);
+
+    // The Create control re-posts the same text with the decision AND the line's own field names +
+    // index, so the confirm resolves that line rather than the first one.
+    mockMvc
+        .perform(
+            post("/categories/resolve")
+                .param("categoryText", "Food", "Food - Milk")
+                .param("index", "1")
+                .param("categoryDecision", "CREATE")
+                .param("fieldName", "lineCategoryId")
+                .param("typeFieldName", "lineCategoryType")
+                .param("directionFieldName", "lineTransferDirection")
+                .param("personFieldPrefix", "line"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("new category: Milk")))
+        .andExpect(content().string(containsString("name=\"lineCategoryId\"")))
+        .andExpect(content().string(not(containsString("name=\"lineCategoryId\" value=\"\""))));
+    assertThat(expenseAccountCount()).isEqualTo(expenseAccountsBefore + 1);
+  }
+
+  @Test
+  void splitLineStatusRendersBelowTheFieldsNotAmongThem() throws Exception {
+    // The row is a flex row: a visible status among the fields narrows every other field as it
+    // appears (receipt-processing/25). The status area is a wrapped full-width row instead, and the
+    // hidden id carrier lives inside it.
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food", "expense");
+
+    mockMvc
+        .perform(
+            post(OPEN_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(food))
+                .param("categoryText", "Food")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("split-line__status")))
+        // The old end-of-row carrier is gone for good — its "takes no visual space" styling was
+        // only ever true while it held nothing but hidden inputs.
+        .andExpect(content().string(not(containsString("split-line__resolved"))));
+  }
+
+  @Test
+  void refusedSaveReArmsThePendingCreateOnTheUnresolvedLine() throws Exception {
+    // The create-confirm lives only in the resolve response, so a server-side re-render would drop
+    // it while keeping the typed text — and `change` cannot bring it back, because the value never
+    // changes. An unresolved line therefore re-resolves on load; a resolved one does not
+    // (receipt-processing/25).
+    long cash = openAccount("Cash", "500");
+    insertCategory("Food", "expense");
+
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("categoryText", "Food - Milk")
+                .param("lineCategoryId", "")
+                .param("lineAmount", "20")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("needs a category")))
+        .andExpect(content().string(containsString("change, load")));
+  }
+
+  @Test
+  void resolvedLineDoesNotReResolveOnEveryRender() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food", "expense");
+
+    mockMvc
+        .perform(
+            post(OPEN_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(food))
+                .param("categoryText", "Food")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        // The seeded line already carries its id: nothing to re-arm, so no load trigger.
+        .andExpect(content().string(not(containsString("change, load"))));
+  }
+
+  private long expenseAccountCount() {
+    return jdbcClient
+        .sql("select count(*) from account where type = 'expense'")
+        .query(Long.class)
+        .single();
+  }
+
   // ── person lines (register §3.5/§2.6, plan stage 8b.2) ────────────────────────
 
   @Test

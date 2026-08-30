@@ -535,7 +535,7 @@
          for a category) so the aligned line arrays stay aligned. `index` is the line being resolved,
          carried so the revival buttons below re-post against the right one (0 for the dock). -->
     <th:block
-      th:fragment="categoryResolved(categoryId, categoryName, error, fieldName, typeFieldName, categoryType, transferDirection, directionFieldName, personName, personDirection, personRevive, personPending, personPendingName, personFieldPrefix, index)"
+      th:fragment="categoryResolved(categoryId, categoryName, error, fieldName, typeFieldName, categoryType, transferDirection, directionFieldName, personName, personDirection, personRevive, personPending, personPendingName, personFieldPrefix, categoryPendingChild, categoryPendingParent, index)"
       th:with="resolveVals=|&quot;fieldName&quot;:&quot;${fieldName}&quot;,&quot;typeFieldName&quot;:&quot;${typeFieldName == null ? '' : typeFieldName}&quot;,&quot;directionFieldName&quot;:&quot;${directionFieldName == null ? '' : directionFieldName}&quot;,&quot;personFieldPrefix&quot;:&quot;${personFieldPrefix == null ? '' : personFieldPrefix}&quot;,&quot;index&quot;:${index == null ? 0 : index}|"
     >
       <input type="hidden" th:name="${fieldName}" th:value="${categoryId}" />
@@ -588,6 +588,29 @@
            choice resolves that line (plan stage 8b.2) — and target `closest
            [data-counterpart-resolved]`, the slot this fragment was swapped into, which is the dock's
            #entry-category-resolved or the line's #line-<i>-resolved without either needing naming. -->
+      <!-- A category that does not exist yet is never created by simply leaving the field
+           (receipt-processing/25, which absorbed transaction-register-ui/14) — a typo used to become
+           a real category. The picker names what would be created and waits; Create re-posts the
+           same typed categoryText with categoryDecision, exactly as the person revival pair does,
+           carrying the caller's own field names + index so a split line's confirm resolves that
+           line. Until then no id is carried, so the commit fails validation like any unresolved
+           category. -->
+      <span th:if="${categoryPendingChild}" class="entry-dock__resolved warning">
+        <span
+          th:text="'&#8216;' + ${categoryPendingChild} + '&#8217; is new under ' + ${categoryPendingParent} + '.'"
+        ></span>
+        <button
+          type="button"
+          class="btn btn--ghost"
+          hx-post="/categories/resolve"
+          hx-include="[name='categoryText']"
+          hx-target="closest [data-counterpart-resolved]"
+          hx-swap="innerHTML"
+          th:attr="hx-vals=|{&quot;categoryDecision&quot;:&quot;CREATE&quot;,${resolveVals}}|"
+        >
+          Create
+        </button>
+      </span>
       <span th:if="${personPending}" class="entry-dock__resolved warning">
         <span th:text="'&#8216;' + ${personPendingName} + '&#8217; is deleted.'"></span>
         <button
@@ -724,8 +747,11 @@
           hx-swap="innerHTML"
         />
         <!-- OOB-fill the hidden categoryId the dock commits, so accepting the ghost as-is is enough
-             (register §3.9). Mirrors the /categories/resolve response's #entry-category-resolved. -->
-        <span id="entry-category-resolved" hx-swap-oob="true">
+             (register §3.9). Mirrors the /categories/resolve response's #entry-category-resolved —
+             `data-counterpart-resolved` included: the resolve fragment's confirm buttons target
+             `closest [data-counterpart-resolved]`, so a replacement missing it leaves them pointing
+             at nothing and htmx aborts the click silently. -->
+        <span id="entry-category-resolved" data-counterpart-resolved hx-swap-oob="true">
           <input type="hidden" name="categoryId" th:value="${categoryId}" />
         </span>
       </th:block>
