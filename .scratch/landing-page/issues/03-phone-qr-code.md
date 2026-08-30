@@ -216,3 +216,39 @@ and MockMvc does not: `Host: raspberrypi:8099` rendered the panel and encoded
 round-trip and the URL by the checks above, but that the printed code scans off the owner's screen
 at 140 px is theirs to confirm.
 
+#### Review pass — four defects found and fixed
+
+A `/code-review high` on the finished branch found four; all were real, all are fixed. It also
+confirmed the parts most likely to be subtly wrong — the loopback range, default ports, trailing
+slash, IPv6 bracketing, the run-length emitter and the escaping — and that `web.qr` stays
+module-internal under `ApplicationModules.verify()`.
+
+1. **A dead CSS rule left the URL and its caption flush together.** `.phone-qr p { margin: 0 }`
+   (specificity 0-1-1) outranks `.phone-qr__url { margin-bottom: 0.3rem }` (0-1-0), so the gap the
+   rule existed to create was never applied. The reset is now scoped to the caption
+   (`.phone-qr .muted`), which is the element it was meant for, and the two selectors no longer
+   compete.
+2. **The `deploy/README.md` trust rationale was wrong about the blast radius.** It repeated this
+   ticket's triage wording — "no redirect or auth surface consumes these values, so the worst a
+   spoofed header can do is put a wrong QR on your own landing page." That is not accurate once
+   `forward-headers-strategy: framework` is on: `ForwardedHeaderFilter` rewrites scheme, host, port
+   and **context path** for the whole request before any screen renders, so a spoofed
+   `X-Forwarded-Prefix` moves every `@{...}` link and the `Location` of the `Mobi` redirect in that
+   response. The *decision* is unchanged and still right — the deployment is LAN-only and
+   single-user, a browser cannot set these cross-origin, nothing is stored, and a spoof lasts one
+   self-inflicted request — but the README now says what actually happens, and ties the trade to
+   ARCH-04/ARCH-05 rather than to a claim that redirects are unaffected.
+3. **`@ConfigurationProperties("hauptbuch")` claimed the app's whole config namespace** for one
+   property, unlike every other properties record here (`hauptbuch.backup`, `hauptbuch.receipts`,
+   `hauptbuch.receipts.ai`). It bound correctly only because `ignoreUnknownFields` defaults to true.
+   Since the key itself is operator-facing and fixed by this ticket and CONTEXT.md, renaming it was
+   not an option; the record is gone instead and the resolver takes
+   `@Value("${hauptbuch.public-base-url:}")` — a single scalar, matching the existing precedent in
+   `SettingsService`, and one file fewer.
+4. **A malformed override re-parsed and re-WARNed on every landing render.** The value is fixed at
+   startup, so it is now validated once in the constructor, which is also what CLAUDE.md §5's
+   ladder means by WARN — a handled event, not per-request noise. Verified on a running app with
+   `--hauptbuch.public-base-url=nonsense-not-a-url`: exactly one WARN, on the `main` thread at
+   startup, unchanged after five landing renders, with the URL correctly derived from the request
+   instead.
+
