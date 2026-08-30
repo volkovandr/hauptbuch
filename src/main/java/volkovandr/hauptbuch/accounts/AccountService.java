@@ -363,21 +363,51 @@ public class AccountService {
    * indents — so no separate query is needed.
    */
   public List<AccountPath> findPostableLeafPaths(List<String> types, String separator) {
-    List<Account> accounts =
-        findLiveByTypesWithDepth(types).stream().map(AccountNode::account).toList();
-    Map<Long, Account> byId = new HashMap<>();
-    for (Account account : accounts) {
-      byId.put(account.accountId(), account);
-    }
+    List<Account> accounts = livePathCandidates(types);
     Set<Long> realParents = new HashSet<>();
     for (Account account : accounts) {
       if (!account.currencyLeaf() && account.parentId() != null) {
         realParents.add(account.parentId());
       }
     }
-    return accounts.stream()
+    return composePaths(
+        accounts.stream().filter(a -> !realParents.contains(a.accountId())).toList(),
+        accounts,
+        separator);
+  }
+
+  /**
+   * Every live account of the given types with its full root-to-leaf path — {@link
+   * #findPostableLeafPaths} without the leaves-only filter, so a <em>group</em> is addressable by
+   * path too.
+   *
+   * <p>Exists because naming a parent is not the same act as naming a posting target: {@code
+   * Clothing - Adult - Men} creates {@code Men} under {@code Clothing - Adult}, which may already
+   * be a group with children and so is absent from the postable-leaf list. Composing the path is
+   * also what disambiguates two same-named categories under different parents — the bare name is
+   * refused as ambiguous, the path is not.
+   */
+  public List<AccountPath> findLivePaths(List<String> types, String separator) {
+    List<Account> accounts = livePathCandidates(types);
+    return composePaths(accounts, accounts, separator);
+  }
+
+  /** The live accounts of these types that can carry a path — the auto-managed leaves cannot. */
+  private List<Account> livePathCandidates(List<String> types) {
+    return findLiveByTypesWithDepth(types).stream()
+        .map(AccountNode::account)
         .filter(a -> !a.currencyLeaf())
-        .filter(a -> !realParents.contains(a.accountId()))
+        .toList();
+  }
+
+  /** Pair each account with its path, composed through {@code ancestors}. */
+  private static List<AccountPath> composePaths(
+      List<Account> accounts, List<Account> ancestors, String separator) {
+    Map<Long, Account> byId = new HashMap<>();
+    for (Account account : ancestors) {
+      byId.put(account.accountId(), account);
+    }
+    return accounts.stream()
         .map(a -> new AccountPath(a.accountId(), composePath(a, byId, separator)))
         .toList();
   }

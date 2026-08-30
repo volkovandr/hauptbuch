@@ -266,3 +266,29 @@ A `/code-review high` on the finished branch found four; all were real, all are 
    on a 20-line receipt a real cost, against the cramping this ticket exists to fix. It is now
    `flex: 0 0 0` by default and only claims a full line when it actually holds something visible
    (`:has(.split-line__ghost, .entry-dock__resolved)`).
+
+#### Owner testing — two follow-ups fixed (2026-08-30)
+
+1. **A parent deeper than two levels could not be named.** The picker's datalist offers whole paths,
+   so adding a third level means picking `Clothing - Adult` and typing ` - Men` after it — but the
+   parent was looked up by **bare display name only**, so `Clothing - Adult - Men` was refused ("no
+   existing category 'Clothing - Adult'") and the user had to delete the `Clothing - ` part by hand.
+   Worse, the bare-name form cannot say *which* `Adult` is meant when two categories share a name
+   under different parents. The parent is now matched by **full path first, bare name second**, over
+   `AccountService.findLivePaths` — a new sibling of `findPostableLeafPaths` without the leaves-only
+   filter, because a parent may already be a group and so is absent from the leaf paths (adding a
+   second child under `Clothing - Adult` has to work too). The confirm now names the parent by its
+   path — *"'Men' is new under Clothing - Adult."* — so a deep or duplicately named parent is
+   unmistakable. The ambiguous bare name stays refused rather than guessed at, which it already was.
+2. **The payee ghost note ran into the create message.** `auto · Meat` sits in the very next span on
+   the dock's status line, so a stale suggestion read as one sentence with the confirm ("auto · Meat
+   'Milk' is new under Food."). Any dock category resolve now OOB-clears `#entry-ghost`: once the
+   field is resolved by hand the suggestion is spent, and its OOB-filled id has just been overwritten
+   anyway. Dock only — a split line has no ghost slot, and an OOB swap aimed at a missing target
+   would just log an htmx error.
+
+Both verified against the running app on the owner's own book (`Clothing - Adult - Zzztest` →
+*"'Zzztest' is new under Clothing - Adult."*, nothing created), on a second instance on port 8081 so
+the owner's own running copy was left alone. The inline-create acceptance tests moved to
+`CategoryInlineCreateIntegrationTest`: `RegisterEntryScreenIntegrationTest` hit PMD's
+class-complexity ceiling, and this flow reads better as its own class.

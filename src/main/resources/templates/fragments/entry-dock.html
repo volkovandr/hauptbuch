@@ -577,6 +577,18 @@
         th:name="${personFieldPrefix != null ? personFieldPrefix + 'PersonRevive' : 'personRevive'}"
         th:value="${personRevive}"
       />
+      <!-- Clear the payee's ghost note (§3.9) whenever the dock's Category resolves to anything.
+           The note sits in the very next span on this status line, so a stale "auto · Meat" ran
+           straight into this resolve's own message and read as one sentence ("auto · Meat ‘Milk’ is
+           new under Food."). Once the field has been resolved by hand the suggestion is spent — its
+           OOB-filled id has just been overwritten too. Dock only: a split line passes its own
+           fieldName and has no ghost slot to swap, and htmx would log a missing-target error. -->
+      <span
+        th:if="${fieldName == 'categoryId'}"
+        id="entry-ghost"
+        class="entry-dock__ghost muted"
+        hx-swap-oob="true"
+      ></span>
       <span th:if="${categoryName}" class="entry-dock__resolved muted" th:text="${categoryName}"
         >Food</span
       >
