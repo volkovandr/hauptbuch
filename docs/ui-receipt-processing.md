@@ -63,7 +63,7 @@
   cash marker, account-edit screen); T-RX-3 → `receipt_line_tag` junction; T-RX-4 → keep
   `receipt_line` after commit (+ reopen). T-RX-1 polling lean stands. Parser client: official
   Anthropic Java SDK (Messages + Batches). Playwright smoke replaced by MockMvc acceptance (plan
-  §14 decision, 2026-07-05).
+  §3 decision, 2026-07-05).
 - **v0.2 (2026-06-24):** **Removed AI-assisted cropping entirely** — tried in practice and rejected:
   manual cropping is trivial (≪ 1 s), whereas validating and correcting an AI crop decision takes
   *longer* than just doing it. Pre-processing is now **purely manual**. This **supersedes

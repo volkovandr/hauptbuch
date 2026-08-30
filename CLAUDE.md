@@ -2,7 +2,7 @@
 
 Guidance for Claude Code working in this repository. This file is **operational** — how to build
 correctly here. *What* to build next lives in `docs/implementation-plan.md`.
-The five design docs in `docs/` are **authoritative** for every product and domain decision; this
+The six design docs in `docs/` are **authoritative** for every product and domain decision; this
 file only summarises the parts you will trip over. Keep it in sync with `docs/` when conventions change.
 
 > A self-hosted, single-user, web-based Microsoft Money replacement: a double-entry ledger with
@@ -322,6 +322,7 @@ The docs are a navigation aid, not a worklog. Resist the urge to add prose.
 - **`data-model.md`** — the double-entry engine, currency/FX, per-person debts, tags; the invariants.
 - **`ui-transaction-register.md`** — the register and the entry/edit dock; display & entry rules.
 - **`ui-receipt-processing.md`** — receipt lifecycle, the four-step workflow, the `receipt` schema sketch.
+- **`import.md`** — the import session/staging model, the maps, the commit gate, and the QIF/Money dialect.
 - **`implementation-plan.md`** — the staged build sequence and the backlog. *Start here for what's next.*
 - **`potential-feature-ideas.md`** — ideas that came up during implementation/testing, not yet planned.
 

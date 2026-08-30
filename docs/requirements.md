@@ -1,8 +1,8 @@
 # Hauptbuch — Requirements Document
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.6
-**Date:** 2026-08-01
+**Status:** Draft v0.7
+**Date:** 2026-08-30
 **Owner:** volkovandr
 **Type:** Self-hosted, single-user, web-based personal finance application
 
@@ -246,7 +246,7 @@ fails in apps like ezBookkeeping.
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | FR-IMP-01 | Import via a **canonical internal representation**; source formats handled by pluggable importers. | Must |
-| FR-IMP-02 | Money-history importer once the export format is chosen (QIF/OFX/CSV candidates). | Must |
+| FR-IMP-02 | Money-history importer — format settled as **QIF** (Q9); see `import.md`. | Must |
 | FR-IMP-03 | Map accounts/categories/payees/transfers/splits with a review step before commit. | Must |
 | FR-IMP-04 | Idempotent import — no duplicates on re-run. | Must |
 | FR-IMP-05 | Generic CSV importer for ongoing use. | Should |
@@ -385,7 +385,7 @@ everything, and allow full disabling. See Q11.
 | Q6 | Forecasting ambition | **Resolved** — scheduled + trend |
 | Q7 | Migrate Money history | **Resolved** — yes, via Money export |
 | Q8 | Budgets | **Resolved** — yes, on the expense taxonomy |
-| Q9 | Money export format | **Deferred** — format-agnostic core; importer later |
+| Q9 | Money export format | **Resolved** (2026-08-30) — **QIF**, exported one account per file; design in `import.md` |
 | Q10 | Telegram external routing acceptable | Assumed yes; see §5.16 note |
 | Q11 | **MCP/agent: accept that queries send data subsets to the model provider at query time?** And default scope — read-only, or read-write with confirmation? | **Open** |
 | Q12 | Monthly narrative report: aggregates-only (max privacy) vs richer AI input? | Open — defaulting to aggregates-only (FR-RPT-03) |

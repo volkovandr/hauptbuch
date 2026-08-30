@@ -1,11 +1,12 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.44
+**Status:** Draft v0.45
 **Date:** 2026-08-30
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
-`ui-transaction-register.md`, `ui-receipt-processing.md` (the five authoritative design docs)
+`ui-transaction-register.md`, `ui-receipt-processing.md`, `import.md`
+(the six authoritative design docs)
 
 > This document records the **build sequence** — the order in which the system is implemented, what
 > each stage delivers, and *why that order*, in keeping with the house rule that the *why* must
@@ -14,29 +15,40 @@
 > Scope note: stages 1–6 are specified in detail because their shape is forced by the data model and
 > the legibility constraint. **Stages 7 onward are deliberately rough** — once the UI is live at
 > stage 6, priorities will shift, and pinning detail now would be premature (the owner's standing
-> position). §14 is an **unordered backlog inventory** — nothing in it is sequenced or staged yet;
+> position). §3 is an **unordered backlog inventory** — nothing in it is sequenced or staged,
+> save the single item currently being built (Money migration, which has its own design doc);
 > priority is set during implementation, once the system is in use.
 >
 > **§2 is closed as of v0.44** — every stage in it is complete. Everything still to build lives in
-> §14; the stage numbering there stops (see the v0.44 changelog entry), and the numbers 10–13 stay
+> §3; the stage numbering there stops (see the v0.44 changelog entry), and the numbers 10–13 stay
 > retired so the historical entries below keep meaning what they said.
 >
-> The cross-cutting decisions in §1 began as «A» working assumptions, listed in §16 with their
-> overturn cost; all are realised as of stage 6, but §16 is kept as the record of what was assumed.
+> The cross-cutting decisions in §1 began as «A» working assumptions, listed in §5 with their
+> overturn cost; all are realised as of stage 6, but §5 is kept as the record of what was assumed.
 
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
-- **v0.44 (2026-08-30):** **Bank statement reconciliation leaves §2 for §14, unbuilt** — the last
+- **v0.45 (2026-08-30):** **Money migration (QIF) grilled & designed**; **Q9 settled — the export
+  format is QIF.** It gets its own authoritative doc, `docs/import.md` (the sixth), because the
+  staging/mapping/commit apparatus it defines outlives the migration — FR-IMP-05's generic CSV
+  importer reuses all of it and changes only the parser. It stays a **§3 backlog item, not a §2
+  stage**: §2 remains closed and stage numbering stays stopped. **Document renumbering** — the
+  level-2 headings had skipped 3–13 to mirror stage numbers that were only level-3 headings, so
+  `## 14` → `## 3`, `## 15` → `## 4`, `## 16` → `## 5`, and every in-doc reference follows.
+  Older `.scratch/` issue records still cite the pre-renumber §14/§15/§16 and are left as written.
+  Scope addition — the import writes derived rates back into `exchange_rate`, needing a third
+  `source` value (`'import'`) and therefore a migration.
+- **v0.44 (2026-08-30):** **Bank statement reconciliation leaves §2 for §3, unbuilt** — the last
   staged item becomes a backlog item, and §2 closes with every stage complete. It was numbered
   "stage 13" only because the v0.28 receipt merge folded the old stages 9–12 into stage 9 and left
   it stranded behind a four-number gap; nothing sequenced it after stage 9 except that leftover
   number. With the register in daily use, its priority is set the same way as everything else in
-  §14 — from use, not from a number assigned before the UI existed. No scope change to the work
+  §3 — from use, not from a number assigned before the UI existed. No scope change to the work
   itself. Stage numbers 10–13 are retired, not reused.
-- **v0.43 (2026-08-25):** **Cross-currency receipt commits leave §14** and ship (issue
+- **v0.43 (2026-08-25):** **Cross-currency receipt commits leave §3** and ship (issue
   receipts/23). Adds `receipt.funding_total` and `receipt.base_total` (V17).
-- **v0.42 (2026-08-21):** **Payee editor page** (create/edit/merge/delete) added to §14's Data
+- **v0.42 (2026-08-21):** **Payee editor page** (create/edit/merge/delete) added to §3's Data
   lifecycle backlog, deferred from `potential-feature-ideas.md`.
 - **v0.41 (2026-08-21):** **9h complete — all of stage 9 (Receipts) complete** (owner-confirmed).
   No scope change (routine). The stage-9 sub-plan `implementation-plan-stage-9.md` is deleted; its
@@ -65,7 +77,7 @@ it shipped. "Stage N complete" needs no recap here.
   no reviewed-marker). Entity changes (V14, data-model v0.11): `receipt.payee_id`,
   `receipt_line.ai_target_text`. The header total becomes **editable**; the split panel is reused
   as a **shared line-editor core**; ⇄ Redistribute is a **per-line** action (no Tax detection);
-  **cross-currency receipt commits deferred** to §14 (Save warns, Confirm blocks). Details in the
+  **cross-currency receipt commits deferred** to §3 (Save warns, Confirm blocks). Details in the
   sub-plan §9f; receipt doc v0.5.
 - **v0.35 (2026-08-02):** **9e complete** (owner-confirmed) — single-receipt analyse shipped. Scope
   addition from owner feedback: the receipt-parser **system prompt is operator-editable** (new
@@ -93,7 +105,7 @@ it shipped. "Stage N complete" needs no recap here.
 - **v0.28 (2026-07-21):** **Stages 9–12 merged into one stage 9 (Receipts)** — they were horizontal
   layers, none independently usable; the merged stage is sliced *vertically* (9a–9h) in the new
   dedicated sub-plan `implementation-plan-stage-9.md`. Scope decisions: **duplicate detection +
-  link-to-existing deferred** to §14 (the matcher arrives with stage 13, which needs it anyway;
+  link-to-existing deferred** to §3 (the matcher arrives with stage 13, which needs it anyway;
   Q-RX-2 moot); the **AI Vocabulary** added — an operator-curated projection of the category
   taxonomy (alias / hide / per-category **AI note** steering categorisation, tags, and
   beneficiaries, owned by `categories`, edited on category-edit) is what
@@ -148,7 +160,7 @@ it shipped. "Stage N complete" needs no recap here.
   base. 7d.0 additionally **un-seeds `FX gain/loss`** — with no code path resolving it by name it is
   no longer a system leaf (dropped from the V2 seed and `createCurrency`), just a lazy user category.
 - **v0.15 (2026-07-05):** Stage 7 made concrete, split into **7a–7e** (tags last; cross-currency
-  after edit/splits; keyboard-first piecewise; sorting deferred to §14). Payee gains city/country +
+  after edit/splits; keyboard-first piecewise; sorting deferred to §3). Payee gains city/country +
   a seeded `country` table at 7b.
 - **v0.11 (2026-07-04):** Inserted **6c — Category deletion**; the former 6c (currency-list editor)
   renumbered to **6d**.
@@ -156,7 +168,7 @@ it shipped. "Stage N complete" needs no recap here.
 - **v0.6 (2026-06-30):** `web` module (UI shell only) added to the §3 map — feature controllers stay
   in their own modules.
 - **v0.2 (2026-06-25):** Base currency moved from config into a DB **`settings` entity**
-  (write-once); multi-currency **fully live from stage 3** (no single-currency phase). §14 reduced to
+  (write-once); multi-currency **fully live from stage 3** (no single-currency phase). §3 reduced to
   a flat, unordered backlog inventory.
 - **v0.1 (2026-06-25):** Initial plan — staged increments + backlog; module-first from day one;
   three-tier test strategy; the stage-3 service framed as invariant-upholding domain ops, not CRUD.
@@ -209,7 +221,7 @@ is *not* deferring multi-currency, it is building each report when it is built:
 - **ECB rate-feed automation** — an integration; until it lands, rates are entered manually (which is
   all a booked conversion needs anyway: the two real amounts are the source of truth, frozen).
 - **Held-balance revaluation** (`native × rate@D` mark-to-market for net worth and the balance
-  timeline) — a valuation query that appears with net-worth reporting (§14).
+  timeline) — a valuation query that appears with net-worth reporting (§3).
 
 ### 1.3 Base currency and the root `settings` entity
 Base currency lives **in the database**, not config — in the single-row root `settings` entity, now
@@ -242,7 +254,7 @@ as ARCH-12 / the `operations` module, in miniature. Generic per-table CRUD exist
 reference data (payees, tags, account definitions).
 
 ### 1.5 Test strategy — three suites, real Postgres, reused containers
-Per the owner's note, via the Gradle JVM Test Suite plugin (see §15 for the full rationale):
+Per the owner's note, via the Gradle JVM Test Suite plugin (see §4 for the full rationale):
 `test` (unit, Mockito, no container, fast), `integrationTest` (Flyway + repositories vs
 Testcontainers), and a logic suite (SQL-resident logic vs Testcontainers — same setup, different
 intent). **Container reuse** (singleton / `testcontainers.reuse.enable=true`) keeps the
@@ -337,12 +349,12 @@ never retrofitted):
 
 - **7a — Register, read-only.** ✅ **complete.** The list over a register query + the stage-3
   running-balance SQL rebound to a real repository; date/account/payee filters (column re-sorting
-  deferred to §14); zebra, currency display, muted `pending_review`.
+  deferred to §3); zebra, currency display, muted `pending_review`.
 - **7b — Entry dock, simple transactions.** ✅ **complete.** Payee picker with create-new parsing
   (payee gains city/country + a seeded ISO-3166 alpha-3 `country` list), category picker with
   create-new and the lazy per-currency-leaf routing (data-model §6.5), sign-free amounts with the
   `+`/`−` override, the single-ghost-category autofill, backdated-insert slice refresh (Q-UI-5
-  decided here). Acceptance via MockMvc in `integrationTest` (Playwright dropped — see §14). Dock
+  decided here). Acceptance via MockMvc in `integrationTest` (Playwright dropped — see §3). Dock
   commit endpoint lives in `operations` (module-cycle precedent from 6d).
 - **7c — Edit mode, splits, void.** ✅ **complete.** Edit-in-place with account/date re-threading,
   `voidTransaction` from the dock, the inline split panel with "the rest" defaulting, notes at both
@@ -517,18 +529,26 @@ here). Eight ordered sub-stages, each shipped green and owner-confirmed:
   9e lenient-seeding path; frozen `parse_cost` = standard rates × 0.5; submit failure fails all
   members; no batch cancel (per-receipt soft-delete is the escape hatch).
 
-Deferred to §14 during the stage: duplicate detection + link-to-existing (the matcher arrives with
+Deferred to §3 during the stage: duplicate detection + link-to-existing (the matcher arrives with
 statement reconciliation, which shares it; Q-RX-2 moot until then), SSE for the status poll (T-RX-1,
 only if 2 s polling grates). Cross-currency receipt commits were also deferred here, and have since shipped
 (issue receipts/23).
 
 ---
 
-## 14. Backlog inventory (unordered)
+## 3. Backlog inventory (unordered)
 
 Requirements not yet placed in a stage. **No ordering, no stages assigned** — priority is set during
-implementation, once the system is in use. Listed by area so nothing is forgotten.
+implementation, once the system is in use. Listed by area so nothing is forgotten. The first bullet
+is the exception: it is the item being built right now, and it is listed first for that reason alone.
 
+- **Money migration (QIF import) — the item currently being built.** ~20 years of Microsoft Money
+  history, exported account by account, imported through a long-running staging session that
+  touches the ledger only once, at the end (FR-IMP-01–04; **settles Q9 — the format is QIF**).
+  Large enough to earn its own authoritative doc: **`docs/import.md`** owns the session/staging
+  model, the three maps (accounts incl. people, categories → category *plus tags*, payees), the
+  transfer-mirror rule, the commit gate, and the QIF/Money dialect — and carries its own a–f
+  slicing. Deliberately **not** a §2 stage; §2 stays closed.
 - **Reporting & analysis:** category×month matrix (FR-ANA-07); consolidated-balance timeline + trend
   line (FR-ANA-09); drill-down from cells (FR-ANA-10); spend by category/tag/payee, period
   comparisons, category trends (FR-ANA-01–04); net worth in base incl. **held-balance revaluation**
@@ -558,13 +578,16 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
 - **Recurring & subscriptions:** recurring templates generating `pending_review` transactions
   (FR-REC); subscriptions manager + renewal overview (FR-SUB).
 - **Planning:** budgets on the category taxonomy (FR-BUD); forecasting — scheduled + trend (FR-FC).
-- **Data lifecycle:** Money-history importer + canonical import representation (FR-IMP-01–04, gated on
-  Q9 — export format); generic CSV importer (FR-IMP-05); **full** data-management operations suite —
+- **Data lifecycle:** generic CSV importer (FR-IMP-05) — reuses the whole staging/mapping/commit
+  apparatus `docs/import.md` defines, differing only in the parser; **full** data-management
+  operations suite —
   merge categories/payees/people/accounts, bulk re-tag/re-categorize (FR-DM; grows the `operations`
   module from its stage-6 subdivision seed). **Payee editor page** — a dedicated payee list/edit
   screen (create has little value, payees already create inline during entry; edit and especially
   merge are the real need) — merge is an instance of the FR-DM suite above, the editor screen itself
-  is net-new UI; deferred from `potential-feature-ideas.md` (2026-08-21).
+  is net-new UI; deferred from `potential-feature-ideas.md` (2026-08-21). The Money import makes
+  payee merge materially more urgent — it auto-creates every distinct Money payee (see
+  `docs/import.md`), which is a deliberate, accepted cost.
 - **Investments:** manual holdings/positions contributing to net worth (FR-INV, "Could").
 - **Exposure & integrations:** MCP server (FR-MCP; Q11 scope must be settled first); Telegram
   quick-capture bot (FR-TG, "Could").
@@ -581,11 +604,11 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
   Postgres, without the browser-binary/WSL setup cost. Revisit only if a defect surfaces that a
   server-side acceptance test structurally cannot catch (e.g. a real client-JS interaction in one of
   the sanctioned JS leaves). Supersedes the earlier "Playwright arrives at 7b" plan and the
-  Should-level UI-testing rows in `tech-stack.md`/§15.
+  Should-level UI-testing rows in `tech-stack.md`/§4.
 
 ---
 
-## 15. Testing strategy — the rationale
+## 4. Testing strategy — the rationale
 
 The three-tier mechanics (which suite runs against what, and which tier a given repository method
 belongs in) are the operational rules in **CLAUDE.md §6** — not restated here. This section keeps only
@@ -603,17 +626,17 @@ the *why* behind the shape:
 - **Migrations** are forward-only (Flyway Community); "tested migrations" (NFR-06) = apply on a fresh
   container and assert the resulting schema/data, plus data-preserving checks where a migration
   transforms existing rows.
-- **No separate UI tier:** browser smoke (Playwright) is dropped (§14); money-critical flows are
+- **No separate UI tier:** browser smoke (Playwright) is dropped (§3); money-critical flows are
   covered at the controller/htmx acceptance level (MockMvc) in the integration tier. Do **not**
   unit-test templates — server-rendering means most "UI logic" is backend logic already covered above.
 
 ---
 
-## 16. Working assumptions folded into this plan (all now realised)
+## 5. Working assumptions folded into this plan (all now realised)
 
 | # | «A» working assumption baked into this plan | Overturn impact |
 |---|----------------------------------------------|-----------------|
-| P-1 | Multi-currency fully live from stage 3 (cross-currency, frozen `base_amount`, `exchange_rate` table); `FX gain/loss` is a manual leg, no auto-booking (2026-07-11 decision); only ECB feed automation + held-balance revaluation arrive with the reports/integration that consume them | Re-scopes stage 3 vs §14 |
+| P-1 | Multi-currency fully live from stage 3 (cross-currency, frozen `base_amount`, `exchange_rate` table); `FX gain/loss` is a manual leg, no auto-booking (2026-07-11 decision); only ECB feed automation + held-balance revaluation arrive with the reports/integration that consume them | Re-scopes stage 3 vs the §3 backlog |
 | P-2 | Root `settings` entity in the DB holds base currency (write-once, required before any transaction); entity born at stage 3, UI at stage 5; now ratified into the data-model doc (§3.8) | Small schema; entity defined |
 | P-3 | Stage 6 covers accounts **and** categories **and** opening balances; `operations` born here (subdivision) | Re-scopes stage 6 |
 | P-4 | Stage-3 service is invariant-upholding domain ops, not generic CRUD | Naming/shape of the `ledger` service |
