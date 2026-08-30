@@ -49,8 +49,8 @@
 - **v0.3 (2026-07-21):** Stage-9 planning round (grilled & owner-confirmed; build sequence in
   `implementation-plan-stage-9.md`). **Schema ratified** into `data-model.md` §13 — that doc is now
   authoritative for the entities; §9 below is historical. **Duplicate detection +
-  link-to-existing deferred** to the backlog (confirm always creates; Q-RX-2 moot until the stage-13
-  matcher exists). **Reopen/re-enter added** (§7): a committed receipt can be reopened, its draft
+  link-to-existing deferred** to the backlog (confirm always creates; Q-RX-2 moot until the
+  statement-reconciliation matcher exists). **Reopen/re-enter added** (§7): a committed receipt can be reopened, its draft
   re-edited, and re-entered — the old transaction is soft-deleted and a new one booked; no drift
   check. **AI Vocabulary added**: the AI sees an operator-curated projection of the taxonomy
   (per-category alias / hide / **AI note** — freetext prompt guidance that can also instruct
@@ -400,7 +400,8 @@ The `failed` view offers **Retry** (→ `pre_processed`) — or Delete, as every
 ### 6.4 Step ④ Confirm
 
 > **Deferred (2026-07-21):** the duplicate check and link-to-existing below are **out of the
-> stage-9 build** — confirm always creates. They land with (or after) the stage-13 matcher they
+> stage-9 build** — confirm always creates. They land with (or after) the statement-reconciliation
+> matcher they
 > share; the 1:0..1 link and this section's design are unchanged. Q-RX-2 is moot until then.
 
 - **Duplicate check** runs here (final values known): match on **merchant + date + total** using the
@@ -583,8 +584,8 @@ create table receipt_line (
 
 | # | Question | Status |
 |---|----------|--------|
-| Q-RX-2 | On **link-to-existing**, push the parsed splits onto the existing transaction, or just attach the image? | **Moot for now** (2026-07-21) — link-to-existing deferred with the duplicate check (§6.4); reopens with the stage-13 matcher |
-| Q-RX-3 | Generalise to one `attachment` entity (receipts **and** statements), or keep `receipt` concrete and parallel the statement entity later? | **Resolved** (2026-07-21) — concrete `receipt` (data-model §13); revisit only if stage 13 proves a common shape |
+| Q-RX-2 | On **link-to-existing**, push the parsed splits onto the existing transaction, or just attach the image? | **Moot for now** (2026-07-21) — link-to-existing deferred with the duplicate check (§6.4); reopens with the statement-reconciliation matcher |
+| Q-RX-3 | Generalise to one `attachment` entity (receipts **and** statements), or keep `receipt` concrete and parallel the statement entity later? | **Resolved** (2026-07-21) — concrete `receipt` (data-model §13); revisit only if statement reconciliation proves a common shape |
 | T-RX-1 | Completion push: htmx **polling** vs **SSE** | **Polling** (lean confirmed 2026-07-21); SSE only if polling grates in use |
 | T-RX-2 | `last-4 → account` map: config table vs learned-on-confirm | **Resolved** (2026-07-21) — config **on the account** (card last-4 + cash marker, account-edit screen; data-model §13.4) |
 | T-RX-3 | Draft-line **tags**: `receipt_line_tag` junction vs carry in `parse_json` until commit | **Resolved** (2026-07-21) — junction mirroring `posting_tag` (data-model §13.2); the raw parse (`parse_raw`) stays immutable |

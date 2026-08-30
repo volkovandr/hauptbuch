@@ -873,9 +873,9 @@ to be designed next:
 - **Recurring templates & subscriptions** (§5.3, §5.5) — generate `pending_review` transactions.
 - **Budgets** (§5.13) — on the same category (account) taxonomy and/or tags; no separate budget
   table of categories.
-- **Statement attachments** (bank statements on the Pi filesystem, ARCH-07) — designed with stage
-  13. *Receipts* are ratified in §13; the two stay separate entities unless stage 13 proves a
-  common shape (Q-RX-3 decision, 2026-07-21).
+- **Statement attachments** (bank statements on the Pi filesystem, ARCH-07) — designed with
+  statement reconciliation. *Receipts* are ratified in §13; the two stay separate entities unless
+  that work proves a common shape (Q-RX-3 decision, 2026-07-21).
 - **Holdings / positions** (§5.11) — contribute to net worth via the same `native × rate@D` rule,
   with manually-entered "rates" (prices).
 - **Import canonical representation** (§5.12) — targets this model; idempotency keys live there.
@@ -946,7 +946,7 @@ create table receipt (
   -- cross-currency header (receipts/23): both NULL for a same-currency receipt
   funding_total  numeric(19,4),           -- what comes off the paying account, in ITS currency —
                                           -- proposed from rate_as_of, overtypeable, an accepted
-                                          -- estimate until the statement arrives (stage 13)
+                                          -- estimate until the statement arrives (reconciliation)
   base_total     numeric(19,4),           -- the base figure freezing the conversion (§6.4); only
                                           -- when neither leg is the base currency
   transaction_id bigint references transaction(transaction_id),  -- NULL until committed

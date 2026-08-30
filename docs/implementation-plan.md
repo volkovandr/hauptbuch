@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.43
-**Date:** 2026-08-21
+**Status:** Draft v0.44
+**Date:** 2026-08-30
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md` (the five authoritative design docs)
@@ -17,12 +17,23 @@
 > position). §14 is an **unordered backlog inventory** — nothing in it is sequenced or staged yet;
 > priority is set during implementation, once the system is in use.
 >
+> **§2 is closed as of v0.44** — every stage in it is complete. Everything still to build lives in
+> §14; the stage numbering there stops (see the v0.44 changelog entry), and the numbers 10–13 stay
+> retired so the historical entries below keep meaning what they said.
+>
 > The cross-cutting decisions in §1 began as «A» working assumptions, listed in §16 with their
 > overturn cost; all are realised as of stage 6, but §16 is kept as the record of what was assumed.
 
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.44 (2026-08-30):** **Bank statement reconciliation leaves §2 for §14, unbuilt** — the last
+  staged item becomes a backlog item, and §2 closes with every stage complete. It was numbered
+  "stage 13" only because the v0.28 receipt merge folded the old stages 9–12 into stage 9 and left
+  it stranded behind a four-number gap; nothing sequenced it after stage 9 except that leftover
+  number. With the register in daily use, its priority is set the same way as everything else in
+  §14 — from use, not from a number assigned before the UI existed. No scope change to the work
+  itself. Stage numbers 10–13 are retired, not reused.
 - **v0.43 (2026-08-25):** **Cross-currency receipt commits leave §14** and ship (issue
   receipts/23). Adds `receipt.funding_total` and `receipt.base_total` (V17).
 - **v0.42 (2026-08-21):** **Payee editor page** (create/edit/merge/delete) added to §14's Data
@@ -507,15 +518,9 @@ here). Eight ordered sub-stages, each shipped green and owner-confirmed:
   members; no batch cancel (per-receipt soft-delete is the escape hatch).
 
 Deferred to §14 during the stage: duplicate detection + link-to-existing (the matcher arrives with
-stage 13, which shares it; Q-RX-2 moot until then), SSE for the status poll (T-RX-1, only if 2 s
-polling grates). Cross-currency receipt commits were also deferred here, and have since shipped
+statement reconciliation, which shares it; Q-RX-2 moot until then), SSE for the status poll (T-RX-1,
+only if 2 s polling grates). Cross-currency receipt commits were also deferred here, and have since shipped
 (issue receipts/23).
-
-### Stage 13 — Bank statement reconciliation (rough)
-The `statements` module (§5.8): PDF-first extraction, matching statement lines against existing
-transactions (manual/receipt/pre-registered), flag-and-create for unmatched, manual override, mark
-reconciled. Builds the matcher that receipt duplicate detection (deferred from stage 9 to §14) will
-share. Money flow covered by MockMvc acceptance (Playwright dropped, §14).
 
 ---
 
@@ -530,9 +535,13 @@ implementation, once the system is in use. Listed by area so nothing is forgotte
   (FR-ANA-05, §1.2); monthly narrative report (FR-RPT, Q12).
 - **Register follow-ons:** column re-sorting with the balance-hide rule (register §2.7) — deferred
   from stage 7a until missed.
+- **Bank statement reconciliation:** the `statements` module (§5.8) — PDF-first extraction, matching
+  statement lines against existing transactions (manual/receipt/pre-registered), flag-and-create for
+  unmatched, manual override, mark reconciled. Money flow covered by MockMvc acceptance (Playwright
+  dropped, below). Builds the matcher receipt duplicate detection (next bullet) shares.
 - **Receipt follow-ons:** duplicate detection at confirm (merchant+date+total) + link-to-existing
   transaction with the Q-RX-2 push-splits question (receipt doc §6.4) — deferred from stage 9;
-  shares the stage-13 matcher, so lands with or after statements. **PDF ingestion** for receipts —
+  shares the statement matcher above, so lands with or after it. **PDF ingestion** for receipts —
   a real need (Android document scanners emit PDFs); stage 9b accepts JPEG/PNG only and rejects
   PDFs with a clear message. **Disk-reclaim purge / undelete** — soft-deleted receipt rows keep
   `deleted_at` but there is no UI to undelete or to sweep orphaned image files off the Pi (stage 9b

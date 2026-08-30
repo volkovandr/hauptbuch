@@ -19,6 +19,17 @@ role names, so the mapping is 1:1:
 | `ready-for-human` | `ready-for-human` |
 | `wontfix` | `wontfix` |
 
+Plus one state the triage vocabulary has no role for, because it is set after the work rather than
+during triage:
+
+| Repo state | `Status:` value |
+|------------|-----------------|
+| fixed and confirmed | `resolved` |
+
+`resolved` is the closed-and-fixed state, mandated by `CLAUDE.md` §9 — a fixed issue is marked, never
+deleted. Set it when the change is merged **and** the owner has confirmed it; an implementation note
+appended under `## Comments` while the branch is still under review leaves the `Status:` line alone.
+
 ## Category — the `Category:` line
 
 Recorded in a `Category:` line directly under `Status:`. Add it when triaging an issue that lacks
@@ -45,6 +56,7 @@ are.
 
 ## wontfix
 
-There is no separate "closed" axis: `Status: wontfix` **is** the closed state. A rejected
+There is no separate "closed" axis: `Status: wontfix` and `Status: resolved` **are** the closed
+states — rejected and fixed respectively. A rejected
 enhancement also gets a `.out-of-scope/` entry linked from the issue's `## Comments`; an
 already-implemented request does not.
