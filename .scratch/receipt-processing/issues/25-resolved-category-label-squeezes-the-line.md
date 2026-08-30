@@ -190,3 +190,79 @@ already-implemented request. Its `Food - Milk` ambiguity is answered by decision
 
 One consequence the owner accepted: a pre-hoc confirm *is* the feedback, so the "new category: …"
 label originally asked for becomes the confirm's follow-up notice rather than the primary signal.
+
+### Implemented — branch `issue/category-resolve-confirm` (2026-08-30)
+
+Built to the brief. `./gradlew check` fully green (all three suites, `ApplicationModules.verify()`,
+every quality tool). Three deviations from the sketch, each forced or argued:
+
+- **`CategoryResolutionService` is its own service**, rather than `CategoryService.resolveCategory`
+  changing signature in place. The brief flagged the `GodClass` ceiling; in place the class went to
+  `WMC=47` and `pmdMain` failed. Moving the resolution cluster (`resolveCategory`, the two match
+  helpers, the propose/create helper, `findManageableByName`) out drops it back under, and lands on
+  exactly the `debts` shape the brief said to mirror — `PersonResolution` + `PersonResolutionService`,
+  now `CategoryResolution` + `CategoryResolutionService`. `CategoryService` keeps creation
+  (`createCategory`), which the resolver calls. The unit tests moved with it, into
+  `CategoryResolutionServiceTest`.
+- **The line's status is a full-width wrapped row under the fields, not a box inside the category
+  field.** The row is `display: flex; flex-wrap: wrap; align-items: end` — a status *inside* the
+  category field grows that field downward and, under `align-items: end`, lifts every other input in
+  the row. That is the misalignment the simple dock already learned about and solved by putting
+  `.entry-dock__status` below its fields (the rule's own comment says so). `.split-line__status`
+  with `flex: 1 0 100%` is that same answer for a line: it wraps onto its own line, so nothing it
+  contains — at any length — moves a field horizontally or vertically. The AI ghost moved in there
+  too, so the category field now holds label + input and nothing else, and the end-of-row
+  `.split-line__resolved` carrier (and its `flex: 0 0 0` claim) is gone entirely rather than being
+  kept honest.
+- **`PickerFields`** — the endpoint's four field-name params bind as one `@ModelAttribute` record
+  (`index` stays its own `@RequestParam`, so its binding semantics are untouched). Adding `categoryDecision` took the method to 10 params and tripped PMD's
+  `ExcessiveParameterList`; they travel as one unit anyway (the confirm buttons re-post the whole
+  set), so grouping them is the honest fix. The wire names are unchanged.
+
+Verified against the running app and the real dev book, not just MockMvc: posting
+`Food - Zzznewleaf` returned the confirm and created **nothing** (`select count(*)` = 0); re-posting
+with `categoryDecision=CREATE` created it under Food and returned `new category: Zzznewleaf` with the
+id filled (the test leaf was then deleted). The rendered split panel and the receipts editor both
+carry `split-line__status` and no `split-line__resolved`.
+
+"A line left at the unconfirmed-create stage cannot commit" needed no new test: a pending create
+leaves `lineCategoryId` empty, which is exactly what
+`commitReRendersThePanelWithAnErrorForaLineWithoutaCategory` already drives, and the receipts
+surface's `ReceiptConfirmGate.checkLines` refuses an unresolved line at Confirm.
+
+**Still open — the visual check.** The acceptance list's browser verification on both surfaces was
+not done: browser tooling was declined in that session. The markup and CSS are verified; that the
+row visibly stops reflowing is the owner's to confirm.
+
+#### Review pass — four defects found and fixed
+
+A `/code-review high` on the finished branch found four; all were real, all are fixed.
+
+1. **A 500 instead of the message, on a refused create** (the serious one). `resolveCategory` was
+   `@Transactional` and catches `IllegalArgumentException` around `createCategory` — which is
+   `@Transactional` itself. A create the rules refuse (type `Food - for Kids`, hit Create: the child
+   name begins with a reserved sigil) marks the shared transaction rollback-only; swallowing the
+   exception then blew up at commit as `UnexpectedRollbackException`. It worked before this ticket
+   only because the `try/catch` sat in the controller, outside the boundary. `resolveCategory` is now
+   deliberately **not** transactional — the one write, `createCategory`, owns its own boundary — and
+   the javadoc says why. `CategoryCreateRefusalIntegrationTest` pins it, and is deliberately **not**
+   `@Transactional`: a test that rolls itself back never commits, so no existing screen test could
+   have caught this. Verified by restoring the annotation: the test fails with exactly
+   `UnexpectedRollbackException`.
+2. **The create-confirm vanished on any panel re-render.** The prompt lives only in the resolve
+   response, so a Save refused for that very line (or add-line / remove-line) re-rendered the panel
+   with the typed text, no id, and no Create control — and `hx-trigger="change"` could not bring it
+   back, because the value never changes. The user was stuck in a Save-error loop until they retyped
+   the category. An unresolved line (text, no id, no person) now carries `hx-trigger="change, load"`
+   and re-resolves itself on render; a resolved line, transfer, person line, or empty line does not.
+   Both halves are tested.
+3. **The payee ghost broke the confirm buttons.** `/register/ghost` OOB-replaces
+   `#entry-category-resolved` with a span that omitted `data-counterpart-resolved` — the hook every
+   confirm button targets via `closest`. After a ghost fired, clicking Create (or the person
+   Restore/Create-new pair, a latent hole this ticket made a common path) aborted silently in htmx.
+   The attribute is back on the ghost's span, asserted in `ghostSuggestsThePayeesMostCommonCategory`.
+4. **Every split line grew by the row gap.** `.split-line__status` is always present (it holds the
+   hidden inputs), so `flex: 1 0 100%` forced a second flex line on every row — `gap: 0.4rem` each,
+   on a 20-line receipt a real cost, against the cramping this ticket exists to fix. It is now
+   `flex: 0 0 0` by default and only claims a full line when it actually holds something visible
+   (`:has(.split-line__ghost, .entry-dock__resolved)`).

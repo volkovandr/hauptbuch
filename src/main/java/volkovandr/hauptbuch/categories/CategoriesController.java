@@ -6,6 +6,7 @@ import java.util.Optional;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -61,6 +62,11 @@ class CategoriesController {
   private static final String RESOLVED_PERSON_PENDING = "personPending";
   private static final String RESOLVED_PERSON_PENDING_NAME = "personPendingName";
 
+  /** The proposed-but-not-yet-created leaf the picker asks the user to confirm (issue 25). */
+  private static final String RESOLVED_CATEGORY_PENDING_CHILD = "categoryPendingChild";
+
+  private static final String RESOLVED_CATEGORY_PENDING_PARENT = "categoryPendingParent";
+
   /**
    * htmx response header the transfer branch raises so the dock recomputes its amount fields
    * (register §3.8a, plan stage 7d.3): a transfer's counterpart currency is fixed by the resolved
@@ -79,6 +85,7 @@ class CategoriesController {
   private static final String COUNTERPART_RESOLVED = "counterpart-resolved";
 
   private final CategoryService categoryService;
+  private final CategoryResolutionService categoryResolutionService;
   private final AccountService accountService;
   private final TagService tagService;
   private final PersonResolutionService personResolutionService;
@@ -86,11 +93,13 @@ class CategoriesController {
 
   CategoriesController(
       CategoryService categoryService,
+      CategoryResolutionService categoryResolutionService,
       AccountService accountService,
       TagService tagService,
       PersonResolutionService personResolutionService,
       AiVocabularyService aiVocabularyService) {
     this.categoryService = categoryService;
+    this.categoryResolutionService = categoryResolutionService;
     this.accountService = accountService;
     this.tagService = tagService;
     this.personResolutionService = personResolutionService;
@@ -174,17 +183,16 @@ class CategoriesController {
   String resolveCategory(
       @RequestParam List<String> categoryText,
       @RequestParam(defaultValue = "0") int index,
-      @RequestParam(defaultValue = RESOLVED_ID) String fieldName,
-      @RequestParam(required = false) String typeFieldName,
-      @RequestParam(required = false) String directionFieldName,
-      @RequestParam(required = false) String personFieldPrefix,
+      @ModelAttribute PickerFields fields,
       @RequestParam(required = false) String personDecision,
+      @RequestParam(required = false) String categoryDecision,
       Model model,
       HttpServletResponse response) {
     String text = index >= 0 && index < categoryText.size() ? categoryText.get(index) : "";
     Optional<TransferTarget.Parsed> transfer = TransferTarget.parse(text);
     Optional<PersonTarget.Parsed> person =
         transfer.isPresent() ? Optional.empty() : PersonTarget.parse(text);
+    clearCategoryPendingAttributes(model);
     if (transfer.isPresent()) {
       resolveTransfer(transfer.get(), model, response);
       clearPersonAttributes(model);
@@ -192,16 +200,16 @@ class CategoriesController {
       resolvePerson(person.get(), personDecision, model);
       model.addAttribute(RESOLVED_DIRECTION, null);
     } else {
-      resolveCategoryText(text, model);
+      resolveCategoryText(text, categoryDecision, model);
       clearPersonAttributes(model);
     }
-    model.addAttribute("fieldName", fieldName);
-    // The optional field-name params round-trip through the fragment's revival buttons, which can
+    model.addAttribute("fieldName", fieldNameOrDefault(fields.fieldName()));
+    // The optional field-name params round-trip through the fragment's confirm buttons, which can
     // only re-post them as strings — so a blank comes back where the first call passed nothing.
     // Normalise it to null, or the fragment would emit an input with an empty name.
-    model.addAttribute("typeFieldName", blankToNull(typeFieldName));
-    model.addAttribute("directionFieldName", blankToNull(directionFieldName));
-    model.addAttribute("personFieldPrefix", blankToNull(personFieldPrefix));
+    model.addAttribute("typeFieldName", blankToNull(fields.typeFieldName()));
+    model.addAttribute("directionFieldName", blankToNull(fields.directionFieldName()));
+    model.addAttribute("personFieldPrefix", blankToNull(fields.personFieldPrefix()));
     model.addAttribute("index", index);
     return "fragments/entry-dock :: categoryResolved(categoryId=${categoryId},"
         + " categoryName=${categoryName}, error=${error}, fieldName=${fieldName},"
@@ -210,32 +218,77 @@ class CategoriesController {
         + " personName=${personName}, personDirection=${personDirection},"
         + " personRevive=${personRevive}, personPending=${personPending},"
         + " personPendingName=${personPendingName}, personFieldPrefix=${personFieldPrefix},"
-        + " index=${index})";
+        + " categoryPendingChild=${categoryPendingChild},"
+        + " categoryPendingParent=${categoryPendingParent}, index=${index})";
+  }
+
+  /**
+   * How the calling picker names its own inputs — one unit because they travel as one: the
+   * fragment's confirm buttons re-post the whole set (alongside the line's {@code index}) so a
+   * split line's Restore / Create resolves <em>that</em> line (plan stage 8b.2). The dock passes
+   * none of them and resolves its single value into the dock's own field names.
+   *
+   * @param fieldName the hidden id input's name ({@code categoryId} for the dock, {@code
+   *     lineCategoryId} for a split line); blank falls back to the dock's
+   * @param typeFieldName the hidden income/expense type input's name, when the caller needs one
+   * @param directionFieldName the hidden transfer-direction input's name, when the caller needs one
+   * @param personFieldPrefix prefixes the person inputs ({@code line} → {@code linePersonName})
+   */
+  record PickerFields(
+      String fieldName,
+      String typeFieldName,
+      String directionFieldName,
+      String personFieldPrefix) {}
+
+  private static String fieldNameOrDefault(String fieldName) {
+    return fieldName == null || fieldName.isBlank() ? RESOLVED_ID : fieldName;
   }
 
   private static String blankToNull(String value) {
     return value == null || value.isBlank() ? null : value;
   }
 
-  /** Resolve a plain category name or {@code Parent - Child} to its (existing or new) leaf id. */
-  private void resolveCategoryText(String text, Model model) {
-    try {
-      long categoryId = categoryService.resolveCategory(text);
-      Account category =
-          categoryService
-              .findById(categoryId)
-              .orElseThrow(() -> new IllegalStateException("resolved category vanished"));
-      model.addAttribute(RESOLVED_ID, categoryId);
-      model.addAttribute(RESOLVED_NAME, category.name());
-      model.addAttribute(RESOLVED_TYPE, category.type());
-      model.addAttribute(RESOLVED_ERROR, null);
-    } catch (IllegalArgumentException e) {
-      model.addAttribute(RESOLVED_ID, "");
-      model.addAttribute(RESOLVED_NAME, null);
-      model.addAttribute(RESOLVED_TYPE, "");
-      model.addAttribute(RESOLVED_ERROR, e.getMessage());
+  /**
+   * Resolve a plain category name or {@code Parent - Child} into the picker's hidden id + status
+   * (receipt-processing/25). A plain match emits <em>no</em> caption — the input already shows what
+   * was picked; only a create is announced, and only after the user confirmed it.
+   */
+  private void resolveCategoryText(String text, String categoryDecision, Model model) {
+    switch (categoryResolutionService.resolveCategory(text, categoryDecision)) {
+      case CategoryResolution.Refused refused -> {
+        model.addAttribute(RESOLVED_ID, "");
+        model.addAttribute(RESOLVED_NAME, null);
+        model.addAttribute(RESOLVED_TYPE, "");
+        model.addAttribute(RESOLVED_ERROR, refused.message());
+      }
+      case CategoryResolution.Pending pending -> {
+        // Nothing was created and no id is carried, so the commit fails validation like any other
+        // unresolved category until the Create control is used.
+        model.addAttribute(RESOLVED_ID, "");
+        model.addAttribute(RESOLVED_NAME, null);
+        model.addAttribute(RESOLVED_TYPE, "");
+        model.addAttribute(RESOLVED_ERROR, null);
+        model.addAttribute(RESOLVED_CATEGORY_PENDING_CHILD, pending.childName());
+        model.addAttribute(RESOLVED_CATEGORY_PENDING_PARENT, pending.parentName());
+      }
+      case CategoryResolution.Resolved resolved -> {
+        Account category =
+            categoryService
+                .findById(resolved.categoryId())
+                .orElseThrow(() -> new IllegalStateException("resolved category vanished"));
+        model.addAttribute(RESOLVED_ID, resolved.categoryId());
+        model.addAttribute(RESOLVED_NAME, resolved.statusText());
+        model.addAttribute(RESOLVED_TYPE, category.type());
+        model.addAttribute(RESOLVED_ERROR, null);
+      }
     }
     model.addAttribute(RESOLVED_DIRECTION, null);
+  }
+
+  /** Blank the proposed-create attributes — every branch but a pending category create. */
+  private static void clearCategoryPendingAttributes(Model model) {
+    model.addAttribute(RESOLVED_CATEGORY_PENDING_CHILD, null);
+    model.addAttribute(RESOLVED_CATEGORY_PENDING_PARENT, null);
   }
 
   /**

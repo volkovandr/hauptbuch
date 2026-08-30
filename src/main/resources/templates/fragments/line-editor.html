@@ -66,22 +66,21 @@
           placeholder="Category"
           th:value="${line.categoryText()}"
           hx-post="/categories/resolve"
-          hx-trigger="change"
           hx-swap="innerHTML"
           th:attr="list=${categoryOptionsId},
                    hx-target='#line-' + ${line.index()} + '-resolved',
+                   hx-trigger=${!#strings.isEmpty(line.categoryText())
+                                 and #strings.isEmpty(line.categoryId())
+                                 and #strings.isEmpty(line.personName())}
+                               ? 'change, load' : 'change',
                    hx-vals=|{&quot;fieldName&quot;:&quot;lineCategoryId&quot;,&quot;typeFieldName&quot;:&quot;lineCategoryType&quot;,&quot;directionFieldName&quot;:&quot;lineTransferDirection&quot;,&quot;personFieldPrefix&quot;:&quot;line&quot;,&quot;index&quot;:${line.index()}}|"
         />
-        <!-- Ghost (plan §9f): an unresolved line the AI named a target for shows that term as a grey,
-             non-committing hint — which also marks a targetless transfer line for what it is. A
-             resolved line carries it as the label's tooltip (above) instead. Register: ghost null. -->
-        <p
-          class="split-line__ghost muted"
-          th:if="${ghost != null and #strings.isEmpty(line.categoryText())}"
-          th:text="'AI said: ' + ${ghost}"
-        >
-          AI said: Food - Sweets
-        </p>
+        <!-- Why `load` on an unresolved line: what the resolve has to say — above all the pending
+             create-confirm — lives only in its response, so any server-side re-render of the panel
+             (a Save refused for this very line, add-line, remove-line) would drop the confirm while
+             keeping the typed text, and `change` cannot bring it back because the value never
+             changes. Re-resolving on load re-arms it. Only a line with text but no id fires; a
+             resolved line, a transfer, a person line, and an empty line all stay quiet. -->
       </div>
       <div class="field field--amount">
         <label class="field__label" th:for="'split-amt-' + ${line.index()}">
@@ -186,25 +185,43 @@
       >
         ✕
       </button>
-      <!-- This line's resolved category id + type + transfer direction + person attribution
-           (hidden), filled by /categories/resolve. The type feeds the live signed-sum readout; the
-           direction signs a transfer line, which has no category type (register §3.8, plan stage
-           7d.3), and the person direction does the same for a `for`/`by` line (register §3.5, plan
-           stage 8b.2) — whose person is carried by NAME, its debt leaf provisioned at commit. Every
-           line emits all of them (blank for a category) so the aligned line arrays stay aligned
-           across a per-line re-resolve. -->
-      <span
-        th:id="'line-' + ${line.index()} + '-resolved'"
-        class="split-line__resolved"
-        data-counterpart-resolved
-      >
-        <input type="hidden" name="lineCategoryId" th:value="${line.categoryId()}" />
-        <input type="hidden" name="lineCategoryType" th:value="${line.categoryType()}" />
-        <input type="hidden" name="lineTransferDirection" th:value="${line.transferDirection()}" />
-        <input type="hidden" name="linePersonName" th:value="${line.personName()}" />
-        <input type="hidden" name="linePersonDirection" th:value="${line.personDirection()}" />
-        <input type="hidden" name="linePersonRevive" th:value="${line.personRevive()}" />
-      </span>
+      <!-- The line's status, wrapped onto its own full-width row BELOW the fields (issue
+           receipt-processing/25). Everything the resolve has to say lands here — the AI ghost, the
+           resolve error, the create-confirm, the person revival choice — for the reason the simple
+           dock already puts its status under the fields rather than beside them: .split-line is a
+           flex row, so a visible span among the fields becomes a column of its own and narrows
+           every other field as it appears. Sitting on a wrapped flex line, it can say anything at
+           any length without moving a field. -->
+      <div class="split-line__status">
+        <!-- Ghost (plan §9f): an unresolved line the AI named a target for shows that term as a grey,
+             non-committing hint — which also marks a targetless transfer line for what it is. A
+             resolved line carries it as the label's tooltip (above) instead. Register: ghost null. -->
+        <span
+          class="split-line__ghost muted"
+          th:if="${ghost != null and #strings.isEmpty(line.categoryText())}"
+          th:text="'AI said: ' + ${ghost}"
+        >
+          AI said: Food - Sweets
+        </span>
+        <!-- This line's resolved category id + type + transfer direction + person attribution
+             (hidden), filled by /categories/resolve — plus whatever status that resolve renders.
+             The type feeds the live signed-sum readout; the direction signs a transfer line, which
+             has no category type (register §3.8, plan stage 7d.3), and the person direction does the
+             same for a `for`/`by` line (register §3.5, plan stage 8b.2) — whose person is carried by
+             NAME, its debt leaf provisioned at commit. Every line emits all of them (blank for a
+             category) so the aligned line arrays stay aligned across a per-line re-resolve. -->
+        <span
+          th:id="'line-' + ${line.index()} + '-resolved'"
+          data-counterpart-resolved
+        >
+          <input type="hidden" name="lineCategoryId" th:value="${line.categoryId()}" />
+          <input type="hidden" name="lineCategoryType" th:value="${line.categoryType()}" />
+          <input type="hidden" name="lineTransferDirection" th:value="${line.transferDirection()}" />
+          <input type="hidden" name="linePersonName" th:value="${line.personName()}" />
+          <input type="hidden" name="linePersonDirection" th:value="${line.personDirection()}" />
+          <input type="hidden" name="linePersonRevive" th:value="${line.personRevive()}" />
+        </span>
+      </div>
     </li>
   </body>
 </html>

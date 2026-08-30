@@ -421,9 +421,21 @@ th.register__spine {
   flex: 0 0 auto;
 }
 
-/* The resolved hidden id/type carrier takes no visual space. */
-.split-line__resolved {
+/* The line's status (issue receipt-processing/25): the AI ghost, the resolve error, the
+   create-confirm, the person revival choice, and the hidden id/type carrier they arrive with.
+
+   With nothing to report it is the old zero-width carrier — `flex: 0 0 0`, no wrap, so a line that
+   says nothing costs nothing, not even the row-gap a forced second flex line would add to every
+   line of a long receipt. The moment it holds something visible it claims a full flex line of its
+   own and drops under the fields, so however much it has to say it never competes with them for
+   width — the same reason the simple dock keeps .entry-dock__status below its fields. */
+.split-line__status {
   flex: 0 0 0;
+  font-size: 0.72rem;
+}
+
+.split-line__status:has(.split-line__ghost, .entry-dock__resolved) {
+  flex: 1 0 100%;
 }
 
 /* A cross-currency line's derived funding/base equivalents (register §3.8a) — read-only, compact,
