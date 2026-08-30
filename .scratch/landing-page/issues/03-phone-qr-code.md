@@ -118,24 +118,24 @@ first-run panel, in the existing house style:
 - No migration, no schema change, no new table — nothing here is persisted.
 
 **Acceptance criteria:**
-- [ ] `./gradlew check` is fully green — all three suites, `ApplicationModules.verify()`, and every
+- [x] `./gradlew check` is fully green — all three suites, `ApplicationModules.verify()`, and every
       quality tool.
-- [ ] Unit tests on the URL resolver, one case per row of the table above, plus: the override wins
+- [x] Unit tests on the URL resolver, one case per row of the table above, plus: the override wins
       over a perfectly good derived URL; a blank override is ignored; `127.0.0.1` and `::1` are
       loopback too; the default port is dropped for both schemes; the trailing slash is normalised
       whether or not the override has one; a context path is preserved.
-- [ ] Unit test on the SVG emitter: the module count matches the matrix, the markup is well-formed,
+- [x] Unit test on the SVG emitter: the module count matches the matrix, the markup is well-formed,
       the URL appears escaped in `<title>`. A genuine encode→decode round-trip (a ~20-line test-only
       `LuminanceSource` over the `BitMatrix` fed to `QRCodeReader`) is worth the lines — it is the
       only thing that actually proves the QR says what we think it says.
-- [ ] Integration test (MockMvc, real Postgres, alongside `LandingBalancesPanelIntegrationTest`): the
+- [x] Integration test (MockMvc, real Postgres, alongside `LandingBalancesPanelIntegrationTest`): the
       panel renders an `<svg>` and the URL text for a normal `Host`; it is absent for a loopback
       `Host`; `X-Forwarded-Host` + `X-Forwarded-Prefix` produce the gateway URL — which is the test
       that proves `forward-headers-strategy` is actually wired, not just configured; the property
       override wins.
-- [ ] No `sqlLogicTest` — there is no SQL in this feature.
-- [ ] All copy English; the panel matches the existing `.panel` / `.eyebrow` house style.
-- [ ] `CONTEXT.md` "Phone QR panel" / "Public base URL" terms added during triage — keep the
+- [x] No `sqlLogicTest` — there is no SQL in this feature.
+- [x] All copy English; the panel matches the existing `.panel` / `.eyebrow` house style.
+- [x] `CONTEXT.md` "Phone QR panel" / "Public base URL" terms added during triage — keep the
       implementation consistent with them.
 
 **Out of scope:**
@@ -170,3 +170,49 @@ Decisions taken the same day:
 - **Trust:** `X-Forwarded-*` are spoofable by anything that can reach the app directly. Accepted —
   the app is LAN-only and single-user, and the worst case is a wrong QR on the operator's own landing
   page. No redirect or auth surface consumes these values.
+
+### Implemented — branch `issue/phone-qr-code` (2026-08-30)
+
+Built to the brief; `./gradlew check` fully green (all three suites — 1306 tests — plus
+`ApplicationModules.verify()` and every quality tool). The docs the brief listed (tech-stack §4.5 and
+its two §8 rows, the two CONTEXT.md terms) were already written during triage and needed no change.
+
+Three notes on judgement calls:
+
+- **An explicit override is honoured even on a loopback request.** The brief's step 3 says "if the
+  *resolved* host is a loopback address" render nothing, which could read as applying to the
+  override too. It doesn't here: the override exists precisely because the request cannot be
+  trusted to answer the question, so second-guessing it would make it not an override. The derived
+  path is unchanged — loopback there still renders nothing, which is why the panel is invisible in
+  local development.
+- **A malformed override falls through to the request rather than being encoded.** The brief asked
+  for no validation beyond "parses as an absolute http(s) URI", which leaves the failure behaviour
+  open. Encoding a QR of `not a url` helps nobody, so it logs a WARN naming the bad value (an
+  expected failure, handled, degraded — the logging ladder in CLAUDE.md §5) and derives instead.
+- **One rect per horizontal run of dark modules**, not per module (the brief allowed either that or
+  a merged path). Same picture, roughly a third of the markup — the real page emits 170 rects and
+  7.2 KB for a 33×33 code. The round-trip test is what makes this safe: it reads the modules back
+  out of our own SVG string and decodes them, so it proves the emitted markup rather than just the
+  `BitMatrix` ZXing handed us. That also replaces the brief's "module count matches the matrix"
+  assertion, which with runs merged would only restate the emitter's own loop.
+
+One thing the brief did not cover, found on self-review: **an IPv6 host is bracketed** before it
+goes into the URL. The servlet API hands `getServerName()` over unbracketed, so a Pi reached at an
+IPv6 literal would otherwise have produced `http://fe80::1:8080/`, where the address's own colons
+run into the port. A hostname or IPv4 address has no colon and is untouched.
+
+Two small fixes to things the change touched: `deploy/README.md`'s "Accessing from the outside"
+said you would "see the app's login page", which does not exist (ARCH-04 is backlog), and its
+heading was an `h1` among `h2`s.
+
+Verified against a running app on port 8099 (not the owner's own copy), through real Tomcat rather
+than only MockMvc — which matters here, because Tomcat derives `serverName` from the `Host` header
+and MockMvc does not: `Host: raspberrypi:8099` rendered the panel and encoded
+`http://raspberrypi:8099/`; a plain `localhost` request rendered no panel at all; and
+`X-Forwarded-Host: homenet` + `X-Forwarded-Prefix: /pi/hauptbuch` encoded
+`http://homenet/pi/hauptbuch/`.
+
+**Still owed:** an actual phone scanning an actual code. The encoding is proven by decode
+round-trip and the URL by the checks above, but that the printed code scans off the owner's screen
+at 140 px is theirs to confirm.
+

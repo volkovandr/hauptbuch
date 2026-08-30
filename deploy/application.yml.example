@@ -21,6 +21,11 @@ hauptbuch:
     daily-cron: "0 0 3 * * *"
   receipts:
     storage-root: /var/lib/hauptbuch/receipts
+  # The URL encoded in the landing page's "Open on your phone" QR panel. Leave it unset: the app
+  # reads the address off the incoming request, honouring a gateway's X-Forwarded-Proto / -Host /
+  # -Prefix, which is right for every normal deployment. Set it only when a gateway cannot be made
+  # to send those headers, or the derived URL is otherwise wrong — it wins over the request.
+  # public-base-url: http://homenet/pi/hauptbuch
 
 # Optional (CLAUDE.md §1.8): only needed if you want the env fallback instead of setting the key
 # via the masked Settings UI, which is the normal path and covers key rotation without a restart.

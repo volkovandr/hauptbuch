@@ -48,6 +48,10 @@ dependencies {
 	// behind our own ReceiptParser interface, and jtoon to decode the model's TOON output.
 	implementation 'com.anthropic:anthropic-java:2.34.0'
 	implementation 'dev.toonformat:jtoon:2.0.2'
+	// Phone QR panel (issue landing-page/03, tech-stack §4.5): `core` only — pure Java, no
+	// transitive dependencies. Deliberately NOT `com.google.zxing:javase`, which exists for
+	// raster output through ImageIO/AWT; we emit the BitMatrix as inline SVG ourselves.
+	implementation 'com.google.zxing:core:3.5.3'
 	runtimeOnly 'org.springframework.modulith:spring-modulith-runtime'
 	runtimeOnly 'org.postgresql:postgresql'
 	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
