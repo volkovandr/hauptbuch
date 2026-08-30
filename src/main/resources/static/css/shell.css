@@ -202,3 +202,39 @@
   color: var(--oxblood);
   box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
 }
+
+/* ── Phone QR panel (landing page, issue landing-page/03) ────────────────────────────────
+   The SVG carries no pixel dimensions — its geometry is in module units with a viewBox — so its
+   rendered size is this one width; the height follows from the square aspect ratio. The code
+   itself is deliberately NOT themed: it paints its own white ground and near-black modules, so it
+   stays scannable in dark mode, and the thin light border keeps that white square from looking
+   like a rendering artefact against dark paper. */
+.phone-qr {
+  display: flex;
+  gap: 0.9rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.phone-qr__code > svg {
+  display: block;
+  width: 140px;
+  height: auto;
+  border: 1px solid var(--rule);
+}
+
+.phone-qr > div {
+  max-width: 22rem;
+}
+
+.phone-qr p {
+  margin: 0;
+}
+
+/* The URL is there to be read off and typed, so it gets the same face the ledger uses for figures
+   transcribed by hand, and breaks rather than overflowing a narrow window. */
+.phone-qr__url {
+  font-family: var(--font-num);
+  overflow-wrap: anywhere;
+  margin-bottom: 0.3rem;
+}

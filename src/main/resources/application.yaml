@@ -1,3 +1,11 @@
+# Honour a gateway's X-Forwarded-Proto/-Host/-Port/-Prefix by installing Spring's
+# ForwardedHeaderFilter, which rewrites the request before any controller sees it. This is what
+# lets the phone QR panel (issue landing-page/03) derive the right URL when the app is served at a
+# path prefix, e.g. http://homenet/pi/hauptbuch/. With no proxy in front the headers are absent and
+# the filter is a no-op, so it is safe in dev and on a direct-to-Pi deployment.
+server:
+  forward-headers-strategy: framework
+
 spring:
   application:
     name: hauptbuch

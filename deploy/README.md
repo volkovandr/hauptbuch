@@ -200,6 +200,29 @@ Restoring an **older** dump into a **newer** app is a forward migration, not a r
 applies any migrations added since, on the next start. That is fine, and it is one-way — take a
 fresh backup first if you might want to come back.
 
-# Accessing from the outside
+## Accessing from the outside
 
-On any machine of the same LAN where the Pi is, open the browser and go to `http://<pi-host>:8080/`. You should see the app's login page. 
+On any machine on the same LAN as the Pi, open a browser at `http://<pi-host>:8080/`. You should
+see the landing page — there is no login (ARCH-04 is still backlog).
+
+To get the app onto a phone, use the **Open on your phone** panel at the bottom of that landing
+page rather than typing the URL: it shows a QR of the app's own address, and scanning it lands the
+phone straight on the receipt-capture screen (a phone is redirected there from `/`).
+
+The URL in that panel is read off the request you are making, so it is already right for a direct
+`http://<pi-host>:8080/` deployment, with nothing to configure.
+
+**Behind a gateway or reverse proxy**, make the proxy pass these headers and the panel follows the
+address your browser actually used — path prefix included:
+
+- `X-Forwarded-Proto`
+- `X-Forwarded-Host`
+- `X-Forwarded-Prefix` — needed if the app is served under a path, e.g. `/pi/hauptbuch`
+
+The app trusts them because it is LAN-only and single-user: no redirect or auth surface consumes
+these values, so the worst a spoofed header can do is put a wrong QR on your own landing page.
+
+If the proxy cannot be made to send them, set `hauptbuch.public-base-url` in
+`/etc/hauptbuch/application.yml` to the URL you want encoded (see `application.yml.example`); it
+wins over whatever the request says. The panel is hidden entirely when the app is reached over
+loopback, which is why it does not appear in local development.
