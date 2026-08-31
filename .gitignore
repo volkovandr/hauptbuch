@@ -59,3 +59,6 @@ application-secret*.yml
 
 # Database backups (dev local root)
 .local-backups/
+
+# Sample Money exports for the import feature — personal data, never commit (import.md a1)
+qif/

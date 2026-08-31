@@ -1,8 +1,8 @@
 # Personal Finance Manager — Import: Sessions, Maps & the QIF/Money Dialect
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.1
-**Date:** 2026-08-30
+**Status:** Draft v0.2
+**Date:** 2026-08-31
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (§5.12, FR-IMP-01–05),
 `data-model.md`,
@@ -40,6 +40,15 @@ across ~300 Money categories, on a Raspberry Pi.
 **One open session at a time.** Every uploaded file feeds the open session; a new session cannot
 start while one is in progress. This is not a limitation to work around — it is what makes the
 mirror rule (§6) and the commit gate (§9) definable at all.
+
+**The filename carries no identity.** Money exports every account under its own program file's
+name, not the account's — across ~100+ accounts the owner will see the same filename over and
+over, and renames files by hand afterwards anyway. So the filename is stored for reference only
+(§11) and is never used to detect "this account was already imported" (that is the account map,
+§5.1) or to auto-skip a re-upload. The one thing it *is* used for: if the owner uploads a file
+whose name matches one **already uploaded in this session**, the tool asks whether this is a
+**replacement** of that upload (discard the old file's staged rows, stage the new one) or a
+**genuinely different file** that happens to share a name — never assumed either way.
 
 Why nothing lands in the ledger until the end:
 
@@ -99,10 +108,14 @@ upload (§5.1).
 | `M` | header memo | `transaction.note` |
 | `N` | cheque / reference number | prefixed into `transaction.note` |
 | `C` | cleared flag: `*`/`c` → `cleared`; `X`/`R` → `reconciled`; absent → `unreconciled` | `posting.reconciliation` |
-| `L` | category path, or `[Account]` for a transfer, or `Category/Class` | §5.2, §6 — **and Q-IMP-1** |
+| `L` | category path, or `[Account]` for a transfer, or `Category/Class` | §5.2, §6, §8 |
 | `A` | payee mailing address lines | **ignored** — the address comes from the payee-name parser (§5.3) |
-| `S` / `E` / `$` | split: category / memo / amount | §7 |
+| `S` / `E` / `$` | split: category (or `[Account]`, or `Category/Class`) / memo / amount | §7 |
 | `^` | record terminator | — |
+
+**Amounts carry a thousands grouping comma** (confirmed against a real export, e.g. `T-650,000.00`,
+`T11,707.31`): `T`, `U` and `$` are all parsed by the **same** routine, and that routine strips the
+grouping separator before parsing the decimal. One routine, not one per field.
 
 ### 4.3 Dates
 
@@ -150,6 +163,16 @@ investment support** — FR-INV-01/02 are "Could" and unbuilt. Importing positio
 be viewed, valued, or edited is worse than not importing them; a brokerage account imported as
 cash-only would carry a balance that silently corrupts net worth.
 
+**A file naming a destroyed account is refused outright, with a clear message.** If the `?`-
+substitution (§4.4) has left the account being imported, or any `[Account]` transfer counterparty
+it references, entirely `?`/whitespace, the whole file is rejected before anything stages — not
+staged-then-flagged. This is a deliberate simplification, not a gap to design around: production
+exports are not expected to hit this (the owner renames a legacy account in Money before export,
+the same discipline already applied to categories, §4.4), and if one ever does, the fix is to rename
+it in Money and re-export, not to build machinery for disambiguating indistinguishable strings. A
+payee in the same state is silently dropped instead (§4.4) because a payee is never mandatory to
+resolve; an account always is.
+
 ---
 
 ## 5. The three maps
@@ -174,6 +197,11 @@ The map is **many-to-one**: several Money accounts may target one Hauptbuch acco
 the merge facility and, deliberately, the whole "junk account" story — legacy accounts the owner
 never intends to export can all be pointed at one account they create for the purpose. No separate
 catch-all mechanism is needed.
+
+**A destroyed account name is rejected, not mapped** — see §4.5. Unlike a payee, which is silently
+dropped when its name is unrecoverable, an account cannot be: mapping is mandatory, and two
+distinct destroyed names can be indistinguishable on the map screen with no safe default to fall
+back on. The file is refused before anything stages, the same way an `!Type:Invst` file is.
 
 **`expect-file` flag.** Independent of the mapping, each Money account name carries "am I still
 waiting for this account's own export?". Clearing it resolves that account's pending mirrors (§6)
@@ -310,6 +338,10 @@ such an account the far amount is still unknown and must be supplied by hand bef
   exchange rate for any of the currency for that date, or use the most recent rate available for
   any of these currencies.
 
+Both questions are still open, but real cross-currency pairs now exist in the sample (two EUR ↔
+RUR transfers, e.g. `-599,999.64` RUR / `[EUR account]` mirrored by `+11,707.31` EUR /
+`[RUR account]`, same date) — real numbers for slice e's fixtures rather than an invented pair.
+
 ---
 
 ## 7. Splits
@@ -322,15 +354,30 @@ directly onto Hauptbuch's split shape — one funding leg plus N category legs �
 Split lines that do not sum to the header total raise an **exception** and are never silently
 adjusted.
 
-The `L` line's role on a split transaction, and how Money exports a split containing a
-**transfer-type leg**, are **open — see Q-IMP-1**.
+**Q-IMP-1 settled, against a real export.** The header `L` on a split transaction simply **repeats
+the first split line** — Money always writes it twice, once as the header category and once as
+`S`. And a split **can** contain a transfer-type leg: `S[Account]` appears exactly where
+`S<category path>` would, followed by its `$amount` like any other split line — confirmed by a
+real split whose second leg is a transfer to a person account. This needs **no new machinery**: a
+split leg's target is resolved exactly like the header's `L` target (§6, §5.4) — category path or
+`[Account]` reference — the split builder just applies that same resolution per line instead of
+once. The mirror rule (§6.1) already anticipated this exact shape — "a Money split line can itself
+be a transfer" — this is that case, now evidenced.
 
 ---
 
 ## 8. Tags
 
 Tags reach a transaction from the category map (§5.2) — and, if the owner used Money's **classes**
-(the `Category/Class` slash suffix), from those too (**Q-IMP-3**).
+(the `Category/Class` slash suffix), from those too.
+
+**Q-IMP-3 settled, against a real export.** Classes are used, at least once in the sample
+(`OtherIncome/<class>`), so the parser needs the real case, not just a guard. A class is a
+**second tag source alongside the category map** — the class name maps to a tag exactly the way a
+category path does, added to whatever tags the category map contributes for that path. A class
+name is free text and goes through the **same `?`-destruction handling as payees** (§4.4): the one
+sample instance is itself fully destroyed, so it contributes no tag rather than fabricating one
+from a `????`-string that could collide with an unrelated class.
 
 Placement follows the rule the receipt path already established, and reuses its implementation
 rather than restating it:
@@ -425,7 +472,9 @@ the target's PK name). `import_*.transaction_id` FKs into `transaction` follow t
 Everything lives in **`importer`**, including its own controller — feature screens' controllers
 belong to their feature module, not `web` (CLAUDE.md §3). It consumes only the **public top-level
 types** of `ledger` (`LedgerService`, `PayeeService`, `ExchangeRateService`), `accounts`,
-`categories` and `debts`. `importer` is a leaf consumer, so no cycle is introduced —
+`categories`, `debts` — **and `operations`**, for `CurrencyLeafService` (the category map targets a
+semantic node, and only `CurrencyLeafService` routes it to the paying account's currency leaf,
+§5.2). `importer` is a leaf consumer of all five, so no cycle is introduced —
 `ApplicationModules.verify()` is the arbiter.
 
 | Tier | Covers |
@@ -460,19 +509,45 @@ before building two map UIs on top of the parser is worth the small reordering.
 
 | # | Question |
 |---|---|
-| **Q-IMP-1** | **`L` on a split transaction**, and how Money exports a split containing a **transfer-type leg**. The owner has such splits; the export shape is not yet known. To be settled against a real sample at slice a. |
+| **Q-IMP-1** | ~~`L` on a split transaction, and how Money exports a split containing a transfer-type leg.~~ **Settled (§7)** against a real sample: `L` repeats the first `S` line; a split leg may be `[Account]` and resolves exactly like the header target. |
 | **Q-IMP-2** | **`transaction.lifecycle` for imported transactions.** Assumed `confirmed` throughout; deliberately deferred for a separate discussion. |
-| **Q-IMP-3** | **Money classes** (`Category/Class`). If used, they are a second tag source alongside the category map (§8); if not, the parser needs only a guard. |
+| **Q-IMP-3** | ~~Money classes (`Category/Class`).~~ **Settled (§8)** against a real sample: classes are used; a class name is a second tag source, handled through the same `?`-destruction rule as payees. |
 | **Q-IMP-4** | **Cross-currency transfers**: how to handle transfers when neigher of the currencies is the base currency. The importer cannot invent a rate; the owner must supply it. To be settled against a real sample at slice e. |
 | **Q-IMP-5** | **Ledger duplicate scan**: when to refresh the review surface, and how to handle a new ledger entry while the scan is running. To be settled against a real sample at slice f. |
 
-A **sample QIF export** is to be supplied and the §4 dialect assumptions verified against it at
-slice a.
+**A sample QIF export was supplied 2026-08-31** (three files: one credit-card, two current
+accounts sharing a currency pair, one a transfer counterparty of the other) and the §4 dialect
+verified against it — closing Q-IMP-1 and Q-IMP-3 above, and surfacing two points the original
+draft missed, now folded into their sections: **amounts carry a thousands-grouping comma** (§4.2);
+and **a destroyed account name rejects the whole file** (§4.5) — a production export is not
+expected to have one (the owner's rename discipline already covers account names, not only
+categories), so the simple answer is refuse and ask for a re-export, not a mapping-time special
+case. The sample's own cross-currency pair (§6.2/§6.3) gives slice e real numbers to build fixtures
+from, though Q-IMP-4/§6.5 themselves are unaffected and remain open for slice e. The sample also
+confirmed the `D26/11'2011` date shape and unambiguous DD/MM detection, the `?`-substitution
+mechanics (full and partial payee destruction, and a real cp1252-only byte pair that a strict
+UTF-8 decode genuinely fails on), and that no file in the sample uses `!Type:Invst`, an `N`/`A`
+field, or a `U`/`T` mismatch. Not exercised by this sample, so still open at whatever slice first
+needs it: the `Name - City - Country` payee-address convention (§5.3), and `C` values other than
+`X`.
 
 ---
 
 ## Changelog
 
+- **v0.2 (2026-08-31):** **Sample verification (slice a1).** A real three-file export checked
+  against §4. Settles **Q-IMP-1** (§7: `L` repeats the first split line; a split leg may itself be
+  a transfer) and **Q-IMP-3** (§8: Money classes are used; second tag source, same `?`-handling as
+  payees). New findings folded in: thousands-grouping commas in every amount field (§4.2); a
+  destroyed *account* name now **rejects the whole file** (§4.5), the same treatment as
+  `!Type:Invst` — production exports are not expected to hit this, so the answer is refuse and
+  re-export, not a mapping-time special case (owner decision, overturning this doc's first draft
+  of the finding, which had proposed tolerating it in the map). §12 corrected — `importer` also
+  depends on `operations` (`CurrencyLeafService`), which §5.2's routing already implied but §12
+  hadn't named. §2 gains the **filename-carries-no-identity** rule (owner clarification): Money
+  reuses one filename across every export, so it is stored for reference only, never used to infer
+  "already imported" — the sole exception being a same-name re-upload within one session, which
+  asks replacement-or-coincidence rather than assuming either.
 - **v0.1 (2026-08-30):** Initial design, from a full grilling pass. Settles **Q9** (format = QIF).
   Establishes the session/staging model, the three maps (accounts incl. people, categories →
   category + tags, payees), the per-posting-pair mirror rule, always-park cross-currency transfers

@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.45
-**Date:** 2026-08-30
+**Status:** Draft v0.46
+**Date:** 2026-08-31
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md`, `import.md`
@@ -29,6 +29,12 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.46 (2026-08-31):** **Money migration sequenced** into the sub-plan
+  `implementation-plan-import.md` (the stage-7/9 sub-plan pattern), cutting `import.md` §13's a–f
+  slices into session-sized steps. No scope change to the feature itself. It records one boundary
+  the design doc missed: the category map needs `CurrencyLeafService`, which lives in
+  **`operations`**, so the `importer` edge set includes that module — `import.md` §12 is corrected
+  at step a1.
 - **v0.45 (2026-08-30):** **Money migration (QIF) grilled & designed**; **Q9 settled — the export
   format is QIF.** It gets its own authoritative doc, `docs/import.md` (the sixth), because the
   staging/mapping/commit apparatus it defines outlives the migration — FR-IMP-05's generic CSV
@@ -548,7 +554,9 @@ is the exception: it is the item being built right now, and it is listed first f
   Large enough to earn its own authoritative doc: **`docs/import.md`** owns the session/staging
   model, the three maps (accounts incl. people, categories → category *plus tags*, payees), the
   transfer-mirror rule, the commit gate, and the QIF/Money dialect — and carries its own a–f
-  slicing. Deliberately **not** a §2 stage; §2 stays closed.
+  slicing. The build sequence lives in the sub-plan **`implementation-plan-import.md`** (the
+  stage-7/9 pattern), which cuts those slices into session-sized steps. Deliberately **not** a §2
+  stage; §2 stays closed.
 - **Reporting & analysis:** category×month matrix (FR-ANA-07); consolidated-balance timeline + trend
   line (FR-ANA-09); drill-down from cells (FR-ANA-10); spend by category/tag/payee, period
   comparisons, category trends (FR-ANA-01–04); net worth in base incl. **held-balance revaluation**
