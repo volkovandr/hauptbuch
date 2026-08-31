@@ -1,6 +1,6 @@
 # Hauptbuch — Import Plan: the Money migration (QIF)
 
-**Status:** Draft v0.2
+**Status:** Draft v0.3
 **Date:** 2026-08-31
 **Owner:** volkovandr
 **Parent:** `implementation-plan.md` §3, first bullet (the item currently being built). This doc is
@@ -98,14 +98,18 @@ synthetic excerpts reproducing each shape this step found (the comma-grouped amo
 date, the cp1252 byte pair, the full/partial `?`-payee, the transfer-leg split, the class suffix),
 authored fresh rather than copied from the real files.
 
-### a2 — Canonical records + the record reader
+### a2 — Canonical records + the record reader ✅ **complete**
 `ImportedTransaction` / `ImportedLine` / the line target (category path **or** account reference) as
 records; the `^`-terminated record reader; the `!Type:` header → asset/liability **proposal**;
 `!Type:Invst` **rejected** by name (§4.5); fields `D` `T`/`U` `P` `M` `N` `C` `L`, `A` ignored.
-Simple one-line transactions only. Takes an already-decoded string — decoding is a3.
+Simple one-line transactions only. Takes an already-decoded string — decoding is a3. `memo` (`M`)
+and `referenceNumber` (`N`) are kept as **separate** canonical fields, matching §3's shape exactly —
+the "prefixed into `transaction.note`" combination (§4.2) is a ledger-write-time concern for a
+later stage, not something a2 bakes in.
 
 **Done when:** unit tests build canonical records from the fixture text, including the `Invst`
-rejection message and the `N`-prefixed note.
+rejection message and the separate `M`/`N` fields. **25 unit tests, all green**; `checkstyleMain`,
+`pmdMain`, `spotbugsMain` and their `*Test` variants clean.
 
 ### a3 — Charset & date-format detection with evidence
 Strict UTF-8 decode probe with **windows-1252 fallback** (§4.4), and the first ~50 decoded lines
@@ -339,6 +343,13 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.3 (2026-08-31):** **a2 complete** — the canonical records (`ImportedTransaction`/
+  `ImportedLine`/`ImportedTarget`), the `^`-terminated record reader, the `!Type:` header proposal
+  (with the `Invst` rejection), and simple one-line field parsing, all pure Java in `importer`. A
+  split (`S`/`E`/`$`) encountered before a4 lands is refused rather than silently dropped. `memo`
+  and `referenceNumber` kept as separate fields (§3), correcting this doc's earlier "N-prefixed
+  note" wording. 25 unit tests; `checkstyleMain/Test`, `pmdMain/Test`, `spotbugsMain` clean. Next:
+  a3 (charset & date-format detection).
 - **v0.2 (2026-08-31):** **a1 complete** — a real three-file Money export verified against §4,
   settling Q-IMP-1 and Q-IMP-3 (folded into `import.md` v0.2). Two dialect corrections the design
   doc missed: amounts carry a thousands-grouping comma; a destroyed *account* name **rejects the
