@@ -177,4 +177,54 @@ class QifParserTest {
     assertThatThrownBy(() -> parser.parse("!Type:Bank\nD01/01'2020\nT1.00\n^\n"))
         .isInstanceOf(QifRejectedException.class);
   }
+
+  @Test
+  void parsesMultipleTransactionsInFileOrder() {
+    String text =
+        """
+        !Type:Bank
+        D01/01'2020
+        T-2.00
+        PCoffee Shop
+        LFood
+        ^
+        D02/01'2020
+        T-599,999.64
+        L[Bank24ru-EUR]
+        ^
+        D03/01'2020
+        T707.46
+        PSalary Inc
+        MMonthly pay
+        LOtherIncome
+        ^
+        """;
+
+    ImportedFile file = parser.parse(text);
+
+    assertThat(file.transactions()).hasSize(3);
+
+    ImportedTransaction first = file.transactions().get(0);
+    assertThat(first.rawDate()).isEqualTo("01/01'2020");
+    assertThat(first.payeeText()).isEqualTo("Coffee Shop");
+    assertThat(first.lines().get(0).amount()).isEqualByComparingTo("-2.00");
+    assertThat(first.lines().get(0).target()).isEqualTo(new ImportedTarget.CategoryPath("Food"));
+
+    // The second record carries no P/M field at all — proves nothing leaks over from the first
+    // record's payee/memo (each record gets its own fresh RawFields, QifParser.toTransaction).
+    ImportedTransaction second = file.transactions().get(1);
+    assertThat(second.rawDate()).isEqualTo("02/01'2020");
+    assertThat(second.payeeText()).isNull();
+    assertThat(second.memo()).isNull();
+    assertThat(second.lines().get(0).target())
+        .isEqualTo(new ImportedTarget.AccountReference("Bank24ru-EUR"));
+
+    ImportedTransaction third = file.transactions().get(2);
+    assertThat(third.rawDate()).isEqualTo("03/01'2020");
+    assertThat(third.payeeText()).isEqualTo("Salary Inc");
+    assertThat(third.memo()).isEqualTo("Monthly pay");
+    assertThat(third.lines().get(0).amount()).isEqualByComparingTo("707.46");
+    assertThat(third.lines().get(0).target())
+        .isEqualTo(new ImportedTarget.CategoryPath("OtherIncome"));
+  }
 }
