@@ -71,7 +71,7 @@ it safe to ship into a book that stays in daily use.
 Pure Java, no Spring, no DB, no ids resolved (§3). Output is the canonical representation, which is
 also the seam FR-IMP-05's CSV importer plugs into later.
 
-### a1 — Sample verification & dialect settlement ✅ **complete** (2026-08-31)
+### a1 — Sample verification & dialect settlement ✅ **complete** (owner-confirmed 2026-08-31)
 Held three real Money exports (a credit card, and two current accounts sharing a currency pair,
 one the other's transfer counterparty) against §4. Confirmed the header set, the `D26/11'2011`
 date shape with unambiguous DD/MM evidence, the `?` substitution (full and partial payee
@@ -98,7 +98,7 @@ synthetic excerpts reproducing each shape this step found (the comma-grouped amo
 date, the cp1252 byte pair, the full/partial `?`-payee, the transfer-leg split, the class suffix),
 authored fresh rather than copied from the real files.
 
-### a2 — Canonical records + the record reader ✅ **complete**
+### a2 — Canonical records + the record reader ✅ **complete** (owner-confirmed 2026-08-31)
 `ImportedTransaction` / `ImportedLine` / the line target (category path **or** account reference) as
 records; the `^`-terminated record reader; the `!Type:` header → asset/liability **proposal**;
 `!Type:Invst` **rejected** by name (§4.5); fields `D` `T`/`U` `P` `M` `N` `C` `L`, `A` ignored.
