@@ -296,6 +296,14 @@ lines, split-sum mismatches, destroyed-payee counts — each linking to where it
 **gate state**: no account still `expect-file`, every path mapped, zero unresolved parks (the
 duplicate scan is f1's half of the gate).
 
+**Orphan map rows (from b3):** map rows are session-scoped and persist across a file removal or
+replacement (§5) — so removing/replacing a file to fix a mis-stated Money account name leaves the
+wrong name behind as an unmapped `import_account` row that no staged posting references. The
+"every account mapped" gate condition must therefore scope to account names **still referenced by
+a live `import_posting`**, not every row in `import_account`; the account map screen (slice c)
+should likewise only demand a mapping for referenced names. Decide at c1 whether unreferenced
+unmapped rows are hidden, or pruned when the last file referencing them is removed.
+
 **Done when:** each issue class appears from crafted staging data and disappears when resolved; the
 gate reports itself locked with a reason and unlocks when all three conditions hold.
 
@@ -356,10 +364,11 @@ the committed accounts match the e′ statistics.
   now also spans staged `import_file` rows (a "replace" drops the staged rows, then the new file
   stages under its old slot). **One decision to ratify:** `import_posting.amount` is stored in
   **Hauptbuch's sign convention, not Money's** — the funding leg on the file's own account carries
-  the record total `T` verbatim (an asset outflow is negative in both conventions) and every
-  category/transfer leg carries the **negation** of its Money `$`/`T`, so a staged transaction's
-  legs sum to zero by construction and f2 hands them to `LedgerService` without a sign flip. The
-  design doc did not pin this; §7/§10 are candidates to record it. Incidental: `ImportedTransaction`
+  the transaction total (the sum of the line amounts, which the parser has already checked equals
+  Money's `T`; an asset outflow is negative in both conventions) and every category/transfer leg
+  carries the **negation** of its Money `$`/`T`, so a staged transaction's legs sum to zero by
+  construction and f2 hands them to `LedgerService` without a sign flip. The design doc did not pin
+  this; §7/§10 are candidates to record it. Incidental: `ImportedTransaction`
   gained a `payeeDestroyed` flag (b1 reserved the column, the parser had collapsed destroyed and
   absent payees); `QifDateFormat.toLocalDate` added (parses `D26/11'2011` with the confirmed
   order, Money's two-digit-year separator convention, refuses non-dates); repositories take the

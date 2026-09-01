@@ -188,8 +188,9 @@ public class ImportStagingService {
       stageLeg(sessionId, importTransactionId, line);
       fundingAmount = fundingAmount.add(line.amount());
     }
-    // The funding leg names the file's own account and carries the record total verbatim (§7); the
-    // legs then sum to zero in Hauptbuch's sign convention.
+    // The funding leg names the file's own account and carries the transaction total — the sum of
+    // the line amounts, which the parser has already checked equals Money's T (§7). The legs then
+    // sum to zero in Hauptbuch's sign convention.
     importPostingRepository.insert(
         new ImportPosting(
             null, importTransactionId, fundingAmount, null, null, fundingAccountName, null, null));

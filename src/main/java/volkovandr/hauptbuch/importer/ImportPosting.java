@@ -8,11 +8,11 @@ import java.math.BigDecimal;
  * import_account}); the funding leg names the file's own account (§7).
  *
  * <p><strong>Sign.</strong> Amounts are stored in Hauptbuch's convention ({@code +} = debit, {@code
- * −} = credit; CLAUDE.md §4), not Money's: the funding leg carries the record total {@code T}
- * verbatim (an outflow from an asset is already negative in both conventions), and every category /
- * transfer leg carries the negation of its Money {@code $}/{@code T} amount. The legs of one staged
- * transaction therefore sum to zero by construction. Currency is still unknown (QIF names none,
- * §5.1); it is fixed by the mapped account at commit.
+ * −} = credit; CLAUDE.md §4), not Money's: the funding leg carries the transaction total (the sum
+ * of the line amounts, which equals Money's {@code T}; an outflow from an asset is already negative
+ * in both conventions), and every category / transfer leg carries the negation of its Money {@code
+ * $}/{@code T} amount. The legs of one staged transaction therefore sum to zero by construction.
+ * Currency is still unknown (QIF names none, §5.1); it is fixed by the mapped account at commit.
  *
  * @param importPostingId surrogate PK; null for a not-yet-persisted row
  * @param importTransactionId the staged transaction this leg belongs to

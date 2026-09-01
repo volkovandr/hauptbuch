@@ -29,13 +29,23 @@ class ImportPreviewService {
   }
 
   /**
-   * Decode, detect and parse one pending upload — the single place the three pure parser pieces are
-   * composed. Throws {@link QifRejectedException} for a file the parser refuses (§4.5); {@link
-   * #preview} catches it, {@link ImportStagingService} lets it propagate.
+   * The bytes decoded once: the strict-UTF-8 probe result and, when the owner overrode the charset,
+   * the re-decode under that choice. {@code effective == detected} when there is no override.
+   *
+   * @param effective the decode the file is actually parsed / previewed from
+   * @param detected the strict-probe decode — its encoding is the "(detected)" hint on the preview
+   */
+  private record Decoded(QifCharset.Decoded effective, QifCharset.Decoded detected) {}
+
+  /**
+   * The result of composing the three pure parser pieces. Throws {@link QifRejectedException} for a
+   * file the parser refuses (§4.5); {@link #preview} catches it, {@link ImportStagingService} lets
+   * it propagate.
    *
    * @param file the parsed canonical representation
    * @param decoded the decoded bytes (effective charset applied), for the preview lines
    * @param charsetCode the effective charset as a wire code
+   * @param detectedCharsetCode the strict-probe charset as a wire code — the "(detected)" hint
    * @param detection the whole-file date-order detection with its evidence
    * @param effectiveOrder the date order to read dates with — the override if set, else the
    *     detected one
@@ -45,16 +55,22 @@ class ImportPreviewService {
       ImportedFile file,
       QifCharset.Decoded decoded,
       String charsetCode,
+      String detectedCharsetCode,
       QifDateFormat.Detection detection,
       QifDateFormat.Order effectiveOrder,
       String dateOrderCode) {}
 
+  private static Decoded decode(PendingImportUpload upload) {
+    byte[] bytes = upload.content();
+    QifCharset.Decoded detected = QifCharset.decode(bytes);
+    QifCharset.Encoding chosen = charsetFromCode(upload.charsetChoice());
+    return new Decoded(chosen == null ? detected : QifCharset.decode(bytes, chosen), detected);
+  }
+
   /** Decode, detect and parse {@code upload}, honouring any charset / date-order override on it. */
   Parsed parse(PendingImportUpload upload) {
-    byte[] bytes = upload.content();
-    QifCharset.Encoding chosenCharset = charsetFromCode(upload.charsetChoice());
-    QifCharset.Decoded decoded =
-        chosenCharset == null ? QifCharset.decode(bytes) : QifCharset.decode(bytes, chosenCharset);
+    Decoded bytes = decode(upload);
+    QifCharset.Decoded decoded = bytes.effective();
     ImportedFile file = qifParser.parse(upload.moneyAccountName(), decoded.text());
     QifDateFormat.Detection detection = QifDateFormat.detect(decoded.text());
     QifDateFormat.Order chosenOrder = orderFromCode(upload.dateOrderChoice());
@@ -63,6 +79,7 @@ class ImportPreviewService {
         file,
         decoded,
         charsetCode(decoded.encoding()),
+        charsetCode(bytes.detected().encoding()),
         detection,
         effectiveOrder,
         orderCode(effectiveOrder));
@@ -72,7 +89,6 @@ class ImportPreviewService {
    * Build the preview for one pending upload, honouring any charset / date-order override on it.
    */
   ImportPreview preview(PendingImportUpload upload) {
-    QifCharset.Decoded detected = QifCharset.decode(upload.content());
     try {
       // Parse first: a destroyed account or !Type:Invst is refused outright with a message that
       // names the account (import.md §4.5), and that must win over a date-format complaint.
@@ -80,7 +96,7 @@ class ImportPreviewService {
       return new ImportPreview(
           parsed.file().proposedAccountType(),
           parsed.charsetCode(),
-          charsetCode(detected.encoding()),
+          parsed.detectedCharsetCode(),
           parsed.dateOrderCode(),
           orderCode(parsed.detection().order()),
           parsed.detection().describe(),
@@ -88,13 +104,11 @@ class ImportPreviewService {
           parsed.file().transactions().size(),
           null);
     } catch (QifRejectedException rejected) {
-      QifCharset.Encoding chosenCharset = charsetFromCode(upload.charsetChoice());
-      QifCharset.Decoded decoded =
-          chosenCharset == null ? detected : QifCharset.decode(upload.content(), chosenCharset);
+      Decoded bytes = decode(upload);
       return ImportPreview.rejected(
-          charsetCode(decoded.encoding()),
-          charsetCode(detected.encoding()),
-          decoded.previewLines(),
+          charsetCode(bytes.effective().encoding()),
+          charsetCode(bytes.detected().encoding()),
+          bytes.effective().previewLines(),
           rejected.getMessage());
     }
   }
