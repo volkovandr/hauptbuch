@@ -1,6 +1,6 @@
 # Hauptbuch — Import Plan: the Money migration (QIF)
 
-**Status:** Draft v0.4
+**Status:** Draft v0.6
 **Date:** 2026-09-01
 **Owner:** volkovandr
 **Parent:** `implementation-plan.md` §3, first bullet (the item currently being built). This doc is
@@ -144,7 +144,7 @@ destroyed-account-name rejection with its message.
 
 ## Slice b — session, staging schema, upload → preview → stage
 
-### b1 — V19 staging schema + session lifecycle
+### b1 — V19 staging schema + session lifecycle ✅ **complete** (owner-confirmed 2026-09-01)
 The seven tables of §11 (`import_session`, `import_file`, `import_account`, `import_category`,
 `import_category_tag`, `import_transaction`, `import_posting`), named per CLAUDE.md §5. The session
 service enforcing **one open session at a time** (§2) — the rule that makes the mirror rule and the
@@ -348,6 +348,13 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.6 (2026-09-01):** **b1 complete** — V19 lands the full seven-table staging schema; the
+  session lifecycle (`ImportSessionService`: one open session at a time, backed by a partial unique
+  index; discard as the only "undo"). Scope: two columns added beyond the §11 sketch because only
+  V19/V20 are planned — `import_account.target_currency_code` (c1/c2 pick a currency for a new
+  account or a person leaf) and `import_transaction.payee_destroyed` (§5.3 counts entirely-`?`
+  payees separately from absent ones). `ImportSessionState` follows the `ReceiptState` pattern.
+  Next: b2 (upload → preview).
 - **v0.5 (2026-09-01):** **a4 complete** — splits (`S`/`E`/`$` → one `ImportedLine` per leg,
   split-sum mismatch raises), the opening-balance self-transfer marker, `?`-destroyed payee
   classification, and `ImportedFile.referencedAccountNames` with the destroyed-account-name file
