@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<!--
+  Import campaign screen (import.md §2, plan b2). One open session at a time; every upload feeds it.
+  This step goes as far as upload → preview — NOTHING is written to a staging table here (that is
+  b3's "Confirm"). Standard server-rendered form POSTs; no bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content ledger" th:fragment="content">
+
+    <p class="warning" th:if="${error}" th:text="${error}">Something went wrong.</p>
+
+    <!-- No campaign open: the only action is to start one. -->
+    <section class="panel" th:if="${campaign == null}">
+      <p class="eyebrow">Import</p>
+      <p class="muted">
+        Importing Microsoft Money is a campaign, not one action: files are parsed and staged, the
+        maps accumulate, and nothing reaches the ledger until the whole campaign commits at the end.
+        One campaign runs at a time.
+      </p>
+      <form method="post" th:action="@{/import/session}" class="form">
+        <p class="actions"><button type="submit" class="btn">Start an import session</button></p>
+      </form>
+    </section>
+
+    <div th:if="${campaign != null}">
+      <section class="panel">
+        <p class="eyebrow">Campaign</p>
+        <p class="muted">
+          Open since
+          <span
+            class="num"
+            th:text="${#temporals.format(campaign.startedAt(), 'dd.MM.yyyy HH:mm')}"
+            >01.09.2026 09:00</span
+          >. Discarding abandons every staged row — it is the only "undo".
+        </p>
+        <form method="post" th:action="@{/import/session/discard}" class="form">
+          <p class="actions">
+            <button type="submit" class="btn btn--danger">Discard campaign</button>
+          </p>
+        </form>
+      </section>
+
+      <!-- A same-named upload is parked here until the owner says replacement or coincidence: Money
+           exports every account under one filename, so a match is expected, never assumed (§2). -->
+      <section class="panel" th:if="${clash != null}">
+        <p class="eyebrow">A file named this is already in this campaign</p>
+        <p class="muted">
+          You just uploaded <span class="num" th:text="${clash.sourceFilename()}">export.qif</span> for
+          <span class="num" th:text="${clash.moneyAccountName()}">Current Account</span>, and a file
+          of that name is already here. The filename carries no identity — is this a
+          <strong>replacement</strong> of that upload, or a <strong>different file</strong> that
+          happens to share the name?
+        </p>
+        <form method="post" th:action="@{/import/uploads/clash}" class="form">
+          <p class="actions">
+            <button type="submit" name="resolution" value="replace" class="btn">
+              Replace the existing one
+            </button>
+            <button type="submit" name="resolution" value="coincidence" class="btn btn--ghost">
+              Keep both
+            </button>
+            <button type="submit" name="resolution" value="cancel" class="btn btn--ghost">
+              Cancel this upload
+            </button>
+          </p>
+        </form>
+      </section>
+
+      <section class="panel" th:unless="${clash != null}">
+        <p class="eyebrow">Upload a QIF export</p>
+        <form
+          method="post"
+          th:action="@{/import/uploads}"
+          enctype="multipart/form-data"
+          class="form"
+        >
+          <div class="field">
+            <label class="field__label" for="file">Money QIF file</label>
+            <input id="file" name="file" type="file" accept=".qif,text/plain" required />
+          </div>
+          <div class="field">
+            <label class="field__label" for="moneyAccountName">Money account this file is for</label>
+            <input
+              id="moneyAccountName"
+              name="moneyAccountName"
+              type="text"
+              class="input"
+              placeholder="e.g. Current Account"
+              autocomplete="off"
+              required
+            />
+            <p class="muted">The file does not name its account — state it here.</p>
+          </div>
+          <p class="actions"><button type="submit" class="btn">Upload &amp; preview</button></p>
+        </form>
+      </section>
+
+      <section class="panel">
+        <p class="eyebrow">Uploaded, awaiting confirmation</p>
+        <p class="muted" th:if="${#lists.isEmpty(uploads)}">
+          Nothing uploaded yet. These are previews only — no rows are staged until you confirm one.
+        </p>
+        <ul class="import-uploads" th:unless="${#lists.isEmpty(uploads)}">
+          <li th:each="u : ${uploads}">
+            <a th:href="@{/import/uploads/{token}(token=${u.token()})}" th:text="${u.sourceFilename()}"
+              >export.qif</a
+            >
+            <span class="muted" th:text="' → ' + ${u.moneyAccountName()}"> → Current Account</span>
+            <form
+              method="post"
+              th:action="@{/import/uploads/{token}/remove(token=${u.token()})}"
+              style="display: inline"
+            >
+              <button type="submit" class="btn btn--ghost">Remove</button>
+            </form>
+          </li>
+        </ul>
+      </section>
+    </div>
+  </main>
+</html>

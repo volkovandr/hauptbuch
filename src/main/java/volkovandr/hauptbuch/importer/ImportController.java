@@ -1,0 +1,206 @@
+package volkovandr.hauptbuch.importer;
+
+import jakarta.servlet.http.HttpSession;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import volkovandr.hauptbuch.web.NavItem;
+
+/**
+ * The import campaign screen (import.md §2; plan b2 — upload → preview, nothing staged). Lives in
+ * {@code importer}: a feature module owns its own controller (CLAUDE.md §3). Plain server-rendered
+ * forms, redirect after POST; no bespoke JS.
+ *
+ * <p>Between the upload and the b3 "Confirm", the file is held in the HTTP session ({@link
+ * ImportUploadSession}) rather than a staging table — the preview is derived from the uploaded
+ * bytes plus the owner's charset / date-order choice and recomputed on each render, so nothing has
+ * to be unwound if the campaign is discarded. b3 stages the confirmed file and drops it from the
+ * session.
+ */
+@Controller
+class ImportController {
+
+  private static final String BASE = "/import";
+  private static final String UPLOAD_PATH = BASE + "/uploads";
+  private static final String SCREEN_VIEW = "import";
+  private static final String PREVIEW_VIEW = "import-preview";
+  private static final String REDIRECT_SCREEN = "redirect:" + BASE;
+  private static final String RESOLUTION_REPLACE = "replace";
+  private static final String RESOLUTION_COINCIDENCE = "coincidence";
+
+  private final ImportSessionService importSessionService;
+  private final ImportPreviewService importPreviewService;
+
+  ImportController(
+      ImportSessionService importSessionService, ImportPreviewService importPreviewService) {
+    this.importSessionService = importSessionService;
+    this.importPreviewService = importPreviewService;
+  }
+
+  /** The screen: the open campaign (or the button to start one) and the pending uploads. */
+  @GetMapping(BASE)
+  String screen(HttpSession httpSession, Model model) {
+    ImportUploadSession uploads = uploadSession(httpSession);
+    model.addAttribute("campaign", importSessionService.currentSession().orElse(null));
+    model.addAttribute("uploads", uploads.pending().stream().map(ImportUploadView::of).toList());
+    model.addAttribute("clash", uploads.clash().map(ImportUploadView::of).orElse(null));
+    model.addAttribute("nav", NavItem.sectionsFor(BASE));
+    model.addAttribute("title", "Import · Hauptbuch");
+    return SCREEN_VIEW;
+  }
+
+  /** Open the campaign — one open session at a time (import.md §2). */
+  @PostMapping(BASE + "/session")
+  String openSession(HttpSession httpSession) {
+    importSessionService.openSession();
+    httpSession.removeAttribute(ImportUploadSession.ATTRIBUTE);
+    return REDIRECT_SCREEN;
+  }
+
+  /** Discard the campaign (import.md §2) — the feature's only "undo". */
+  @PostMapping(BASE + "/session/discard")
+  String discardSession(HttpSession httpSession) {
+    importSessionService.discardSession();
+    httpSession.removeAttribute(ImportUploadSession.ATTRIBUTE);
+    return REDIRECT_SCREEN;
+  }
+
+  /**
+   * Receive a file and the Money account it is for (§4.1) and route to its preview — or, if the
+   * filename matches one already uploaded this session, to the replacement-or-coincidence choice
+   * (§2). Nothing is staged.
+   */
+  @PostMapping(UPLOAD_PATH)
+  String upload(
+      @RequestParam("file") MultipartFile file,
+      @RequestParam(required = false) String moneyAccountName,
+      HttpSession httpSession,
+      RedirectAttributes redirectAttributes) {
+    if (importSessionService.currentSession().isEmpty()) {
+      redirectAttributes.addFlashAttribute(
+          "error", "Start an import session before uploading a file.");
+      return REDIRECT_SCREEN;
+    }
+    if (moneyAccountName == null || moneyAccountName.isBlank()) {
+      redirectAttributes.addFlashAttribute(
+          "error", "State which Money account this file is for — the file does not say which.");
+      return REDIRECT_SCREEN;
+    }
+    byte[] bytes;
+    try {
+      bytes = bytesOf(file);
+    } catch (IllegalArgumentException rejected) {
+      redirectAttributes.addFlashAttribute("error", rejected.getMessage());
+      return REDIRECT_SCREEN;
+    }
+    PendingImportUpload pending =
+        PendingImportUpload.of(
+            UUID.randomUUID().toString(), filenameOf(file), moneyAccountName.strip(), bytes);
+    ImportUploadSession uploads = uploadSession(httpSession);
+    if (uploads.hasFilename(pending.sourceFilename())) {
+      uploads.parkClash(pending);
+      return REDIRECT_SCREEN;
+    }
+    uploads.add(pending);
+    return previewRedirect(pending.token());
+  }
+
+  /**
+   * Resolve a parked filename clash (§2): {@code replace} discards the same-named upload first,
+   * {@code coincidence} keeps both, {@code cancel} drops the new one.
+   */
+  @PostMapping(UPLOAD_PATH + "/clash")
+  String resolveClash(@RequestParam String resolution, HttpSession httpSession) {
+    ImportUploadSession uploads = uploadSession(httpSession);
+    if (uploads.clash().isEmpty()) {
+      return REDIRECT_SCREEN;
+    }
+    // Only the two explicit "keep it" choices act; cancel — and any unrecognised value — drops it.
+    if (RESOLUTION_REPLACE.equals(resolution) || RESOLUTION_COINCIDENCE.equals(resolution)) {
+      return previewRedirect(uploads.resolveClash(RESOLUTION_REPLACE.equals(resolution)));
+    }
+    uploads.clearClash();
+    return REDIRECT_SCREEN;
+  }
+
+  /** The preview for one pending upload (import.md §4.3/§4.4). */
+  @GetMapping(UPLOAD_PATH + "/{token}")
+  String preview(@PathVariable String token, HttpSession httpSession, Model model) {
+    Optional<PendingImportUpload> pending = uploadSession(httpSession).findByToken(token);
+    if (pending.isEmpty()) {
+      return REDIRECT_SCREEN;
+    }
+    PendingImportUpload upload = pending.get();
+    model.addAttribute("upload", ImportUploadView.of(upload));
+    model.addAttribute("preview", importPreviewService.preview(upload));
+    model.addAttribute("nav", NavItem.sectionsFor(BASE));
+    model.addAttribute("title", upload.sourceFilename() + " · Import · Hauptbuch");
+    return PREVIEW_VIEW;
+  }
+
+  /**
+   * Confirm or override the detected charset / date order (import.md §4.3 — a day/month swap
+   * corrupts the whole campaign, so it is confirmed, never assumed). A blank value follows
+   * detection.
+   */
+  @PostMapping(UPLOAD_PATH + "/{token}")
+  String override(
+      @PathVariable String token,
+      @RequestParam(required = false) String charset,
+      @RequestParam(required = false) String dateOrder,
+      HttpSession httpSession) {
+    uploadSession(httpSession).updateChoice(token, blankToNull(charset), blankToNull(dateOrder));
+    return previewRedirect(token);
+  }
+
+  /** Drop a pending upload before it is staged. */
+  @PostMapping(UPLOAD_PATH + "/{token}/remove")
+  String remove(@PathVariable String token, HttpSession httpSession) {
+    uploadSession(httpSession).removeByToken(token);
+    return REDIRECT_SCREEN;
+  }
+
+  private static String previewRedirect(String token) {
+    return "redirect:" + UPLOAD_PATH + "/" + token;
+  }
+
+  private static ImportUploadSession uploadSession(HttpSession httpSession) {
+    ImportUploadSession existing =
+        (ImportUploadSession) httpSession.getAttribute(ImportUploadSession.ATTRIBUTE);
+    if (existing == null) {
+      existing = new ImportUploadSession();
+      httpSession.setAttribute(ImportUploadSession.ATTRIBUTE, existing);
+    }
+    return existing;
+  }
+
+  private static byte[] bytesOf(MultipartFile file) {
+    if (file == null || file.isEmpty()) {
+      throw new IllegalArgumentException(
+          "No file was attached — choose a Money QIF export and try again.");
+    }
+    try {
+      return file.getBytes();
+    } catch (IOException e) {
+      throw new UncheckedIOException("Failed to read the uploaded file", e);
+    }
+  }
+
+  private static String filenameOf(MultipartFile file) {
+    String original = file.getOriginalFilename();
+    return original == null || original.isBlank() ? "export.qif" : original;
+  }
+
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value;
+  }
+}

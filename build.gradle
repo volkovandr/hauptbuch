@@ -227,6 +227,10 @@ testing {
 				// dedicated module; the web shell's integration test boots the full context
 				// and drives it through MockMvc.
 				implementation 'org.springframework.boot:spring-boot-webmvc-test'
+				// Servlet API on the suite classpath so a test can read a redirect's
+				// Location back off MockMvc's response (the /import upload flow keys its
+				// preview URL on a generated token).
+				implementation 'jakarta.servlet:jakarta.servlet-api'
 				implementation 'org.springframework.boot:spring-boot-testcontainers'
 				implementation 'org.testcontainers:testcontainers-junit-jupiter'
 				implementation 'org.testcontainers:testcontainers-postgresql'

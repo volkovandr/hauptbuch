@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<!--
+  Upload preview (import.md §4.3/§4.4, plan b2). Shows what the parser read BEFORE anything is
+  staged: proposed account type, detected charset, detected date order with its evidence (or a loud
+  AMBIGUOUS), the first ~50 decoded lines so mojibake is visible, and the record count that is
+  ticked against Money's own balance. The owner confirms or overrides charset and date order here —
+  a day/month swap corrupts the whole campaign, so it is never assumed. Nothing is staged; "Confirm
+  & stage" arrives in b3.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content ledger" th:fragment="content">
+    <p><a class="btn btn--ghost" th:href="@{/import}">← Campaign</a></p>
+
+    <section class="panel">
+      <p class="eyebrow">Preview</p>
+      <p class="muted">
+        <span class="num" th:text="${upload.sourceFilename()}">export.qif</span> for
+        <span class="num" th:text="${upload.moneyAccountName()}">Current Account</span>
+      </p>
+
+      <p class="warning" th:if="${preview.rejected()}" th:text="${preview.rejection()}">
+        This file cannot be imported.
+      </p>
+
+      <div th:unless="${preview.rejected()}">
+        <div class="field">
+          <span class="field__label">Proposed account type</span>
+          <p class="num" th:text="${preview.proposedAccountType()}">asset</p>
+          <p class="muted">From the <span class="num">!Type:</span> header — overridable at the account map.</p>
+        </div>
+
+        <div class="field">
+          <span class="field__label">Records</span>
+          <p class="num" th:text="${preview.recordCount()}">0</p>
+        </div>
+
+        <div class="field">
+          <span class="field__label">Date order</span>
+          <p th:text="${preview.dateEvidence()}">DD/MM, proven by ...</p>
+          <p class="muted">
+            Reading dates as <span class="num" th:text="${preview.dateOrder()}">day_month</span>.
+          </p>
+          <p class="warning" th:if="${preview.dateOrder() == 'ambiguous'}">
+            AMBIGUOUS — no date in this file distinguishes DD/MM from MM/DD. Choose one before
+            staging.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Confirm or override the detection. One form applies both choices; blank ⇒ follow detection. -->
+    <section class="panel" th:unless="${preview.rejected()}">
+      <p class="eyebrow">Confirm or override</p>
+      <form method="post" th:action="@{/import/uploads/{token}(token=${upload.token()})}" class="form">
+        <div class="field">
+          <span class="field__label">Charset</span>
+          <label class="receipt-edit__toggle">
+            <input type="radio" name="charset" value="utf_8"
+                   th:checked="${preview.charset() == 'utf_8'}" />
+            UTF-8 <span class="muted" th:if="${preview.detectedCharset() == 'utf_8'}">(detected)</span>
+          </label>
+          <label class="receipt-edit__toggle">
+            <input type="radio" name="charset" value="windows_1252"
+                   th:checked="${preview.charset() == 'windows_1252'}" />
+            Windows-1252
+            <span class="muted" th:if="${preview.detectedCharset() == 'windows_1252'}">(detected)</span>
+          </label>
+        </div>
+        <div class="field">
+          <span class="field__label">Date order</span>
+          <label class="receipt-edit__toggle">
+            <input type="radio" name="dateOrder" value="day_month"
+                   th:checked="${preview.dateOrder() == 'day_month'}" />
+            DD/MM
+            <span class="muted" th:if="${preview.detectedDateOrder() == 'day_month'}">(detected)</span>
+          </label>
+          <label class="receipt-edit__toggle">
+            <input type="radio" name="dateOrder" value="month_day"
+                   th:checked="${preview.dateOrder() == 'month_day'}" />
+            MM/DD
+            <span class="muted" th:if="${preview.detectedDateOrder() == 'month_day'}">(detected)</span>
+          </label>
+        </div>
+        <p class="actions"><button type="submit" class="btn">Update preview</button></p>
+      </form>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">First decoded lines</p>
+      <p class="muted">
+        Decoded as
+        <span class="num" th:text="${preview.charset()}">utf_8</span>. Check for mojibake before
+        staging — Money replaces any character it cannot encode with a literal <span class="num">?</span>.
+      </p>
+      <pre class="ai-prompt-preview" th:text="${preview.previewText()}">
+!Type:Bank
+      </pre>
+    </section>
+
+    <section class="panel">
+      <p class="muted">Confirming this file into staging arrives in the next step (b3).</p>
+      <form method="post" th:action="@{/import/uploads/{token}/remove(token=${upload.token()})}" class="form">
+        <p class="actions"><button type="submit" class="btn btn--ghost">Remove this upload</button></p>
+      </form>
+    </section>
+  </main>
+</html>
