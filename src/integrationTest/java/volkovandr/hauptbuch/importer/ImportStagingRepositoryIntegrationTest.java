@@ -160,6 +160,33 @@ class ImportStagingRepositoryIntegrationTest {
   }
 
   @Test
+  void mapToAccountResolvesTheTargetAndIsManyToOne() {
+    long sessionId = openSession();
+    importAccountRepository.upsertUnmapped(sessionId, "Junk A");
+    importAccountRepository.upsertUnmapped(sessionId, "Junk B");
+    long junkA = mapRowId(sessionId, "Junk A");
+    long junkB = mapRowId(sessionId, "Junk B");
+    long account = insertAccount("Everything Else", "asset");
+
+    importAccountRepository.mapToAccount(junkA, account, null);
+    importAccountRepository.mapToAccount(junkB, account, "CHF");
+
+    assertThat(importAccountRepository.findBySession(sessionId))
+        .satisfiesExactly(
+            a -> {
+              assertThat(a.moneyAccountName()).isEqualTo("Junk A");
+              assertThat(a.accountId()).isEqualTo(account);
+              assertThat(a.personId()).isNull();
+              assertThat(a.targetCurrencyCode()).isNull();
+            },
+            b -> {
+              assertThat(b.moneyAccountName()).isEqualTo("Junk B");
+              assertThat(b.accountId()).isEqualTo(account);
+              assertThat(b.targetCurrencyCode()).isEqualTo("CHF");
+            });
+  }
+
+  @Test
   void deletingFileCascadesToTransactionsAndPostingsButLeavesTheMaps() {
     long sessionId = openSession();
     long fileId = stageFile(sessionId, "export.qif").importFileId();
@@ -189,6 +216,25 @@ class ImportStagingRepositoryIntegrationTest {
     assertThat(importFileRepository.findBySession(sessionId))
         .extracting(ImportFile::sourceFilename)
         .containsExactly("keep.qif");
+  }
+
+  private long mapRowId(long sessionId, String moneyAccountName) {
+    return importAccountRepository.findBySession(sessionId).stream()
+        .filter(row -> row.moneyAccountName().equals(moneyAccountName))
+        .findFirst()
+        .orElseThrow()
+        .importAccountId();
+  }
+
+  private long insertAccount(String name, String type) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code) values (:name, :type, 'EUR')"
+                + " returning account_id")
+        .param("name", name)
+        .param("type", type)
+        .query(Long.class)
+        .single();
   }
 
   private int count(String table) {

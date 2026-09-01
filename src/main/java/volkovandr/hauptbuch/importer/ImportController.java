@@ -36,6 +36,7 @@ class ImportController {
   private static final String PREVIEW_VIEW = "import-preview";
   private static final String REVIEW_VIEW = "import-review";
   private static final String REDIRECT_SCREEN = "redirect:" + BASE;
+  private static final String REDIRECT_REVIEW = "redirect:" + BASE + "/review";
   private static final String RESOLUTION_REPLACE = "replace";
   private static final String RESOLUTION_COINCIDENCE = "coincidence";
   private static final String ERROR = "error";
@@ -44,16 +45,19 @@ class ImportController {
   private final ImportPreviewService importPreviewService;
   private final ImportStagingService importStagingService;
   private final ImportReviewService importReviewService;
+  private final ImportAccountMapService importAccountMapService;
 
   ImportController(
       ImportSessionService importSessionService,
       ImportPreviewService importPreviewService,
       ImportStagingService importStagingService,
-      ImportReviewService importReviewService) {
+      ImportReviewService importReviewService,
+      ImportAccountMapService importAccountMapService) {
     this.importSessionService = importSessionService;
     this.importPreviewService = importPreviewService;
     this.importStagingService = importStagingService;
     this.importReviewService = importReviewService;
+    this.importAccountMapService = importAccountMapService;
   }
 
   /** The screen: the open campaign (or the button to start one) and the pending uploads. */
@@ -84,6 +88,35 @@ class ImportController {
     model.addAttribute("nav", NavItem.sectionsFor(BASE));
     model.addAttribute("title", "Import review · Hauptbuch");
     return REVIEW_VIEW;
+  }
+
+  /**
+   * Map one Money account name (import.md §5.1; plan c1). A chosen {@code accountId} maps to that
+   * existing account; otherwise a new account is opened from {@code newName} / {@code type} /
+   * {@code currencyCode} and the row maps to it. The map is many-to-one — pointing several rows at
+   * one account is how a merge and the junk-account cleanup are done. A rejected choice comes back
+   * to the review with the reason.
+   */
+  @PostMapping(BASE + "/review/accounts/{importAccountId}/map")
+  String mapAccount(
+      @PathVariable long importAccountId,
+      @RequestParam(required = false) String accountId,
+      @RequestParam(required = false) String newName,
+      @RequestParam(required = false) String type,
+      @RequestParam(required = false) String currencyCode,
+      RedirectAttributes redirectAttributes) {
+    try {
+      String existing = blankToNull(accountId);
+      if (existing != null) {
+        importAccountMapService.mapToExisting(importAccountId, Long.parseLong(existing));
+      } else {
+        importAccountMapService.mapToNew(
+            importAccountId, blankToNull(newName), blankToNull(type), blankToNull(currencyCode));
+      }
+    } catch (IllegalArgumentException | IllegalStateException rejected) {
+      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
+    }
+    return REDIRECT_REVIEW;
   }
 
   /** Open the campaign — one open session at a time (import.md §2). */
