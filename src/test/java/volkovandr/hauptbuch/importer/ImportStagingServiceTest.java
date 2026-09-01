@@ -71,7 +71,7 @@ class ImportStagingServiceTest {
 
   private void parsed(ImportedFile file, QifDateFormat.Order order) {
     when(importPreviewService.parse(any()))
-        .thenReturn(new Parsed(file, null, "utf_8", null, order, "day_month"));
+        .thenReturn(new Parsed(file, null, "utf_8", "utf_8", null, order, "day_month"));
   }
 
   private void stubFileAndTransactionInserts() {
@@ -182,7 +182,7 @@ class ImportStagingServiceTest {
                 null));
     // Category leg: the negation of Money's amount (an expense debits the category, +).
     verify(importPostingRepository).insert(categoryLeg("12.34", null, "Food"));
-    // Funding leg: the record total verbatim, on the file's own account (a credit, −).
+    // Funding leg: the transaction total (Σ line amounts) on the file's own account (a credit, −).
     verify(importPostingRepository).insert(fundingLeg("-12.34"));
   }
 
@@ -253,6 +253,60 @@ class ImportStagingServiceTest {
     verify(importPostingRepository).insert(categoryLeg("60.00", "food", "Food"));
     verify(importPostingRepository).insert(categoryLeg("40.00", "fuel", "Fuel"));
     verify(importPostingRepository).insert(fundingLeg("-100.00"));
+  }
+
+  @Test
+  void stagesTheOpeningBalanceSelfTransferAsZeroSumPairOnTheSameAccount() {
+    openSession();
+    stubFileAndTransactionInserts();
+    ImportedTransaction opening =
+        new ImportedTransaction(
+            "01/07'2004",
+            null,
+            false,
+            null,
+            null,
+            ClearedStatus.UNRECONCILED,
+            true,
+            List.of(
+                new ImportedLine(
+                    new BigDecimal("1000.00"),
+                    null,
+                    null,
+                    new ImportedTarget.AccountReference("Current Account"))));
+    parsed(
+        new ImportedFile("asset", Set.of("Current Account"), List.of(opening)),
+        QifDateFormat.Order.DAY_MONTH);
+
+    service().stage(upload());
+
+    verify(importTransactionRepository)
+        .insert(
+            new ImportTransaction(
+                null,
+                FILE_ID,
+                LocalDate.of(2004, 7, 1),
+                null,
+                false,
+                null,
+                null,
+                "unreconciled",
+                true,
+                null,
+                null));
+    verify(importPostingRepository)
+        .insert(fundingLeg("1000.00")); // the synthesised funding leg names the same account
+    verify(importPostingRepository)
+        .insert(
+            new ImportPosting(
+                null,
+                TX_ID,
+                new BigDecimal("-1000.00"),
+                null,
+                null,
+                "Current Account",
+                null,
+                null));
   }
 
   @Test

@@ -192,11 +192,15 @@ class ImportController {
    * {@code import_transaction} + {@code import_posting} and folds the file's account names and
    * category paths into the maps as unmapped rows. The pending upload is then dropped from the
    * session. A file the parser refuses, or one whose date order is still ambiguous, comes back to
-   * the preview with the reason.
+   * the preview with the reason; a campaign discarded meanwhile sends the owner back to the screen.
    */
   @PostMapping(UPLOAD_PATH + "/{token}/stage")
   String stage(
       @PathVariable String token, HttpSession httpSession, RedirectAttributes redirectAttributes) {
+    if (importSessionService.currentSession().isEmpty()) {
+      redirectAttributes.addFlashAttribute(ERROR, "Start an import session before staging a file.");
+      return REDIRECT_SCREEN;
+    }
     Optional<PendingImportUpload> pending = uploadSession(httpSession).findByToken(token);
     if (pending.isEmpty()) {
       return REDIRECT_SCREEN;

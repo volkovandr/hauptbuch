@@ -326,6 +326,21 @@ class ImportScreenIntegrationTest {
     assertNothingStaged();
   }
 
+  @Test
+  void confirmingAfterTheCampaignWasDiscardedFallsBackToTheScreen() throws Exception {
+    MockHttpSession session = openCampaign();
+    String token = upload(session, qif("export.qif", DAY_MONTH_BANK), "Current Account");
+    mockMvc
+        .perform(post("/import/session/discard").session(session))
+        .andExpect(redirectedUrl("/import"));
+
+    mockMvc
+        .perform(post("/import/uploads/" + token + "/stage").session(session))
+        .andExpect(redirectedUrl("/import"));
+
+    assertNothingStaged();
+  }
+
   private void assertNothingStaged() {
     for (String table :
         new String[] {
