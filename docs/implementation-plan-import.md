@@ -1,7 +1,7 @@
 # Hauptbuch — Import Plan: the Money migration (QIF)
 
-**Status:** Draft v0.3
-**Date:** 2026-08-31
+**Status:** Draft v0.4
+**Date:** 2026-09-01
 **Owner:** volkovandr
 **Parent:** `implementation-plan.md` §3, first bullet (the item currently being built). This doc is
 the detail the sub-plan pattern pushes out of the main plan — deleted on completion with a summary
@@ -111,15 +111,20 @@ later stage, not something a2 bakes in.
 rejection message and the separate `M`/`N` fields. **25 unit tests, all green**; `checkstyleMain`,
 `pmdMain`, `spotbugsMain` and their `*Test` variants clean.
 
-### a3 — Charset & date-format detection with evidence
+### a3 — Charset & date-format detection with evidence ✅ **complete** (owner-confirmed 2026-09-01)
 Strict UTF-8 decode probe with **windows-1252 fallback** (§4.4), and the first ~50 decoded lines
 carried out for the preview. Whole-file date detection (§4.3): first component >12 ⇒ `DD/MM`,
 second >12 ⇒ `MM/DD`, neither ever ⇒ **ambiguous** — each carrying its **evidence** (the proving
-line and its number). Both are *proposals* with an override, never a silent choice.
+line and its number). Both are *proposals* with an override, never a silent choice. `QifCharset`
+also strips a leading UTF-8 BOM (Money writes none, but a re-encoded file carries one and the
+record reader reads the first character literally); a file whose own dates prove *both* orders, or
+a `D` line that is not a date, is refused rather than guessed at.
 
 **Done when:** the unit tier proves all three date outcomes with their evidence strings, the cp1252
 fallback on a byte sequence invalid as UTF-8, and that ASCII-only input is decoded identically
-either way.
+either way. **13 unit tests, all green**; `checkstyleMain/Test`, `pmdMain/Test`, `spotbugsMain`
+clean. Not folded into `QifParser` — that wiring is b2. Class-suffix `L` values (`Category/Class`,
+`[Account]/Class`) still land as a raw `CategoryPath`; splitting them into category + tag is a4.
 
 ### a4 — Splits, transfers, opening balances, destroyed payees & accounts
 The `S`/`E`/`$` triples → multiple `ImportedLine`s with `E` on the line memo; a **split-sum
@@ -343,6 +348,13 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.4 (2026-09-01):** **a3 complete** — `QifCharset` (strict UTF-8 probe → windows-1252
+  fallback, leading-BOM strip, `previewLines()`) and `QifDateFormat` (whole-file day/month-order
+  detection carrying the verbatim proving line and its number; contradictory-order files and
+  non-date `D` lines refused), both pure Java in `importer`, unit-tier only. 13 tests;
+  `checkstyle`/`pmd`/`spotbugs` clean. No scope change. A code-review finding folded in: the BOM
+  strip belongs in the decoder because the record reader reads the first character literally. Next:
+  a4 (splits, transfers, opening balances, destroyed payees & accounts).
 - **v0.3 (2026-08-31):** **a2 complete** — the canonical records (`ImportedTransaction`/
   `ImportedLine`/`ImportedTarget`), the `^`-terminated record reader, the `!Type:` header proposal
   (with the `Invst` rejection), and simple one-line field parsing, all pure Java in `importer`. A
