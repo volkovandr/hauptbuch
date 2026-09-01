@@ -34,6 +34,7 @@ class ImportController {
   private static final String UPLOAD_PATH = BASE + "/uploads";
   private static final String SCREEN_VIEW = "import";
   private static final String PREVIEW_VIEW = "import-preview";
+  private static final String REVIEW_VIEW = "import-review";
   private static final String REDIRECT_SCREEN = "redirect:" + BASE;
   private static final String RESOLUTION_REPLACE = "replace";
   private static final String RESOLUTION_COINCIDENCE = "coincidence";
@@ -42,14 +43,17 @@ class ImportController {
   private final ImportSessionService importSessionService;
   private final ImportPreviewService importPreviewService;
   private final ImportStagingService importStagingService;
+  private final ImportReviewService importReviewService;
 
   ImportController(
       ImportSessionService importSessionService,
       ImportPreviewService importPreviewService,
-      ImportStagingService importStagingService) {
+      ImportStagingService importStagingService,
+      ImportReviewService importReviewService) {
     this.importSessionService = importSessionService;
     this.importPreviewService = importPreviewService;
     this.importStagingService = importStagingService;
+    this.importReviewService = importReviewService;
   }
 
   /** The screen: the open campaign (or the button to start one) and the pending uploads. */
@@ -63,6 +67,23 @@ class ImportController {
     model.addAttribute("nav", NavItem.sectionsFor(BASE));
     model.addAttribute("title", "Import · Hauptbuch");
     return SCREEN_VIEW;
+  }
+
+  /**
+   * The review page (import.md §9; plan e′): the per-account statistics that get ticked against
+   * Money's own balances. Born as a skeleton — slices c/d/e add the map and issues panels. No open
+   * campaign ⇒ back to the screen.
+   */
+  @GetMapping(BASE + "/review")
+  String review(Model model) {
+    Optional<ImportReview> review = importReviewService.review();
+    if (review.isEmpty()) {
+      return REDIRECT_SCREEN;
+    }
+    model.addAttribute("review", review.get());
+    model.addAttribute("nav", NavItem.sectionsFor(BASE));
+    model.addAttribute("title", "Import review · Hauptbuch");
+    return REVIEW_VIEW;
   }
 
   /** Open the campaign — one open session at a time (import.md §2). */

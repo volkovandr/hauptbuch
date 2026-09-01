@@ -69,9 +69,10 @@ class ImportStagingRepositoryIntegrationTest {
       String note,
       String path,
       String account,
-      String className) {
+      String className,
+      boolean funding) {
     return new ImportPosting(
-        null, transactionId, new BigDecimal(amount), note, path, account, className, null);
+        null, transactionId, new BigDecimal(amount), note, path, account, className, null, funding);
   }
 
   @Test
@@ -102,9 +103,9 @@ class ImportStagingRepositoryIntegrationTest {
 
     long transactionId = stageTransaction(fileId, "reconciled", false);
     importPostingRepository.insert(
-        leg(transactionId, "12.34", "line memo", "Food", null, "Holiday"));
+        leg(transactionId, "12.34", "line memo", "Food", null, "Holiday", false));
     importPostingRepository.insert(
-        leg(transactionId, "-12.34", null, null, "Current Account", null));
+        leg(transactionId, "-12.34", null, null, "Current Account", null, true));
 
     ImportTransaction transaction = importTransactionRepository.findByFile(fileId).get(0);
     assertThat(transaction.date()).isEqualTo(LocalDate.of(2004, 7, 1));
@@ -123,11 +124,13 @@ class ImportStagingRepositoryIntegrationTest {
               assertThat(category.moneyAccountName()).isNull();
               assertThat(category.note()).isEqualTo("line memo");
               assertThat(category.className()).isEqualTo("Holiday");
+              assertThat(category.funding()).isFalse();
             },
             funding -> {
               assertThat(funding.amount()).isEqualByComparingTo("-12.34");
               assertThat(funding.moneyCategoryPath()).isNull();
               assertThat(funding.moneyAccountName()).isEqualTo("Current Account");
+              assertThat(funding.funding()).isTrue();
             });
   }
 
@@ -161,7 +164,7 @@ class ImportStagingRepositoryIntegrationTest {
     long sessionId = openSession();
     long fileId = stageFile(sessionId, "export.qif").importFileId();
     long transactionId = stageTransaction(fileId, "unreconciled", false);
-    importPostingRepository.insert(leg(transactionId, "5.00", null, "Food", null, null));
+    importPostingRepository.insert(leg(transactionId, "5.00", null, "Food", null, null, false));
     importAccountRepository.upsertUnmapped(sessionId, "Current Account");
     importCategoryRepository.upsertUnmapped(sessionId, "Food");
 

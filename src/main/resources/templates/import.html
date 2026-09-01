@@ -130,6 +130,9 @@
         <p class="muted" th:if="${#lists.isEmpty(files)}">
           None staged yet. Confirm a preview to stage its transactions.
         </p>
+        <p class="actions" th:unless="${#lists.isEmpty(files)}">
+          <a class="btn" th:href="@{/import/review}">Review the campaign</a>
+        </p>
         <ul class="import-uploads" th:unless="${#lists.isEmpty(files)}">
           <li th:each="f : ${files}">
             <span class="num" th:text="${f.sourceFilename()}">export.qif</span>

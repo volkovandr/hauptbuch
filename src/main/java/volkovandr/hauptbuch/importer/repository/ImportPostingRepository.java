@@ -23,8 +23,8 @@ public class ImportPostingRepository {
 
   /**
    * Stage one leg. Exactly one of {@code moneyCategoryPath} / {@code moneyAccountName} is set;
-   * {@code importPostingId} and {@code mirrorPairId} on the draft are ignored (slice e links
-   * mirrors).
+   * {@code funding} marks the synthesised funding leg (§7); {@code importPostingId} and {@code
+   * mirrorPairId} on the draft are ignored (slice e links mirrors).
    */
   public void insert(ImportPosting posting) {
     jdbcClient
@@ -32,9 +32,10 @@ public class ImportPostingRepository {
             """
             insert into import_posting
               (import_transaction_id, amount, note, money_category_path, money_account_name,
-               class_name)
+               class_name, funding)
             values
-              (:transactionId, :amount, :note, :moneyCategoryPath, :moneyAccountName, :className)
+              (:transactionId, :amount, :note, :moneyCategoryPath, :moneyAccountName, :className,
+               :funding)
             """)
         .param(TRANSACTION_ID, posting.importTransactionId())
         .param("amount", posting.amount())
@@ -42,6 +43,7 @@ public class ImportPostingRepository {
         .param("moneyCategoryPath", posting.moneyCategoryPath())
         .param("moneyAccountName", posting.moneyAccountName())
         .param("className", posting.className())
+        .param("funding", posting.funding())
         .update();
   }
 
