@@ -75,8 +75,13 @@ database, never resolves a name to an id, and never knows what a `posting` is:
 
 - **`ImportedTransaction`** — date, payee text, memo, reference/cheque number, cleared flag,
   an opening-balance marker, and one or more lines.
-- **`ImportedLine`** — a signed amount, a memo, and a **target** that is either a *category path*
+- **`ImportedLine`** — a signed amount, a memo, an optional Money *class name* (the `L`/`S`
+  `/Class` suffix, §8, split off the path here), and a **target** that is either a *category path*
   (a source-format string) or an *account reference* (a source-format account name, i.e. a transfer).
+
+The parse result also carries the **set of account names the file mentions** — the account it is
+for (stated by the owner, §4.1) plus every `[Account]` counterparty — the input to the account map
+(§5.1), and where the destroyed-account rejection (§4.5) is enforced.
 
 Everything downstream — mapping, mirror matching, staging, commit — operates on this shape alone.
 That is the seam FR-IMP-05's CSV importer plugs into: a new parser, nothing else. It is also why

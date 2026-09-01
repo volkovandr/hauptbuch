@@ -9,14 +9,19 @@ import java.util.List;
  * has to guess at it.
  *
  * @param rawDate the literal {@code D} field, unparsed
- * @param payeeText the {@code P} field, verbatim; null when absent
+ * @param payeeText the {@code P} field; verbatim when it carries information, null when absent or
+ *     when it was <em>entirely</em> destroyed on export (all {@code ?}/whitespace, §4.4) — a
+ *     partially destroyed name is kept verbatim
  * @param memo the header {@code M} field; null when absent
  * @param referenceNumber the {@code N} field (cheque/reference number); null when absent — kept
  *     separate from {@code memo} here, since "prefixed into the note" (§4.2) is a ledger-write-time
  *     combination, not part of the canonical shape
  * @param clearedStatus the {@code C} field, classified (§4.2)
- * @param lines this transaction's lines — exactly one for a2's simple transactions; splits (a4)
- *     will carry several
+ * @param openingBalance true when this is Money's opening-balance self-transfer — an {@code
+ *     [Account]} line naming the very account the file is for (§5.1); reconciled against the target
+ *     account's own opening balance at map time (c3), never booked blindly
+ * @param lines this transaction's lines — exactly one for a simple transaction; a split carries
+ *     several, with {@code E} landing on each line's memo
  */
 public record ImportedTransaction(
     String rawDate,
@@ -24,6 +29,7 @@ public record ImportedTransaction(
     String memo,
     String referenceNumber,
     ClearedStatus clearedStatus,
+    boolean openingBalance,
     List<ImportedLine> lines) {
 
   /**
