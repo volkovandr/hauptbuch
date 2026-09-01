@@ -191,7 +191,7 @@ the repository round-trips are green.
 
 ---
 
-## Slice e′ — per-account statistics (pulled ahead of the maps)
+## Slice e′ — per-account statistics (pulled ahead of the maps) ✅ **complete** (owner-confirmed 2026-09-01)
 
 **e′ — the verification device.** Per staged Money account: **transaction count, net sum, date
 range** (§9.4) — the number that gets ticked against Money's own balance for that account. The
@@ -365,7 +365,7 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
-- **v0.9 (2026-09-01):** **e′ ready to confirm** — `ImportStatisticsRepository.perMoneyAccount`
+- **v0.9 (2026-09-01):** **e′ complete** (owner-confirmed) — `ImportStatisticsRepository.perMoneyAccount`
   (a grouped aggregate over `import_file` → `import_transaction` → `import_posting`, `sqlLogicTest`
   tier) reads back per Money account: transaction count, net sum and date range, folding files
   that share an account name and ignoring a transfer's mirror leg staged from the *other* account.
