@@ -3,17 +3,19 @@ package volkovandr.hauptbuch.importer;
 import java.util.List;
 
 /**
- * The render model for the import review page (import.md §9; plan e′). Born here as a
- * <strong>skeleton</strong> carrying only the per-account statistics — the account map, the
- * category map and the issues list attach as further panels in slices c, d and e.
+ * The render model for the import review page (import.md §9). e′ delivered the per-account
+ * statistics; c1 adds the account map. The category map and the issues list attach as further
+ * panels in slices d and e.
  *
  * @param accounts one row per Money account that has a staged file, ordered by account name
+ * @param accountMap the account-map panel (import.md §5.1; plan c1)
  */
-public record ImportReview(List<AccountStatisticsRow> accounts) {
+public record ImportReview(List<AccountStatisticsRow> accounts, ImportAccountMap accountMap) {
 
   /** Defensive copy of the account rows. */
   public ImportReview {
     accounts = accounts == null ? List.of() : List.copyOf(accounts);
+    accountMap = accountMap == null ? new ImportAccountMap(null, null, null) : accountMap;
   }
 
   /** True when nothing has been staged yet — the page shows only its explanatory copy. */

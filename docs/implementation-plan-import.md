@@ -365,6 +365,14 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.10 (2026-09-01):** **c1 ready to confirm** — the account map's first target pair (import.md
+  §5.1). `ImportAccountRepository.mapToAccount` points an `import_account` row at a Hauptbuch
+  account (existing, or one `ImportAccountMapService` opens via `accounts`' `AccountService` with a
+  proposed type and a chosen currency); the map stays many-to-one, so several Money names may share
+  one account. The review page grows an **Account map** panel — one form per Money account name —
+  under `ImportReview.accountMap` (`ImportAccountMapService.mapPanel`). Realises the planned
+  `importer → accounts` and `importer → ledger` edges (the edge set above). Person targets,
+  `expect-file` and the opening-balance reconciliation stay with c2/c3.
 - **v0.9 (2026-09-01):** **e′ complete** (owner-confirmed) — `ImportStatisticsRepository.perMoneyAccount`
   (a grouped aggregate over `import_file` → `import_transaction` → `import_posting`, `sqlLogicTest`
   tier) reads back per Money account: transaction count, net sum and date range, folding files

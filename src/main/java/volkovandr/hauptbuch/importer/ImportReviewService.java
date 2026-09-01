@@ -2,7 +2,6 @@ package volkovandr.hauptbuch.importer;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.importer.ImportReview.AccountStatisticsRow;
@@ -10,13 +9,13 @@ import volkovandr.hauptbuch.importer.repository.ImportStatisticsRepository;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 
 /**
- * Builds the import review render model (import.md §9; plan e′). e′ delivers only the per-account
- * statistics — the verification device the owner ticks against Money's own balances (§9.4); slices
- * c, d and e hang the account map, category map and issues list off the same page.
+ * Builds the import review render model (import.md §9). e′ delivers the per-account statistics —
+ * the verification device the owner ticks against Money's own balances (§9.4); c1 adds the account
+ * map (§5.1); slices d and e hang the category map and issues list off the same page.
  *
  * <p>Formatting happens here, not in the template: {@code netSum} is rendered bare in German style
  * (QIF carries no currency, §5.1) and the date span as {@code dd.MM.yyyy}. An empty review — no
- * open campaign, or one with nothing staged — carries no rows.
+ * open campaign, or one with nothing staged — carries no statistics rows.
  */
 @Service
 public class ImportReviewService {
@@ -25,12 +24,15 @@ public class ImportReviewService {
 
   private final ImportSessionService importSessionService;
   private final ImportStatisticsRepository importStatisticsRepository;
+  private final ImportAccountMapService importAccountMapService;
 
   ImportReviewService(
       ImportSessionService importSessionService,
-      ImportStatisticsRepository importStatisticsRepository) {
+      ImportStatisticsRepository importStatisticsRepository,
+      ImportAccountMapService importAccountMapService) {
     this.importSessionService = importSessionService;
     this.importStatisticsRepository = importStatisticsRepository;
+    this.importAccountMapService = importAccountMapService;
   }
 
   /**
@@ -41,12 +43,13 @@ public class ImportReviewService {
   public Optional<ImportReview> review() {
     return importSessionService
         .currentSession()
-        .map(session -> importStatisticsRepository.perMoneyAccount(session.importSessionId()))
-        .map(ImportReviewService::toReview);
-  }
-
-  private static ImportReview toReview(List<ImportAccountStatistics> statistics) {
-    return new ImportReview(statistics.stream().map(ImportReviewService::toRow).toList());
+        .map(
+            session ->
+                new ImportReview(
+                    importStatisticsRepository.perMoneyAccount(session.importSessionId()).stream()
+                        .map(ImportReviewService::toRow)
+                        .toList(),
+                    importAccountMapService.mapPanel(session.importSessionId())));
   }
 
   private static AccountStatisticsRow toRow(ImportAccountStatistics statistics) {

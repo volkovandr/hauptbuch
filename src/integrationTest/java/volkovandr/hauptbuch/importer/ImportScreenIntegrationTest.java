@@ -140,6 +140,34 @@ class ImportScreenIntegrationTest {
     return token;
   }
 
+  private long insertAccount(String name, String type) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code) values (:name, :type, 'EUR')"
+                + " returning account_id")
+        .param("name", name)
+        .param("type", type)
+        .query(Long.class)
+        .single();
+  }
+
+  private long mapRowId(String moneyAccountName) {
+    return jdbcClient
+        .sql("select import_account_id from import_account where money_account_name = :name")
+        .param("name", moneyAccountName)
+        .query(Long.class)
+        .single();
+  }
+
+  private Long mappedAccountId(String moneyAccountName) {
+    return jdbcClient
+        .sql("select account_id from import_account where money_account_name = :name")
+        .param("name", moneyAccountName)
+        .query(Long.class)
+        .optional()
+        .orElse(null);
+  }
+
   private long stagedFileId(String filename) {
     return jdbcClient
         .sql(
@@ -418,6 +446,88 @@ class ImportScreenIntegrationTest {
         .perform(get("/import/review").session(session))
         .andExpect(content().string(containsString("net -17,34")))
         .andExpect(content().string(containsString("net -28,00")));
+  }
+
+  @Test
+  void mapsMoneyAccountToExistingHauptbuchAccount() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+    long giro = insertAccount("Giro", "asset");
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + mapRowId("Current Account") + "/map")
+                .param("accountId", Long.toString(giro))
+                .session(session))
+        .andExpect(redirectedUrl("/import/review"));
+
+    assertThat(mappedAccountId("Current Account")).isEqualTo(giro);
+    mockMvc
+        .perform(get("/import/review").session(session))
+        .andExpect(content().string(containsString("→ Giro")));
+  }
+
+  @Test
+  void mapsMoneyAccountToNewAccountItCreates() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + mapRowId("Current Account") + "/map")
+                .param("newName", "Everyday")
+                .param("type", "asset")
+                .param("currencyCode", "EUR")
+                .session(session))
+        .andExpect(redirectedUrl("/import/review"));
+
+    Long created = mappedAccountId("Current Account");
+    assertThat(created).isNotNull();
+    assertThat(
+            jdbcClient
+                .sql("select name from account where account_id = :id")
+                .param("id", created)
+                .query(String.class)
+                .single())
+        .isEqualTo("Everyday");
+  }
+
+  @Test
+  void severalMoneyAccountsCanShareOneHauptbuchAccount() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+    stageNewFile(session, "savings.qif", SAVINGS_WITH_TRANSFER, "Savings");
+    long dump = insertAccount("Everything Else", "asset");
+
+    for (String moneyAccount : new String[] {"Current Account", "Savings"}) {
+      mockMvc
+          .perform(
+              post("/import/review/accounts/" + mapRowId(moneyAccount) + "/map")
+                  .param("accountId", Long.toString(dump))
+                  .session(session))
+          .andExpect(redirectedUrl("/import/review"));
+    }
+
+    assertThat(mappedAccountId("Current Account")).isEqualTo(dump);
+    assertThat(mappedAccountId("Savings")).isEqualTo(dump);
+  }
+
+  @Test
+  void rejectedAccountMappingComesBackToReviewWithReason() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + mapRowId("Current Account") + "/map")
+                .param("accountId", "999999")
+                .session(session))
+        .andExpect(redirectedUrl("/import/review"));
+
+    mockMvc
+        .perform(get("/import/review").session(session))
+        .andExpect(content().string(containsString("999999")));
+    assertThat(mappedAccountId("Current Account")).isNull();
   }
 
   @Test
