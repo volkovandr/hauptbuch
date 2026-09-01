@@ -153,7 +153,7 @@ gate definable — plus discard-session, which is the only "undo" the feature ha
 **Done when:** the migration applies on a fresh container; the session repository round-trips in the
 integration tier; the unit tier proves a second open session is refused.
 
-### b2 — Upload → preview (nothing staged yet)
+### b2 — Upload → preview (nothing staged yet) ✅ **complete** (owner-confirmed 2026-09-01)
 The `/import` screen: choose a file, **state which Money account it is for** (the file does not say
 — §4.1), get back the preview — proposed account type from the header, detected charset, detected
 date format **with its evidence** or a loud AMBIGUOUS, the first ~50 decoded lines, the record
@@ -348,11 +348,8 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
-- **v0.7 (2026-09-01):** **b2 ready for owner confirmation** (not yet ticked) — `/import` screen:
-  start / discard a campaign, upload a file with the stated Money account, preview (proposed type,
-  detected charset, detected date order + evidence or a loud AMBIGUOUS, first ~50 decoded lines,
-  record count, `!Type:Invst` / destroyed-account rejection), and confirm-or-override charset & date
-  order. Nothing is written to any staging table. Mechanism notes: (1) between upload and b3's
+- **v0.7 (2026-09-01):** **b2 complete** — `/import` screen (upload → preview, nothing staged).
+  Mechanism notes: (1) between upload and b3's
   Confirm the file is held in the **HTTP session** (`ImportUploadSession`, bytes Base64) and the
   preview recomputed per render — there is no staging row to unwind on discard; (2) the
   filename-identity clash check (§2) runs against the **session-held pending uploads** for now — b3
