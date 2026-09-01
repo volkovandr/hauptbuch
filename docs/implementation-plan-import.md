@@ -1,6 +1,6 @@
 # Hauptbuch — Import Plan: the Money migration (QIF)
 
-**Status:** Draft v0.6
+**Status:** Draft v0.7
 **Date:** 2026-09-01
 **Owner:** volkovandr
 **Parent:** `implementation-plan.md` §3, first bullet (the item currently being built). This doc is
@@ -348,6 +348,19 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.7 (2026-09-01):** **b2 ready for owner confirmation** (not yet ticked) — `/import` screen:
+  start / discard a campaign, upload a file with the stated Money account, preview (proposed type,
+  detected charset, detected date order + evidence or a loud AMBIGUOUS, first ~50 decoded lines,
+  record count, `!Type:Invst` / destroyed-account rejection), and confirm-or-override charset & date
+  order. Nothing is written to any staging table. Mechanism notes: (1) between upload and b3's
+  Confirm the file is held in the **HTTP session** (`ImportUploadSession`, bytes Base64) and the
+  preview recomputed per render — there is no staging row to unwind on discard; (2) the
+  filename-identity clash check (§2) runs against the **session-held pending uploads** for now — b3
+  extends it to staged `import_file` rows; (3) a **pending-uploads list + drop-a-pending-upload**
+  action were added (not in §13) as the surface the clash flow needs — distinct from b3's
+  "remove a staged file". Scope additions outside `importer`: an **Import** entry in the nav shell
+  (`web/NavItem`), and `jakarta.servlet-api` on the `integrationTest` suite (a MockMvc test reads a
+  redirect `Location`). Next: b3 (stage the confirmed file).
 - **v0.6 (2026-09-01):** **b1 complete** — V19 lands the full seven-table staging schema; the
   session lifecycle (`ImportSessionService`: one open session at a time, backed by a partial unique
   index; discard as the only "undo"). Scope: two columns added beyond the §11 sketch because only
