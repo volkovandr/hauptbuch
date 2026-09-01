@@ -24,6 +24,10 @@ import java.util.List;
  *     when the file was rejected
  * @param previewLines the first decoded lines of the file
  * @param recordCount the number of parsed transactions, or null when the file was rejected
+ * @param accountName the Money account the file is for (import.md §4.1) — deduced from the
+ *     opening-balance record or stated by the owner; null when neither has happened yet
+ * @param accountNameDeduced true when {@code accountName} was read from the file's own
+ *     opening-balance self-transfer (§5.1) rather than typed by the owner
  * @param rejection the user-facing reason the file cannot be imported, or null when it parsed
  */
 public record ImportPreview(
@@ -35,6 +39,8 @@ public record ImportPreview(
     String dateEvidence,
     List<String> previewLines,
     Integer recordCount,
+    String accountName,
+    boolean accountNameDeduced,
     String rejection) {
 
   /** Defensive copy of the preview lines. */
@@ -49,12 +55,31 @@ public record ImportPreview(
   public static ImportPreview rejected(
       String charset, String detectedCharset, List<String> previewLines, String rejection) {
     return new ImportPreview(
-        null, charset, detectedCharset, null, null, null, previewLines, null, rejection);
+        null,
+        charset,
+        detectedCharset,
+        null,
+        null,
+        null,
+        previewLines,
+        null,
+        null,
+        false,
+        rejection);
   }
 
   /** Whether the parser refused this file (import.md §4.5). */
   public boolean rejected() {
     return rejection != null;
+  }
+
+  /**
+   * Whether the owner still has to state which Money account this file is for (import.md §4.1) —
+   * the file has no opening-balance record to name it and none has been typed. Staging is refused
+   * until this is false, the same way an ambiguous date order blocks it.
+   */
+  public boolean awaitingAccountName() {
+    return !rejected() && accountName == null;
   }
 
   /** The decoded preview lines joined for rendering in a {@code <pre>}. */

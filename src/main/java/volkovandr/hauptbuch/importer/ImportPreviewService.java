@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.importer;
 
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 /**
@@ -67,6 +68,19 @@ class ImportPreviewService {
     return new Decoded(chosen == null ? detected : QifCharset.decode(bytes, chosen), detected);
   }
 
+  /**
+   * The Money account the file names in its own opening-balance record (import.md §4.1/§5.1), read
+   * back at upload to pre-fill the preview. Empty when the file has no such record — or cannot be
+   * decoded/parsed at all, in which case the preview surfaces the real rejection.
+   */
+  Optional<String> deduceAccountName(PendingImportUpload upload) {
+    try {
+      return qifParser.detectAccountName(decode(upload).effective().text());
+    } catch (QifRejectedException rejected) {
+      return Optional.empty();
+    }
+  }
+
   /** Decode, detect and parse {@code upload}, honouring any charset / date-order override on it. */
   Parsed parse(PendingImportUpload upload) {
     Decoded bytes = decode(upload);
@@ -102,6 +116,8 @@ class ImportPreviewService {
           parsed.detection().describe(),
           parsed.decoded().previewLines(),
           parsed.file().transactions().size(),
+          upload.moneyAccountName(),
+          upload.accountNameDeduced(),
           null);
     } catch (QifRejectedException rejected) {
       Decoded bytes = decode(upload);

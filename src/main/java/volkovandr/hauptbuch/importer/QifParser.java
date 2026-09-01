@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Component;
 
@@ -30,26 +31,47 @@ public class QifParser {
   private static final String ASSET_TYPE = "asset";
   private static final String LIABILITY_TYPE = "liability";
 
+  /** §5.1: Money writes an account's opening balance as a self-transfer with this payee. */
+  private static final String OPENING_BALANCE_PAYEE = "Opening Balance";
+
   /**
    * Parse a fully decoded QIF file's text (§4.1) into its canonical representation.
    *
-   * @param moneyAccountName the Money account the file is for — the file itself does not say, so
-   *     the owner states it at upload (§4.1). Used to recognise the opening-balance self-transfer
-   *     and to seed {@link ImportedFile#referencedAccountNames()}; required.
+   * @param moneyAccountName the Money account the file is for — the file itself has no field for
+   *     it, but usually names it in the opening-balance self-transfer (§5.1), read back by {@link
+   *     #detectAccountName}. Pass that (or the owner's hand-stated name) to seed {@link
+   *     ImportedFile#referencedAccountNames()}, or {@code null} when it is not yet known (the
+   *     preview before the owner has confirmed it); a blank string is still rejected.
    * @param text the fully decoded file text
    */
   public ImportedFile parse(String moneyAccountName, String text) {
-    if (moneyAccountName == null || moneyAccountName.isBlank()) {
+    if (moneyAccountName != null && moneyAccountName.isBlank()) {
       throw new IllegalArgumentException(
-          "The Money account name the file is for must be supplied (import.md §4.1).");
+          "The Money account name must be non-blank when supplied (import.md §4.1) — pass null when"
+              + " it is not yet known.");
     }
     QifRecordReader.Result read = QifRecordReader.read(text);
     String accountType = proposeAccountType(read.header());
     List<ImportedTransaction> transactions =
-        read.records().stream().map(record -> toTransaction(moneyAccountName, record)).toList();
+        read.records().stream().map(QifParser::toTransaction).toList();
     Set<String> referenced = referencedAccountNames(moneyAccountName, transactions);
     rejectDestroyedAccounts(referenced);
     return new ImportedFile(accountType, referenced, transactions);
+  }
+
+  /**
+   * The account name Money's opening-balance record names (§4.1/§5.1): the {@code [Account]} target
+   * of the single-line self-transfer whose payee is {@value #OPENING_BALANCE_PAYEE}. Empty when the
+   * file has no such record — then the owner states the account by hand on the upload preview. Pure
+   * (§3); used to pre-fill the preview so the common case needs no typing.
+   */
+  public Optional<String> detectAccountName(String text) {
+    return parse(null, text).transactions().stream()
+        .filter(ImportedTransaction::openingBalance)
+        .map(transaction -> transaction.lines().get(0).target())
+        .filter(ImportedTarget.AccountReference.class::isInstance)
+        .map(target -> ((ImportedTarget.AccountReference) target).accountName())
+        .findFirst();
   }
 
   private static String proposeAccountType(String header) {
@@ -67,8 +89,7 @@ public class QifParser {
     throw new QifRejectedException("Unrecognised QIF account header: \"" + header + "\".");
   }
 
-  private static ImportedTransaction toTransaction(
-      String moneyAccountName, List<String> fieldLines) {
+  private static ImportedTransaction toTransaction(List<String> fieldLines) {
     RawRecord raw = RawRecord.from(fieldLines);
     List<ImportedLine> lines =
         raw.splitLegs().isEmpty() ? List.of(raw.simpleLine()) : raw.splitLines();
@@ -79,7 +100,7 @@ public class QifParser {
         raw.memo(),
         raw.referenceNumber(),
         ClearedStatus.fromCode(raw.clearedCode()),
-        isOpeningBalance(moneyAccountName, lines),
+        isOpeningBalance(raw.payeeText(), lines),
         lines);
   }
 
@@ -100,16 +121,24 @@ public class QifParser {
     return rawPayee != null && !rawPayee.isBlank() && QifText.isDestroyed(rawPayee);
   }
 
-  private static boolean isOpeningBalance(String moneyAccountName, List<ImportedLine> lines) {
-    return lines.size() == 1
-        && lines.get(0).target() instanceof ImportedTarget.AccountReference ref
-        && ref.accountName().equals(moneyAccountName);
+  /**
+   * §5.1: Money exports an opening balance as a single-line self-transfer whose payee is {@value
+   * #OPENING_BALANCE_PAYEE} — recognised by that marker and shape, so the file's own account name
+   * ({@code [Account]} on that one line) does not have to be known in advance to spot it.
+   */
+  private static boolean isOpeningBalance(String payeeText, List<ImportedLine> lines) {
+    return payeeText != null
+        && OPENING_BALANCE_PAYEE.equalsIgnoreCase(payeeText.strip())
+        && lines.size() == 1
+        && lines.get(0).target() instanceof ImportedTarget.AccountReference;
   }
 
   private static Set<String> referencedAccountNames(
       String moneyAccountName, List<ImportedTransaction> transactions) {
     Set<String> names = new LinkedHashSet<>();
-    names.add(moneyAccountName);
+    if (moneyAccountName != null) {
+      names.add(moneyAccountName);
+    }
     transactions.stream()
         .flatMap(transaction -> transaction.lines().stream())
         .map(ImportedLine::target)

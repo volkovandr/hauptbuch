@@ -51,7 +51,11 @@
         <p class="eyebrow">A file named this is already in this campaign</p>
         <p class="muted">
           You just uploaded <span class="num" th:text="${clash.sourceFilename()}">export.qif</span> for
-          <span class="num" th:text="${clash.moneyAccountName()}">Current Account</span>, and a file
+          <span
+            class="num"
+            th:text="${clash.moneyAccountName() != null ? clash.moneyAccountName() : 'an account named on the next screen'}"
+            >Current Account</span
+          >, and a file
           of that name is already here. The filename carries no identity — is this a
           <strong>replacement</strong> of that upload, or a <strong>different file</strong> that
           happens to share the name?
@@ -82,19 +86,10 @@
           <div class="field">
             <label class="field__label" for="file">Money QIF file</label>
             <input id="file" name="file" type="file" accept=".qif,text/plain" required />
-          </div>
-          <div class="field">
-            <label class="field__label" for="moneyAccountName">Money account this file is for</label>
-            <input
-              id="moneyAccountName"
-              name="moneyAccountName"
-              type="text"
-              class="input"
-              placeholder="e.g. Current Account"
-              autocomplete="off"
-              required
-            />
-            <p class="muted">The file does not name its account — state it here.</p>
+            <p class="muted">
+              The next screen reads which account this file is for from its opening-balance record,
+              or lets you state it if there is none.
+            </p>
           </div>
           <p class="actions"><button type="submit" class="btn">Upload &amp; preview</button></p>
         </form>
@@ -110,7 +105,12 @@
             <a th:href="@{/import/uploads/{token}(token=${u.token()})}" th:text="${u.sourceFilename()}"
               >export.qif</a
             >
-            <span class="muted" th:text="' → ' + ${u.moneyAccountName()}"> → Current Account</span>
+            <span
+              class="muted"
+              th:text="${u.moneyAccountName() != null ? ' → ' + u.moneyAccountName() : ' → account not yet confirmed'}"
+            >
+              → Current Account</span
+            >
             <form
               method="post"
               th:action="@{/import/uploads/{token}/remove(token=${u.token()})}"
