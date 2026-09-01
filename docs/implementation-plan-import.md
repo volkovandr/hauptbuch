@@ -168,7 +168,7 @@ suspicious.
 uploading a second file under the same name prompts the replacement-or-coincidence choice instead
 of silently doing either; nothing has been written to any staging table.
 
-### b3 — Stage the confirmed file *(implemented; awaiting owner confirmation)*
+### b3 — Stage the confirmed file ✅ **complete** (owner-confirmed 2026-09-01)
 Confirming the preview writes `import_file` + `import_transaction` + `import_posting` (targets kept
 as the **unresolved** Money strings, §11), and folds the file's account names into `import_account`
 and its category paths into `import_category` as unmapped rows — accumulating across files (§5).
@@ -356,7 +356,7 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
-- **v0.8 (2026-09-01):** **b3 implemented** (awaiting owner confirmation) — Confirm & stage writes
+- **v0.8 (2026-09-01):** **b3 complete** (owner-confirmed) — Confirm & stage writes
   `import_file` / `import_transaction` / `import_posting`, folds referenced account names and
   category paths into `import_account` / `import_category` as unmapped rows (idempotent on the
   session-unique keys, so re-staging never duplicates), the campaign screen grew a **staged-files
