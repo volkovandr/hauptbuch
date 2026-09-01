@@ -1,19 +1,23 @@
 package volkovandr.hauptbuch.importer;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
  * Parses an already-decoded QIF file's text into its canonical representation (import.md §3/§4) —
- * slice a2 of the import build sequence. Charset decoding and whole-file date-format detection both
+ * slice a of the import build sequence. Charset decoding and whole-file date-format detection both
  * happen around this, not inside it (a3): {@link ImportedTransaction#rawDate()} stays the literal
  * source text, never guessed at here.
  *
- * <p>Handles Money's asset/liability account headers and simple, one-line transactions only.
- * Splits, the self-transfer opening-balance marker, and the destroyed-account-name rejection all
- * land at a4; encountering a split here is refused rather than silently dropping its extra legs.
+ * <p>Handles Money's asset/liability account headers, simple one-line transactions, splits ({@code
+ * S}/{@code E}/{@code $}), transfers ({@code [Account]}), the opening-balance self-transfer (§5.1)
+ * and Money's {@code /Class} tag suffix (§8, resolved by {@link QifTarget}). {@code !Type:Invst}
+ * and any file naming a destroyed account (§4.5) are refused outright rather than staged with a
+ * guess (CLAUDE.md §0).
  */
 @Component
 public class QifParser {
@@ -26,19 +30,29 @@ public class QifParser {
   private static final String ASSET_TYPE = "asset";
   private static final String LIABILITY_TYPE = "liability";
 
-  private static final char ADDRESS_FIELD_LETTER = 'A';
-  private static final Set<Character> SPLIT_FIELD_LETTERS = Set.of('S', 'E', '$');
-
-  /** Parse a fully decoded QIF file's text (§4.1) into its canonical representation. */
-  public ImportedFile parse(String text) {
+  /**
+   * Parse a fully decoded QIF file's text (§4.1) into its canonical representation.
+   *
+   * @param moneyAccountName the Money account the file is for — the file itself does not say, so
+   *     the owner states it at upload (§4.1). Used to recognise the opening-balance self-transfer
+   *     and to seed {@link ImportedFile#referencedAccountNames()}; required.
+   * @param text the fully decoded file text
+   */
+  public ImportedFile parse(String moneyAccountName, String text) {
+    if (moneyAccountName == null || moneyAccountName.isBlank()) {
+      throw new IllegalArgumentException(
+          "The Money account name the file is for must be supplied (import.md §4.1).");
+    }
     QifRecordReader.Result read = QifRecordReader.read(text);
     String accountType = proposeAccountType(read.header());
     List<ImportedTransaction> transactions =
-        read.records().stream().map(this::toTransaction).toList();
-    return new ImportedFile(accountType, transactions);
+        read.records().stream().map(record -> toTransaction(moneyAccountName, record)).toList();
+    Set<String> referenced = referencedAccountNames(moneyAccountName, transactions);
+    rejectDestroyedAccounts(referenced);
+    return new ImportedFile(accountType, referenced, transactions);
   }
 
-  private String proposeAccountType(String header) {
+  private static String proposeAccountType(String header) {
     if (ASSET_HEADERS.contains(header)) {
       return ASSET_TYPE;
     }
@@ -53,84 +67,156 @@ public class QifParser {
     throw new QifRejectedException("Unrecognised QIF account header: \"" + header + "\".");
   }
 
-  private ImportedTransaction toTransaction(List<String> fieldLines) {
-    RawFields raw = new RawFields();
-    for (String fieldLine : fieldLines) {
-      if (fieldLine.charAt(0) == ADDRESS_FIELD_LETTER) {
-        continue; // payee mailing address — ignored (§4.4); the payee-name parser is the source
-      }
-      assign(raw, fieldLine);
-    }
-    if (raw.rawDate == null) {
-      throw new QifRejectedException("A QIF record is missing its D (date) field.");
-    }
-    if (raw.targetText == null) {
-      throw new QifRejectedException("A QIF record is missing its L (category/account) field.");
-    }
-
-    BigDecimal amount =
-        QifAmounts.parse(raw.amountText != null ? raw.amountText : raw.duplicateAmountText);
-    ImportedLine line = new ImportedLine(amount, null, toTarget(raw.targetText));
-
+  private static ImportedTransaction toTransaction(
+      String moneyAccountName, List<String> fieldLines) {
+    RawRecord raw = RawRecord.from(fieldLines);
+    List<ImportedLine> lines =
+        raw.splitLegs().isEmpty() ? List.of(raw.simpleLine()) : raw.splitLines();
     return new ImportedTransaction(
-        raw.rawDate,
-        raw.payeeText,
-        raw.memo,
-        raw.referenceNumber,
-        ClearedStatus.fromCode(raw.clearedCode),
-        List.of(line));
+        raw.requireDate(),
+        classifyPayee(raw.payeeText()),
+        raw.memo(),
+        raw.referenceNumber(),
+        ClearedStatus.fromCode(raw.clearedCode()),
+        isOpeningBalance(moneyAccountName, lines),
+        lines);
   }
 
-  private static void assign(RawFields raw, String fieldLine) {
-    char letter = fieldLine.charAt(0);
-    if (SPLIT_FIELD_LETTERS.contains(letter)) {
+  /**
+   * §4.4: a payee that is <em>entirely</em> {@code ?}/whitespace carries no information and would
+   * collide with every other fully destroyed name, so it yields no payee at all; a partially
+   * destroyed name still distinguishes and is kept verbatim.
+   */
+  private static String classifyPayee(String rawPayee) {
+    if (rawPayee == null || rawPayee.isBlank() || QifText.isDestroyed(rawPayee)) {
+      return null;
+    }
+    return rawPayee;
+  }
+
+  private static boolean isOpeningBalance(String moneyAccountName, List<ImportedLine> lines) {
+    return lines.size() == 1
+        && lines.get(0).target() instanceof ImportedTarget.AccountReference ref
+        && ref.accountName().equals(moneyAccountName);
+  }
+
+  private static Set<String> referencedAccountNames(
+      String moneyAccountName, List<ImportedTransaction> transactions) {
+    Set<String> names = new LinkedHashSet<>();
+    names.add(moneyAccountName);
+    transactions.stream()
+        .flatMap(transaction -> transaction.lines().stream())
+        .map(ImportedLine::target)
+        .filter(ImportedTarget.AccountReference.class::isInstance)
+        .map(target -> ((ImportedTarget.AccountReference) target).accountName())
+        .forEach(names::add);
+    return names;
+  }
+
+  private static void rejectDestroyedAccounts(Set<String> referencedAccountNames) {
+    boolean anyDestroyed =
+        referencedAccountNames.stream()
+            .anyMatch(name -> !name.isBlank() && QifText.isDestroyed(name));
+    if (anyDestroyed) {
       throw new QifRejectedException(
-          "This record has a split (S/E/$) — splits are not supported yet (a4).");
+          "This file references an account whose name was destroyed on export (it is all \"?\")."
+              + " Rename that account in Money and re-export — Hauptbuch will not guess which"
+              + " account it is.");
     }
-    String value = fieldLine.substring(1);
-    if (tryFundingField(raw, letter, value) || tryDetailField(raw, letter, value)) {
-      return;
-    }
-    throw new QifRejectedException("Unrecognised QIF field: \"" + fieldLine + "\".");
   }
 
-  /** {@code D}/{@code T}/{@code U}/{@code P} — split from {@link #tryDetailField} for size only. */
-  private static boolean tryFundingField(RawFields raw, char letter, String value) {
-    switch (letter) {
-      case 'D' -> raw.rawDate = value;
-      case 'T' -> raw.amountText = value;
-      case 'U' -> raw.duplicateAmountText = value;
-      case 'P' -> raw.payeeText = value;
-      default -> {
-        return false;
+  /**
+   * One QIF record's field values, gathered as its lines are walked (import.md §4.2). Split legs
+   * are kept in source order — a leg is complete only once its {@code $} amount arrives.
+   */
+  private record RawRecord(
+      String rawDate,
+      String amountText,
+      String duplicateAmountText,
+      String payeeText,
+      String memo,
+      String referenceNumber,
+      String clearedCode,
+      String targetText,
+      List<SplitLeg> splitLegs) {
+
+    private static RawRecord from(List<String> fieldLines) {
+      Builder builder = new Builder();
+      for (String fieldLine : fieldLines) {
+        builder.accept(fieldLine.charAt(0), fieldLine.substring(1), fieldLine);
       }
+      return builder.build();
     }
-    return true;
-  }
 
-  /** {@code M}/{@code N}/{@code C}/{@code L} — the rest of {@link #assign}'s known fields. */
-  private static boolean tryDetailField(RawFields raw, char letter, String value) {
-    switch (letter) {
-      case 'M' -> raw.memo = value;
-      case 'N' -> raw.referenceNumber = value;
-      case 'C' -> raw.clearedCode = value;
-      case 'L' -> raw.targetText = value;
-      default -> {
-        return false;
+    private String requireDate() {
+      if (rawDate == null) {
+        throw new QifRejectedException("A QIF record is missing its D (date) field.");
       }
+      return rawDate;
     }
-    return true;
+
+    private String headerAmountText() {
+      return amountText != null ? amountText : duplicateAmountText;
+    }
+
+    private ImportedLine simpleLine() {
+      if (targetText == null) {
+        throw new QifRejectedException("A QIF record is missing its L (category/account) field.");
+      }
+      QifTarget.Resolved resolved = QifTarget.resolve(targetText);
+      return new ImportedLine(
+          QifAmounts.parse(headerAmountText()), null, resolved.className(), resolved.target());
+    }
+
+    private List<ImportedLine> splitLines() {
+      String headerAmount = headerAmountText();
+      if (headerAmount == null) {
+        throw new QifRejectedException("A split QIF record is missing its T (total) field.");
+      }
+      List<ImportedLine> lines = new ArrayList<>();
+      for (SplitLeg leg : splitLegs) {
+        lines.add(splitLine(leg));
+      }
+      BigDecimal sum =
+          lines.stream().map(ImportedLine::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+      BigDecimal headerTotal = QifAmounts.parse(headerAmount);
+      if (sum.compareTo(headerTotal) != 0) {
+        throw new QifRejectedException(
+            "This split's lines sum to "
+                + sum.toPlainString()
+                + " but the record total (T) is "
+                + headerTotal.toPlainString()
+                + " — Hauptbuch never adjusts a split to make it balance.");
+      }
+      return lines;
+    }
+
+    private static ImportedLine splitLine(SplitLeg leg) {
+      if (leg.amountText == null) {
+        throw new QifRejectedException("The split line \"S" + leg.target + "\" has no $ amount.");
+      }
+      QifTarget.Resolved resolved = QifTarget.resolve(leg.target);
+      return new ImportedLine(
+          QifAmounts.parse(leg.amountText),
+          QifText.blankToNull(leg.memo),
+          resolved.className(),
+          resolved.target());
+    }
   }
 
-  private ImportedTarget toTarget(String rawTarget) {
-    if (rawTarget.startsWith("[") && rawTarget.endsWith("]")) {
-      return new ImportedTarget.AccountReference(rawTarget.substring(1, rawTarget.length() - 1));
+  /** One {@code S}/{@code E}/{@code $} split leg, filled in as its three lines are walked. */
+  private static final class SplitLeg {
+    private final String target;
+    private String memo;
+    private String amountText;
+
+    private SplitLeg(String target) {
+      this.target = target;
     }
-    return new ImportedTarget.CategoryPath(rawTarget);
   }
 
-  /** The still-unparsed field values of one record, gathered as its lines are walked. */
-  private static final class RawFields {
+  /** Accumulates one record's fields as {@link RawRecord#from} walks its lines. */
+  private static final class Builder {
     private String rawDate;
     private String amountText;
     private String duplicateAmountText;
@@ -139,5 +225,80 @@ public class QifParser {
     private String referenceNumber;
     private String clearedCode;
     private String targetText;
+    private final List<SplitLeg> splitLegs = new ArrayList<>();
+
+    private void accept(char letter, String value, String fieldLine) {
+      if (assignFundingField(letter, value)
+          || assignDetailField(letter, value)
+          || assignSplitField(letter, value, fieldLine)) {
+        return;
+      }
+      throw new QifRejectedException("Unrecognised QIF field: \"" + fieldLine + "\".");
+    }
+
+    /** {@code D}/{@code T}/{@code U}/{@code P} — the funding fields (§4.2). */
+    private boolean assignFundingField(char letter, String value) {
+      switch (letter) {
+        case 'D' -> rawDate = value;
+        case 'T' -> amountText = value;
+        case 'U' -> duplicateAmountText = value;
+        case 'P' -> payeeText = value;
+        default -> {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    /** {@code M}/{@code N}/{@code C}/{@code L}, plus {@code A} which is ignored (§4.4). */
+    private boolean assignDetailField(char letter, String value) {
+      switch (letter) {
+        case 'M' -> memo = value;
+        case 'N' -> referenceNumber = value;
+        case 'C' -> clearedCode = value;
+        case 'L' -> targetText = value;
+        case 'A' -> {
+          // payee mailing address — ignored; the payee-name parser is the source
+        }
+        default -> {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    /** {@code S}/{@code E}/{@code $} — one split leg's three lines, in source order (§7). */
+    private boolean assignSplitField(char letter, String value, String fieldLine) {
+      switch (letter) {
+        case 'S' -> splitLegs.add(new SplitLeg(value));
+        case 'E' -> openLeg(fieldLine).memo = value;
+        case '$' -> openLeg(fieldLine).amountText = value;
+        default -> {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    private SplitLeg openLeg(String fieldLine) {
+      if (splitLegs.isEmpty()) {
+        throw new QifRejectedException(
+            "QIF split field \"" + fieldLine + "\" has no preceding S (category) line.");
+      }
+      return splitLegs.get(splitLegs.size() - 1);
+    }
+
+    private RawRecord build() {
+      return new RawRecord(
+          rawDate,
+          amountText,
+          duplicateAmountText,
+          payeeText,
+          memo,
+          referenceNumber,
+          clearedCode,
+          targetText,
+          List.copyOf(splitLegs));
+    }
   }
 }

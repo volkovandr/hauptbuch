@@ -2,18 +2,26 @@ package volkovandr.hauptbuch.importer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tier (plan §a2): canonical records built from fixture text. The fixtures are synthetic and
- * sanitized, reproducing shapes a real sample export proved (import.md §14 v0.2) without
+ * Unit tier (plan §a2–§a4): canonical records built from fixture text. The fixtures are synthetic
+ * and sanitized, reproducing shapes a real sample export proved (import.md §14 v0.2) without
  * reproducing the source files themselves (personal data, never committed).
  */
 class QifParserTest {
 
   private final QifParser parser = new QifParser();
+
+  /**
+   * The file itself never names its account (§4.1) — the tests state one the way the owner does.
+   */
+  private ImportedFile parse(String text) {
+    return parser.parse("Test Account", text);
+  }
 
   @Test
   void proposesAssetForBankHeader() {
@@ -27,13 +35,14 @@ class QifParserTest {
         ^
         """;
 
-    ImportedFile file = parser.parse(text);
+    ImportedFile file = parse(text);
 
     assertThat(file.proposedAccountType()).isEqualTo("asset");
     assertThat(file.transactions()).hasSize(1);
     ImportedTransaction transaction = file.transactions().get(0);
     assertThat(transaction.rawDate()).isEqualTo("26/11'2011");
     assertThat(transaction.payeeText()).isEqualTo("Bank24.ru");
+    assertThat(transaction.openingBalance()).isFalse();
     assertThat(transaction.lines()).hasSize(1);
     ImportedLine line = transaction.lines().get(0);
     assertThat(line.amount()).isEqualByComparingTo(new BigDecimal("700290.00"));
@@ -52,35 +61,35 @@ class QifParserTest {
         ^
         """;
 
-    assertThat(parser.parse(text).proposedAccountType()).isEqualTo("liability");
+    assertThat(parse(text).proposedAccountType()).isEqualTo("liability");
   }
 
   @Test
   void proposesAssetForOtherAssetHeader() {
     String text = "!Type:Oth A\nD01/01'2020\nT1.00\nLFood\n^\n";
 
-    assertThat(parser.parse(text).proposedAccountType()).isEqualTo("asset");
+    assertThat(parse(text).proposedAccountType()).isEqualTo("asset");
   }
 
   @Test
   void proposesLiabilityForOtherLiabilityHeader() {
     String text = "!Type:Oth L\nD01/01'2020\nT1.00\nLFood\n^\n";
 
-    assertThat(parser.parse(text).proposedAccountType()).isEqualTo("liability");
+    assertThat(parse(text).proposedAccountType()).isEqualTo("liability");
   }
 
   @Test
   void rejectsInvestmentAccount() {
     String text = "!Type:Invst\nD01/01'2020\nT1.00\nLFood\n^\n";
 
-    assertThatThrownBy(() -> parser.parse(text))
+    assertThatThrownBy(() -> parse(text))
         .isInstanceOf(QifRejectedException.class)
         .hasMessageContaining("Invst");
   }
 
   @Test
   void rejectsUnrecognisedHeader() {
-    assertThatThrownBy(() -> parser.parse("!Type:Whatever\nD01/01'2020\nT1.00\nLFood\n^\n"))
+    assertThatThrownBy(() -> parse("!Type:Whatever\nD01/01'2020\nT1.00\nLFood\n^\n"))
         .isInstanceOf(QifRejectedException.class);
   }
 
@@ -96,9 +105,10 @@ class QifParserTest {
         ^
         """;
 
-    ImportedTransaction transaction = parser.parse(text).transactions().get(0);
+    ImportedTransaction transaction = parse(text).transactions().get(0);
 
     assertThat(transaction.clearedStatus()).isEqualTo(ClearedStatus.RECONCILED);
+    assertThat(transaction.openingBalance()).isFalse();
     assertThat(transaction.lines().get(0).target())
         .isEqualTo(new ImportedTarget.AccountReference("Bank24ru-EUR"));
   }
@@ -117,7 +127,7 @@ class QifParserTest {
         ^
         """;
 
-    ImportedTransaction transaction = parser.parse(text).transactions().get(0);
+    ImportedTransaction transaction = parse(text).transactions().get(0);
 
     assertThat(transaction.memo()).isEqualTo("Some note");
     assertThat(transaction.referenceNumber()).isEqualTo("1234");
@@ -137,44 +147,28 @@ class QifParserTest {
         ^
         """;
 
-    ImportedTransaction transaction = parser.parse(text).transactions().get(0);
+    ImportedTransaction transaction = parse(text).transactions().get(0);
 
     assertThat(transaction.payeeText()).isEqualTo("Some Payee");
-  }
-
-  @Test
-  void rejectsSplitRecord() {
-    String text =
-        """
-        !Type:Bank
-        D01/01'2020
-        T-10.00
-        LFood
-        SFood
-        $-10.00
-        ^
-        """;
-
-    assertThatThrownBy(() -> parser.parse(text)).isInstanceOf(QifRejectedException.class);
   }
 
   @Test
   void fallsBackToDuplicateAmountFieldWhenPrimaryIsMissing() {
     String text = "!Type:Bank\nD01/01'2020\nU5.00\nLFood\n^\n";
 
-    assertThat(parser.parse(text).transactions().get(0).lines().get(0).amount())
+    assertThat(parse(text).transactions().get(0).lines().get(0).amount())
         .isEqualByComparingTo("5.00");
   }
 
   @Test
   void rejectsRecordMissingDateField() {
-    assertThatThrownBy(() -> parser.parse("!Type:Bank\nT1.00\nLFood\n^\n"))
+    assertThatThrownBy(() -> parse("!Type:Bank\nT1.00\nLFood\n^\n"))
         .isInstanceOf(QifRejectedException.class);
   }
 
   @Test
   void rejectsRecordMissingTargetField() {
-    assertThatThrownBy(() -> parser.parse("!Type:Bank\nD01/01'2020\nT1.00\n^\n"))
+    assertThatThrownBy(() -> parse("!Type:Bank\nD01/01'2020\nT1.00\n^\n"))
         .isInstanceOf(QifRejectedException.class);
   }
 
@@ -200,7 +194,7 @@ class QifParserTest {
         ^
         """;
 
-    ImportedFile file = parser.parse(text);
+    ImportedFile file = parse(text);
 
     assertThat(file.transactions()).hasSize(3);
 
@@ -226,5 +220,284 @@ class QifParserTest {
     assertThat(third.lines().get(0).amount()).isEqualByComparingTo("707.46");
     assertThat(third.lines().get(0).target())
         .isEqualTo(new ImportedTarget.CategoryPath("OtherIncome"));
+  }
+
+  // ---------------------------------------------------------------------------
+  // a4 — splits, transfers, opening balances, destroyed payees & accounts
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void requiresTheMoneyAccountNameToBeSupplied() {
+    assertThatThrownBy(() -> parser.parse("  ", "!Type:Bank\nD01/01'2020\nT1.00\nLFood\n^\n"))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void parsesSplitIntoOneLinePerLeg() {
+    // The header L simply repeats the first S line (import.md §7, Q-IMP-1) — it is not a fourth
+    // leg.
+    String text =
+        """
+        !Type:CCard
+        D19/07'2016
+        T-161.07
+        PCitygoRentals
+        LVacation:car-rental
+        SVacation:car-rental
+        $-115.05
+        SVacation:entertainment
+        $-46.02
+        ^
+        """;
+
+    ImportedTransaction transaction = parse(text).transactions().get(0);
+
+    assertThat(transaction.payeeText()).isEqualTo("CitygoRentals");
+    assertThat(transaction.lines())
+        .extracting(line -> line.amount().toPlainString(), ImportedLine::target)
+        .containsExactly(
+            tuple("-115.05", new ImportedTarget.CategoryPath("Vacation:car-rental")),
+            tuple("-46.02", new ImportedTarget.CategoryPath("Vacation:entertainment")));
+  }
+
+  @Test
+  void putsSplitLineMemoOnTheLine() {
+    String text =
+        """
+        !Type:Bank
+        D01/01'2020
+        T-10.00
+        LFood
+        SFood
+        Elunch with a client
+        $-7.00
+        STransport
+        Ebus fare
+        $-3.00
+        ^
+        """;
+
+    ImportedTransaction transaction = parse(text).transactions().get(0);
+
+    assertThat(transaction.lines())
+        .extracting(ImportedLine::memo)
+        .containsExactly("lunch with a client", "bus fare");
+  }
+
+  @Test
+  void rejectsSplitWhoseLinesDoNotSumToTheTotal() {
+    String text =
+        """
+        !Type:Bank
+        D01/01'2020
+        T-10.00
+        LFood
+        SFood
+        $-7.00
+        STransport
+        $-2.00
+        ^
+        """;
+
+    assertThatThrownBy(() -> parse(text))
+        .isInstanceOf(QifRejectedException.class)
+        .hasMessageContaining("-9")
+        .hasMessageContaining("-10");
+  }
+
+  @Test
+  void rejectsSplitLegWithNoAmount() {
+    String text =
+        """
+        !Type:Bank
+        D01/01'2020
+        T-10.00
+        LFood
+        SFood
+        $-7.00
+        STransport
+        ^
+        """;
+
+    assertThatThrownBy(() -> parse(text)).isInstanceOf(QifRejectedException.class);
+  }
+
+  @Test
+  void parsesSplitContainingTransferLeg() {
+    // A real split whose second leg is a transfer to a person account (import.md §7, Q-IMP-1).
+    String text =
+        """
+        !Type:CCard
+        D19/07'2016
+        T-161.07
+        PCitygoRentals
+        LVacation:car-rental
+        SVacation:car-rental
+        $-115.05
+        S[Debt-Volkov]
+        $-46.02
+        ^
+        """;
+
+    ImportedFile file = parse(text);
+    ImportedTransaction transaction = file.transactions().get(0);
+
+    assertThat(transaction.lines().get(1).target())
+        .isEqualTo(new ImportedTarget.AccountReference("Debt-Volkov"));
+    assertThat(file.referencedAccountNames()).contains("Debt-Volkov");
+  }
+
+  @Test
+  void flagsTheSelfTransferAsOpeningBalance() {
+    String text =
+        """
+        !Type:CCard
+        D19/07'2016
+        T0.00
+        CX
+        POpening Balance
+        L[Advanzia-MC]
+        ^
+        """;
+
+    ImportedTransaction transaction = parser.parse("Advanzia-MC", text).transactions().get(0);
+
+    assertThat(transaction.openingBalance()).isTrue();
+    assertThat(transaction.lines().get(0).target())
+        .isEqualTo(new ImportedTarget.AccountReference("Advanzia-MC"));
+  }
+
+  @Test
+  void doesNotFlagTransferToAnotherAccountAsOpeningBalance() {
+    String text =
+        """
+        !Type:Bank
+        D19/07'2016
+        T-100.00
+        L[Some Other Account]
+        ^
+        """;
+
+    assertThat(parser.parse("Advanzia-MC", text).transactions().get(0).openingBalance()).isFalse();
+  }
+
+  @Test
+  void dropsAnEntirelyDestroyedPayee() {
+    String text =
+        """
+        !Type:Bank
+        D01/01'2020
+        T-5.00
+        P???? ????
+        LFood
+        ^
+        """;
+
+    assertThat(parse(text).transactions().get(0).payeeText()).isNull();
+  }
+
+  @Test
+  void keepsPartiallyDestroyedPayeeVerbatim() {
+    String text =
+        """
+        !Type:Bank
+        D01/01'2020
+        T-5.00
+        P???????? Rewe
+        LFood
+        ^
+        """;
+
+    assertThat(parse(text).transactions().get(0).payeeText()).isEqualTo("???????? Rewe");
+  }
+
+  @Test
+  void rejectsFileThatReferencesDestroyedAccountName() {
+    String text =
+        """
+        !Type:Bank
+        D01/01'2020
+        T-5.00
+        L[???? ?????????]
+        ^
+        """;
+
+    assertThatThrownBy(() -> parse(text))
+        .isInstanceOf(QifRejectedException.class)
+        .hasMessageContaining("destroyed");
+  }
+
+  @Test
+  void collectsEveryReferencedAccountName() {
+    String text =
+        """
+        !Type:Bank
+        D01/01'2020
+        T-5.00
+        L[Commerzbank-main]
+        ^
+        D02/01'2020
+        T-6.00
+        LFood
+        SFood
+        $-2.00
+        S[Cash-RUR]
+        $-4.00
+        ^
+        """;
+
+    assertThat(parser.parse("Bank24ru-EUR", text).referencedAccountNames())
+        .containsExactlyInAnyOrder("Bank24ru-EUR", "Commerzbank-main", "Cash-RUR");
+  }
+
+  @Test
+  void splitsTheClassSuffixOffTheCategoryPath() {
+    String text =
+        """
+        !Type:Bank
+        D01/01'2020
+        T7.64
+        LOtherIncome/holiday-fund
+        ^
+        """;
+
+    ImportedLine line = parse(text).transactions().get(0).lines().get(0);
+
+    assertThat(line.target()).isEqualTo(new ImportedTarget.CategoryPath("OtherIncome"));
+    assertThat(line.className()).isEqualTo("holiday-fund");
+  }
+
+  @Test
+  void dropsDestroyedClassSuffixRatherThanTagging() {
+    String text =
+        """
+        !Type:Bank
+        D01/01'2020
+        T7.64
+        LOtherIncome/??????
+        ^
+        """;
+
+    ImportedLine line = parse(text).transactions().get(0).lines().get(0);
+
+    assertThat(line.target()).isEqualTo(new ImportedTarget.CategoryPath("OtherIncome"));
+    assertThat(line.className()).isNull();
+  }
+
+  @Test
+  void splitsTheClassSuffixOffTransferTarget() {
+    String text =
+        """
+        !Type:Bank
+        D01/01'2020
+        T-50.00
+        L[Savings]/holiday-fund
+        ^
+        """;
+
+    ImportedLine line = parse(text).transactions().get(0).lines().get(0);
+
+    assertThat(line.target()).isEqualTo(new ImportedTarget.AccountReference("Savings"));
+    assertThat(line.className()).isEqualTo("holiday-fund");
   }
 }
