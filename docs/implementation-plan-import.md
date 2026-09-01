@@ -1,6 +1,6 @@
 # Hauptbuch — Import Plan: the Money migration (QIF)
 
-**Status:** Draft v0.7
+**Status:** Draft v0.8
 **Date:** 2026-09-01
 **Owner:** volkovandr
 **Parent:** `implementation-plan.md` §3, first bullet (the item currently being built). This doc is
@@ -168,7 +168,7 @@ suspicious.
 uploading a second file under the same name prompts the replacement-or-coincidence choice instead
 of silently doing either; nothing has been written to any staging table.
 
-### b3 — Stage the confirmed file
+### b3 — Stage the confirmed file *(implemented; awaiting owner confirmation)*
 Confirming the preview writes `import_file` + `import_transaction` + `import_posting` (targets kept
 as the **unresolved** Money strings, §11), and folds the file's account names into `import_account`
 and its category paths into `import_category` as unmapped rows — accumulating across files (§5).
@@ -348,6 +348,24 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.8 (2026-09-01):** **b3 implemented** (awaiting owner confirmation) — Confirm & stage writes
+  `import_file` / `import_transaction` / `import_posting`, folds referenced account names and
+  category paths into `import_account` / `import_category` as unmapped rows (idempotent on the
+  session-unique keys, so re-staging never duplicates), the campaign screen grew a **staged-files
+  list** with per-file counts and a **remove-staged-file** action, and the b2 filename-clash check
+  now also spans staged `import_file` rows (a "replace" drops the staged rows, then the new file
+  stages under its old slot). **One decision to ratify:** `import_posting.amount` is stored in
+  **Hauptbuch's sign convention, not Money's** — the funding leg on the file's own account carries
+  the record total `T` verbatim (an asset outflow is negative in both conventions) and every
+  category/transfer leg carries the **negation** of its Money `$`/`T`, so a staged transaction's
+  legs sum to zero by construction and f2 hands them to `LedgerService` without a sign flip. The
+  design doc did not pin this; §7/§10 are candidates to record it. Incidental: `ImportedTransaction`
+  gained a `payeeDestroyed` flag (b1 reserved the column, the parser had collapsed destroyed and
+  absent payees); `QifDateFormat.toLocalDate` added (parses `D26/11'2011` with the confirmed
+  order, Money's two-digit-year separator convention, refuses non-dates); repositories take the
+  row record (`insert(record)`, the `AccountRepository` idiom); `import_file.filename` is read as
+  `source_filename` to match `PendingImportUpload`. A still-ambiguous date order blocks staging.
+  Next: e′ (per-account statistics).
 - **v0.7 (2026-09-01):** **b2 complete** — `/import` screen (upload → preview, nothing staged).
   Mechanism notes: (1) between upload and b3's
   Confirm the file is held in the **HTTP session** (`ImportUploadSession`, bytes Base64) and the

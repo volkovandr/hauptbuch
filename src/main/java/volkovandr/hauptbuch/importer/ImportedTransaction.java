@@ -12,6 +12,9 @@ import java.util.List;
  * @param payeeText the {@code P} field; verbatim when it carries information, null when absent or
  *     when it was <em>entirely</em> destroyed on export (all {@code ?}/whitespace, §4.4) — a
  *     partially destroyed name is kept verbatim
+ * @param payeeDestroyed true when the {@code P} field was present but <em>entirely</em> {@code
+ *     ?}/whitespace (§4.4) — distinct from an absent payee, which the review counts separately
+ *     (§5.3). {@code payeeText} is null in both cases
  * @param memo the header {@code M} field; null when absent
  * @param referenceNumber the {@code N} field (cheque/reference number); null when absent — kept
  *     separate from {@code memo} here, since "prefixed into the note" (§4.2) is a ledger-write-time
@@ -26,6 +29,7 @@ import java.util.List;
 public record ImportedTransaction(
     String rawDate,
     String payeeText,
+    boolean payeeDestroyed,
     String memo,
     String referenceNumber,
     ClearedStatus clearedStatus,

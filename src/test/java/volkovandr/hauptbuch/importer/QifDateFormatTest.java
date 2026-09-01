@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.importer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -119,5 +120,44 @@ class QifDateFormatTest {
     String text = "!Type:Bank\nD00/03'2007\nT-3.00\nLFood\n^\n";
 
     assertThatThrownBy(() -> QifDateFormat.detect(text)).isInstanceOf(QifRejectedException.class);
+  }
+
+  @Test
+  void parsesRawValueWithTheConfirmedDayMonthOrder() {
+    assertThat(QifDateFormat.toLocalDate("26/11'2011", QifDateFormat.Order.DAY_MONTH))
+        .isEqualTo(LocalDate.of(2011, 11, 26));
+  }
+
+  @Test
+  void parsesRawValueWithTheConfirmedMonthDayOrder() {
+    assertThat(QifDateFormat.toLocalDate("11/26'2011", QifDateFormat.Order.MONTH_DAY))
+        .isEqualTo(LocalDate.of(2011, 11, 26));
+  }
+
+  @Test
+  void readsTwoDigitYearsByMoneySeparatorConvention() {
+    assertThat(QifDateFormat.toLocalDate("03/01'00", QifDateFormat.Order.DAY_MONTH))
+        .isEqualTo(LocalDate.of(2000, 1, 3));
+    assertThat(QifDateFormat.toLocalDate("03/01/98", QifDateFormat.Order.DAY_MONTH))
+        .isEqualTo(LocalDate.of(1998, 1, 3));
+  }
+
+  @Test
+  void refusesToParseWhileTheOrderIsAmbiguous() {
+    assertThatThrownBy(() -> QifDateFormat.toLocalDate("03/01'2005", QifDateFormat.Order.AMBIGUOUS))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("AMBIGUOUS");
+  }
+
+  @Test
+  void rejectsUnparseableRawValue() {
+    assertThatThrownBy(() -> QifDateFormat.toLocalDate("not-a-date", QifDateFormat.Order.DAY_MONTH))
+        .isInstanceOf(QifRejectedException.class);
+  }
+
+  @Test
+  void rejectsRawValueOutsideTheRealCalendar() {
+    assertThatThrownBy(() -> QifDateFormat.toLocalDate("31/02'2011", QifDateFormat.Order.DAY_MONTH))
+        .isInstanceOf(QifRejectedException.class);
   }
 }

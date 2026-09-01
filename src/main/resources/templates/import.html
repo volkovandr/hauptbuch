@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--
-  Import campaign screen (import.md §2, plan b2). One open session at a time; every upload feeds it.
-  This step goes as far as upload → preview — NOTHING is written to a staging table here (that is
-  b3's "Confirm"). Standard server-rendered form POSTs; no bespoke JS.
+  Import campaign screen (import.md §2, plan b2/b3). One open session at a time; every upload feeds
+  it. Upload → preview → "Confirm & stage" writes the file into the staging tables (b3); the ledger
+  is still untouched until the campaign commits. Standard server-rendered form POSTs; no bespoke JS.
 -->
 <html
   lang="en"
@@ -12,6 +12,7 @@
   <main class="content ledger" th:fragment="content">
 
     <p class="warning" th:if="${error}" th:text="${error}">Something went wrong.</p>
+    <p class="eyebrow" th:if="${staged}" th:text="${staged}">Staged.</p>
 
     <!-- No campaign open: the only action is to start one. -->
     <section class="panel" th:if="${campaign == null}">
@@ -113,6 +114,32 @@
             <form
               method="post"
               th:action="@{/import/uploads/{token}/remove(token=${u.token()})}"
+              style="display: inline"
+            >
+              <button type="submit" class="btn btn--ghost">Remove</button>
+            </form>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Staged files: what the campaign has taken in so far. Removing one takes out exactly its
+           transactions and postings (the maps it fed persist for the campaign, §5) — recovers a
+           mis-stated account or a wrong date order without discarding the whole campaign. -->
+      <section class="panel">
+        <p class="eyebrow">Staged files</p>
+        <p class="muted" th:if="${#lists.isEmpty(files)}">
+          None staged yet. Confirm a preview to stage its transactions.
+        </p>
+        <ul class="import-uploads" th:unless="${#lists.isEmpty(files)}">
+          <li th:each="f : ${files}">
+            <span class="num" th:text="${f.sourceFilename()}">export.qif</span>
+            <span class="muted" th:text="' → ' + ${f.moneyAccountName()}"> → Current Account</span>
+            <span class="muted num" th:text="' · ' + ${f.transactionCount()} + ' transactions'">
+              · 0 transactions</span
+            >
+            <form
+              method="post"
+              th:action="@{/import/files/{id}/remove(id=${f.importFileId()})}"
               style="display: inline"
             >
               <button type="submit" class="btn btn--ghost">Remove</button>
