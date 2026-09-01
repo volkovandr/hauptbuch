@@ -126,7 +126,7 @@ either way. **13 unit tests, all green**; `checkstyleMain/Test`, `pmdMain/Test`,
 clean. Not folded into `QifParser` — that wiring is b2. Class-suffix `L` values (`Category/Class`,
 `[Account]/Class`) still land as a raw `CategoryPath`; splitting them into category + tag is a4.
 
-### a4 — Splits, transfers, opening balances, destroyed payees & accounts
+### a4 — Splits, transfers, opening balances, destroyed payees & accounts ✅ **complete** (owner-confirmed 2026-09-01)
 The `S`/`E`/`$` triples → multiple `ImportedLine`s with `E` on the line memo; a **split-sum
 mismatch raises**, never adjusts (§7). `L[Account]` → an account-reference target; the
 self-transfer `L[Same Account]` → the **opening-balance marker** (§5.1). `?`-payee classification
@@ -348,6 +348,14 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.5 (2026-09-01):** **a4 complete** — splits (`S`/`E`/`$` → one `ImportedLine` per leg,
+  split-sum mismatch raises), the opening-balance self-transfer marker, `?`-destroyed payee
+  classification, and `ImportedFile.referencedAccountNames` with the destroyed-account-name file
+  rejection. `QifParser.parse` now takes the stated Money account name (the file does not carry it,
+  §4.1) — the seam b2 fills. The `/Class` suffix is split off the path onto `ImportedLine.className`
+  (the a3 changelog assigned this to a4), resolved by the new package-private `QifTarget`; `QifText`
+  holds the shared `?`-destruction predicate. 46 importer unit tests; `./gradlew check` green. No
+  scope change. Next: b1 (V19 staging schema + session lifecycle).
 - **v0.4 (2026-09-01):** **a3 complete** — `QifCharset` (strict UTF-8 probe → windows-1252
   fallback, leading-BOM strip, `previewLines()`) and `QifDateFormat` (whole-file day/month-order
   detection carrying the verbatim proving line and its number; contradictory-order files and
