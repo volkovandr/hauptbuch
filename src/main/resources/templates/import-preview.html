@@ -29,13 +29,13 @@
       <div th:unless="${preview.rejected()}">
         <div class="field">
           <span class="field__label">Proposed account type</span>
-          <p class="num" th:text="${preview.proposedAccountType()}">asset</p>
+          <p class="setting-value" th:text="${preview.proposedAccountType()}">asset</p>
           <p class="muted">From the <span class="num">!Type:</span> header — overridable at the account map.</p>
         </div>
 
         <div class="field">
           <span class="field__label">Records</span>
-          <p class="num" th:text="${preview.recordCount()}">0</p>
+          <p class="setting-value num" th:text="${preview.recordCount()}">0</p>
         </div>
 
         <div class="field">
