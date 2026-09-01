@@ -1,18 +1,17 @@
 package volkovandr.hauptbuch.importer;
 
-import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
- * Composes the three pure parser pieces (a2–a4) into the upload {@link ImportPreview} (plan b2):
- * decode the bytes ({@link QifCharset}), detect the whole-file date order ({@link QifDateFormat}),
- * and parse the canonical representation ({@link QifParser}) — applying the owner's charset /
- * date-order override from {@link PendingImportUpload} when present. Nothing here writes to a
- * staging table; the preview is recomputed on every render.
+ * Composes the three pure parser pieces (a2–a4) into the upload {@link ImportPreview} (plan b2) and
+ * into the {@link Parsed} value the staging step consumes (plan b3): decode the bytes ({@link
+ * QifCharset}), detect the whole-file date order ({@link QifDateFormat}), and parse the canonical
+ * representation ({@link QifParser}) — applying the owner's charset / date-order override from
+ * {@link PendingImportUpload} when present. Nothing here writes to a staging table.
  *
  * <p>The wire codes ({@code utf_8}, {@code windows_1252}, {@code day_month}, {@code month_day},
  * {@code ambiguous}) match the {@code import_session} / {@code import_file} check constraints so b3
- * can persist the confirmed choice unchanged.
+ * persists the confirmed choice unchanged.
  */
 @Service
 class ImportPreviewService {
@@ -30,37 +29,72 @@ class ImportPreviewService {
   }
 
   /**
+   * Decode, detect and parse one pending upload — the single place the three pure parser pieces are
+   * composed. Throws {@link QifRejectedException} for a file the parser refuses (§4.5); {@link
+   * #preview} catches it, {@link ImportStagingService} lets it propagate.
+   *
+   * @param file the parsed canonical representation
+   * @param decoded the decoded bytes (effective charset applied), for the preview lines
+   * @param charsetCode the effective charset as a wire code
+   * @param detection the whole-file date-order detection with its evidence
+   * @param effectiveOrder the date order to read dates with — the override if set, else the
+   *     detected one
+   * @param dateOrderCode {@code effectiveOrder} as a wire code
+   */
+  record Parsed(
+      ImportedFile file,
+      QifCharset.Decoded decoded,
+      String charsetCode,
+      QifDateFormat.Detection detection,
+      QifDateFormat.Order effectiveOrder,
+      String dateOrderCode) {}
+
+  /** Decode, detect and parse {@code upload}, honouring any charset / date-order override on it. */
+  Parsed parse(PendingImportUpload upload) {
+    byte[] bytes = upload.content();
+    QifCharset.Encoding chosenCharset = charsetFromCode(upload.charsetChoice());
+    QifCharset.Decoded decoded =
+        chosenCharset == null ? QifCharset.decode(bytes) : QifCharset.decode(bytes, chosenCharset);
+    ImportedFile file = qifParser.parse(upload.moneyAccountName(), decoded.text());
+    QifDateFormat.Detection detection = QifDateFormat.detect(decoded.text());
+    QifDateFormat.Order chosenOrder = orderFromCode(upload.dateOrderChoice());
+    QifDateFormat.Order effectiveOrder = chosenOrder == null ? detection.order() : chosenOrder;
+    return new Parsed(
+        file,
+        decoded,
+        charsetCode(decoded.encoding()),
+        detection,
+        effectiveOrder,
+        orderCode(effectiveOrder));
+  }
+
+  /**
    * Build the preview for one pending upload, honouring any charset / date-order override on it.
    */
   ImportPreview preview(PendingImportUpload upload) {
-    byte[] bytes = upload.content();
-    QifCharset.Decoded detected = QifCharset.decode(bytes);
-    QifCharset.Encoding chosenCharset = charsetFromCode(upload.charsetChoice());
-    QifCharset.Decoded decoded =
-        chosenCharset == null ? detected : QifCharset.decode(bytes, chosenCharset);
-    List<String> previewLines = decoded.previewLines();
+    QifCharset.Decoded detected = QifCharset.decode(upload.content());
     try {
       // Parse first: a destroyed account or !Type:Invst is refused outright with a message that
       // names the account (import.md §4.5), and that must win over a date-format complaint.
-      ImportedFile file = qifParser.parse(upload.moneyAccountName(), decoded.text());
-      QifDateFormat.Detection detection = QifDateFormat.detect(decoded.text());
-      QifDateFormat.Order chosenOrder = orderFromCode(upload.dateOrderChoice());
-      QifDateFormat.Order effectiveOrder = chosenOrder == null ? detection.order() : chosenOrder;
+      Parsed parsed = parse(upload);
       return new ImportPreview(
-          file.proposedAccountType(),
-          charsetCode(decoded.encoding()),
+          parsed.file().proposedAccountType(),
+          parsed.charsetCode(),
           charsetCode(detected.encoding()),
-          orderCode(effectiveOrder),
-          orderCode(detection.order()),
-          detection.describe(),
-          previewLines,
-          file.transactions().size(),
+          parsed.dateOrderCode(),
+          orderCode(parsed.detection().order()),
+          parsed.detection().describe(),
+          parsed.decoded().previewLines(),
+          parsed.file().transactions().size(),
           null);
     } catch (QifRejectedException rejected) {
+      QifCharset.Encoding chosenCharset = charsetFromCode(upload.charsetChoice());
+      QifCharset.Decoded decoded =
+          chosenCharset == null ? detected : QifCharset.decode(upload.content(), chosenCharset);
       return ImportPreview.rejected(
           charsetCode(decoded.encoding()),
           charsetCode(detected.encoding()),
-          previewLines,
+          decoded.previewLines(),
           rejected.getMessage());
     }
   }

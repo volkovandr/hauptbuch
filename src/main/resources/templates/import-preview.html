@@ -4,8 +4,8 @@
   staged: proposed account type, detected charset, detected date order with its evidence (or a loud
   AMBIGUOUS), the first ~50 decoded lines so mojibake is visible, and the record count that is
   ticked against Money's own balance. The owner confirms or overrides charset and date order here —
-  a day/month swap corrupts the whole campaign, so it is never assumed. Nothing is staged; "Confirm
-  & stage" arrives in b3.
+  a day/month swap corrupts the whole campaign, so it is never assumed. "Confirm & stage" (b3)
+  writes the file into the staging tables; the ledger stays untouched until the campaign commits.
 -->
 <html
   lang="en"
@@ -14,6 +14,8 @@
 >
   <main class="content ledger" th:fragment="content">
     <p><a class="btn btn--ghost" th:href="@{/import}">← Campaign</a></p>
+
+    <p class="warning" th:if="${error}" th:text="${error}">Something went wrong.</p>
 
     <section class="panel">
       <p class="eyebrow">Preview</p>
@@ -101,8 +103,26 @@
       </pre>
     </section>
 
+    <section class="panel" th:unless="${preview.rejected()}">
+      <p class="eyebrow">Confirm &amp; stage</p>
+      <p class="muted">
+        Writes this file's transactions and postings into staging and folds its account names and
+        category paths into the maps. The ledger stays untouched until the whole campaign commits.
+      </p>
+      <p class="warning" th:if="${preview.dateOrder() == 'ambiguous'}">
+        Choose a date order above before staging — this file's dates do not distinguish DD/MM from
+        MM/DD.
+      </p>
+      <form method="post" th:action="@{/import/uploads/{token}/stage(token=${upload.token()})}" class="form">
+        <p class="actions">
+          <button type="submit" class="btn" th:disabled="${preview.dateOrder() == 'ambiguous'}">
+            Confirm &amp; stage
+          </button>
+        </p>
+      </form>
+    </section>
+
     <section class="panel">
-      <p class="muted">Confirming this file into staging arrives in the next step (b3).</p>
       <form method="post" th:action="@{/import/uploads/{token}/remove(token=${upload.token()})}" class="form">
         <p class="actions"><button type="submit" class="btn btn--ghost">Remove this upload</button></p>
       </form>

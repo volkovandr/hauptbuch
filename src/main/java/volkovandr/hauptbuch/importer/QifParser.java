@@ -75,6 +75,7 @@ public class QifParser {
     return new ImportedTransaction(
         raw.requireDate(),
         classifyPayee(raw.payeeText()),
+        isDestroyedPayee(raw.payeeText()),
         raw.memo(),
         raw.referenceNumber(),
         ClearedStatus.fromCode(raw.clearedCode()),
@@ -92,6 +93,11 @@ public class QifParser {
       return null;
     }
     return rawPayee;
+  }
+
+  /** §4.4: the {@code P} field was present but wholly {@code ?}/whitespace — counted separately. */
+  private static boolean isDestroyedPayee(String rawPayee) {
+    return rawPayee != null && !rawPayee.isBlank() && QifText.isDestroyed(rawPayee);
   }
 
   private static boolean isOpeningBalance(String moneyAccountName, List<ImportedLine> lines) {

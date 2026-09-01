@@ -53,6 +53,26 @@ class ImportScreenIntegrationTest {
 
   private static final String INVESTMENT = "!Type:Invst\nD01/07'2004\n^\n";
 
+  /** A second account whose file both transfers to "Current Account" and reuses the "Food" path. */
+  private static final String SAVINGS_WITH_TRANSFER =
+      """
+      !Type:Bank
+      D22/07'2004
+      T-20.00
+      PMovers
+      L[Current Account]
+      ^
+      D23/07'2004
+      T-8.00
+      PBaker
+      LFood
+      ^
+      """;
+
+  /** Both components ≤ 12 in every date — the order cannot be inferred (import.md §4.3). */
+  private static final String AMBIGUOUS_CARD =
+      "!Type:CCard\nD01/02'2005\nT-9.99\nPShop\nLStuff\n^\n";
+
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
 
@@ -80,6 +100,28 @@ class ImportScreenIntegrationTest {
     String location =
         Objects.requireNonNull(result.getResponse().getRedirectedUrl(), "no redirect Location");
     return location.substring(location.lastIndexOf('/') + 1);
+  }
+
+  private void stage(MockHttpSession session, String token) throws Exception {
+    mockMvc
+        .perform(post("/import/uploads/" + token + "/stage").session(session))
+        .andExpect(redirectedUrl("/import"));
+  }
+
+  private String stageNewFile(MockHttpSession session, String name, String text, String account)
+      throws Exception {
+    String token = upload(session, qif(name, text), account);
+    stage(session, token);
+    return token;
+  }
+
+  private long stagedFileId(String filename) {
+    return jdbcClient
+        .sql(
+            "select import_file_id from import_file where filename = :name order by import_file_id")
+        .param("name", filename)
+        .query(Long.class)
+        .single();
   }
 
   @Test
@@ -175,6 +217,113 @@ class ImportScreenIntegrationTest {
 
     assertNothingStaged();
     assertThat(resolved.getResponse().getRedirectedUrl()).startsWith("/import/uploads/");
+  }
+
+  @Test
+  void confirmingThePreviewStagesTheFileItsTransactionsAndItsMapRows() throws Exception {
+    MockHttpSession session = openCampaign();
+
+    stageNewFile(session, "export.qif", DAY_MONTH_BANK, "Current Account");
+
+    assertThat(count("import_file")).isEqualTo(1);
+    assertThat(count("import_transaction")).isEqualTo(2);
+    // two legs per transaction: the category leg plus the synthesised funding leg (§7)
+    assertThat(count("import_posting")).isEqualTo(4);
+    assertThat(count("import_account")).isEqualTo(1);
+    assertThat(count("import_category")).isEqualTo(1);
+
+    mockMvc
+        .perform(get("/import").session(session))
+        .andExpect(content().string(containsString("Staged files")))
+        .andExpect(content().string(containsString("export.qif")))
+        .andExpect(content().string(containsString("2 transactions")));
+  }
+
+  @Test
+  void stagingTwoFilesAccumulatesMapRowsWithoutDuplicatingThem() throws Exception {
+    MockHttpSession session = openCampaign();
+
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+    stageNewFile(session, "savings.qif", SAVINGS_WITH_TRANSFER, "Savings");
+
+    // "Current Account" is named by both files, "Food" by both — each maps once.
+    assertThat(
+            jdbcClient
+                .sql("select money_account_name from import_account order by money_account_name")
+                .query(String.class)
+                .list())
+        .containsExactly("Current Account", "Savings");
+    assertThat(count("import_category")).isEqualTo(1);
+    assertThat(count("import_file")).isEqualTo(2);
+  }
+
+  @Test
+  void removingStagedFileRemovesExactlyItsRowsAndKeepsTheMaps() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+    stageNewFile(session, "savings.qif", SAVINGS_WITH_TRANSFER, "Savings");
+
+    mockMvc
+        .perform(post("/import/files/" + stagedFileId("current.qif") + "/remove").session(session))
+        .andExpect(redirectedUrl("/import"));
+
+    assertThat(jdbcClient.sql("select filename from import_file").query(String.class).list())
+        .containsExactly("savings.qif");
+    // only savings.qif's rows are left: 2 transactions, 4 legs
+    assertThat(count("import_transaction")).isEqualTo(2);
+    assertThat(count("import_posting")).isEqualTo(4);
+    // the maps both files fed persist for the campaign (§5)
+    assertThat(count("import_account")).isEqualTo(2);
+    assertThat(count("import_category")).isEqualTo(1);
+  }
+
+  @Test
+  void replacingStagedFileLeavesOnlyTheNewFileRows() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "export.qif", DAY_MONTH_BANK, "Current Account");
+
+    // Same filename again — parked (redirects to the screen), then "replace" drops the staged rows
+    // before the new file stages.
+    mockMvc
+        .perform(
+            multipart("/import/uploads")
+                .file(qif("export.qif", SAVINGS_WITH_TRANSFER))
+                .param("moneyAccountName", "Savings")
+                .session(session))
+        .andExpect(redirectedUrl("/import"));
+    MvcResult resolved =
+        mockMvc
+            .perform(post("/import/uploads/clash").param("resolution", "replace").session(session))
+            .andExpect(redirectedUrlPattern("/import/uploads/*"))
+            .andReturn();
+    String location =
+        Objects.requireNonNull(resolved.getResponse().getRedirectedUrl(), "no redirect Location");
+    stage(session, location.substring(location.lastIndexOf('/') + 1));
+
+    assertThat(count("import_file")).isEqualTo(1);
+    assertThat(
+            jdbcClient
+                .sql("select money_account_name from import_file")
+                .query(String.class)
+                .single())
+        .isEqualTo("Savings");
+    assertThat(count("import_transaction")).isEqualTo(2);
+  }
+
+  @Test
+  void stagingIsRefusedWhileTheDateOrderIsStillAmbiguous() throws Exception {
+    MockHttpSession session = openCampaign();
+    String token = upload(session, qif("card.qif", AMBIGUOUS_CARD), "Credit Card");
+
+    mockMvc
+        .perform(post("/import/uploads/" + token + "/stage").session(session))
+        .andExpect(redirectedUrl("/import/uploads/" + token));
+
+    mockMvc
+        .perform(get("/import/uploads/" + token).session(session))
+        .andExpect(content().string(containsString("DD/MM")));
+
+    assertNothingStaged();
   }
 
   private void assertNothingStaged() {

@@ -20,11 +20,12 @@ import volkovandr.hauptbuch.web.NavItem;
  * {@code importer}: a feature module owns its own controller (CLAUDE.md §3). Plain server-rendered
  * forms, redirect after POST; no bespoke JS.
  *
- * <p>Between the upload and the b3 "Confirm", the file is held in the HTTP session ({@link
+ * <p>Between the upload and the "Confirm & stage", the file is held in the HTTP session ({@link
  * ImportUploadSession}) rather than a staging table — the preview is derived from the uploaded
  * bytes plus the owner's charset / date-order choice and recomputed on each render, so nothing has
- * to be unwound if the campaign is discarded. b3 stages the confirmed file and drops it from the
- * session.
+ * to be unwound if the campaign is discarded. Confirming (b3) stages the file through {@link
+ * ImportStagingService} and drops it from the session; a staged file can still be removed from the
+ * campaign screen without discarding the whole campaign.
  */
 @Controller
 class ImportController {
@@ -36,14 +37,19 @@ class ImportController {
   private static final String REDIRECT_SCREEN = "redirect:" + BASE;
   private static final String RESOLUTION_REPLACE = "replace";
   private static final String RESOLUTION_COINCIDENCE = "coincidence";
+  private static final String ERROR = "error";
 
   private final ImportSessionService importSessionService;
   private final ImportPreviewService importPreviewService;
+  private final ImportStagingService importStagingService;
 
   ImportController(
-      ImportSessionService importSessionService, ImportPreviewService importPreviewService) {
+      ImportSessionService importSessionService,
+      ImportPreviewService importPreviewService,
+      ImportStagingService importStagingService) {
     this.importSessionService = importSessionService;
     this.importPreviewService = importPreviewService;
+    this.importStagingService = importStagingService;
   }
 
   /** The screen: the open campaign (or the button to start one) and the pending uploads. */
@@ -53,6 +59,7 @@ class ImportController {
     model.addAttribute("campaign", importSessionService.currentSession().orElse(null));
     model.addAttribute("uploads", uploads.pending().stream().map(ImportUploadView::of).toList());
     model.addAttribute("clash", uploads.clash().map(ImportUploadView::of).orElse(null));
+    model.addAttribute("files", importStagingService.stagedFiles());
     model.addAttribute("nav", NavItem.sectionsFor(BASE));
     model.addAttribute("title", "Import · Hauptbuch");
     return SCREEN_VIEW;
@@ -87,26 +94,29 @@ class ImportController {
       RedirectAttributes redirectAttributes) {
     if (importSessionService.currentSession().isEmpty()) {
       redirectAttributes.addFlashAttribute(
-          "error", "Start an import session before uploading a file.");
+          ERROR, "Start an import session before uploading a file.");
       return REDIRECT_SCREEN;
     }
     if (moneyAccountName == null || moneyAccountName.isBlank()) {
       redirectAttributes.addFlashAttribute(
-          "error", "State which Money account this file is for — the file does not say which.");
+          ERROR, "State which Money account this file is for — the file does not say which.");
       return REDIRECT_SCREEN;
     }
     byte[] bytes;
     try {
       bytes = bytesOf(file);
     } catch (IllegalArgumentException rejected) {
-      redirectAttributes.addFlashAttribute("error", rejected.getMessage());
+      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
       return REDIRECT_SCREEN;
     }
     PendingImportUpload pending =
         PendingImportUpload.of(
             UUID.randomUUID().toString(), filenameOf(file), moneyAccountName.strip(), bytes);
     ImportUploadSession uploads = uploadSession(httpSession);
-    if (uploads.hasFilename(pending.sourceFilename())) {
+    // A name match against a pending upload OR an already-staged file is parked, never assumed —
+    // Money reuses one filename across every export (import.md §2).
+    if (uploads.hasFilename(pending.sourceFilename())
+        || importStagingService.hasStagedFile(pending.sourceFilename())) {
       uploads.parkClash(pending);
       return REDIRECT_SCREEN;
     }
@@ -126,7 +136,15 @@ class ImportController {
     }
     // Only the two explicit "keep it" choices act; cancel — and any unrecognised value — drops it.
     if (RESOLUTION_REPLACE.equals(resolution) || RESOLUTION_COINCIDENCE.equals(resolution)) {
-      return previewRedirect(uploads.resolveClash(RESOLUTION_REPLACE.equals(resolution)));
+      boolean replace = RESOLUTION_REPLACE.equals(resolution);
+      String filename = uploads.clash().orElseThrow().sourceFilename();
+      String token = uploads.resolveClash(replace);
+      if (replace) {
+        // "Replace" also drops any already-staged file of that name — b3's replacement is that
+        // removal followed by staging the new file (import.md §2), not a separate mechanism.
+        importStagingService.removeFilesNamed(filename);
+      }
+      return previewRedirect(token);
     }
     uploads.clearClash();
     return REDIRECT_SCREEN;
@@ -166,6 +184,49 @@ class ImportController {
   @PostMapping(UPLOAD_PATH + "/{token}/remove")
   String remove(@PathVariable String token, HttpSession httpSession) {
     uploadSession(httpSession).removeByToken(token);
+    return REDIRECT_SCREEN;
+  }
+
+  /**
+   * Confirm the preview and stage the file (import.md §11; plan b3): writes {@code import_file} +
+   * {@code import_transaction} + {@code import_posting} and folds the file's account names and
+   * category paths into the maps as unmapped rows. The pending upload is then dropped from the
+   * session. A file the parser refuses, or one whose date order is still ambiguous, comes back to
+   * the preview with the reason.
+   */
+  @PostMapping(UPLOAD_PATH + "/{token}/stage")
+  String stage(
+      @PathVariable String token, HttpSession httpSession, RedirectAttributes redirectAttributes) {
+    Optional<PendingImportUpload> pending = uploadSession(httpSession).findByToken(token);
+    if (pending.isEmpty()) {
+      return REDIRECT_SCREEN;
+    }
+    try {
+      ImportFile staged = importStagingService.stage(pending.get());
+      uploadSession(httpSession).removeByToken(token);
+      redirectAttributes.addFlashAttribute(
+          "staged",
+          "Staged "
+              + staged.sourceFilename()
+              + " for "
+              + staged.moneyAccountName()
+              + " — "
+              + staged.transactionCount()
+              + " transactions.");
+      return REDIRECT_SCREEN;
+    } catch (QifRejectedException rejected) {
+      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
+      return previewRedirect(token);
+    }
+  }
+
+  /**
+   * Remove a staged file and everything it staged (plan b3) — recovers a mis-stated account or a
+   * wrong date order without discarding the whole campaign.
+   */
+  @PostMapping(BASE + "/files/{importFileId}/remove")
+  String removeFile(@PathVariable long importFileId) {
+    importStagingService.removeFile(importFileId);
     return REDIRECT_SCREEN;
   }
 

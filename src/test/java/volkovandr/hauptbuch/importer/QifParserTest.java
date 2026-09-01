@@ -393,7 +393,9 @@ class QifParserTest {
         ^
         """;
 
-    assertThat(parse(text).transactions().get(0).payeeText()).isNull();
+    ImportedTransaction transaction = parse(text).transactions().get(0);
+    assertThat(transaction.payeeText()).isNull();
+    assertThat(transaction.payeeDestroyed()).isTrue();
   }
 
   @Test
@@ -408,7 +410,18 @@ class QifParserTest {
         ^
         """;
 
-    assertThat(parse(text).transactions().get(0).payeeText()).isEqualTo("???????? Rewe");
+    ImportedTransaction transaction = parse(text).transactions().get(0);
+    assertThat(transaction.payeeText()).isEqualTo("???????? Rewe");
+    assertThat(transaction.payeeDestroyed()).isFalse();
+  }
+
+  @Test
+  void marksAnAbsentPayeeAsNotDestroyed() {
+    String text = "!Type:Bank\nD01/01'2020\nT-5.00\nLFood\n^\n";
+
+    ImportedTransaction transaction = parse(text).transactions().get(0);
+    assertThat(transaction.payeeText()).isNull();
+    assertThat(transaction.payeeDestroyed()).isFalse();
   }
 
   @Test
