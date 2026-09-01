@@ -58,7 +58,8 @@ class ImportStagingServiceTest {
   }
 
   private static PendingImportUpload upload() {
-    return PendingImportUpload.of("tok", "export.qif", "Current Account", new byte[] {1});
+    return PendingImportUpload.of("tok", "export.qif", new byte[] {1})
+        .withDeducedAccountName("Current Account");
   }
 
   private void openSession() {
@@ -123,6 +124,18 @@ class ImportStagingServiceTest {
 
     verifyNoInteractions(
         importFileRepository, importTransactionRepository, importPostingRepository);
+  }
+
+  @Test
+  void refusesToStageUntilTheMoneyAccountIsStated() {
+    openSession();
+
+    assertThatThrownBy(
+            () -> service().stage(PendingImportUpload.of("tok", "export.qif", new byte[] {1})))
+        .isInstanceOf(QifRejectedException.class)
+        .hasMessageContaining("State which Money account");
+
+    verifyNoInteractions(importPreviewService, importFileRepository);
   }
 
   @Test

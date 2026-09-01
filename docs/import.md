@@ -1,8 +1,8 @@
 # Personal Finance Manager — Import: Sessions, Maps & the QIF/Money Dialect
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.2
-**Date:** 2026-08-31
+**Status:** Draft v0.3
+**Date:** 2026-09-01
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (§5.12, FR-IMP-01–05),
 `data-model.md`,
@@ -80,8 +80,9 @@ database, never resolves a name to an id, and never knows what a `posting` is:
   (a source-format string) or an *account reference* (a source-format account name, i.e. a transfer).
 
 The parse result also carries the **set of account names the file mentions** — the account it is
-for (stated by the owner, §4.1) plus every `[Account]` counterparty — the input to the account map
-(§5.1), and where the destroyed-account rejection (§4.5) is enforced.
+for (deduced from the opening-balance record, or stated by the owner, §4.1) plus every `[Account]`
+counterparty — the input to the account map (§5.1), and where the destroyed-account rejection
+(§4.5) is enforced.
 
 Everything downstream — mapping, mirror matching, staging, commit — operates on this shape alone.
 That is the seam FR-IMP-05's CSV importer plugs into: a new parser, nothing else. It is also why
@@ -94,8 +95,11 @@ the parser is **pure Java with no Spring and no DB** and is tested entirely in t
 ### 4.1 File shape
 
 Money's *loose QIF* export writes **one account per file**, opening with a type header and then
-`^`-terminated records. The file does **not** say which account it is — the owner states that at
-upload (§5.1).
+`^`-terminated records. No field declares which account the file is — but it almost always
+*contains* the name: Money writes the account's opening balance as a self-transfer whose
+`[Account]` target is the account itself (§5.1). The importer reads that back and proposes it on
+the upload preview; the owner confirms or corrects it there, and types it by hand only for the
+rare file with no opening-balance record.
 
 | Header | Meaning |
 |---|---|
@@ -188,8 +192,9 @@ decision made while importing account A is still in force when account B arrives
 ### 5.1 Accounts
 
 On upload the file is scanned and **every account name it mentions** is collected: the account
-being imported (stated by the owner, since the file does not say) plus every `[Account]` transfer
-counterparty. Mapping each one is **mandatory** before staging completes.
+being imported (deduced from the opening-balance self-transfer, or stated by the owner when the
+file has none — §4.1) plus every `[Account]` transfer counterparty. Mapping each one is
+**mandatory** before staging completes.
 
 A Money account maps to **one of**:
 
@@ -215,12 +220,14 @@ rather than a blanket override. It does **not** change any transaction: a transf
 non-imported account is still booked in full on both legs (sum-to-zero leaves no choice); that
 account simply ends up holding only the postings other files happened to mention.
 
-**Opening balances.** Money exports an opening balance as a self-transfer (`L[Same Account]`), and
-the target Hauptbuch account will usually already have one of its own. The importer proposes a
-winner — **the earlier-dated one, breaking ties toward the non-zero one** — shows both, and lets
-the owner override, including voiding Hauptbuch's. This is the *only* conflict raised when
-importing into an account that already has postings; overlapping transactions are handled once, at
-commit, by the duplicate scan (§9).
+**Opening balances.** Money exports an opening balance as a single-line self-transfer with payee
+`Opening Balance` (`L[Same Account]`) — the one place the file names its own account, which is why
+the importer reads it back to pre-fill the upload preview (§4.1). The target Hauptbuch account will
+usually already have an opening balance of its own. The importer proposes a winner — **the
+earlier-dated one, breaking ties toward the non-zero one** — shows both, and lets the owner
+override, including voiding Hauptbuch's. This is the *only* conflict raised when importing into an
+account that already has postings; overlapping transactions are handled once, at commit, by the
+duplicate scan (§9).
 
 ### 5.2 Categories
 
@@ -540,6 +547,11 @@ needs it: the `Name - City - Country` payee-address convention (§5.3), and `C` 
 
 ## Changelog
 
+- **v0.3 (2026-09-01):** §4.1 / §5.1 — the Money account a file is for is **deduced from its
+  opening-balance self-transfer** (payee `Opening Balance`, `L[Same Account]`) and confirmed on the
+  upload preview, instead of always typed at upload. Manual entry (still on the preview) is the
+  fallback for a file with no opening-balance record; staging is refused until the account is
+  known. UX refinement from on-device testing; the upload screen no longer has an account field.
 - **v0.2 (2026-08-31):** **Sample verification (slice a1).** A real three-file export checked
   against §4. Settles **Q-IMP-1** (§7: `L` repeats the first split line; a split leg may itself be
   a transfer) and **Q-IMP-3** (§8: Money classes are used; second tag source, same `?`-handling as

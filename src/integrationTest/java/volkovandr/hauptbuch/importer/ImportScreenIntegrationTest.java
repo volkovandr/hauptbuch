@@ -51,6 +51,23 @@ class ImportScreenIntegrationTest {
       ^
       """;
 
+  /** Opens with Money's opening-balance self-transfer, which names the account (import.md §5.1). */
+  private static final String BANK_WITH_OPENING_BALANCE =
+      """
+      !Type:Bank
+      D01/07'2004
+      T0.00
+      CX
+      POpening Balance
+      L[Bank24ru-EUR]
+      ^
+      D28/07'2004
+      T-5.00
+      PBaker
+      LFood
+      ^
+      """;
+
   private static final String INVESTMENT = "!Type:Invst\nD01/07'2004\n^\n";
 
   /** A second account whose file both transfers to "Current Account" and reuses the "Food" path. */
@@ -86,15 +103,23 @@ class ImportScreenIntegrationTest {
     return session;
   }
 
+  /**
+   * Upload, then state the Money account on the preview the way the owner does (import.md §4.1).
+   */
   private String upload(MockHttpSession session, MockMultipartFile file, String account)
       throws Exception {
+    String token = uploadOnly(session, file);
+    mockMvc
+        .perform(
+            post("/import/uploads/" + token).param("moneyAccountName", account).session(session))
+        .andExpect(redirectedUrl("/import/uploads/" + token));
+    return token;
+  }
+
+  private String uploadOnly(MockHttpSession session, MockMultipartFile file) throws Exception {
     MvcResult result =
         mockMvc
-            .perform(
-                multipart("/import/uploads")
-                    .file(file)
-                    .param("moneyAccountName", account)
-                    .session(session))
+            .perform(multipart("/import/uploads").file(file).session(session))
             .andExpect(redirectedUrlPattern("/import/uploads/*"))
             .andReturn();
     String location =
@@ -151,6 +176,54 @@ class ImportScreenIntegrationTest {
   }
 
   @Test
+  void deducesTheAccountNameFromTheOpeningBalanceRecordAndStagesWithoutTyping() throws Exception {
+    MockHttpSession session = openCampaign();
+
+    String token = uploadOnly(session, qif("export.qif", BANK_WITH_OPENING_BALANCE));
+
+    mockMvc
+        .perform(get("/import/uploads/" + token).session(session))
+        .andExpect(content().string(containsString("Bank24ru-EUR")))
+        .andExpect(content().string(containsString("opening-balance record")));
+
+    stage(session, token);
+
+    assertThat(
+            jdbcClient
+                .sql("select money_account_name from import_file")
+                .query(String.class)
+                .single())
+        .isEqualTo("Bank24ru-EUR");
+  }
+
+  @Test
+  void promptsForTheAccountNameAndRefusesStagingWhenThereIsNoOpeningBalanceRecord()
+      throws Exception {
+    MockHttpSession session = openCampaign();
+
+    String token = uploadOnly(session, qif("export.qif", DAY_MONTH_BANK));
+
+    mockMvc
+        .perform(get("/import/uploads/" + token).session(session))
+        .andExpect(content().string(containsString("State which Money account this file is for")));
+
+    mockMvc
+        .perform(post("/import/uploads/" + token + "/stage").session(session))
+        .andExpect(redirectedUrl("/import/uploads/" + token));
+    assertNothingStaged();
+
+    // Once stated, it stages.
+    mockMvc
+        .perform(
+            post("/import/uploads/" + token)
+                .param("moneyAccountName", "Current Account")
+                .session(session))
+        .andExpect(redirectedUrl("/import/uploads/" + token));
+    stage(session, token);
+    assertThat(count("import_file")).isEqualTo(1);
+  }
+
+  @Test
   void overrideChangesTheEffectiveCharsetAndDateOrder() throws Exception {
     MockHttpSession session = openCampaign();
     String token = upload(session, qif("export.qif", DAY_MONTH_BANK), "Current Account");
@@ -192,10 +265,7 @@ class ImportScreenIntegrationTest {
 
     mockMvc
         .perform(
-            multipart("/import/uploads")
-                .file(qif("export.qif", DAY_MONTH_BANK))
-                .param("moneyAccountName", "Savings")
-                .session(session))
+            multipart("/import/uploads").file(qif("export.qif", DAY_MONTH_BANK)).session(session))
         .andExpect(redirectedUrl("/import"));
 
     mockMvc
@@ -209,6 +279,13 @@ class ImportScreenIntegrationTest {
             .perform(post("/import/uploads/clash").param("resolution", "replace").session(session))
             .andExpect(redirectedUrlPattern("/import/uploads/*"))
             .andReturn();
+    String location =
+        Objects.requireNonNull(resolved.getResponse().getRedirectedUrl(), "no redirect Location");
+    String token = location.substring(location.lastIndexOf('/') + 1);
+    mockMvc
+        .perform(
+            post("/import/uploads/" + token).param("moneyAccountName", "Savings").session(session))
+        .andExpect(redirectedUrl("/import/uploads/" + token));
 
     mockMvc
         .perform(get("/import").session(session))
@@ -216,7 +293,7 @@ class ImportScreenIntegrationTest {
         .andReturn();
 
     assertNothingStaged();
-    assertThat(resolved.getResponse().getRedirectedUrl()).startsWith("/import/uploads/");
+    assertThat(location).startsWith("/import/uploads/");
   }
 
   @Test
@@ -288,7 +365,6 @@ class ImportScreenIntegrationTest {
         .perform(
             multipart("/import/uploads")
                 .file(qif("export.qif", SAVINGS_WITH_TRANSFER))
-                .param("moneyAccountName", "Savings")
                 .session(session))
         .andExpect(redirectedUrl("/import"));
     MvcResult resolved =
@@ -298,7 +374,12 @@ class ImportScreenIntegrationTest {
             .andReturn();
     String location =
         Objects.requireNonNull(resolved.getResponse().getRedirectedUrl(), "no redirect Location");
-    stage(session, location.substring(location.lastIndexOf('/') + 1));
+    String token = location.substring(location.lastIndexOf('/') + 1);
+    mockMvc
+        .perform(
+            post("/import/uploads/" + token).param("moneyAccountName", "Savings").session(session))
+        .andExpect(redirectedUrl("/import/uploads/" + token));
+    stage(session, token);
 
     assertThat(count("import_file")).isEqualTo(1);
     assertThat(

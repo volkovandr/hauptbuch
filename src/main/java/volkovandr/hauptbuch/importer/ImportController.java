@@ -82,24 +82,19 @@ class ImportController {
   }
 
   /**
-   * Receive a file and the Money account it is for (§4.1) and route to its preview — or, if the
-   * filename matches one already uploaded this session, to the replacement-or-coincidence choice
-   * (§2). Nothing is staged.
+   * Receive a file and route to its preview — or, if the filename matches one already uploaded this
+   * session, to the replacement-or-coincidence choice (§2). Which Money account the file is for
+   * (§4.1) is deduced here from its opening-balance record (§5.1) and confirmed on the preview;
+   * nothing is staged.
    */
   @PostMapping(UPLOAD_PATH)
   String upload(
       @RequestParam("file") MultipartFile file,
-      @RequestParam(required = false) String moneyAccountName,
       HttpSession httpSession,
       RedirectAttributes redirectAttributes) {
     if (importSessionService.currentSession().isEmpty()) {
       redirectAttributes.addFlashAttribute(
           ERROR, "Start an import session before uploading a file.");
-      return REDIRECT_SCREEN;
-    }
-    if (moneyAccountName == null || moneyAccountName.isBlank()) {
-      redirectAttributes.addFlashAttribute(
-          ERROR, "State which Money account this file is for — the file does not say which.");
       return REDIRECT_SCREEN;
     }
     byte[] bytes;
@@ -110,8 +105,12 @@ class ImportController {
       return REDIRECT_SCREEN;
     }
     PendingImportUpload pending =
-        PendingImportUpload.of(
-            UUID.randomUUID().toString(), filenameOf(file), moneyAccountName.strip(), bytes);
+        PendingImportUpload.of(UUID.randomUUID().toString(), filenameOf(file), bytes);
+    pending =
+        importPreviewService
+            .deduceAccountName(pending)
+            .map(pending::withDeducedAccountName)
+            .orElse(pending);
     ImportUploadSession uploads = uploadSession(httpSession);
     // A name match against a pending upload OR an already-staged file is parked, never assumed —
     // Money reuses one filename across every export (import.md §2).
@@ -166,17 +165,20 @@ class ImportController {
   }
 
   /**
-   * Confirm or override the detected charset / date order (import.md §4.3 — a day/month swap
-   * corrupts the whole campaign, so it is confirmed, never assumed). A blank value follows
-   * detection.
+   * Confirm or override the preview: the detected charset / date order (import.md §4.3 — a
+   * day/month swap corrupts the whole campaign, so it is confirmed, never assumed) and which Money
+   * account the file is for (§4.1). A blank charset / date order follows detection; a blank account
+   * name keeps the one deduced from the file (§5.1).
    */
   @PostMapping(UPLOAD_PATH + "/{token}")
   String override(
       @PathVariable String token,
       @RequestParam(required = false) String charset,
       @RequestParam(required = false) String dateOrder,
+      @RequestParam(required = false) String moneyAccountName,
       HttpSession httpSession) {
-    uploadSession(httpSession).updateChoice(token, blankToNull(charset), blankToNull(dateOrder));
+    uploadSession(httpSession)
+        .updateChoice(token, blankToNull(charset), blankToNull(dateOrder), moneyAccountName);
     return previewRedirect(token);
   }
 

@@ -46,11 +46,16 @@ final class ImportUploadSession implements Serializable {
     uploads.removeIf(upload -> upload.token().equals(token));
   }
 
-  /** Apply the owner's charset / date-order choice to one pending upload (import.md §4.3). */
-  void updateChoice(String token, String charsetChoice, String dateOrderChoice) {
+  /**
+   * Apply the owner's preview-screen confirmation to one pending upload — charset / date order
+   * (import.md §4.3) and the Money account the file is for (§4.1).
+   */
+  void updateChoice(
+      String token, String charsetChoice, String dateOrderChoice, String accountName) {
     for (int index = 0; index < uploads.size(); index++) {
       if (uploads.get(index).token().equals(token)) {
-        uploads.set(index, uploads.get(index).withChoice(charsetChoice, dateOrderChoice));
+        uploads.set(
+            index, uploads.get(index).withChoice(charsetChoice, dateOrderChoice, accountName));
         return;
       }
     }

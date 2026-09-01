@@ -128,8 +128,10 @@ clean. Not folded into `QifParser` — that wiring is b2. Class-suffix `L` value
 
 ### a4 — Splits, transfers, opening balances, destroyed payees & accounts ✅ **complete** (owner-confirmed 2026-09-01)
 The `S`/`E`/`$` triples → multiple `ImportedLine`s with `E` on the line memo; a **split-sum
-mismatch raises**, never adjusts (§7). `L[Account]` → an account-reference target; the
-self-transfer `L[Same Account]` → the **opening-balance marker** (§5.1). `?`-payee classification
+mismatch raises**, never adjusts (§7). `L[Account]` → an account-reference target; a single-line
+transfer with payee `Opening Balance` → the **opening-balance marker** (§5.1), and its `[Account]`
+target is what `detectAccountName` reads back to name the file's account (b2′). `?`-payee
+classification
 (§4.4): a name that is *entirely* `?`/whitespace yields **no payee**; a partially destroyed name is
 kept **verbatim**. The parse result also carries the **set of account names the file mentions**
 (the account being imported plus every transfer counterparty) — the input to the account map, and
@@ -154,19 +156,26 @@ gate definable — plus discard-session, which is the only "undo" the feature ha
 integration tier; the unit tier proves a second open session is refused.
 
 ### b2 — Upload → preview (nothing staged yet) ✅ **complete** (owner-confirmed 2026-09-01)
-The `/import` screen: choose a file, **state which Money account it is for** (the file does not say
-— §4.1), get back the preview — proposed account type from the header, detected charset, detected
-date format **with its evidence** or a loud AMBIGUOUS, the first ~50 decoded lines, the record
-count, and the `Invst` rejection where it applies. The owner **confirms or overrides** charset and
-date format here (§4.3: a day/month swap corrupts the whole campaign and surfaces years later, if
-ever — so it is confirmed, never assumed). **The filename carries no identity** (§2): if it
+The `/import` screen: choose a file, get back the preview — proposed account type from the header,
+detected charset, detected date format **with its evidence** or a loud AMBIGUOUS, the first ~50
+decoded lines, the record count, and the `Invst` rejection where it applies. **Which Money account
+the file is for** (§4.1) is deduced from its opening-balance self-transfer (§5.1) and shown on the
+preview for confirmation; the owner types it by hand there only for a file with no opening-balance
+record, and staging is refused until it is known. The owner also **confirms or overrides** charset
+and date format here (§4.3: a day/month swap corrupts the whole campaign and surfaces years later,
+if ever — so it is confirmed, never assumed). **The filename carries no identity** (§2): if it
 matches one already uploaded this session, the preview asks **replacement or coincidence** rather
 than assuming either — Money reuses one filename across every export, so a match is expected, not
 suspicious.
 
-**Done when:** MockMvc acceptance drives upload → preview → override for a fixture file, and
-uploading a second file under the same name prompts the replacement-or-coincidence choice instead
-of silently doing either; nothing has been written to any staging table.
+**Done when:** MockMvc acceptance drives upload → preview → override for a fixture file, the
+account name is deduced from an opening-balance record (and demanded on the preview when there is
+none), and uploading a second file under the same name prompts the replacement-or-coincidence
+choice instead of silently doing either; nothing has been written to any staging table.
+
+**b2′ refinement (2026-09-01, owner-flagged):** the account name moved off the upload form —
+deduced from the opening-balance record (§4.1/§5.1), hand-entered on the preview only as the
+fallback. `import.md` v0.3.
 
 ### b3 — Stage the confirmed file ✅ **complete** (owner-confirmed 2026-09-01)
 Confirming the preview writes `import_file` + `import_transaction` + `import_posting` (targets kept

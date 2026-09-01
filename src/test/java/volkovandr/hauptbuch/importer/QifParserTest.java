@@ -227,9 +227,47 @@ class QifParserTest {
   // ---------------------------------------------------------------------------
 
   @Test
-  void requiresTheMoneyAccountNameToBeSupplied() {
+  void rejectsBlankMoneyAccountNameButAllowsNullWhenNotYetKnown() {
     assertThatThrownBy(() -> parser.parse("  ", "!Type:Bank\nD01/01'2020\nT1.00\nLFood\n^\n"))
         .isInstanceOf(IllegalArgumentException.class);
+
+    assertThat(parser.parse(null, "!Type:Bank\nD01/01'2020\nT1.00\nLFood\n^\n").transactions())
+        .hasSize(1);
+  }
+
+  @Test
+  void detectsTheAccountNameFromTheOpeningBalanceSelfTransfer() {
+    String text =
+        """
+        !Type:Bank
+        D25/12'2013
+        T0.00
+        CX
+        POpening Balance
+        L[Bank24ru-EUR]
+        ^
+        D28/07'2014
+        T-5.00
+        PBaker
+        LFood
+        ^
+        """;
+
+    assertThat(parser.detectAccountName(text)).contains("Bank24ru-EUR");
+    // the deduced name also lands in the referenced set even when none was passed in
+    assertThat(parser.parse(null, text).referencedAccountNames()).contains("Bank24ru-EUR");
+  }
+
+  @Test
+  void detectsNoAccountNameWhenTheFileHasNoOpeningBalanceRecord() {
+    assertThat(parser.detectAccountName("!Type:Bank\nD01/01'2020\nT-5.00\nLFood\n^\n")).isEmpty();
+  }
+
+  @Test
+  void flagsTheOpeningBalanceByItsPayeeMarkerWithoutBeingToldTheAccountName() {
+    String text = "!Type:CCard\nD19/07'2016\nT0.00\nCX\nPOpening Balance\nL[Advanzia-MC]\n^\n";
+
+    assertThat(parser.parse(null, text).transactions().get(0).openingBalance()).isTrue();
   }
 
   @Test

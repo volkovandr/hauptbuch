@@ -105,7 +105,8 @@ public class ImportStagingService {
 
   /**
    * Stage a confirmed upload. Propagates {@link QifRejectedException} for a file the parser refuses
-   * (§4.5) or one whose date order is still ambiguous.
+   * (§4.5), one whose date order is still ambiguous, or one the owner has not yet named an account
+   * for (import.md §4.1 — a file with no opening-balance record to deduce it from).
    *
    * @throws IllegalStateException if no import session is open
    */
@@ -119,6 +120,12 @@ public class ImportStagingService {
                     new IllegalStateException(
                         "No import session is open — start one before staging a file."));
     long sessionId = session.importSessionId();
+
+    if (upload.moneyAccountName() == null) {
+      throw new QifRejectedException(
+          "State which Money account this file is for before staging — it has no opening-balance"
+              + " record to name it (import.md §4.1).");
+    }
 
     Parsed parsed = importPreviewService.parse(upload);
     if (parsed.effectiveOrder() == QifDateFormat.Order.AMBIGUOUS) {

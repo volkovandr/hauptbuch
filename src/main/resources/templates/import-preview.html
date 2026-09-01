@@ -4,7 +4,9 @@
   staged: proposed account type, detected charset, detected date order with its evidence (or a loud
   AMBIGUOUS), the first ~50 decoded lines so mojibake is visible, and the record count that is
   ticked against Money's own balance. The owner confirms or overrides charset and date order here —
-  a day/month swap corrupts the whole campaign, so it is never assumed. "Confirm & stage" (b3)
+  a day/month swap corrupts the whole campaign, so it is never assumed — and confirms which Money
+  account the file is for (deduced from its opening-balance record, or stated by hand when there is
+  none — import.md §4.1/§5.1). "Confirm & stage" (b3)
   writes the file into the staging tables; the ledger stays untouched until the campaign commits.
 -->
 <html
@@ -21,7 +23,11 @@
       <p class="eyebrow">Preview</p>
       <p class="muted">
         <span class="num" th:text="${upload.sourceFilename()}">export.qif</span> for
-        <span class="num" th:text="${upload.moneyAccountName()}">Current Account</span>
+        <span
+          class="num"
+          th:text="${preview.accountName() != null ? preview.accountName() : 'an account you have not stated yet'}"
+          >Current Account</span
+        >
       </p>
 
       <p class="warning" th:if="${preview.rejected()}" th:text="${preview.rejection()}">
@@ -54,10 +60,36 @@
       </div>
     </section>
 
-    <!-- Confirm or override the detection. One form applies both choices; blank ⇒ follow detection. -->
+    <!-- Confirm or override the detection. One form applies every choice; blank charset / date
+         order ⇒ follow detection, blank account name ⇒ keep the one deduced from the file. -->
     <section class="panel" th:unless="${preview.rejected()}">
       <p class="eyebrow">Confirm or override</p>
       <form method="post" th:action="@{/import/uploads/{token}(token=${upload.token()})}" class="form">
+        <div class="field">
+          <label class="field__label" for="moneyAccountName">Money account this file is for</label>
+          <input
+            id="moneyAccountName"
+            name="moneyAccountName"
+            type="text"
+            class="input"
+            th:value="${preview.accountName()}"
+            placeholder="e.g. Current Account"
+            autocomplete="off"
+          />
+          <p class="muted" th:if="${preview.accountNameDeduced()}">
+            Read from this file's opening-balance record. Change it if that is wrong.
+          </p>
+          <p class="warning" th:if="${preview.awaitingAccountName()}">
+            This file has no opening-balance record naming its account — state it here before
+            staging.
+          </p>
+          <p
+            class="muted"
+            th:unless="${preview.accountNameDeduced() or preview.awaitingAccountName()}"
+          >
+            The file does not name its account; this is what you entered.
+          </p>
+        </div>
         <div class="field">
           <span class="field__label">Charset</span>
           <label class="receipt-edit__toggle">
@@ -113,9 +145,16 @@
         Choose a date order above before staging — this file's dates do not distinguish DD/MM from
         MM/DD.
       </p>
+      <p class="warning" th:if="${preview.awaitingAccountName()}">
+        State which Money account this file is for above before staging.
+      </p>
       <form method="post" th:action="@{/import/uploads/{token}/stage(token=${upload.token()})}" class="form">
         <p class="actions">
-          <button type="submit" class="btn" th:disabled="${preview.dateOrder() == 'ambiguous'}">
+          <button
+            type="submit"
+            class="btn"
+            th:disabled="${preview.dateOrder() == 'ambiguous' or preview.awaitingAccountName()}"
+          >
             Confirm &amp; stage
           </button>
         </p>
