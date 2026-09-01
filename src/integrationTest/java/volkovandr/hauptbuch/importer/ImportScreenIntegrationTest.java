@@ -392,6 +392,52 @@ class ImportScreenIntegrationTest {
   }
 
   @Test
+  void reviewPageShowsPerAccountStatisticsTickedAgainstMoney() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+
+    mockMvc
+        .perform(get("/import/review").session(session))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Per-account statistics")))
+        .andExpect(content().string(containsString("Current Account")))
+        .andExpect(content().string(containsString("2 transactions")))
+        .andExpect(content().string(containsString("net -17,34")))
+        .andExpect(content().string(containsString("01.07.2004 – 28.07.2004")));
+  }
+
+  @Test
+  void reviewNetSumCountsOnlyEachAccountsOwnFundingLegs() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+    stageNewFile(session, "savings.qif", SAVINGS_WITH_TRANSFER, "Savings");
+
+    // Savings transfers 20.00 to [Current Account]; that mirror leg must not inflate Current
+    // Account's net here — it stays its own funding legs' sum.
+    mockMvc
+        .perform(get("/import/review").session(session))
+        .andExpect(content().string(containsString("net -17,34")))
+        .andExpect(content().string(containsString("net -28,00")));
+  }
+
+  @Test
+  void reviewPageWithNothingStagedSaysSo() throws Exception {
+    MockHttpSession session = openCampaign();
+
+    mockMvc
+        .perform(get("/import/review").session(session))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Nothing staged yet")));
+  }
+
+  @Test
+  void reviewPageWithoutCampaignRedirectsToTheScreen() throws Exception {
+    mockMvc
+        .perform(get("/import/review").session(new MockHttpSession()))
+        .andExpect(redirectedUrl("/import"));
+  }
+
+  @Test
   void stagingIsRefusedWhileTheDateOrderIsStillAmbiguous() throws Exception {
     MockHttpSession session = openCampaign();
     String token = upload(session, qif("card.qif", AMBIGUOUS_CARD), "Credit Card");

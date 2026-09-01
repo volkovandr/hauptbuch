@@ -1,6 +1,6 @@
 # Hauptbuch — Import Plan: the Money migration (QIF)
 
-**Status:** Draft v0.8
+**Status:** Draft v0.9
 **Date:** 2026-09-01
 **Owner:** volkovandr
 **Parent:** `implementation-plan.md` §3, first bullet (the item currently being built). This doc is
@@ -365,6 +365,17 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.9 (2026-09-01):** **e′ ready to confirm** — `ImportStatisticsRepository.perMoneyAccount`
+  (a grouped aggregate over `import_file` → `import_transaction` → `import_posting`, `sqlLogicTest`
+  tier) reads back per Money account: transaction count, net sum and date range, folding files
+  that share an account name and ignoring a transfer's mirror leg staged from the *other* account.
+  The review page (`/import/review`) is born as a skeleton hanging one panel — the per-account
+  statistics — off which c/d/e attach the maps and issues list; a "Review the campaign" link
+  appears once a file is staged. **Scope addition:** V20 adds `import_posting.funding` — the
+  synthesised funding leg (§7) cannot be told from an opening-balance self-transfer leg by column
+  values alone (both name the file's own account with a null category), and the net sum must sum
+  only the funding legs to match Money's own balance. `ImportStagingService` sets it; the record
+  and the b3 repository round-trip cover it.
 - **v0.8 (2026-09-01):** **b3 complete** (owner-confirmed) — Confirm & stage writes
   `import_file` / `import_transaction` / `import_posting`, folds referenced account names and
   category paths into `import_account` / `import_category` as unmapped rows (idempotent on the

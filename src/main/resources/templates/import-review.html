@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<!--
+  Import review (import.md §9, plan e′). Born as a skeleton: it carries only the per-account
+  statistics — transaction count, net sum and date range — the verification device the owner ticks
+  against Money's own balance for each account (§9.4). The account map, category map and issues
+  list attach as further panels in slices c, d and e. Server-rendered, no bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content ledger" th:fragment="content">
+    <section class="panel">
+      <p class="eyebrow">Import review</p>
+      <p class="muted">
+        The campaign is reviewed by its maps and its exceptions, not row by row. This page grows the
+        account map, the category map and the issues list as those steps land. For now it shows the
+        per-account statistics — check each against Money's own balance for that account before the
+        campaign commits.
+      </p>
+      <p class="actions"><a class="btn btn--ghost" th:href="@{/import}">Back to the campaign</a></p>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Per-account statistics</p>
+      <p class="muted" th:if="${review.empty()}">
+        Nothing staged yet. Stage a file on the campaign screen and its accounts appear here.
+      </p>
+      <ul class="import-uploads" th:unless="${review.empty()}">
+        <li th:each="a : ${review.accounts()}">
+          <span class="num" th:text="${a.moneyAccountName()}">Current Account</span>
+          <span class="muted num" th:text="' · ' + ${a.transactionCount()} + ' transactions'">
+            · 0 transactions</span
+          >
+          <span class="muted num" th:text="' · net ' + ${a.netSum()}"> · net 0,00</span>
+          <span class="muted num" th:text="' · ' + ${a.dateRange()}"> · 01.01.2004</span>
+        </li>
+      </ul>
+    </section>
+  </main>
+</html>

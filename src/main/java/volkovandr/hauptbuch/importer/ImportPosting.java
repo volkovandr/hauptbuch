@@ -24,6 +24,10 @@ import java.math.BigDecimal;
  * @param className the {@code /Class} suffix — a tag at commit (§8), or null
  * @param mirrorPairId the other sighting of a transfer once matched within staging (§6.1), else
  *     null; set by slice e
+ * @param funding true for the one synthesised leg on the file's own account that carries the record
+ *     total (§7) — the figure ticked against Money's balance (§9.4); false for every category leg
+ *     and every transfer leg, including an opening-balance self-transfer leg that names the same
+ *     account
  */
 public record ImportPosting(
     Long importPostingId,
@@ -33,4 +37,5 @@ public record ImportPosting(
     String moneyCategoryPath,
     String moneyAccountName,
     String className,
-    Long mirrorPairId) {}
+    Long mirrorPairId,
+    boolean funding) {}

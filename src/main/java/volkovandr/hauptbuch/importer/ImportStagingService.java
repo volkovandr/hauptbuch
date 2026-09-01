@@ -200,7 +200,15 @@ public class ImportStagingService {
     // sum to zero in Hauptbuch's sign convention.
     importPostingRepository.insert(
         new ImportPosting(
-            null, importTransactionId, fundingAmount, null, null, fundingAccountName, null, null));
+            null,
+            importTransactionId,
+            fundingAmount,
+            null,
+            null,
+            fundingAccountName,
+            null,
+            null,
+            true));
   }
 
   private void stageLeg(long sessionId, long importTransactionId, ImportedLine line) {
@@ -217,7 +225,8 @@ public class ImportStagingService {
                 category.path(),
                 null,
                 line.className(),
-                null));
+                null,
+                false));
       }
       case ImportedTarget.AccountReference reference ->
           importPostingRepository.insert(
@@ -229,7 +238,8 @@ public class ImportStagingService {
                   null,
                   reference.accountName(),
                   line.className(),
-                  null));
+                  null,
+                  false));
     }
   }
 }
