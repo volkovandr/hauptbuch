@@ -24,15 +24,15 @@ public class ImportReviewService {
 
   private final ImportSessionService importSessionService;
   private final ImportStatisticsRepository importStatisticsRepository;
-  private final ImportAccountMapService importAccountMapService;
+  private final ImportAccountMapPanel importAccountMapPanel;
 
   ImportReviewService(
       ImportSessionService importSessionService,
       ImportStatisticsRepository importStatisticsRepository,
-      ImportAccountMapService importAccountMapService) {
+      ImportAccountMapPanel importAccountMapPanel) {
     this.importSessionService = importSessionService;
     this.importStatisticsRepository = importStatisticsRepository;
-    this.importAccountMapService = importAccountMapService;
+    this.importAccountMapPanel = importAccountMapPanel;
   }
 
   /**
@@ -49,7 +49,7 @@ public class ImportReviewService {
                     importStatisticsRepository.perMoneyAccount(session.importSessionId()).stream()
                         .map(ImportReviewService::toRow)
                         .toList(),
-                    importAccountMapService.mapPanel(session.importSessionId())));
+                    importAccountMapPanel.forSession(session.importSessionId())));
   }
 
   private static AccountStatisticsRow toRow(ImportAccountStatistics statistics) {

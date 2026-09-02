@@ -187,6 +187,30 @@ class ImportStagingRepositoryIntegrationTest {
   }
 
   @Test
+  void expectFileIsToggledPerRow() {
+    long sessionId = openSession();
+    importAccountRepository.upsertUnmapped(sessionId, "Current Account");
+    long rowId = mapRowId(sessionId, "Current Account");
+
+    // Fresh rows expect a file (V19 default); the toggle flips it both ways.
+    assertThat(expectFileOf(sessionId, rowId)).isTrue();
+
+    importAccountRepository.setExpectFile(rowId, false);
+    assertThat(expectFileOf(sessionId, rowId)).isFalse();
+
+    importAccountRepository.setExpectFile(rowId, true);
+    assertThat(expectFileOf(sessionId, rowId)).isTrue();
+  }
+
+  private boolean expectFileOf(long sessionId, long importAccountId) {
+    return importAccountRepository.findBySession(sessionId).stream()
+        .filter(row -> row.importAccountId() == importAccountId)
+        .findFirst()
+        .orElseThrow()
+        .expectFile();
+  }
+
+  @Test
   void deletingFileCascadesToTransactionsAndPostingsButLeavesTheMaps() {
     long sessionId = openSession();
     long fileId = stageFile(sessionId, "export.qif").importFileId();

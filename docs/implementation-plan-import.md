@@ -365,6 +365,17 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.11 (2026-09-02):** **c2 built, green, awaiting owner confirmation** — person targets and the
+  `expect-file` flag (import.md §5.1, §5.4). Two decisions the design left implicit, settled here:
+  (1) a person target is **resolved to the leaf at map time** via `PersonProvisioningService.ensureLeaf`
+  and stored as an ordinary `account_id` (c1's precedent that eager `accounts`/`debts` provisioning
+  is fine, and it makes §5.4's "personhood exists only in the map" true by construction — f2 gets no
+  person branch); `import_account.person_id` is consequently left unused for now. (2) `expect-file`
+  is a **purely manual** per-account toggle — a staged file does **not** auto-clear it (kept out of
+  scope; the "clear every account" ergonomics are e4's problem). New `importer → debts` edge
+  (`PersonProvisioningService`, `PersonService`), already sanctioned by §12. Panel assembly moved to
+  `ImportAccountMapPanel` (same render-model-assembler shape as `ImportReviewService`) to keep the
+  mutation service's coupling in check.
 - **v0.10 (2026-09-01):** **c1 complete** (owner-confirmed 2026-09-02) — the account map's first target pair (import.md
   §5.1). `ImportAccountRepository.mapToAccount` points an `import_account` row at a Hauptbuch
   account (existing, or one `ImportAccountMapService` opens via `accounts`' `AccountService` with a

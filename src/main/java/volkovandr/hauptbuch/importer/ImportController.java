@@ -121,6 +121,50 @@ class ImportController {
     return REDIRECT_REVIEW;
   }
 
+  /**
+   * Map one Money account name to a person (import.md §5.4; plan c2). A chosen {@code personId}
+   * targets that existing person; otherwise a new person is created from {@code newPersonName}. The
+   * {@code currencyCode} selects the person's per-currency leaf. A rejected choice comes back to
+   * the review with the reason.
+   */
+  @PostMapping(BASE + "/review/accounts/{importAccountId}/map-person")
+  String mapAccountToPerson(
+      @PathVariable long importAccountId,
+      @RequestParam(required = false) String personId,
+      @RequestParam(required = false) String newPersonName,
+      @RequestParam(required = false) String currencyCode,
+      RedirectAttributes redirectAttributes) {
+    try {
+      String existing = blankToNull(personId);
+      importAccountMapService.mapToPerson(
+          importAccountId,
+          existing == null ? null : Long.parseLong(existing),
+          blankToNull(newPersonName),
+          blankToNull(currencyCode));
+    } catch (IllegalArgumentException | IllegalStateException rejected) {
+      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
+    }
+    return REDIRECT_REVIEW;
+  }
+
+  /**
+   * Flip the {@code expect-file} flag on one Money account (import.md §5.1; plan c2) — "am I still
+   * waiting for this account's own export?". The commit gate stays locked while any account still
+   * expects a file (§9).
+   */
+  @PostMapping(BASE + "/review/accounts/{importAccountId}/expect-file")
+  String updateExpectFile(
+      @PathVariable long importAccountId,
+      @RequestParam boolean expectFile,
+      RedirectAttributes redirectAttributes) {
+    try {
+      importAccountMapService.setExpectFile(importAccountId, expectFile);
+    } catch (IllegalArgumentException | IllegalStateException rejected) {
+      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
+    }
+    return REDIRECT_REVIEW;
+  }
+
   /** Open the campaign — one open session at a time (import.md §2). */
   @PostMapping(BASE + "/session")
   String openSession(HttpSession httpSession) {

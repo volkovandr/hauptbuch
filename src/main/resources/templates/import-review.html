@@ -44,17 +44,23 @@
     </section>
 
     <!--
-      Account map (import.md §5.1). One form per Money account name: pick an existing Hauptbuch
+      Account map (import.md §5.1, §5.4). One form per Money account name: pick an existing Hauptbuch
       account, or leave that select on "create a new account" and fill the new-account fields
       (its type is proposed from the file header, its currency is chosen since QIF carries none).
-      Pointing several rows at one account is the merge / junk-account story. Person targets and
-      the expect-file flag arrive in c2, the opening-balance reconciliation in c3.
+      Pointing several rows at one account is the merge / junk-account story. The opening-balance
+      reconciliation arrives in c3.
 
       Each row is a native <details> (the People / Backup screen pattern — no bespoke JS): a mapped
       row renders collapsed, an unmapped one open, so with tens of accounts the still-to-do rows
       are the ones showing their form. Mapping redirects back here, so the just-mapped row returns
       collapsed. The new-account currency select is the shared currency picker, so "Add currency"
       is offered inline here as everywhere else.
+
+      A row carries three independent forms (separate <form>s — nesting is invalid HTML): map to an
+      account, map to a person (§5.4 — resolves through PersonProvisioningService to that person's
+      per-currency leaf, so the row then holds an ordinary account id), and the expect-file toggle
+      (§5.1) — a per-account, manually-set gate escape hatch for a counterparty whose own export is
+      not coming (§6.4).
     -->
     <section class="panel" th:unless="${#lists.isEmpty(review.accountMap().rows())}">
       <p class="eyebrow">Account map</p>
@@ -68,10 +74,18 @@
           <details class="import-account" th:open="${!row.mapped()}">
             <summary class="import-account__summary">
               <span class="num" th:text="${row.moneyAccountName()}">Current Account</span>
-              <span class="muted" th:if="${row.mapped()}" th:text="' → ' + ${row.targetName()}">
-                → Giro</span
-              >
+              <span class="muted" th:if="${row.mapped()}">
+                <span th:text="' → ' + ${row.targetName()}">→ Giro</span
+                ><span th:if="${row.personTarget()}"> (person)</span>
+              </span>
               <span class="muted" th:unless="${row.mapped()}"> → not mapped</span>
+              <span
+                class="muted"
+                th:if="${row.expectFile()}"
+                title="This account's own export is still awaited"
+              >
+                · expecting a file</span
+              >
             </summary>
             <form
               method="post"
@@ -132,6 +146,74 @@
             <div
               th:replace="~{fragments/currency-picker :: dialogMount(fieldId='import-account-currency-' + ${row.importAccountId()})}"
             ></div>
+
+            <!-- Map to a person (import.md §5.4): a Money account that was really money lent to or
+                 borrowed from someone. Resolves to that person's per-currency leaf right away, so
+                 the row then reads as an ordinary account target. -->
+            <form
+              method="post"
+              th:action="@{/import/review/accounts/{id}/map-person(id=${row.importAccountId()})}"
+              class="form"
+            >
+              <p class="field__label">Or map to a person</p>
+              <div class="field">
+                <label class="field__label">Existing person</label>
+                <select name="personId" class="input">
+                  <option value="">— name a new person instead —</option>
+                  <option
+                    th:each="p : ${review.accountMap().personOptions()}"
+                    th:value="${p.personId()}"
+                    th:text="${p.name()}"
+                  >
+                    Max
+                  </option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field__label">New person name</label>
+                <input type="text" name="newPersonName" class="input" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label
+                  class="field__label"
+                  th:for="'import-person-currency-' + ${row.importAccountId()}"
+                  >Person leaf currency</label
+                >
+                <div
+                  th:replace="~{fragments/currency-picker :: picker(fieldId='import-person-currency-' + ${row.importAccountId()}, fieldName='currencyCode', selected=null, oob=false)}"
+                ></div>
+              </div>
+              <p class="actions"><button type="submit" class="btn">Map to person</button></p>
+            </form>
+            <div
+              th:replace="~{fragments/currency-picker :: dialogMount(fieldId='import-person-currency-' + ${row.importAccountId()})}"
+            ></div>
+
+            <!-- Expect-file toggle (import.md §5.1, §6.4): the gate stays locked while any account
+                 still expects its own export. A hidden field carries the flipped value. -->
+            <form
+              method="post"
+              th:action="@{/import/review/accounts/{id}/expect-file(id=${row.importAccountId()})}"
+              class="form"
+            >
+              <p class="muted" th:if="${row.expectFile()}">
+                Still expecting this account's own export — the campaign cannot commit until every
+                account's file is staged or this is cleared.
+              </p>
+              <p class="muted" th:unless="${row.expectFile()}">
+                Not expecting a file for this account.
+              </p>
+              <input type="hidden" name="expectFile" th:value="${!row.expectFile()}" />
+              <p class="actions">
+                <button
+                  type="submit"
+                  class="btn btn--ghost"
+                  th:text="${row.expectFile()} ? 'Stop expecting a file' : 'Expect a file'"
+                >
+                  Stop expecting a file
+                </button>
+              </p>
+            </form>
           </details>
         </li>
       </ul>

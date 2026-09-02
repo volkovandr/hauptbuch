@@ -90,6 +90,17 @@ class ImportScreenIntegrationTest {
   private static final String AMBIGUOUS_CARD =
       "!Type:CCard\nD01/02'2005\nT-9.99\nPShop\nLStuff\n^\n";
 
+  /** Transfers to a counterparty that is really money lent to a person (import.md §5.4). */
+  private static final String BANK_WITH_PERSON_TRANSFER =
+      """
+      !Type:Bank
+      D22/07'2004
+      T-20.00
+      PMax
+      L[Loan to Max]
+      ^
+      """;
+
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
 
@@ -163,6 +174,38 @@ class ImportScreenIntegrationTest {
     return jdbcClient
         .sql("select account_id from import_account where money_account_name = :name")
         .param("name", moneyAccountName)
+        .query(Long.class)
+        .optional()
+        .orElse(null);
+  }
+
+  private boolean expectFile(String moneyAccountName) {
+    return jdbcClient
+        .sql("select expect_file from import_account where money_account_name = :name")
+        .param("name", moneyAccountName)
+        .query(Boolean.class)
+        .single();
+  }
+
+  private long insertPerson(String name) {
+    return jdbcClient
+        .sql("insert into person (name) values (:name) returning person_id")
+        .param("name", name)
+        .query(Long.class)
+        .single();
+  }
+
+  /**
+   * The account id owned by {@code personId} for {@code currency} — the leaf a person map targets.
+   */
+  private Long personLeafId(long personId, String currency) {
+    return jdbcClient
+        .sql(
+            "select a.account_id from account a"
+                + " join account_owner ao on ao.account_id = a.account_id"
+                + " where ao.person_id = :pid and a.currency_code = :cur")
+        .param("pid", personId)
+        .param("cur", currency)
         .query(Long.class)
         .optional()
         .orElse(null);
@@ -567,6 +610,74 @@ class ImportScreenIntegrationTest {
         .perform(get("/import/review").session(session))
         .andExpect(content().string(containsString("999999")));
     assertThat(mappedAccountId("Current Account")).isNull();
+  }
+
+  @Test
+  void mapsMoneyAccountToExistingPersonsResolvedLeaf() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", BANK_WITH_PERSON_TRANSFER, "Current Account");
+    long max = insertPerson("Max");
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + mapRowId("Loan to Max") + "/map-person")
+                .param("personId", Long.toString(max))
+                .param("currencyCode", "EUR")
+                .session(session))
+        .andExpect(redirectedUrl("/import/review"));
+
+    // The row now holds Max's EUR leaf as an ordinary account id (import.md §5.4).
+    assertThat(mappedAccountId("Loan to Max")).isEqualTo(personLeafId(max, "EUR"));
+    mockMvc
+        .perform(get("/import/review").session(session))
+        .andExpect(content().string(containsString("Max")))
+        .andExpect(content().string(containsString("(person)")));
+  }
+
+  @Test
+  void mapsMoneyAccountToNewPersonProvisioningTheLeaf() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", BANK_WITH_PERSON_TRANSFER, "Current Account");
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + mapRowId("Loan to Max") + "/map-person")
+                .param("newPersonName", "Cousin Bob")
+                .param("currencyCode", "EUR")
+                .session(session))
+        .andExpect(redirectedUrl("/import/review"));
+
+    Long bob =
+        jdbcClient
+            .sql("select person_id from person where name = 'Cousin Bob'")
+            .query(Long.class)
+            .single();
+    assertThat(mappedAccountId("Loan to Max")).isEqualTo(personLeafId(bob, "EUR"));
+  }
+
+  @Test
+  void expectFileToggleFlipsTheFlagBothWays() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", BANK_WITH_PERSON_TRANSFER, "Current Account");
+
+    // A staged file does not clear expect-file (plan c2) — it stays a manual toggle.
+    assertThat(expectFile("Loan to Max")).isTrue();
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + mapRowId("Loan to Max") + "/expect-file")
+                .param("expectFile", "false")
+                .session(session))
+        .andExpect(redirectedUrl("/import/review"));
+    assertThat(expectFile("Loan to Max")).isFalse();
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + mapRowId("Loan to Max") + "/expect-file")
+                .param("expectFile", "true")
+                .session(session))
+        .andExpect(redirectedUrl("/import/review"));
+    assertThat(expectFile("Loan to Max")).isTrue();
   }
 
   @Test
