@@ -207,7 +207,7 @@ not start slice c before it passes.*
 
 ## Slice c — the account map (§5.1, §5.4)
 
-### c1 — Map to an existing or a new account
+### c1 — Map to an existing or a new account ✅ **complete** (owner-confirmed 2026-09-02)
 Per Money account name: target an **existing** Hauptbuch account, or a **new** one (type proposed
 from the header, **currency asked** — QIF carries none, so it can only be asked). **Many-to-one** is
 allowed and load-bearing: it is both the merge facility and the entire junk-account story (§5.1).
@@ -365,7 +365,7 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
-- **v0.10 (2026-09-01):** **c1 ready to confirm** — the account map's first target pair (import.md
+- **v0.10 (2026-09-01):** **c1 complete** (owner-confirmed 2026-09-02) — the account map's first target pair (import.md
   §5.1). `ImportAccountRepository.mapToAccount` points an `import_account` row at a Hauptbuch
   account (existing, or one `ImportAccountMapService` opens via `accounts`' `AccountService` with a
   proposed type and a chosen currency); the map stays many-to-one, so several Money names may share
