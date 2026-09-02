@@ -16,17 +16,29 @@ package volkovandr.hauptbuch.importer;
  *     take_money} / {@code override}), or null while undecided
  * @param recordedAmount the recorded {@code override} amount, German-formatted for the form's
  *     prefill, or null
+ * @param recordedSummary a compact one-line rendering of the recorded outcome for the collapsed
+ *     row's summary (e.g. {@code opening balance 1.234,56 at 01.01.2004 (Money)}), or null while
+ *     undecided, when nothing reconciles, or when the winning amount is zero and the choice was not
+ *     an override (import.md §5.1; the owner asked to omit a boring zero note but always keep a
+ *     deliberate override)
+ * @param autoResolves whether the reconciliation carries no real decision — Money staged a zero
+ *     opening balance and the mapped Hauptbuch account has none, so {@code take_money} applies with
+ *     nothing to weigh (§5.1). The collapsed row does not flag it; the commit falls back to {@link
+ *     #proposal} when no choice was recorded. The expanded form still renders so the owner may
+ *     override if they want to.
  */
 public record ImportOpeningBalanceCells(
     String moneyOpeningBalance,
     String hauptbuchOpeningBalance,
     String proposal,
     String recordedChoice,
-    String recordedAmount) {
+    String recordedAmount,
+    String recordedSummary,
+    boolean autoResolves) {
 
   /** Nothing on either side, nothing recorded — the default for a row. */
   public static final ImportOpeningBalanceCells EMPTY =
-      new ImportOpeningBalanceCells(null, null, null, null, null);
+      new ImportOpeningBalanceCells(null, null, null, null, null, null, false);
 
   /**
    * Whether a reconciliation applies — Money staged an opening balance for this account, so the
@@ -34,6 +46,15 @@ public record ImportOpeningBalanceCells(
    */
   public boolean reconciles() {
     return moneyOpeningBalance != null;
+  }
+
+  /**
+   * Whether the owner still has to pick a winner — a reconciliation applies, no choice is recorded
+   * yet, and it is not a zero-into-nothing that resolves itself ({@code autoResolves}). The
+   * collapsed row flags this so it stays visible without re-expanding (§5.1).
+   */
+  public boolean needsResolution() {
+    return reconciles() && recordedChoice == null && !autoResolves;
   }
 
   /** Whether both sides carry an opening balance — the genuine conflict (§5.1). */

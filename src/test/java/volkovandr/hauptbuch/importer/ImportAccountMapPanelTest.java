@@ -95,6 +95,7 @@ class ImportAccountMapPanelTest {
               assertThat(cash.mapped()).isFalse();
               assertThat(cash.targetName()).isNull();
               assertThat(cash.proposedType()).isEqualTo("asset");
+              assertThat(cash.fileProvided()).isTrue();
             },
             junkA -> {
               assertThat(junkA.mapped()).isTrue();
@@ -103,10 +104,13 @@ class ImportAccountMapPanelTest {
               assertThat(junkA.personTarget()).isFalse();
               // first non-null header wins
               assertThat(junkA.proposedType()).isEqualTo("liability");
+              assertThat(junkA.fileProvided()).isTrue();
             },
             junkB -> {
               assertThat(junkB.targetName()).isEqualTo("Everything Else");
               assertThat(junkB.proposedType()).isNull();
+              // seen only as a transfer counterparty — no file of its own
+              assertThat(junkB.fileProvided()).isFalse();
             });
     assertThat(result.accountOptions())
         .singleElement()
@@ -128,6 +132,46 @@ class ImportAccountMapPanelTest {
             c -> {
               assertThat(c.code()).isEqualTo("EUR");
               assertThat(c.name()).isEqualTo("Euro");
+            });
+  }
+
+  @Test
+  void sortsAccountOptionsByNameCaseInsensitive() {
+    when(importAccountRepository.findBySession(SESSION_ID)).thenReturn(List.of());
+    when(importFileRepository.findBySession(SESSION_ID)).thenReturn(List.of());
+    // manageableAccounts() returns the Accounts-screen order (by type, then hierarchy), not by
+    // name.
+    when(accountService.manageableAccounts())
+        .thenReturn(
+            List.of(
+                account(1L, "Zebra Savings", "asset"),
+                account(2L, "apple Cash", "asset"),
+                account(3L, "Mortgage", "liability")));
+    when(personService.personNamesForAccounts(anyList())).thenReturn(Map.of());
+    when(personService.findAllLive()).thenReturn(List.of());
+    when(currencyService.findAll()).thenReturn(List.of());
+
+    assertThat(panel().forSession(SESSION_ID).accountOptions())
+        .extracting(ImportAccountMap.AccountOption::name)
+        .containsExactly("apple Cash", "Mortgage", "Zebra Savings");
+  }
+
+  @Test
+  void marksFileProvidedEvenWhenTheStagedFileCarriedNoTypeHeader() {
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(10L, "Cash")));
+    when(importFileRepository.findBySession(SESSION_ID)).thenReturn(List.of(file("Cash", null)));
+    when(accountService.manageableAccounts()).thenReturn(List.of());
+    when(personService.personNamesForAccounts(anyList())).thenReturn(Map.of());
+    when(personService.findAllLive()).thenReturn(List.of());
+    when(currencyService.findAll()).thenReturn(List.of());
+
+    assertThat(panel().forSession(SESSION_ID).rows())
+        .singleElement()
+        .satisfies(
+            row -> {
+              assertThat(row.fileProvided()).isTrue();
+              assertThat(row.proposedType()).isNull();
             });
   }
 

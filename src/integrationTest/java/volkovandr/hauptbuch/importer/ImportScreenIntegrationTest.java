@@ -69,6 +69,23 @@ class ImportScreenIntegrationTest {
       ^
       """;
 
+  /** Same, but the opening balance is non-zero — a genuine decision for the owner (§5.1). */
+  private static final String BANK_WITH_NONZERO_OPENING_BALANCE =
+      """
+      !Type:Bank
+      D01/07'2004
+      T1000.00
+      CX
+      POpening Balance
+      L[Bank24ru-EUR]
+      ^
+      D28/07'2004
+      T-5.00
+      PBaker
+      LFood
+      ^
+      """;
+
   private static final String INVESTMENT = "!Type:Invst\nD01/07'2004\n^\n";
 
   /** A second account whose file both transfers to "Current Account" and reuses the "Food" path. */
@@ -683,6 +700,39 @@ class ImportScreenIntegrationTest {
   }
 
   @Test
+  void summaryDistinguishesAnAccountWithItsOwnFileFromAnAwaitedOne() throws Exception {
+    MockHttpSession session = openCampaign();
+    // Names its own account "Savings" and transfers to "Current Account", a counterparty
+    // with no file of its own.
+    stageNewFile(session, "savings.qif", SAVINGS_WITH_TRANSFER, "Savings");
+
+    String html = reviewHtml(session);
+    assertThat(html).contains("· file provided");
+    assertThat(html).contains("· expecting a file");
+  }
+
+  @Test
+  void collapsedRowFlagsAnUnresolvedOpeningBalanceThenSummarisesTheOutcome() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "bank.qif", BANK_WITH_NONZERO_OPENING_BALANCE, "Bank24ru-EUR");
+    long rowId = mapRowId("Bank24ru-EUR");
+
+    assertThat(reviewHtml(session)).contains("opening balance unresolved");
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + rowId + "/opening-balance")
+                .param("choice", "override")
+                .param("amount", "1.234,56")
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
+
+    String html = reviewHtml(session);
+    assertThat(html).doesNotContain("opening balance unresolved");
+    assertThat(html).contains("opening balance 1.234,56 (override)");
+  }
+
+  @Test
   void reviewShowsMoneysStagedOpeningBalanceAndItsProposedWinner() throws Exception {
     MockHttpSession session = openCampaign();
     stageNewFile(session, "bank.qif", BANK_WITH_OPENING_BALANCE, "Bank24ru-EUR");
@@ -692,6 +742,8 @@ class ImportScreenIntegrationTest {
     assertThat(html).contains("Money: 0,00 · 01.07.2004");
     // No Hauptbuch account is mapped yet, so Money's is simply brought in.
     assertThat(html).contains("Proposed: take Money's.");
+    // A zero opening balance into nothing resolves itself — the collapsed row does not nag.
+    assertThat(html).doesNotContain("opening balance unresolved");
   }
 
   @Test
