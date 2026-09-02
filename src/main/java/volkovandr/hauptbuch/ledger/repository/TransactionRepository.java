@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
+import volkovandr.hauptbuch.ledger.OpeningBalanceView;
 import volkovandr.hauptbuch.ledger.Posting;
 import volkovandr.hauptbuch.ledger.Transaction;
 
@@ -216,6 +217,35 @@ public class TransactionRepository {
             limit 1
             """)
         .query(LocalDate.class)
+        .optional();
+  }
+
+  /**
+   * The earliest live opening balance of {@code accountId} — the transaction that has a leg on it
+   * <em>and</em> a leg on {@code openingBalancesLeafId} (its per-currency {@code Opening Balances}
+   * leaf, data-model T-DM-4). Empty when the account has no opening balance of its own. The
+   * importer's account map reconciles this against Money's staged one (import.md §5.1; plan c3).
+   */
+  public Optional<OpeningBalanceView> findOpeningBalance(
+      long accountId, long openingBalancesLeafId) {
+    return jdbcClient
+        .sql(
+            """
+            select t.date as date, own.amount as amount
+            from transaction t
+            join posting own
+              on own.transaction_id = t.transaction_id and own.account_id = :accountId
+            where t.deleted_at is null
+              and exists (
+                select 1 from posting ob
+                where ob.transaction_id = t.transaction_id
+                  and ob.account_id = :openingBalancesLeafId)
+            order by t.date, t.transaction_id
+            limit 1
+            """)
+        .param(ACCOUNT_ID, accountId)
+        .param("openingBalancesLeafId", openingBalancesLeafId)
+        .query(OpeningBalanceView.class)
         .optional();
   }
 

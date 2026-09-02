@@ -28,10 +28,14 @@ class ImportReviewServiceTest {
   @Mock ImportSessionService importSessionService;
   @Mock ImportStatisticsRepository importStatisticsRepository;
   @Mock ImportAccountMapPanel importAccountMapPanel;
+  @Mock ImportOpeningBalancePanel importOpeningBalancePanel;
 
   private ImportReviewService service() {
     return new ImportReviewService(
-        importSessionService, importStatisticsRepository, importAccountMapPanel);
+        importSessionService,
+        importStatisticsRepository,
+        importAccountMapPanel,
+        importOpeningBalancePanel);
   }
 
   private void openSession() {
@@ -47,7 +51,8 @@ class ImportReviewServiceTest {
     when(importSessionService.currentSession()).thenReturn(Optional.empty());
 
     assertThat(service().review()).isEmpty();
-    verifyNoInteractions(importStatisticsRepository, importAccountMapPanel);
+    verifyNoInteractions(
+        importStatisticsRepository, importAccountMapPanel, importOpeningBalancePanel);
   }
 
   @Test
@@ -84,6 +89,7 @@ class ImportReviewServiceTest {
               assertThat(row.dateRange()).isEqualTo("01.07.2004 – 28.07.2004");
             });
     assertThat(review.accountMap()).isSameAs(panel);
+    assertThat(review.openingBalanceFor(1L)).isEqualTo(ImportOpeningBalanceCells.EMPTY);
   }
 
   @Test

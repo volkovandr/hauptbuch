@@ -365,6 +365,19 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.12 (2026-09-02):** **c3 ready to confirm** — opening-balance reconciliation (import.md §5.1).
+  `import_account.opening_balance_choice` / `_amount` (V19 columns, unused until now) record one of
+  `keep_hauptbuch` / `take_money` / `override` via `ImportAccountMapService.reconcileOpeningBalance`;
+  the pure winner rule (`OpeningBalanceReconciliation` — earlier date wins, ties toward the non-zero
+  one) is unit-tested including the tie. **Scope additions:** (1) a new `ledger` public read —
+  `LedgerService.openingBalanceOf(accountId)` → `OpeningBalanceView`, backed by
+  `TransactionRepository.findOpeningBalance` (the earliest live transaction touching the account and
+  its per-currency `Opening Balances` leaf) — the `importer → ledger` edge already existed (c1); (2)
+  `ImportStatisticsRepository.stagedOpeningBalances` reads Money's staged opening balances (the same
+  three-table join as `perMoneyAccount`, `sqlLogicTest`); (3) the reconciliation cells are assembled
+  by a new `ImportOpeningBalancePanel` and hung on `ImportReview.openingBalances` (keyed by
+  `import_account` id) rather than on the map panel — `ImportAccountMapPanel` was already at its PMD
+  coupling budget.
 - **v0.11 (2026-09-02):** **c2 complete** (owner-confirmed 2026-09-02) — person targets and the
   `expect-file` flag (import.md §5.1, §5.4). Two decisions the design left implicit, settled here:
   (1) a person target is **resolved to the leaf at map time** via `PersonProvisioningService.ensureLeaf`

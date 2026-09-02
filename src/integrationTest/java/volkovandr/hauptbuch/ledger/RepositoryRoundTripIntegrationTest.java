@@ -285,6 +285,62 @@ class RepositoryRoundTripIntegrationTest {
     assertThat(transactionRepository.earliestLiveDate()).contains(LocalDate.of(2024, 3, 15));
   }
 
+  /**
+   * {@code findOpeningBalance} (import.md §5.1; plan c3): the earliest live transaction touching
+   * both the account and its per-currency {@code Opening Balances} leaf, empty when the account has
+   * none, and blind to soft-deleted rows and to transactions that touch the account but not the
+   * opening-balances leaf.
+   */
+  @Test
+  void findOpeningBalanceReadsTheAccountsOwnOpeningTransaction() {
+    long cash = insertCashAccount(EUR);
+    Account openingLeaf =
+        accountService.findLeafUnderParentNamed(OPENING_BALANCES, EUR).orElseThrow();
+
+    assertThat(transactionRepository.findOpeningBalance(cash, openingLeaf.accountId())).isEmpty();
+
+    long opening =
+        transactionRepository.insertTransaction(
+            new Transaction(
+                null,
+                LocalDate.of(2004, 7, 1),
+                null,
+                "Opening balance",
+                CONFIRMED,
+                null,
+                null,
+                null));
+    transactionRepository.insertPosting(
+        new Posting(null, opening, cash, new BigDecimal("1234.5600"), null, UNRECONCILED, null));
+    transactionRepository.insertPosting(
+        new Posting(
+            null,
+            opening,
+            openingLeaf.accountId(),
+            new BigDecimal("-1234.5600"),
+            null,
+            UNRECONCILED,
+            null));
+
+    // An ordinary transaction on the same account, later — must not shadow the opening balance.
+    long ordinary =
+        transactionRepository.insertTransaction(
+            new Transaction(
+                null, LocalDate.of(2010, 1, 1), null, "groceries", CONFIRMED, null, null, null));
+    transactionRepository.insertPosting(
+        new Posting(null, ordinary, cash, new BigDecimal("-5.0000"), null, UNRECONCILED, null));
+
+    assertThat(transactionRepository.findOpeningBalance(cash, openingLeaf.accountId()))
+        .hasValueSatisfying(
+            view -> {
+              assertThat(view.date()).isEqualTo(LocalDate.of(2004, 7, 1));
+              assertThat(view.amount()).isEqualByComparingTo("1234.56");
+            });
+
+    transactionRepository.softDelete(opening);
+    assertThat(transactionRepository.findOpeningBalance(cash, openingLeaf.accountId())).isEmpty();
+  }
+
   @Test
   void settingsRowExistsAndDisplayNameUpdates() {
     settingsRepository.updateDisplayName("Andrey");

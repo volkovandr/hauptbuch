@@ -220,6 +220,94 @@
                 </button>
               </p>
             </form>
+
+            <!-- Opening-balance reconciliation (import.md §5.1, plan c3): Money exports an opening
+                 balance as a self-transfer and the target account usually already has one. The
+                 proposal is the earlier-dated one, ties toward the non-zero one; the owner picks
+                 the winner or types an override. Only the decision is recorded here — the commit
+                 voids Hauptbuch's own or books Money's. Shown only when a staged file carries an
+                 opening-balance record for this account. The cells are keyed by import-account id
+                 on ${review.openingBalances()} (assembled apart from the map panel, plan c3). -->
+            <th:block th:with="ob=${review.openingBalanceFor(row.importAccountId())}">
+            <form
+              th:if="${ob.reconciles()}"
+              method="post"
+              th:action="@{/import/review/accounts/{id}/opening-balance(id=${row.importAccountId()})}"
+              class="form"
+            >
+              <p class="field__label">Opening balance</p>
+              <p class="muted">
+                <span th:text="'Money: ' + ${ob.moneyOpeningBalance()}"
+                  >Money: 1.234,56 · 01.01.2004</span
+                >
+                <span
+                  th:if="${ob.hauptbuchOpeningBalance() != null}"
+                  th:text="' · Hauptbuch: ' + ${ob.hauptbuchOpeningBalance()}"
+                >
+                  · Hauptbuch: 0,00 · 01.01.2004</span
+                >
+                <span th:unless="${ob.hauptbuchOpeningBalance() != null}">
+                  · Hauptbuch: none — Money's will be brought in</span
+                >
+              </p>
+              <p
+                class="muted"
+                th:if="${ob.proposal() != null and ob.recordedChoice() == null}"
+                th:switch="${ob.proposal()}"
+              >
+                <span th:case="'take_money'">Proposed: take Money's.</span>
+                <span th:case="'keep_hauptbuch'">Proposed: keep Hauptbuch's.</span>
+              </p>
+              <p class="muted" th:if="${ob.recordedChoice() != null}" th:switch="${ob.recordedChoice()}">
+                <span th:case="'keep_hauptbuch'">Recorded: keep Hauptbuch's own opening balance.</span>
+                <span th:case="'take_money'">Recorded: take Money's opening balance.</span>
+                <span
+                  th:case="'override'"
+                  th:text="'Recorded: override to ' + ${ob.recordedAmount()} + '.'"
+                  >Recorded: override.</span
+                >
+              </p>
+              <div class="field">
+                <label class="field__label">
+                  <input
+                    type="radio"
+                    name="choice"
+                    value="keep_hauptbuch"
+                    th:checked="${ob.recordedChoice() == 'keep_hauptbuch'}"
+                  />
+                  Keep Hauptbuch's
+                </label>
+                <label class="field__label">
+                  <input
+                    type="radio"
+                    name="choice"
+                    value="take_money"
+                    th:checked="${ob.recordedChoice() == 'take_money'}"
+                  />
+                  Take Money's
+                </label>
+                <label class="field__label">
+                  <input
+                    type="radio"
+                    name="choice"
+                    value="override"
+                    th:checked="${ob.recordedChoice() == 'override'}"
+                  />
+                  Override with
+                </label>
+                <input
+                  type="text"
+                  name="amount"
+                  class="input"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  placeholder="1.234,56"
+                  th:value="${ob.recordedAmount()}"
+                />
+              </div>
+              <p class="actions"><button type="submit" class="btn">Record</button></p>
+            </form>
+            </th:block>
           </details>
         </li>
       </ul>
