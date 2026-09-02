@@ -1,7 +1,7 @@
 # Hauptbuch — Import Plan: the Money migration (QIF)
 
-**Status:** Draft v0.9
-**Date:** 2026-09-01
+**Status:** Draft v0.11
+**Date:** 2026-09-02
 **Owner:** volkovandr
 **Parent:** `implementation-plan.md` §3, first bullet (the item currently being built). This doc is
 the detail the sub-plan pattern pushes out of the main plan — deleted on completion with a summary
@@ -216,7 +216,7 @@ Mapping is mandatory before the gate opens.
 **Done when:** the map screen resolves both targets, several Money accounts can share one target,
 and the unit tier covers the resolution with repositories mocked.
 
-### c2 — Person targets and `expect-file`
+### c2 — Person targets and `expect-file` ✅ **complete** (owner-confirmed 2026-09-02)
 A Money account may map to a **Person** (§5.4), resolving through `PersonProvisioningService`
 `ensureLeaf(person, currency)` to that person's per-currency leaf — after which the importer treats
 it as an ordinary account id and the transaction builder never learns people exist. The currency is
@@ -365,7 +365,7 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
-- **v0.11 (2026-09-02):** **c2 built, green, awaiting owner confirmation** — person targets and the
+- **v0.11 (2026-09-02):** **c2 complete** (owner-confirmed 2026-09-02) — person targets and the
   `expect-file` flag (import.md §5.1, §5.4). Two decisions the design left implicit, settled here:
   (1) a person target is **resolved to the leaf at map time** via `PersonProvisioningService.ensureLeaf`
   and stored as an ordinary `account_id` (c1's precedent that eager `accounts`/`debts` provisioning
