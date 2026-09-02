@@ -1,0 +1,45 @@
+/* Import review (import.md §9).
+
+   Deliberately thin: the account-map rows are the same <details> pattern the People and Backup
+   screens use, so the caret and summary treatment follow that rather than inventing a second one.
+   A mapped row renders collapsed and an unmapped one open (import-review.html), so a campaign with
+   tens of accounts shows its forms only where work is left. */
+
+.import-account-map {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.import-account {
+  border-bottom: 1px solid var(--feint);
+}
+
+/* Same caret treatment as .person__summary — a flex summary drops the native marker. */
+.import-account__summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.4rem 0.25rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.import-account__summary::-webkit-details-marker {
+  display: none;
+}
+
+.import-account__summary::before {
+  content: "\25B8"; /* ▸ */
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.import-account[open] .import-account__summary::before {
+  content: "\25BE"; /* ▾ */
+}
+
+.import-account .form {
+  padding: 0.2rem 0.25rem 0.8rem 1.55rem;
+}

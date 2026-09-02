@@ -85,6 +85,8 @@ class ImportController {
       return REDIRECT_SCREEN;
     }
     model.addAttribute("review", review.get());
+    // The shared currency-picker fragment (account-map panel, plan c1) reads ${currencies}.
+    model.addAttribute("currencies", review.get().accountMap().currencyOptions());
     model.addAttribute("nav", NavItem.sectionsFor(BASE));
     model.addAttribute("title", "Import review · Hauptbuch");
     return REVIEW_VIEW;

@@ -49,6 +49,12 @@
       (its type is proposed from the file header, its currency is chosen since QIF carries none).
       Pointing several rows at one account is the merge / junk-account story. Person targets and
       the expect-file flag arrive in c2, the opening-balance reconciliation in c3.
+
+      Each row is a native <details> (the People / Backup screen pattern — no bespoke JS): a mapped
+      row renders collapsed, an unmapped one open, so with tens of accounts the still-to-do rows
+      are the ones showing their form. Mapping redirects back here, so the just-mapped row returns
+      collapsed. The new-account currency select is the shared currency picker, so "Add currency"
+      is offered inline here as everywhere else.
     -->
     <section class="panel" th:unless="${#lists.isEmpty(review.accountMap().rows())}">
       <p class="eyebrow">Account map</p>
@@ -57,69 +63,76 @@
         can commit. Several Money accounts may point at one Hauptbuch account — that is how a merge
         and the junk-account cleanup are done.
       </p>
-      <ul class="import-uploads">
+      <ul class="import-account-map">
         <li th:each="row : ${review.accountMap().rows()}">
-          <p>
-            <span class="num" th:text="${row.moneyAccountName()}">Current Account</span>
-            <span class="muted" th:if="${row.mapped()}" th:text="' → ' + ${row.targetName()}">
-              → Giro</span
+          <details class="import-account" th:open="${!row.mapped()}">
+            <summary class="import-account__summary">
+              <span class="num" th:text="${row.moneyAccountName()}">Current Account</span>
+              <span class="muted" th:if="${row.mapped()}" th:text="' → ' + ${row.targetName()}">
+                → Giro</span
+              >
+              <span class="muted" th:unless="${row.mapped()}"> → not mapped</span>
+            </summary>
+            <form
+              method="post"
+              th:action="@{/import/review/accounts/{id}/map(id=${row.importAccountId()})}"
+              class="form"
             >
-            <span class="muted" th:unless="${row.mapped()}"> → not mapped</span>
-          </p>
-          <form
-            method="post"
-            th:action="@{/import/review/accounts/{id}/map(id=${row.importAccountId()})}"
-            class="form"
-          >
-            <div class="field">
-              <label class="field__label">Existing account</label>
-              <select name="accountId" class="input">
-                <option value="">— create a new account instead —</option>
-                <option
-                  th:each="o : ${review.accountMap().accountOptions()}"
-                  th:value="${o.accountId()}"
-                  th:selected="${row.targetAccountId() != null and o.accountId() == row.targetAccountId()}"
-                  th:text="${o.name() + ' (' + o.type() + ')'}"
+              <div class="field">
+                <label class="field__label">Existing account</label>
+                <select name="accountId" class="input">
+                  <option value="">— create a new account instead —</option>
+                  <option
+                    th:each="o : ${review.accountMap().accountOptions()}"
+                    th:value="${o.accountId()}"
+                    th:selected="${row.targetAccountId() != null and o.accountId() == row.targetAccountId()}"
+                    th:text="${o.name() + ' (' + o.type() + ')'}"
+                  >
+                    Giro (asset)
+                  </option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field__label">New account name</label>
+                <input
+                  type="text"
+                  name="newName"
+                  class="input"
+                  th:value="${row.moneyAccountName()}"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="field">
+                <label class="field__label">New account type</label>
+                <select name="type" class="input">
+                  <option value="asset" th:selected="${row.proposedType() != 'liability'}">
+                    Asset — cash, giro, savings
+                  </option>
+                  <option value="liability" th:selected="${row.proposedType() == 'liability'}">
+                    Liability — card, loan
+                  </option>
+                </select>
+              </div>
+              <div class="field">
+                <label
+                  class="field__label"
+                  th:for="'import-account-currency-' + ${row.importAccountId()}"
+                  >New account currency</label
                 >
-                  Giro (asset)
-                </option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="field__label">New account name</label>
-              <input
-                type="text"
-                name="newName"
-                class="input"
-                th:value="${row.moneyAccountName()}"
-                autocomplete="off"
-              />
-            </div>
-            <div class="field">
-              <label class="field__label">New account type</label>
-              <select name="type" class="input">
-                <option value="asset" th:selected="${row.proposedType() != 'liability'}">
-                  Asset — cash, giro, savings
-                </option>
-                <option value="liability" th:selected="${row.proposedType() == 'liability'}">
-                  Liability — card, loan
-                </option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="field__label">New account currency</label>
-              <select name="currencyCode" class="input">
-                <option
-                  th:each="c : ${review.accountMap().currencyOptions()}"
-                  th:value="${c.code()}"
-                  th:text="${c.code() + ' — ' + c.name()}"
-                >
-                  EUR — Euro
-                </option>
-              </select>
-            </div>
-            <p class="actions"><button type="submit" class="btn">Map</button></p>
-          </form>
+                <!-- Shared currency picker (plan stage 6d): the field id is per-row so each
+                     picker's "Add currency" dialog swaps back into its own row. -->
+                <div
+                  th:replace="~{fragments/currency-picker :: picker(fieldId='import-account-currency-' + ${row.importAccountId()}, fieldName='currencyCode', selected=null, oob=false)}"
+                ></div>
+              </div>
+              <p class="actions"><button type="submit" class="btn">Map</button></p>
+            </form>
+            <!-- The add-currency dialog mounts OUTSIDE the map form: the dialog carries its own
+                 <form>, and nesting forms is invalid HTML (the 6d precedent, accounts.html). -->
+            <div
+              th:replace="~{fragments/currency-picker :: dialogMount(fieldId='import-account-currency-' + ${row.importAccountId()})}"
+            ></div>
+          </details>
         </li>
       </ul>
     </section>

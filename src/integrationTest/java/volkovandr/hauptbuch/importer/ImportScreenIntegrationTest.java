@@ -177,6 +177,14 @@ class ImportScreenIntegrationTest {
         .single();
   }
 
+  private String reviewHtml(MockHttpSession session) throws Exception {
+    return mockMvc
+        .perform(get("/import/review").session(session))
+        .andReturn()
+        .getResponse()
+        .getContentAsString();
+  }
+
   @Test
   void withoutCampaignTheScreenOffersToStartOne() throws Exception {
     mockMvc
@@ -465,6 +473,37 @@ class ImportScreenIntegrationTest {
     mockMvc
         .perform(get("/import/review").session(session))
         .andExpect(content().string(containsString("→ Giro")));
+  }
+
+  @Test
+  void accountRowStartsExpandedAndReturnsCollapsedOnceMapped() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+    long giro = insertAccount("Giro", "asset");
+
+    assertThat(reviewHtml(session)).contains("class=\"import-account\" open");
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + mapRowId("Current Account") + "/map")
+                .param("accountId", Long.toString(giro))
+                .session(session))
+        .andExpect(redirectedUrl("/import/review"));
+
+    assertThat(reviewHtml(session)).doesNotContain("class=\"import-account\" open");
+  }
+
+  @Test
+  void newAccountCurrencyFieldUsesTheSharedCurrencyPicker() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+    long rowId = mapRowId("Current Account");
+
+    mockMvc
+        .perform(get("/import/review").session(session))
+        .andExpect(content().string(containsString("currency-picker__add")))
+        .andExpect(
+            content().string(containsString("currency-dialog-import-account-currency-" + rowId)));
   }
 
   @Test
