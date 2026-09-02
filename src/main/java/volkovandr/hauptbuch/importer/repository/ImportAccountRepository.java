@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.importer.repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -74,6 +75,27 @@ public class ImportAccountRepository {
     jdbcClient
         .sql("update import_account set expect_file = :expectFile where import_account_id = :id")
         .param("expectFile", expectFile)
+        .param("id", importAccountId)
+        .update();
+  }
+
+  /**
+   * Record the opening-balance reconciliation outcome on one map row (import.md §5.1; plan c3):
+   * {@code keep_hauptbuch} / {@code take_money} / {@code override}. {@code amount} is the explicit
+   * figure for an {@code override} and {@code null} otherwise. The actual voiding / booking happens
+   * at commit (f2) — this only records the decision.
+   */
+  public void setOpeningBalanceChoice(long importAccountId, String choice, BigDecimal amount) {
+    jdbcClient
+        .sql(
+            """
+            update import_account
+               set opening_balance_choice = :choice,
+                   opening_balance_amount = :amount
+             where import_account_id = :id
+            """)
+        .param("choice", choice)
+        .param("amount", amount)
         .param("id", importAccountId)
         .update();
   }

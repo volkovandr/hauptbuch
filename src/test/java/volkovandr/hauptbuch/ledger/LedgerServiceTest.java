@@ -421,4 +421,43 @@ class LedgerServiceTest {
     assertThat(ledgerService.labelsForTagIds(List.of(5L)))
         .containsExactly(java.util.Map.entry(5L, "Car"));
   }
+
+  // ── opening-balance read (import.md §5.1, plan c3) ───────────────────────────
+
+  @Test
+  void openingBalanceOfResolvesTheCurrencyLeafThenReadsTheAccountsOpeningTransaction() {
+    stubAccount(CASH_EUR, EUR);
+    Account leaf =
+        new Account(
+            77L,
+            "Opening Balances",
+            "equity",
+            null,
+            EUR,
+            null,
+            null,
+            null,
+            null,
+            false,
+            false,
+            false);
+    when(accountService.findLeafUnderParentNamed(
+            LedgerOpeningBalanceRecorder.OPENING_BALANCES_PARENT, EUR))
+        .thenReturn(Optional.of(leaf));
+    when(transactionRepository.findOpeningBalance(CASH_EUR, 77L))
+        .thenReturn(
+            Optional.of(
+                new OpeningBalanceView(LocalDate.of(2004, 1, 1), new BigDecimal("100.00"))));
+
+    assertThat(ledgerService.openingBalanceOf(CASH_EUR))
+        .hasValueSatisfying(view -> assertThat(view.amount()).isEqualByComparingTo("100.00"));
+  }
+
+  @Test
+  void openingBalanceOfIsEmptyWhenTheAccountIsUnknown() {
+    when(accountService.findById(CASH_EUR)).thenReturn(Optional.empty());
+
+    assertThat(ledgerService.openingBalanceOf(CASH_EUR)).isEmpty();
+    verify(transactionRepository, never()).findOpeningBalance(anyLong(), anyLong());
+  }
 }

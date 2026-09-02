@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import volkovandr.hauptbuch.shared.MoneyFormat;
 import volkovandr.hauptbuch.web.NavItem;
 
 /**
@@ -159,6 +160,29 @@ class ImportController {
       RedirectAttributes redirectAttributes) {
     try {
       importAccountMapService.setExpectFile(importAccountId, expectFile);
+    } catch (IllegalArgumentException | IllegalStateException rejected) {
+      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
+    }
+    return reviewAnchoredAt(importAccountId);
+  }
+
+  /**
+   * Record the opening-balance reconciliation for one Money account (import.md §5.1; plan c3) —
+   * {@code keep_hauptbuch} keeps the target account's own, {@code take_money} takes Money's staged
+   * one (voiding Hauptbuch's at commit), {@code override} books the typed {@code amount}
+   * (German-formatted). Only the decision is recorded; the commit acts on it. A rejected choice
+   * comes back to the review with the reason.
+   */
+  @PostMapping(BASE + "/review/accounts/{importAccountId}/opening-balance")
+  String reconcileOpeningBalance(
+      @PathVariable long importAccountId,
+      @RequestParam String choice,
+      @RequestParam(required = false) String amount,
+      RedirectAttributes redirectAttributes) {
+    try {
+      String typed = blankToNull(amount);
+      importAccountMapService.reconcileOpeningBalance(
+          importAccountId, choice, typed == null ? null : MoneyFormat.parse(typed));
     } catch (IllegalArgumentException | IllegalStateException rejected) {
       redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
     }

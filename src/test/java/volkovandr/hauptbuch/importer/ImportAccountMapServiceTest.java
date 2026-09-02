@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -286,5 +287,82 @@ class ImportAccountMapServiceTest {
         .isInstanceOf(IllegalArgumentException.class);
 
     verify(importAccountRepository, never()).setExpectFile(anyLong(), anyBoolean());
+  }
+
+  @Test
+  void recordsKeepHauptbuchWithNoAmount() {
+    openSession();
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(10L, "Current Account")));
+
+    service().reconcileOpeningBalance(10L, OpeningBalanceChoice.KEEP_HAUPTBUCH, null);
+
+    verify(importAccountRepository)
+        .setOpeningBalanceChoice(10L, OpeningBalanceChoice.KEEP_HAUPTBUCH, null);
+  }
+
+  @Test
+  void recordsTakeMoneyAndDiscardsAnyTypedAmount() {
+    openSession();
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(10L, "Current Account")));
+
+    service().reconcileOpeningBalance(10L, OpeningBalanceChoice.TAKE_MONEY, new BigDecimal("5.00"));
+
+    verify(importAccountRepository)
+        .setOpeningBalanceChoice(10L, OpeningBalanceChoice.TAKE_MONEY, null);
+  }
+
+  @Test
+  void recordsOverrideWithItsAmount() {
+    openSession();
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(10L, "Current Account")));
+
+    service()
+        .reconcileOpeningBalance(10L, OpeningBalanceChoice.OVERRIDE, new BigDecimal("1234.56"));
+
+    verify(importAccountRepository)
+        .setOpeningBalanceChoice(10L, OpeningBalanceChoice.OVERRIDE, new BigDecimal("1234.56"));
+  }
+
+  @Test
+  void overrideNeedsAnAmount() {
+    openSession();
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(10L, "Current Account")));
+
+    assertThatThrownBy(
+            () -> service().reconcileOpeningBalance(10L, OpeningBalanceChoice.OVERRIDE, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("amount");
+
+    verify(importAccountRepository, never()).setOpeningBalanceChoice(anyLong(), any(), any());
+  }
+
+  @Test
+  void rejectsAnUnrecognisedOpeningBalanceChoice() {
+    openSession();
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(10L, "Current Account")));
+
+    assertThatThrownBy(() -> service().reconcileOpeningBalance(10L, "whatever", null))
+        .isInstanceOf(IllegalArgumentException.class);
+
+    verify(importAccountRepository, never()).setOpeningBalanceChoice(anyLong(), any(), any());
+  }
+
+  @Test
+  void reconcileRejectsAnImportAccountRowNotInTheOpenSession() {
+    openSession();
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(10L, "Current Account")));
+
+    assertThatThrownBy(
+            () ->
+                service().reconcileOpeningBalance(999L, OpeningBalanceChoice.KEEP_HAUPTBUCH, null))
+        .isInstanceOf(IllegalArgumentException.class);
+
+    verify(importAccountRepository, never()).setOpeningBalanceChoice(anyLong(), any(), any());
   }
 }

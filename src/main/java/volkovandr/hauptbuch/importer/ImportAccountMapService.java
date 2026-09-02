@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.importer;
 
+import java.math.BigDecimal;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -170,6 +171,35 @@ public class ImportAccountMapService {
     ImportAccount row = requireRowInOpenSession(importAccountId);
     importAccountRepository.setExpectFile(importAccountId, expectFile);
     LOG.debug("Import account \"{}\" expect-file set to {}", row.moneyAccountName(), expectFile);
+  }
+
+  /**
+   * Record the opening-balance reconciliation for one map row (import.md §5.1; plan c3). Money's
+   * opening balance is a self-transfer and the target Hauptbuch account usually already has one —
+   * the owner picks the winner: {@code keep_hauptbuch} drops Money's, {@code take_money} voids
+   * Hauptbuch's own at commit and books Money's, {@code override} books {@code amount}. Only the
+   * decision is stored; f2 acts on it. Nothing here writes to {@code transaction} / {@code
+   * posting}.
+   *
+   * @throws IllegalStateException if no campaign is open
+   * @throws IllegalArgumentException if the row is not in the open campaign, the choice is not one
+   *     of the three, or {@code override} is chosen without an amount
+   */
+  @Transactional
+  public void reconcileOpeningBalance(long importAccountId, String choice, BigDecimal amount) {
+    ImportAccount row = requireRowInOpenSession(importAccountId);
+    if (!OpeningBalanceChoice.isValid(choice)) {
+      throw new IllegalArgumentException("Unrecognised opening-balance choice \"" + choice + "\"");
+    }
+    boolean override = OpeningBalanceChoice.OVERRIDE.equals(choice);
+    if (override && amount == null) {
+      throw new IllegalArgumentException(
+          "Type an amount to override the opening balance for \"" + row.moneyAccountName() + "\"");
+    }
+    BigDecimal storedAmount = override ? amount : null;
+    importAccountRepository.setOpeningBalanceChoice(importAccountId, choice, storedAmount);
+    LOG.debug(
+        "Import account \"{}\" opening-balance choice set to {}", row.moneyAccountName(), choice);
   }
 
   private void requireKnownCurrency(String currencyCode, String moneyAccountName) {

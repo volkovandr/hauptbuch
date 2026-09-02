@@ -171,6 +171,22 @@ public class LedgerService {
     return tagReadRepository.labelsForTagIds(tagIds);
   }
 
+  /**
+   * The account's own opening balance (data-model T-DM-4), or empty when it has none — the target
+   * side of the importer's opening-balance reconciliation (import.md §5.1; plan c3). Resolved by
+   * finding the account's per-currency {@code Opening Balances} leaf and the earliest live
+   * transaction that touches both.
+   */
+  public Optional<OpeningBalanceView> openingBalanceOf(long accountId) {
+    return accountService
+        .findById(accountId)
+        .flatMap(
+            account ->
+                accountService.findLeafUnderParentNamed(
+                    LedgerOpeningBalanceRecorder.OPENING_BALANCES_PARENT, account.currencyCode()))
+        .flatMap(leaf -> transactionRepository.findOpeningBalance(accountId, leaf.accountId()));
+  }
+
   /** Reversibly soft-delete a transaction and (by the join) its postings (data-model §3.5). */
   @Transactional
   public void voidTransaction(long transactionId) {

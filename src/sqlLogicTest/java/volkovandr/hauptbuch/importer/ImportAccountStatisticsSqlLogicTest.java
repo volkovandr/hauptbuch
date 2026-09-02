@@ -15,13 +15,15 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.importer.repository.ImportStatisticsRepository;
 
 /**
- * SQL-logic tier (CLAUDE.md §6): {@link ImportStatisticsRepository#perMoneyAccount} — the
- * per-account verification device (import.md §9.4; plan e′). The logic lives in the SQL: a grouped
- * aggregate over {@code import_file} → {@code import_transaction} → {@code import_posting}, with
- * the net sum a <em>filtered</em> aggregate over the funding legs only so a transfer's mirror leg
- * staged from the other account's file is not double-counted. Crafted staging rows via raw {@link
- * JdbcClient}; the query under test is the real repository. {@code @Transactional} rolls each test
- * back on the reused container.
+ * SQL-logic tier (CLAUDE.md §6): {@link ImportStatisticsRepository} — the per-account verification
+ * device {@code perMoneyAccount} (import.md §9.4; plan e′) and Money's staged opening balances
+ * {@code stagedOpeningBalances} (§5.1; plan c3). The logic lives in the SQL: a grouped aggregate
+ * over {@code import_file} → {@code import_transaction} → {@code import_posting}, with the net sum
+ * a <em>filtered</em> aggregate over the funding legs only so a transfer's mirror leg staged from
+ * the other account's file is not double-counted; {@code stagedOpeningBalances} is the same
+ * three-table join filtered to the opening-balance funding legs, ordered earliest-first per
+ * account. Crafted staging rows via raw {@link JdbcClient}; the query under test is the real
+ * repository. {@code @Transactional} rolls each test back on the reused container.
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
@@ -221,5 +223,71 @@ class ImportAccountStatisticsSqlLogicTest {
   @Test
   void emptySessionYieldsNoRows() {
     assertThat(importStatisticsRepository.perMoneyAccount(openSession())).isEmpty();
+  }
+
+  @Test
+  void stagedOpeningBalancesReadsTheFundingLegOfEveryOpeningBalanceTransaction() {
+    long session = openSession();
+    long current = stageFile(session, "Current Account");
+
+    long currentOpening = stageTransaction(current, LocalDate.of(2004, 7, 1), true);
+    stageLeg(currentOpening, "-1000.00", false, null, "Current Account");
+    stageLeg(currentOpening, "1000.00", true, null, "Current Account");
+    stagePlain(current, LocalDate.of(2004, 7, 2), "-5.00", "Current Account");
+
+    long savings = stageFile(session, "Savings");
+    long savingsOpening = stageTransaction(savings, LocalDate.of(2006, 1, 1), true);
+    stageLeg(savingsOpening, "-250.00", false, null, "Savings");
+    stageLeg(savingsOpening, "250.00", true, null, "Savings");
+
+    assertThat(importStatisticsRepository.stagedOpeningBalances(session))
+        .satisfiesExactly(
+            a -> {
+              assertThat(a.moneyAccountName()).isEqualTo("Current Account");
+              assertThat(a.date()).isEqualTo(LocalDate.of(2004, 7, 1));
+              assertThat(a.amount()).isEqualByComparingTo("1000.00");
+            },
+            b -> {
+              assertThat(b.moneyAccountName()).isEqualTo("Savings");
+              assertThat(b.date()).isEqualTo(LocalDate.of(2006, 1, 1));
+              assertThat(b.amount()).isEqualByComparingTo("250.00");
+            });
+  }
+
+  @Test
+  void stagedOpeningBalancesOrdersAnAccountsTwoFilesEarliestFirst() {
+    long session = openSession();
+    long first = stageFile(session, "Current Account");
+    long second = stageFile(session, "Current Account");
+
+    long later = stageTransaction(second, LocalDate.of(2008, 5, 1), true);
+    stageLeg(later, "-9.00", false, null, "Current Account");
+    stageLeg(later, "9.00", true, null, "Current Account");
+
+    long earlier = stageTransaction(first, LocalDate.of(2004, 7, 1), true);
+    stageLeg(earlier, "-1000.00", false, null, "Current Account");
+    stageLeg(earlier, "1000.00", true, null, "Current Account");
+
+    assertThat(importStatisticsRepository.stagedOpeningBalances(session))
+        .extracting(ImportStagedOpeningBalance::date)
+        .containsExactly(LocalDate.of(2004, 7, 1), LocalDate.of(2008, 5, 1));
+  }
+
+  @Test
+  void stagedOpeningBalancesIgnoresOrdinaryTransactionsAndOtherSessions() {
+    long session = openSession();
+    long other = otherSession();
+    stagePlain(
+        stageFile(session, "Current Account"),
+        LocalDate.of(2004, 7, 1),
+        "-10.00",
+        "Current Account");
+
+    long otherOpening =
+        stageTransaction(stageFile(other, "Current Account"), LocalDate.of(2004, 1, 1), true);
+    stageLeg(otherOpening, "-1.00", false, null, "Current Account");
+    stageLeg(otherOpening, "1.00", true, null, "Current Account");
+
+    assertThat(importStatisticsRepository.stagedOpeningBalances(session)).isEmpty();
   }
 }

@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -679,6 +680,79 @@ class ImportScreenIntegrationTest {
                 .session(session))
         .andExpect(redirectedUrlPattern("/import/review#account-*"));
     assertThat(expectFile("Loan to Max")).isTrue();
+  }
+
+  @Test
+  void reviewShowsMoneysStagedOpeningBalanceAndItsProposedWinner() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "bank.qif", BANK_WITH_OPENING_BALANCE, "Bank24ru-EUR");
+
+    String html = reviewHtml(session);
+    assertThat(html).contains("Opening balance");
+    assertThat(html).contains("Money: 0,00 · 01.07.2004");
+    // No Hauptbuch account is mapped yet, so Money's is simply brought in.
+    assertThat(html).contains("Proposed: take Money's.");
+  }
+
+  @Test
+  void recordsEachOpeningBalanceOutcomeForMoneyAccount() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "bank.qif", BANK_WITH_OPENING_BALANCE, "Bank24ru-EUR");
+    long rowId = mapRowId("Bank24ru-EUR");
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + rowId + "/opening-balance")
+                .param("choice", "take_money")
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
+    assertThat(openingBalanceChoice("Bank24ru-EUR")).isEqualTo("take_money");
+    assertThat(openingBalanceAmount("Bank24ru-EUR")).isNull();
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + rowId + "/opening-balance")
+                .param("choice", "override")
+                .param("amount", "1.234,56")
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
+    assertThat(openingBalanceChoice("Bank24ru-EUR")).isEqualTo("override");
+    assertThat(openingBalanceAmount("Bank24ru-EUR")).isEqualByComparingTo("1234.56");
+  }
+
+  @Test
+  void overrideWithoutAnAmountComesBackToReviewWithTheReason() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "bank.qif", BANK_WITH_OPENING_BALANCE, "Bank24ru-EUR");
+    long rowId = mapRowId("Bank24ru-EUR");
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + rowId + "/opening-balance")
+                .param("choice", "override")
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#account-*"))
+        .andExpect(flash().attributeExists("error"));
+
+    assertThat(openingBalanceChoice("Bank24ru-EUR")).isNull();
+  }
+
+  private String openingBalanceChoice(String moneyAccountName) {
+    return jdbcClient
+        .sql("select opening_balance_choice from import_account where money_account_name = :name")
+        .param("name", moneyAccountName)
+        .query(String.class)
+        .optional()
+        .orElse(null);
+  }
+
+  private java.math.BigDecimal openingBalanceAmount(String moneyAccountName) {
+    return jdbcClient
+        .sql("select opening_balance_amount from import_account where money_account_name = :name")
+        .param("name", moneyAccountName)
+        .query(java.math.BigDecimal.class)
+        .optional()
+        .orElse(null);
   }
 
   @Test

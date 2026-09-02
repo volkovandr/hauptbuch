@@ -211,6 +211,39 @@ class ImportStagingRepositoryIntegrationTest {
   }
 
   @Test
+  void openingBalanceChoiceRoundTripsForEachOutcome() {
+    long sessionId = openSession();
+    importAccountRepository.upsertUnmapped(sessionId, "Current Account");
+    long rowId = mapRowId(sessionId, "Current Account");
+
+    importAccountRepository.setOpeningBalanceChoice(rowId, "keep_hauptbuch", null);
+    assertThat(reconciliationOf(sessionId, rowId))
+        .satisfies(
+            row -> {
+              assertThat(row.openingBalanceChoice()).isEqualTo("keep_hauptbuch");
+              assertThat(row.openingBalanceAmount()).isNull();
+            });
+
+    importAccountRepository.setOpeningBalanceChoice(rowId, "take_money", null);
+    assertThat(reconciliationOf(sessionId, rowId).openingBalanceChoice()).isEqualTo("take_money");
+
+    importAccountRepository.setOpeningBalanceChoice(rowId, "override", new BigDecimal("1234.56"));
+    assertThat(reconciliationOf(sessionId, rowId))
+        .satisfies(
+            row -> {
+              assertThat(row.openingBalanceChoice()).isEqualTo("override");
+              assertThat(row.openingBalanceAmount()).isEqualByComparingTo("1234.56");
+            });
+  }
+
+  private ImportAccount reconciliationOf(long sessionId, long importAccountId) {
+    return importAccountRepository.findBySession(sessionId).stream()
+        .filter(row -> row.importAccountId() == importAccountId)
+        .findFirst()
+        .orElseThrow();
+  }
+
+  @Test
   void deletingFileCascadesToTransactionsAndPostingsButLeavesTheMaps() {
     long sessionId = openSession();
     long fileId = stageFile(sessionId, "export.qif").importFileId();

@@ -11,7 +11,8 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
 /**
  * Builds the import review render model (import.md §9). e′ delivers the per-account statistics —
  * the verification device the owner ticks against Money's own balances (§9.4); c1 adds the account
- * map (§5.1); slices d and e hang the category map and issues list off the same page.
+ * map (§5.1) and c3 the opening-balance reconciliation cells beside it ({@link
+ * ImportOpeningBalancePanel}); slices d and e hang the category map and issues list off the page.
  *
  * <p>Formatting happens here, not in the template: {@code netSum} is rendered bare in German style
  * (QIF carries no currency, §5.1) and the date span as {@code dd.MM.yyyy}. An empty review — no
@@ -25,14 +26,17 @@ public class ImportReviewService {
   private final ImportSessionService importSessionService;
   private final ImportStatisticsRepository importStatisticsRepository;
   private final ImportAccountMapPanel importAccountMapPanel;
+  private final ImportOpeningBalancePanel importOpeningBalancePanel;
 
   ImportReviewService(
       ImportSessionService importSessionService,
       ImportStatisticsRepository importStatisticsRepository,
-      ImportAccountMapPanel importAccountMapPanel) {
+      ImportAccountMapPanel importAccountMapPanel,
+      ImportOpeningBalancePanel importOpeningBalancePanel) {
     this.importSessionService = importSessionService;
     this.importStatisticsRepository = importStatisticsRepository;
     this.importAccountMapPanel = importAccountMapPanel;
+    this.importOpeningBalancePanel = importOpeningBalancePanel;
   }
 
   /**
@@ -49,7 +53,8 @@ public class ImportReviewService {
                     importStatisticsRepository.perMoneyAccount(session.importSessionId()).stream()
                         .map(ImportReviewService::toRow)
                         .toList(),
-                    importAccountMapPanel.forSession(session.importSessionId())));
+                    importAccountMapPanel.forSession(session.importSessionId()),
+                    importOpeningBalancePanel.forSession(session.importSessionId())));
   }
 
   private static AccountStatisticsRow toRow(ImportAccountStatistics statistics) {
