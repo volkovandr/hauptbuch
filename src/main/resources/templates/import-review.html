@@ -77,6 +77,7 @@
             class="import-account"
             th:id="'account-' + ${row.importAccountId()}"
             th:open="${!row.mapped()}"
+            th:with="ob=${review.openingBalanceFor(row.importAccountId())}"
           >
             <summary class="import-account__summary">
               <span class="num" th:text="${row.moneyAccountName()}">Current Account</span>
@@ -84,13 +85,31 @@
                 <span th:text="' → ' + ${row.targetName()}">→ Giro</span
                 ><span th:if="${row.personTarget()}"> (person)</span>
               </span>
-              <span class="muted" th:unless="${row.mapped()}"> → not mapped</span>
+              <span class="warning" th:unless="${row.mapped()}"> → not mapped</span>
               <span
                 class="muted"
-                th:if="${row.expectFile()}"
+                th:if="${row.expectFile() and !row.fileProvided()}"
                 title="This account's own export is still awaited"
               >
                 · expecting a file</span
+              >
+              <span
+                class="muted"
+                th:if="${row.expectFile() and row.fileProvided()}"
+                title="This account's own export has been staged; clear the flag once its data is complete"
+              >
+                · file provided</span
+              >
+              <!-- Opening-balance status stays in the <summary> so it survives a manual collapse
+                   (plan c3, Finding 2): an unresolved reconciliation is a commit-gate blocker, the
+                   recorded outcome is a settled note. -->
+              <span class="warning" th:if="${ob.needsResolution()}"> · opening balance unresolved</span>
+              <span
+                class="muted"
+                th:if="${ob.recordedSummary() != null}"
+                th:text="' · ' + ${ob.recordedSummary()}"
+              >
+                · opening balance 1.234,56 at 01.01.2004 (Money)</span
               >
             </summary>
             <form
@@ -202,9 +221,13 @@
               th:action="@{/import/review/accounts/{id}/expect-file(id=${row.importAccountId()})}"
               class="form"
             >
-              <p class="muted" th:if="${row.expectFile()}">
+              <p class="muted" th:if="${row.expectFile() and !row.fileProvided()}">
                 Still expecting this account's own export — the campaign cannot commit until every
                 account's file is staged or this is cleared.
+              </p>
+              <p class="muted" th:if="${row.expectFile() and row.fileProvided()}">
+                This account's file has been staged. Clear this once you're satisfied its data is
+                complete.
               </p>
               <p class="muted" th:unless="${row.expectFile()}">
                 Not expecting a file for this account.
@@ -227,8 +250,8 @@
                  the winner or types an override. Only the decision is recorded here — the commit
                  voids Hauptbuch's own or books Money's. Shown only when a staged file carries an
                  opening-balance record for this account. The cells are keyed by import-account id
-                 on ${review.openingBalances()} (assembled apart from the map panel, plan c3). -->
-            <th:block th:with="ob=${review.openingBalanceFor(row.importAccountId())}">
+                 on ${review.openingBalances()} (assembled apart from the map panel, plan c3).
+                 `ob` is bound on the enclosing <details> so the summary can read it too. -->
             <form
               th:if="${ob.reconciles()}"
               method="post"
@@ -307,7 +330,6 @@
               </div>
               <p class="actions"><button type="submit" class="btn">Record</button></p>
             </form>
-            </th:block>
           </details>
         </li>
       </ul>

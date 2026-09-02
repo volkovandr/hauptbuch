@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.importer;
 
+import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
@@ -90,7 +91,23 @@ class ImportOpeningBalancePanel {
         row.openingBalanceChoice(),
         row.openingBalanceAmount() == null
             ? null
-            : MoneyFormat.number(row.openingBalanceAmount(), 2));
+            : MoneyFormat.number(row.openingBalanceAmount(), 2),
+        recordedSummary(
+            row.openingBalanceChoice(), moneyBalance, hauptbuchBalance, row.openingBalanceAmount()),
+        autoResolves(moneyBalance, hauptbuchBalance));
+  }
+
+  /**
+   * A zero opening balance from Money with no Hauptbuch balance to weigh it against — {@code
+   * take_money} brings in zero, which is a no-op, so there is nothing for the owner to decide
+   * (§5.1).
+   */
+  private static boolean autoResolves(
+      OpeningBalanceReconciliation.Balance money, OpeningBalanceReconciliation.Balance hauptbuch) {
+    return hauptbuch == null
+        && money != null
+        && money.amount() != null
+        && money.amount().signum() == 0;
   }
 
   private static String format(OpeningBalanceReconciliation.Balance balance) {
@@ -98,5 +115,38 @@ class ImportOpeningBalancePanel {
       return null;
     }
     return MoneyFormat.number(balance.amount(), 2) + " · " + GERMAN_DATE.format(balance.date());
+  }
+
+  /**
+   * The collapsed-row summary of a recorded outcome (§5.1). A zero winning amount is not worth a
+   * note, so {@code take_money} / {@code keep_hauptbuch} suppress it — but an {@code override} is a
+   * deliberate act and always shows, even at zero, and carries no date (none is stored for it).
+   */
+  private static String recordedSummary(
+      String choice,
+      OpeningBalanceReconciliation.Balance money,
+      OpeningBalanceReconciliation.Balance hauptbuch,
+      BigDecimal overrideAmount) {
+    if (choice == null) {
+      return null;
+    }
+    if (OpeningBalanceChoice.OVERRIDE.equals(choice)) {
+      return overrideAmount == null
+          ? null
+          : "opening balance " + MoneyFormat.number(overrideAmount, 2) + " (override)";
+    }
+    OpeningBalanceReconciliation.Balance winner =
+        OpeningBalanceChoice.TAKE_MONEY.equals(choice) ? money : hauptbuch;
+    if (winner == null || winner.amount() == null || winner.amount().signum() == 0) {
+      return null;
+    }
+    String source = OpeningBalanceChoice.TAKE_MONEY.equals(choice) ? "Money" : "HB";
+    return "opening balance "
+        + MoneyFormat.number(winner.amount(), 2)
+        + " at "
+        + GERMAN_DATE.format(winner.date())
+        + " ("
+        + source
+        + ")";
   }
 }

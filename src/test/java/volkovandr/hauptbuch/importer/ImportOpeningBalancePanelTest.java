@@ -75,6 +75,76 @@ class ImportOpeningBalancePanelTest {
     assertThat(cells.proposal()).isEqualTo(OpeningBalanceChoice.TAKE_MONEY);
     assertThat(cells.reconciles()).isTrue();
     assertThat(cells.conflict()).isTrue();
+    // nothing recorded yet — the collapsed row must flag it, no summary note
+    assertThat(cells.needsResolution()).isTrue();
+    assertThat(cells.recordedSummary()).isNull();
+  }
+
+  @Test
+  void summarisesTheRecordedWinnerWithItsAmountDateAndSource() {
+    mapRowsAre(recorded(10L, "Current Account", OpeningBalanceChoice.TAKE_MONEY, null));
+    when(importStatisticsRepository.stagedOpeningBalances(SESSION_ID))
+        .thenReturn(List.of(staged("Current Account", "2004-01-01", "1234.56")));
+    when(ledgerService.openingBalanceOf(42L)).thenReturn(Optional.empty());
+
+    ImportOpeningBalanceCells cells = panel().forSession(SESSION_ID).get(10L);
+
+    assertThat(cells.needsResolution()).isFalse();
+    assertThat(cells.recordedSummary()).isEqualTo("opening balance 1.234,56 at 01.01.2004 (Money)");
+  }
+
+  @Test
+  void zeroOpeningBalanceIntoNothingResolvesItself() {
+    mapRowsAre(mapRow(10L, "Current Account", 42L));
+    when(importStatisticsRepository.stagedOpeningBalances(SESSION_ID))
+        .thenReturn(List.of(staged("Current Account", "2004-01-01", "0.00")));
+    when(ledgerService.openingBalanceOf(42L)).thenReturn(Optional.empty());
+
+    ImportOpeningBalanceCells cells = panel().forSession(SESSION_ID).get(10L);
+
+    assertThat(cells.autoResolves()).isTrue();
+    assertThat(cells.needsResolution()).isFalse();
+    assertThat(cells.recordedSummary()).isNull();
+  }
+
+  @Test
+  void zeroOpeningBalanceAgainstHauptbuchStillNeedsResolution() {
+    mapRowsAre(mapRow(10L, "Current Account", 42L));
+    when(importStatisticsRepository.stagedOpeningBalances(SESSION_ID))
+        .thenReturn(List.of(staged("Current Account", "2004-01-01", "0.00")));
+    when(ledgerService.openingBalanceOf(42L))
+        .thenReturn(
+            Optional.of(new OpeningBalanceView(LocalDate.of(2005, 6, 1), new BigDecimal("50.00"))));
+
+    ImportOpeningBalanceCells cells = panel().forSession(SESSION_ID).get(10L);
+
+    assertThat(cells.autoResolves()).isFalse();
+    assertThat(cells.needsResolution()).isTrue();
+  }
+
+  @Test
+  void omitsTheSummaryNoteWhenTheWinningAmountIsZero() {
+    mapRowsAre(recorded(10L, "Current Account", OpeningBalanceChoice.TAKE_MONEY, null));
+    when(importStatisticsRepository.stagedOpeningBalances(SESSION_ID))
+        .thenReturn(List.of(staged("Current Account", "2004-01-01", "0.00")));
+    when(ledgerService.openingBalanceOf(42L)).thenReturn(Optional.empty());
+
+    ImportOpeningBalanceCells cells = panel().forSession(SESSION_ID).get(10L);
+
+    assertThat(cells.recordedSummary()).isNull();
+  }
+
+  @Test
+  void keepsTheSummaryNoteForAnOverrideEvenAtZero() {
+    mapRowsAre(
+        recorded(10L, "Current Account", OpeningBalanceChoice.OVERRIDE, new BigDecimal("0.00")));
+    when(importStatisticsRepository.stagedOpeningBalances(SESSION_ID))
+        .thenReturn(List.of(staged("Current Account", "2004-01-01", "10.00")));
+    when(ledgerService.openingBalanceOf(42L)).thenReturn(Optional.empty());
+
+    ImportOpeningBalanceCells cells = panel().forSession(SESSION_ID).get(10L);
+
+    assertThat(cells.recordedSummary()).isEqualTo("opening balance 0,00 (override)");
   }
 
   @Test
@@ -115,5 +185,6 @@ class ImportOpeningBalancePanelTest {
 
     assertThat(cells.recordedChoice()).isEqualTo(OpeningBalanceChoice.OVERRIDE);
     assertThat(cells.recordedAmount()).isEqualTo("1.234,56");
+    assertThat(cells.recordedSummary()).isEqualTo("opening balance 1.234,56 (override)");
   }
 }

@@ -1,6 +1,6 @@
 # Hauptbuch — Import Plan: the Money migration (QIF)
 
-**Status:** Draft v0.11
+**Status:** Draft v0.12
 **Date:** 2026-09-02
 **Owner:** volkovandr
 **Parent:** `implementation-plan.md` §3, first bullet (the item currently being built). This doc is
@@ -228,7 +228,7 @@ than a blanket override.
 **Done when:** a person-mapped account produces the same leg a `for`-sigil entry would; clearing
 `expect-file` is persisted and shown on the review.
 
-### c3 — Opening-balance reconciliation
+### c3 — Opening-balance reconciliation ✅ **complete** (owner-confirmed 2026-09-02)
 Money's opening balance is a self-transfer (§5.1) and the target account usually already has one.
 Propose a winner — **the earlier-dated one, ties broken toward the non-zero one** — show both, let
 the owner override, including voiding Hauptbuch's own. The *only* conflict raised at map time;
@@ -365,7 +365,7 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
-- **v0.12 (2026-09-02):** **c3 ready to confirm** — opening-balance reconciliation (import.md §5.1).
+- **v0.12 (2026-09-02):** **c3 complete** (owner-confirmed 2026-09-02) — opening-balance reconciliation (import.md §5.1).
   `import_account.opening_balance_choice` / `_amount` (V19 columns, unused until now) record one of
   `keep_hauptbuch` / `take_money` / `override` via `ImportAccountMapService.reconcileOpeningBalance`;
   the pure winner rule (`OpeningBalanceReconciliation` — earlier date wins, ties toward the non-zero
@@ -377,7 +377,12 @@ the committed accounts match the e′ statistics.
   three-table join as `perMoneyAccount`, `sqlLogicTest`); (3) the reconciliation cells are assembled
   by a new `ImportOpeningBalancePanel` and hung on `ImportReview.openingBalances` (keyed by
   `import_account` id) rather than on the map panel — `ImportAccountMapPanel` was already at its PMD
-  coupling budget.
+  coupling budget. **Review follow-ups (2026-09-02):** the account-map `<select>` is now name-sorted
+  (it carried the Accounts-screen order, illegible flat); unmapped and unresolved-opening-balance
+  rows carry a `.warning` marker in the collapsed `<summary>` so they stay visible; `expect-file`
+  renders three-way (`expecting a file` / `file provided` / silent) via a new
+  `ImportAccountMap.Row.fileProvided`; and a zero Money opening balance into an account with none
+  (`ImportOpeningBalanceCells.autoResolves`) no longer prompts.
 - **v0.11 (2026-09-02):** **c2 complete** (owner-confirmed 2026-09-02) — person targets and the
   `expect-file` flag (import.md §5.1, §5.4). Two decisions the design left implicit, settled here:
   (1) a person target is **resolved to the leaf at map time** via `PersonProvisioningService.ensureLeaf`

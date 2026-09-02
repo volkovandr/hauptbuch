@@ -70,7 +70,8 @@ class ImportReviewServiceTest {
     ImportAccountMap panel =
         new ImportAccountMap(
             List.of(
-                new ImportAccountMap.Row(1L, "Current Account", null, null, false, "asset", true)),
+                new ImportAccountMap.Row(
+                    1L, "Current Account", null, null, false, "asset", true, false)),
             List.of(),
             List.of(),
             List.of());

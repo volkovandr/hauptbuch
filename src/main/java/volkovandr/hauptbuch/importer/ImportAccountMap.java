@@ -49,6 +49,9 @@ public record ImportAccountMap(
    *     null when no file of this account's own has been staged yet
    * @param expectFile whether this account's own export is still awaited (§5.1) — the commit gate
    *     stays locked while any row is still {@code true}
+   * @param fileProvided whether a staged file names this Money account as its own (§5.1) —
+   *     orthogonal to {@code expectFile}, which stays a manual flag: a provided file does not clear
+   *     it, it just lets the row say "file provided" rather than "expecting a file"
    */
   public record Row(
       long importAccountId,
@@ -57,7 +60,8 @@ public record ImportAccountMap(
       String targetName,
       boolean personTarget,
       String proposedType,
-      boolean expectFile) {
+      boolean expectFile,
+      boolean fileProvided) {
 
     /** Whether this row has been resolved to a Hauptbuch account (a person leaf included). */
     public boolean mapped() {
