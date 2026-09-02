@@ -1,9 +1,6 @@
 package volkovandr.hauptbuch.importer;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -11,22 +8,32 @@ import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountDraft;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonProvisioningService;
+import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.importer.repository.ImportAccountRepository;
-import volkovandr.hauptbuch.importer.repository.ImportFileRepository;
 import volkovandr.hauptbuch.ledger.CurrencyService;
 
 /**
- * The account map (import.md §5.1; plan c1): resolves every Money account name a staged file
- * mentions to a Hauptbuch account — an <strong>existing</strong> one, or a <strong>new</strong> one
- * opened here with the type proposed from the file header and a currency the owner chooses (QIF
- * carries none). The map is many-to-one — several Money names may target one account, which is how
- * a merge and the junk-account cleanup are done.
+ * The account map (import.md §5.1, §5.4; plan c1/c2): resolves every Money account name a staged
+ * file mentions to a target — an <strong>existing</strong> Hauptbuch account, a
+ * <strong>new</strong> one opened here (type proposed from the file header, currency chosen since
+ * QIF carries none), or a <strong>person</strong> (§5.4). The map is many-to-one — several Money
+ * names may target one account, which is how a merge and the junk-account cleanup are done.
  *
- * <p>Reads the panel model for the review page and performs the two mapping actions. Person targets
- * and {@code expect-file} (§5.4) land in c2, the opening-balance reconciliation (§5.1) in c3.
- * Nothing here touches the ledger — the campaign still commits atomically at the end (f2) — except
- * that opening a new account is a real {@code accounts} operation, done now so the map has a
- * concrete id to point at.
+ * <p>Also owns the {@code expect-file} flag per Money account name — "is this account's own export
+ * still awaited?" — which the commit gate reads (§9). A staged file does not clear it: it is a
+ * per-account, recorded, visible status the owner changes by hand (§5.1), the gate's only escape
+ * hatch for a counterparty whose own export is not coming (§6.4).
+ *
+ * <p>This class is the domain <em>mutations</em>; {@link ImportAccountMapPanel} assembles the read
+ * model the review renders (the same render-model-assembler shape as {@link ImportReviewService}).
+ * The opening-balance reconciliation (§5.1) lands in c3. Nothing here writes to {@code transaction}
+ * or {@code posting} — the campaign still commits atomically at the end (f2). Opening a new
+ * account, and resolving a person target through {@link PersonProvisioningService#ensureLeaf} to
+ * that person's per-currency leaf, are real {@code accounts}/{@code debts} operations done now so
+ * the map holds a concrete account id: a person-mapped row is then an <em>ordinary account id</em>
+ * and f2 books it exactly as a {@code for}-sigil entry does (§5.4 — "personhood exists only in the
+ * map").
  */
 @Service
 public class ImportAccountMapService {
@@ -38,65 +45,24 @@ public class ImportAccountMapService {
 
   private final ImportSessionService importSessionService;
   private final ImportAccountRepository importAccountRepository;
-  private final ImportFileRepository importFileRepository;
   private final AccountService accountService;
+  private final PersonService personService;
+  private final PersonProvisioningService personProvisioningService;
   private final CurrencyService currencyService;
 
   ImportAccountMapService(
       ImportSessionService importSessionService,
       ImportAccountRepository importAccountRepository,
-      ImportFileRepository importFileRepository,
       AccountService accountService,
+      PersonService personService,
+      PersonProvisioningService personProvisioningService,
       CurrencyService currencyService) {
     this.importSessionService = importSessionService;
     this.importAccountRepository = importAccountRepository;
-    this.importFileRepository = importFileRepository;
     this.accountService = accountService;
+    this.personService = personService;
+    this.personProvisioningService = personProvisioningService;
     this.currencyService = currencyService;
-  }
-
-  /**
-   * The account-map panel for a session: one row per {@code import_account} name with its current
-   * target, plus the option lists the row form needs. The proposed type is the first non-null
-   * {@code !Type:} header among the files staged for that name (§4.1); null when no file of the
-   * account's own has been staged yet.
-   */
-  public ImportAccountMap mapPanel(long importSessionId) {
-    Map<String, String> proposedTypes = new HashMap<>();
-    for (ImportFile file : importFileRepository.findBySession(importSessionId)) {
-      if (file.proposedAccountType() != null) {
-        proposedTypes.putIfAbsent(file.moneyAccountName(), file.proposedAccountType());
-      }
-    }
-
-    List<Account> mappable = accountService.manageableAccounts();
-    Map<Long, String> nameById = new HashMap<>();
-    for (Account account : mappable) {
-      nameById.put(account.accountId(), account.name());
-    }
-
-    List<ImportAccountMap.Row> rows =
-        importAccountRepository.findBySession(importSessionId).stream()
-            .map(
-                row ->
-                    new ImportAccountMap.Row(
-                        row.importAccountId(),
-                        row.moneyAccountName(),
-                        row.accountId(),
-                        targetName(row.accountId(), nameById),
-                        proposedTypes.get(row.moneyAccountName())))
-            .toList();
-
-    List<ImportAccountMap.AccountOption> accountOptions =
-        mappable.stream()
-            .map(a -> new ImportAccountMap.AccountOption(a.accountId(), a.name(), a.type()))
-            .toList();
-    List<ImportAccountMap.CurrencyOption> currencyOptions =
-        currencyService.findAll().stream()
-            .map(c -> new ImportAccountMap.CurrencyOption(c.code(), c.name()))
-            .toList();
-
-    return new ImportAccountMap(rows, accountOptions, currencyOptions);
   }
 
   /**
@@ -139,15 +105,7 @@ public class ImportAccountMapService {
   @Transactional
   public void mapToNew(long importAccountId, String name, String type, String currencyCode) {
     ImportAccount row = requireRowInOpenSession(importAccountId);
-    if (currencyCode == null || currencyCode.isBlank()) {
-      throw new IllegalArgumentException(
-          "Choose a currency for the new account \"" + row.moneyAccountName() + "\"");
-    }
-    if (!currencyService.exists(currencyCode)) {
-      // AccountService.openAccount does not validate the currency — an unknown code would surface
-      // only as a FK violation (an HTTP 500), so check it here where the message can be friendly.
-      throw new IllegalArgumentException("Unknown currency \"" + currencyCode + "\"");
-    }
+    requireKnownCurrency(currencyCode, row.moneyAccountName());
     Account created =
         accountService.openAccount(new AccountDraft(name, type, null, currencyCode, null, null));
     importAccountRepository.mapToAccount(importAccountId, created.accountId(), currencyCode);
@@ -156,6 +114,73 @@ public class ImportAccountMapService {
         row.moneyAccountName(),
         created.accountId(),
         created.name());
+  }
+
+  /**
+   * Map a Money account name to a <strong>person</strong> (§5.4) — money the owner lent to or
+   * borrowed from someone, which Money records as an ordinary account. Resolves through {@link
+   * PersonProvisioningService#ensureLeaf} to that person's per-currency leaf and maps the row to
+   * that leaf's account id, so from here it is an ordinary account target (§5.4). Targets an
+   * existing live person by id, or a person named in {@code newPersonName} (created if absent; a
+   * name matching only a soft-deleted person yields a fresh distinct person — {@code revive} is
+   * {@code false} because the review has no place for a revival prompt). The currency selects the
+   * leaf and is required — QIF carries none, and a cross-currency transfer to the person must land
+   * on the right leaf.
+   *
+   * @throws IllegalStateException if no campaign is open
+   * @throws IllegalArgumentException if the row is not in the open campaign, the currency is
+   *     missing or unknown, neither a person id nor a new name was given, the person id is unknown,
+   *     or the name is ambiguous among live persons
+   */
+  @Transactional
+  public void mapToPerson(
+      long importAccountId, Long personId, String newPersonName, String currencyCode) {
+    ImportAccount row = requireRowInOpenSession(importAccountId);
+    requireKnownCurrency(currencyCode, row.moneyAccountName());
+    Account leaf;
+    if (personId != null) {
+      personService
+          .findById(personId)
+          .orElseThrow(() -> new IllegalArgumentException("No live person with id " + personId));
+      leaf = personProvisioningService.ensureLeaf(personId, currencyCode);
+    } else if (newPersonName != null && !newPersonName.isBlank()) {
+      leaf = personProvisioningService.ensureLeaf(newPersonName, currencyCode, false);
+    } else {
+      throw new IllegalArgumentException(
+          "Choose an existing person or name a new one for \"" + row.moneyAccountName() + "\"");
+    }
+    importAccountRepository.mapToAccount(importAccountId, leaf.accountId(), currencyCode);
+    LOG.info(
+        "Import account \"{}\" mapped to person leaf {} ({})",
+        row.moneyAccountName(),
+        leaf.accountId(),
+        currencyCode);
+  }
+
+  /**
+   * Set the {@code expect-file} flag on a map row (§5.1, §6.4) — "am I still waiting for this
+   * account's own export?". The owner clears a counterparty account's flag to accept its transfers
+   * as the one file states them, or re-sets it to lock the gate again.
+   *
+   * @throws IllegalStateException if no campaign is open
+   * @throws IllegalArgumentException if the row is not in the open campaign
+   */
+  @Transactional
+  public void setExpectFile(long importAccountId, boolean expectFile) {
+    ImportAccount row = requireRowInOpenSession(importAccountId);
+    importAccountRepository.setExpectFile(importAccountId, expectFile);
+    LOG.debug("Import account \"{}\" expect-file set to {}", row.moneyAccountName(), expectFile);
+  }
+
+  private void requireKnownCurrency(String currencyCode, String moneyAccountName) {
+    if (currencyCode == null || currencyCode.isBlank()) {
+      throw new IllegalArgumentException("Choose a currency for \"" + moneyAccountName + "\"");
+    }
+    if (!currencyService.exists(currencyCode)) {
+      // AccountService.openAccount does not validate the currency — an unknown code would surface
+      // only as a FK violation (an HTTP 500), so check it here where the message can be friendly.
+      throw new IllegalArgumentException("Unknown currency \"" + currencyCode + "\"");
+    }
   }
 
   private ImportAccount requireRowInOpenSession(long importAccountId) {
@@ -174,12 +199,5 @@ public class ImportAccountMapService {
             () ->
                 new IllegalArgumentException(
                     "No account-map row " + importAccountId + " in the open campaign"));
-  }
-
-  private static String targetName(Long accountId, Map<Long, String> nameById) {
-    if (accountId == null) {
-      return null;
-    }
-    return Optional.ofNullable(nameById.get(accountId)).orElse("account #" + accountId);
   }
 }

@@ -15,7 +15,7 @@ public record ImportReview(List<AccountStatisticsRow> accounts, ImportAccountMap
   /** Defensive copy of the account rows. */
   public ImportReview {
     accounts = accounts == null ? List.of() : List.copyOf(accounts);
-    accountMap = accountMap == null ? new ImportAccountMap(null, null, null) : accountMap;
+    accountMap = accountMap == null ? new ImportAccountMap(null, null, null, null) : accountMap;
   }
 
   /** True when nothing has been staged yet — the page shows only its explanatory copy. */

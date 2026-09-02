@@ -1,8 +1,8 @@
 package volkovandr.hauptbuch.importer;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,16 +19,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountDraft;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.Person;
+import volkovandr.hauptbuch.debts.PersonProvisioningService;
+import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.importer.repository.ImportAccountRepository;
-import volkovandr.hauptbuch.importer.repository.ImportFileRepository;
-import volkovandr.hauptbuch.ledger.Currency;
 import volkovandr.hauptbuch.ledger.CurrencyService;
 
 /**
  * Unit tier (CLAUDE.md §6): {@link ImportAccountMapService} resolution logic with every repository
- * and cross-module service mocked — mapping a Money account name to an existing Hauptbuch account
- * or to a new one (import.md §5.1; plan c1), the many-to-one target, and the guards (row not in the
- * open session, a non-mappable target account).
+ * and cross-module service mocked — mapping a Money account name to an existing Hauptbuch account,
+ * a new one (import.md §5.1; plan c1), or a person (§5.4; plan c2); the {@code expect-file} toggle;
+ * the many-to-one target; and the guards (row not in the open session, a non-mappable target
+ * account, an unknown person, a missing currency).
  */
 @ExtendWith(MockitoExtension.class)
 class ImportAccountMapServiceTest {
@@ -37,16 +39,18 @@ class ImportAccountMapServiceTest {
 
   @Mock ImportSessionService importSessionService;
   @Mock ImportAccountRepository importAccountRepository;
-  @Mock ImportFileRepository importFileRepository;
   @Mock AccountService accountService;
+  @Mock PersonService personService;
+  @Mock PersonProvisioningService personProvisioningService;
   @Mock CurrencyService currencyService;
 
   private ImportAccountMapService service() {
     return new ImportAccountMapService(
         importSessionService,
         importAccountRepository,
-        importFileRepository,
         accountService,
+        personService,
+        personProvisioningService,
         currencyService);
   }
 
@@ -60,10 +64,6 @@ class ImportAccountMapServiceTest {
 
   private static ImportAccount unmapped(long id, String name) {
     return new ImportAccount(id, SESSION_ID, name, null, null, null, true, null, null);
-  }
-
-  private static ImportAccount mappedTo(long id, String name, long accountId) {
-    return new ImportAccount(id, SESSION_ID, name, accountId, null, null, true, null, null);
   }
 
   private static Account account(long id, String name, String type) {
@@ -191,75 +191,100 @@ class ImportAccountMapServiceTest {
   }
 
   @Test
-  void buildsPanelWithResolvedNamesProposedTypesAndManyToOneTarget() {
+  void mapsToAnExistingPersonsResolvedLeaf() {
+    openSession();
     when(importAccountRepository.findBySession(SESSION_ID))
-        .thenReturn(
-            List.of(
-                unmapped(10L, "Cash"), mappedTo(11L, "Junk A", 42L), mappedTo(12L, "Junk B", 42L)));
-    when(importFileRepository.findBySession(SESSION_ID))
-        .thenReturn(
-            List.of(file("Cash", "asset"), file("Junk A", null), file("Junk A", "liability")));
-    when(accountService.manageableAccounts())
-        .thenReturn(List.of(account(42L, "Everything Else", "asset")));
-    when(currencyService.findAll()).thenReturn(List.of(new Currency("EUR", 2, "€", "Euro")));
+        .thenReturn(List.of(unmapped(20L, "Loan to Max")));
+    when(currencyService.exists("EUR")).thenReturn(true);
+    when(personService.findById(8L)).thenReturn(Optional.of(new Person(8L, "Max", null)));
+    when(personProvisioningService.ensureLeaf(8L, "EUR"))
+        .thenReturn(account(99L, "personal.EUR", "asset"));
 
-    ImportAccountMap panel = service().mapPanel(SESSION_ID);
+    service().mapToPerson(20L, 8L, null, "EUR");
 
-    assertThat(panel.rows())
-        .satisfiesExactly(
-            cash -> {
-              assertThat(cash.moneyAccountName()).isEqualTo("Cash");
-              assertThat(cash.mapped()).isFalse();
-              assertThat(cash.targetName()).isNull();
-              assertThat(cash.proposedType()).isEqualTo("asset");
-            },
-            junkA -> {
-              assertThat(junkA.mapped()).isTrue();
-              assertThat(junkA.targetAccountId()).isEqualTo(42L);
-              assertThat(junkA.targetName()).isEqualTo("Everything Else");
-              // first non-null header wins
-              assertThat(junkA.proposedType()).isEqualTo("liability");
-            },
-            junkB -> {
-              assertThat(junkB.targetName()).isEqualTo("Everything Else");
-              assertThat(junkB.proposedType()).isNull();
-            });
-    assertThat(panel.accountOptions())
-        .singleElement()
-        .satisfies(
-            option -> {
-              assertThat(option.accountId()).isEqualTo(42L);
-              assertThat(option.name()).isEqualTo("Everything Else");
-            });
-    assertThat(panel.currencyOptions())
-        .singleElement()
-        .satisfies(
-            c -> {
-              assertThat(c.code()).isEqualTo("EUR");
-              assertThat(c.name()).isEqualTo("Euro");
-            });
+    // The row holds an ordinary account id (the leaf) — f2 books it like any account (§5.4).
+    verify(importAccountRepository).mapToAccount(20L, 99L, "EUR");
   }
 
   @Test
-  void mapPanelIsEmptyWhenNothingHasBeenStaged() {
-    when(importAccountRepository.findBySession(SESSION_ID)).thenReturn(List.of());
-    when(importFileRepository.findBySession(SESSION_ID)).thenReturn(List.of());
-    when(accountService.manageableAccounts()).thenReturn(List.of());
-    when(currencyService.findAll()).thenReturn(List.of());
+  void mapsToNamedPersonProvisioningTheLeaf() {
+    openSession();
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(20L, "Loan to Bob")));
+    when(currencyService.exists("CHF")).thenReturn(true);
+    when(personProvisioningService.ensureLeaf("Bob", "CHF", false))
+        .thenReturn(account(55L, "personal.CHF", "asset"));
 
-    assertThat(service().mapPanel(SESSION_ID).rows()).isEmpty();
+    service().mapToPerson(20L, null, "Bob", "CHF");
+
+    verify(importAccountRepository).mapToAccount(20L, 55L, "CHF");
+    verify(personService, never()).findById(anyLong());
   }
 
-  private static ImportFile file(String moneyAccountName, String proposedType) {
-    return new ImportFile(
-        1L,
-        SESSION_ID,
-        "export.qif",
-        moneyAccountName,
-        "utf_8",
-        "day_month",
-        proposedType,
-        0,
-        OffsetDateTime.now());
+  @Test
+  void personMappingNeedsPersonOrName() {
+    openSession();
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(20L, "Loan to Max")));
+    when(currencyService.exists("EUR")).thenReturn(true);
+
+    assertThatThrownBy(() -> service().mapToPerson(20L, null, "  ", "EUR"))
+        .isInstanceOf(IllegalArgumentException.class);
+
+    verifyNoInteractions(personProvisioningService);
+    verify(importAccountRepository, never()).mapToAccount(anyLong(), anyLong(), any());
+  }
+
+  @Test
+  void personMappingNeedsCurrency() {
+    openSession();
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(20L, "Loan to Max")));
+
+    assertThatThrownBy(() -> service().mapToPerson(20L, 8L, null, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("currency");
+
+    verifyNoInteractions(personService, personProvisioningService);
+    verify(importAccountRepository, never()).mapToAccount(anyLong(), anyLong(), any());
+  }
+
+  @Test
+  void personMappingRejectsAnUnknownPersonId() {
+    openSession();
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(20L, "Loan to Max")));
+    when(currencyService.exists("EUR")).thenReturn(true);
+    when(personService.findById(77L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service().mapToPerson(20L, 77L, null, "EUR"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("77");
+
+    verifyNoInteractions(personProvisioningService);
+    verify(importAccountRepository, never()).mapToAccount(anyLong(), anyLong(), any());
+  }
+
+  @Test
+  void setsAndClearsExpectFileForOneRowInTheOpenSession() {
+    openSession();
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(10L, "Current Account")));
+
+    service().setExpectFile(10L, false);
+
+    verify(importAccountRepository).setExpectFile(10L, false);
+  }
+
+  @Test
+  void setExpectFileRejectsUnknownRow() {
+    openSession();
+    when(importAccountRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(10L, "Current Account")));
+
+    assertThatThrownBy(() -> service().setExpectFile(999L, false))
+        .isInstanceOf(IllegalArgumentException.class);
+
+    verify(importAccountRepository, never()).setExpectFile(anyLong(), anyBoolean());
   }
 }

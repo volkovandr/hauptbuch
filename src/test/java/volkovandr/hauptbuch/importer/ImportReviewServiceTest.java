@@ -27,11 +27,11 @@ class ImportReviewServiceTest {
 
   @Mock ImportSessionService importSessionService;
   @Mock ImportStatisticsRepository importStatisticsRepository;
-  @Mock ImportAccountMapService importAccountMapService;
+  @Mock ImportAccountMapPanel importAccountMapPanel;
 
   private ImportReviewService service() {
     return new ImportReviewService(
-        importSessionService, importStatisticsRepository, importAccountMapService);
+        importSessionService, importStatisticsRepository, importAccountMapPanel);
   }
 
   private void openSession() {
@@ -47,7 +47,7 @@ class ImportReviewServiceTest {
     when(importSessionService.currentSession()).thenReturn(Optional.empty());
 
     assertThat(service().review()).isEmpty();
-    verifyNoInteractions(importStatisticsRepository, importAccountMapService);
+    verifyNoInteractions(importStatisticsRepository, importAccountMapPanel);
   }
 
   @Test
@@ -64,10 +64,12 @@ class ImportReviewServiceTest {
                     LocalDate.of(2004, 7, 28))));
     ImportAccountMap panel =
         new ImportAccountMap(
-            List.of(new ImportAccountMap.Row(1L, "Current Account", null, null, "asset")),
+            List.of(
+                new ImportAccountMap.Row(1L, "Current Account", null, null, false, "asset", true)),
+            List.of(),
             List.of(),
             List.of());
-    when(importAccountMapService.mapPanel(SESSION_ID)).thenReturn(panel);
+    when(importAccountMapPanel.forSession(SESSION_ID)).thenReturn(panel);
 
     ImportReview review = service().review().orElseThrow();
 
@@ -96,8 +98,8 @@ class ImportReviewServiceTest {
                     new BigDecimal("5.00"),
                     LocalDate.of(2010, 3, 4),
                     LocalDate.of(2010, 3, 4))));
-    when(importAccountMapService.mapPanel(SESSION_ID))
-        .thenReturn(new ImportAccountMap(List.of(), List.of(), List.of()));
+    when(importAccountMapPanel.forSession(SESSION_ID))
+        .thenReturn(new ImportAccountMap(List.of(), List.of(), List.of(), List.of()));
 
     ImportReview review = service().review().orElseThrow();
 

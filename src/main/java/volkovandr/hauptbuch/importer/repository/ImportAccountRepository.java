@@ -6,11 +6,13 @@ import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.importer.ImportAccount;
 
 /**
- * Native-SQL access to {@code import_account} — the account map (import.md §5.1), accumulated
- * across every file in the campaign. Plan b3 folds in <strong>unmapped</strong> rows; slice c1
- * resolves each one to a Hauptbuch account with {@link #mapToAccount}. {@code upsertUnmapped} is
- * idempotent on the {@code (session, name)} unique key so re-staging a file never duplicates a map
- * row. Row-mapping round-trips for the integration tier (CLAUDE.md §6).
+ * Native-SQL access to {@code import_account} — the account map (import.md §5.1, §5.4), accumulated
+ * across every file in the campaign. Plan b3 folds in <strong>unmapped</strong> rows; slice c
+ * resolves each one to a Hauptbuch account with {@link #mapToAccount} (a person target, plan c2,
+ * resolves to that person's leaf and lands here as an ordinary account id) and toggles {@link
+ * #setExpectFile}. {@code upsertUnmapped} is idempotent on the {@code (session, name)} unique key
+ * so re-staging a file never duplicates a map row. Row-mapping round-trips for the integration tier
+ * (CLAUDE.md §6).
  */
 @Repository
 public class ImportAccountRepository {
@@ -40,11 +42,11 @@ public class ImportAccountRepository {
   }
 
   /**
-   * Point a map row at a Hauptbuch account (import.md §5.1; plan c1) — an existing account or one
-   * just created for the import. Clears any person target ({@code account_id} and {@code person_id}
-   * are mutually exclusive, V19) and records the currency chosen for a new account / person leaf
-   * ({@code null} for an existing account, which brings its own currency). The map is many-to-one,
-   * so nothing here stops several Money names from sharing one {@code accountId}.
+   * Point a map row at a Hauptbuch account (import.md §5.1, §5.4; plan c1/c2) — an existing
+   * account, one just created for the import, or a person's per-currency leaf (§5.4, resolved by
+   * the service). Records the currency chosen for a new account / person leaf ({@code null} for an
+   * existing account, which brings its own currency). The map is many-to-one, so nothing here stops
+   * several Money names from sharing one {@code accountId}.
    */
   public void mapToAccount(long importAccountId, long accountId, String targetCurrencyCode) {
     jdbcClient
@@ -58,6 +60,20 @@ public class ImportAccountRepository {
             """)
         .param("accountId", accountId)
         .param("currency", targetCurrencyCode)
+        .param("id", importAccountId)
+        .update();
+  }
+
+  /**
+   * Set the {@code expect-file} flag on one map row (import.md §5.1, §6.4; plan c2) — "am I still
+   * waiting for this account's own export?". The commit gate stays locked while any row is still
+   * {@code true} (§9); clearing a counterparty account's flag accepts its pending mirrors as the
+   * one file states them (§6.4).
+   */
+  public void setExpectFile(long importAccountId, boolean expectFile) {
+    jdbcClient
+        .sql("update import_account set expect_file = :expectFile where import_account_id = :id")
+        .param("expectFile", expectFile)
         .param("id", importAccountId)
         .update();
   }
