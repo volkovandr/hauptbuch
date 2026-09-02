@@ -71,7 +71,13 @@
       </p>
       <ul class="import-account-map">
         <li th:each="row : ${review.accountMap().rows()}">
-          <details class="import-account" th:open="${!row.mapped()}">
+          <!-- id is the scroll anchor: after a map / toggle the POST redirects to
+               #account-<id> so the browser returns to this row, not the page top. -->
+          <details
+            class="import-account"
+            th:id="'account-' + ${row.importAccountId()}"
+            th:open="${!row.mapped()}"
+          >
             <summary class="import-account__summary">
               <span class="num" th:text="${row.moneyAccountName()}">Current Account</span>
               <span class="muted" th:if="${row.mapped()}">

@@ -14,6 +14,8 @@
 
 .import-account {
   border-bottom: 1px solid var(--feint);
+  /* Breathing room when the post-map redirect scrolls this row (#account-<id>) into view. */
+  scroll-margin-top: 0.75rem;
 }
 
 /* Same caret treatment as .person__summary — a flex summary drops the native marker. */

@@ -118,7 +118,7 @@ class ImportController {
     } catch (IllegalArgumentException | IllegalStateException rejected) {
       redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
     }
-    return REDIRECT_REVIEW;
+    return reviewAnchoredAt(importAccountId);
   }
 
   /**
@@ -144,7 +144,7 @@ class ImportController {
     } catch (IllegalArgumentException | IllegalStateException rejected) {
       redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
     }
-    return REDIRECT_REVIEW;
+    return reviewAnchoredAt(importAccountId);
   }
 
   /**
@@ -162,7 +162,15 @@ class ImportController {
     } catch (IllegalArgumentException | IllegalStateException rejected) {
       redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
     }
-    return REDIRECT_REVIEW;
+    return reviewAnchoredAt(importAccountId);
+  }
+
+  /**
+   * The review redirect with a {@code #account-<id>} fragment: after a map / toggle the browser
+   * lands back on that row (now collapsed, since it is mapped) instead of the top of a long page.
+   */
+  private static String reviewAnchoredAt(long importAccountId) {
+    return REDIRECT_REVIEW + "#account-" + importAccountId;
   }
 
   /** Open the campaign — one open session at a time (import.md §2). */

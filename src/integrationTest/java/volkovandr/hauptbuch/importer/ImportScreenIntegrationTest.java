@@ -510,7 +510,7 @@ class ImportScreenIntegrationTest {
             post("/import/review/accounts/" + mapRowId("Current Account") + "/map")
                 .param("accountId", Long.toString(giro))
                 .session(session))
-        .andExpect(redirectedUrl("/import/review"));
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
 
     assertThat(mappedAccountId("Current Account")).isEqualTo(giro);
     mockMvc
@@ -523,17 +523,18 @@ class ImportScreenIntegrationTest {
     MockHttpSession session = openCampaign();
     stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
     long giro = insertAccount("Giro", "asset");
+    String openRow = "id=\"account-" + mapRowId("Current Account") + "\" open";
 
-    assertThat(reviewHtml(session)).contains("class=\"import-account\" open");
+    assertThat(reviewHtml(session)).contains(openRow);
 
     mockMvc
         .perform(
             post("/import/review/accounts/" + mapRowId("Current Account") + "/map")
                 .param("accountId", Long.toString(giro))
                 .session(session))
-        .andExpect(redirectedUrl("/import/review"));
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
 
-    assertThat(reviewHtml(session)).doesNotContain("class=\"import-account\" open");
+    assertThat(reviewHtml(session)).doesNotContain(openRow);
   }
 
   @Test
@@ -561,7 +562,7 @@ class ImportScreenIntegrationTest {
                 .param("type", "asset")
                 .param("currencyCode", "EUR")
                 .session(session))
-        .andExpect(redirectedUrl("/import/review"));
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
 
     Long created = mappedAccountId("Current Account");
     assertThat(created).isNotNull();
@@ -587,7 +588,7 @@ class ImportScreenIntegrationTest {
               post("/import/review/accounts/" + mapRowId(moneyAccount) + "/map")
                   .param("accountId", Long.toString(dump))
                   .session(session))
-          .andExpect(redirectedUrl("/import/review"));
+          .andExpect(redirectedUrlPattern("/import/review#account-*"));
     }
 
     assertThat(mappedAccountId("Current Account")).isEqualTo(dump);
@@ -604,7 +605,7 @@ class ImportScreenIntegrationTest {
             post("/import/review/accounts/" + mapRowId("Current Account") + "/map")
                 .param("accountId", "999999")
                 .session(session))
-        .andExpect(redirectedUrl("/import/review"));
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
 
     mockMvc
         .perform(get("/import/review").session(session))
@@ -624,7 +625,7 @@ class ImportScreenIntegrationTest {
                 .param("personId", Long.toString(max))
                 .param("currencyCode", "EUR")
                 .session(session))
-        .andExpect(redirectedUrl("/import/review"));
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
 
     // The row now holds Max's EUR leaf as an ordinary account id (import.md §5.4).
     assertThat(mappedAccountId("Loan to Max")).isEqualTo(personLeafId(max, "EUR"));
@@ -645,7 +646,7 @@ class ImportScreenIntegrationTest {
                 .param("newPersonName", "Cousin Bob")
                 .param("currencyCode", "EUR")
                 .session(session))
-        .andExpect(redirectedUrl("/import/review"));
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
 
     Long bob =
         jdbcClient
@@ -668,7 +669,7 @@ class ImportScreenIntegrationTest {
             post("/import/review/accounts/" + mapRowId("Loan to Max") + "/expect-file")
                 .param("expectFile", "false")
                 .session(session))
-        .andExpect(redirectedUrl("/import/review"));
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
     assertThat(expectFile("Loan to Max")).isFalse();
 
     mockMvc
@@ -676,7 +677,7 @@ class ImportScreenIntegrationTest {
             post("/import/review/accounts/" + mapRowId("Loan to Max") + "/expect-file")
                 .param("expectFile", "true")
                 .session(session))
-        .andExpect(redirectedUrl("/import/review"));
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
     assertThat(expectFile("Loan to Max")).isTrue();
   }
 
