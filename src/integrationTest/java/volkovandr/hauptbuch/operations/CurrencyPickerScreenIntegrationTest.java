@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.operations;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -15,6 +16,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
+import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
  * Integration tier (plan §1.5): the stage-6d currency picker's htmx endpoints driven through the
@@ -37,6 +39,26 @@ class CurrencyPickerScreenIntegrationTest {
   private static final String FIELD_NAME = "fieldName";
 
   @Autowired MockMvc mockMvc;
+  @Autowired SettingsService settingsService;
+
+  @Test
+  void freshPickerDefaultsToTheBookBaseCurrency() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+
+    // The open-account form carries a plain picker (selected=null); the seed list is alphabetical,
+    // so without the base-currency default the browser would land on CHF.
+    String markup =
+        mockMvc
+            .perform(get("/accounts"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString()
+            .replaceAll("\\s+", " ");
+
+    assertThat(markup).contains("value=\"EUR\" selected=\"selected\"");
+    assertThat(markup).doesNotContain("value=\"CHF\" selected");
+  }
 
   @Test
   void opensTheDialogForTheRequestingPicker() throws Exception {
