@@ -366,26 +366,31 @@ the committed accounts match the e′ statistics.
 ## Changelog
 
 - **v0.13 (2026-09-03):** **d1 implemented** (owner-confirmation pending) — the category map (import.md
-  §5.2, §8): `ImportCategoryMapService.mapToCategory` / `setTags` / `bulkMapToCategory` / `bulkAddTag`
-  over `ImportCategoryRepository.mapToCategory` and the new `ImportCategoryTagRepository` (junction);
-  `ImportCategoryMapPanel` assembles the review's third panel. **Decisions the design left open,
-  settled here:** (1) the map target is a **postable category leaf**, offered by a new
-  `CategoryService.postableCategoryPaths()` (delegates to `AccountService.findPostableLeafPaths`, so
-  currency leaves *and* semantic groups are excluded by construction — a Money path can never land on
-  either); `isPostableCategory` is the guard. (2) Sign evidence is **computed live** by
-  `ImportStatisticsRepository.perCategoryPath` (`sqlLogicTest`), not stored — the V19
-  `import_category.debit_line_count` / `credit_line_count` / `proposed_type` columns stay unused (a
-  stored count would drift on file removal); the panel derives an `expense`/`income` hint from the
-  majority sign and shows the raw counts. (3) The **tags field reuses the register's chip field**
-  verbatim (owner call) — `data-tag-field` + `/categories/tags/resolve` + the `entry-dock :: tagChip`
-  fragment + a datalist of `LedgerService.liveTagLabels()` (new pass-through); keyboard.js is already
-  app-wide, so no bespoke JS is added. "Save tags" submits the pills' `tagId`s and replaces the row's
-  set; `TagService.exists` filters stale ids. (4) **Bulk** is one `<form>` with the checkboxes
-  associated by `form=` and two `formaction` submits (map / add-tag) — no JS; the bulk op validates
-  the whole selection in one `findBySession` pass (not per-id) and refuses an empty tick with a
-  message. (5) The sign-evidence query skips `mirrored`/`excluded` transactions (§6) so the hint
-  tracks what commits — inert at d1, load-bearing from slice e. New sanctioned edge
-  `importer → categories` (§12 already allowed it). No schema change (V19 already has the tables).
+  §5.2, §8): one Money path → one Hauptbuch category **and** its tags, written together.
+  `ImportCategoryMapService.mapResolved` / `bulkMapResolved` over `ImportCategoryRepository.mapToCategory`
+  and the new `ImportCategoryTagRepository` (junction); `ImportCategoryMapPanel` assembles the
+  review's third panel. **Decisions the design left open, settled here:** (1) the map target is a
+  **postable category leaf**, offered by a new `CategoryService.postableCategoryPaths()` (delegates
+  to `AccountService.findPostableLeafPaths`, so currency leaves *and* semantic groups are excluded
+  by construction); `isPostableCategory` is the guard. A **missing category is created inline** from
+  a typed `Parent - Child` path via `categories`' own `CategoryResolutionService` — the register's
+  resolver, no second create path (CLAUDE.md §0); the map form pairs the existing-category `<select>`
+  with a "new category" field exactly as the account map pairs its select with the new-account
+  fields. (2) Sign evidence is **computed live** by `ImportStatisticsRepository.perCategoryPath`
+  (`sqlLogicTest`), not stored — the V19 counter columns stay unused (a stored count would drift on
+  file removal); the panel derives an `expense`/`income` hint from the majority sign and shows the
+  raw counts. The query skips `mirrored`/`excluded` transactions (§6) so the hint tracks what
+  commits — inert at d1, load-bearing from slice e. (3) The **tags field reuses the register's chip
+  field** verbatim (owner call) — `data-tag-field` + `/categories/tags/resolve` + the
+  `entry-dock :: tagChip` fragment + a datalist of `LedgerService.liveTagLabels()` (new
+  pass-through); keyboard.js is already app-wide, so no bespoke JS. The pills submit **with the "Map"
+  button** and replace the row's tag set (empty clears); `TagService.exists` filters stale ids. (4)
+  **One action, one button**: picking the category (or typing a new one) and the tags commit and
+  collapse together — no separate "Save tags" step. **Bulk** is one `<form>` (row checkboxes
+  associated by `form=`, the tick doubling as the row bullet in the `<summary>`) with a single "Map
+  ticked" that replaces category *and* tag set across the selection; validated in one `findBySession`
+  pass, empty tick refused with a message. New sanctioned edge `importer → categories` (§12 already
+  allowed it). No schema change (V19 already has the tables).
 - **v0.12 (2026-09-02):** **c3 complete** (owner-confirmed 2026-09-02) — opening-balance reconciliation (import.md §5.1).
   `import_account.opening_balance_choice` / `_amount` (V19 columns, unused until now) record one of
   `keep_hauptbuch` / `take_money` / `override` via `ImportAccountMapService.reconcileOpeningBalance`;

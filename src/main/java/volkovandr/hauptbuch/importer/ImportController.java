@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import volkovandr.hauptbuch.categories.CategoryResolution;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 import volkovandr.hauptbuch.web.NavItem;
 
@@ -194,36 +195,26 @@ class ImportController {
   }
 
   /**
-   * Map one Money category path to a Hauptbuch category (import.md §5.2; plan d1). The target is a
-   * postable category leaf — {@code categories} refuses a group or a currency leaf, so a path can
-   * never land on one. The map is many-to-one: consolidating several Money paths onto one category
-   * is the point of the exercise. A rejected choice comes back to the review with the reason.
+   * Map one Money category path — category <em>and</em> tags in one action (import.md §5.2, §8;
+   * plan d1). Either an existing {@code accountId} is picked from the select, or {@code
+   * newCategoryPath} names a {@code Parent - Child} leaf to create under its existing parent. The
+   * {@code tagId} pills from the row's chip field <em>replace</em> the row's tags. The map is
+   * many-to-one: consolidating several Money paths onto one category is the point. A rejected
+   * choice comes back with the reason.
    */
   @PostMapping(BASE + "/review/categories/{importCategoryId}/map")
   String mapCategory(
       @PathVariable long importCategoryId,
       @RequestParam(required = false) String accountId,
-      RedirectAttributes redirectAttributes) {
-    try {
-      importCategoryMapService.mapToCategory(importCategoryId, requireCategoryId(accountId));
-    } catch (IllegalArgumentException | IllegalStateException rejected) {
-      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
-    }
-    return reviewAnchoredAtCategory(importCategoryId);
-  }
-
-  /**
-   * Replace one Money path's tags with the pills its chip field shows (import.md §5.2, §8; plan d1)
-   * — the same chip field as the register (each committed pill carries a hidden {@code tagId}). An
-   * empty submission clears the row's tags.
-   */
-  @PostMapping(BASE + "/review/categories/{importCategoryId}/tags")
-  String mapCategoryTags(
-      @PathVariable long importCategoryId,
+      @RequestParam(required = false) String newCategoryPath,
       @RequestParam(name = "tagId", required = false) List<Long> tagIds,
       RedirectAttributes redirectAttributes) {
+    List<Long> tags = tagIds == null ? List.of() : tagIds;
     try {
-      importCategoryMapService.setTags(importCategoryId, tagIds == null ? List.of() : tagIds);
+      Long resolved = resolveCategoryChoice(accountId, newCategoryPath, redirectAttributes);
+      if (resolved != null) {
+        importCategoryMapService.mapResolved(importCategoryId, resolved, tags);
+      }
     } catch (IllegalArgumentException | IllegalStateException rejected) {
       redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
     }
@@ -231,38 +222,66 @@ class ImportController {
   }
 
   /**
-   * Bulk-assign the selected Money paths (import.md §5.2; plan d1) — {@code categoryId} maps them
-   * all to one category, {@code tag} adds one tag across them (additive, not a replace). ~300 paths
-   * one at a time would stall the campaign. Which action ran is decided by the submit button's
-   * {@code formaction}; this endpoint maps, {@link #bulkTagCategories} tags.
+   * Bulk-assign the ticked Money paths (import.md §5.2, §8; plan d1) — one "Map" that sets the
+   * category (existing {@code accountId} or a new {@code newCategoryPath} leaf) and
+   * <em>replaces</em> every ticked row's tags with the {@code tagId} pills. ~300 paths one at a
+   * time would stall the campaign.
    */
   @PostMapping(BASE + "/review/categories/bulk-map")
   String bulkMapCategories(
       @RequestParam(name = "importCategoryId", required = false) List<Long> importCategoryIds,
       @RequestParam(required = false) String accountId,
+      @RequestParam(required = false) String newCategoryPath,
+      @RequestParam(name = "tagId", required = false) List<Long> tagIds,
       RedirectAttributes redirectAttributes) {
+    List<Long> ids = importCategoryIds == null ? List.of() : importCategoryIds;
+    List<Long> tags = tagIds == null ? List.of() : tagIds;
     try {
-      importCategoryMapService.bulkMapToCategory(
-          importCategoryIds == null ? List.of() : importCategoryIds, requireCategoryId(accountId));
+      Long resolved = resolveCategoryChoice(accountId, newCategoryPath, redirectAttributes);
+      if (resolved != null) {
+        importCategoryMapService.bulkMapResolved(ids, resolved, tags);
+      }
     } catch (IllegalArgumentException | IllegalStateException rejected) {
       redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
     }
     return REDIRECT_REVIEW + "#category-map";
   }
 
-  /** Bulk-add one tag to the selected Money paths (import.md §5.2, §8; plan d1). */
-  @PostMapping(BASE + "/review/categories/bulk-tag")
-  String bulkTagCategories(
-      @RequestParam(name = "importCategoryId", required = false) List<Long> importCategoryIds,
-      @RequestParam(required = false) String tag,
-      RedirectAttributes redirectAttributes) {
-    try {
-      importCategoryMapService.bulkAddTag(
-          importCategoryIds == null ? List.of() : importCategoryIds, tag);
-    } catch (IllegalArgumentException | IllegalStateException rejected) {
-      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
+  /**
+   * Turn the map form's category choice into a category id: an existing pick is used as-is; a typed
+   * {@code Parent - Child} path is resolved through {@code categories}, <em>creating</em> the leaf.
+   * Returns null (with a flash) when the path names no existing category and cannot be created, or
+   * when nothing was chosen.
+   */
+  private Long resolveCategoryChoice(
+      String accountId, String newCategoryPath, RedirectAttributes redirectAttributes) {
+    String existing = blankToNull(accountId);
+    if (existing != null) {
+      return Long.parseLong(existing);
     }
-    return REDIRECT_REVIEW + "#category-map";
+    String typed = blankToNull(newCategoryPath);
+    if (typed == null) {
+      redirectAttributes.addFlashAttribute(
+          ERROR, "Pick a category, or type a new one as 'Parent - Child'");
+      return null;
+    }
+    CategoryResolution resolution = importCategoryMapService.resolveNewCategory(typed);
+    if (resolution instanceof CategoryResolution.Resolved resolved) {
+      return resolved.categoryId();
+    }
+    if (resolution instanceof CategoryResolution.Pending pending) {
+      redirectAttributes.addFlashAttribute(
+          ERROR,
+          "No category '"
+              + pending.parentName()
+              + "' to create '"
+              + pending.childName()
+              + "' under — check the parent path");
+      return null;
+    }
+    redirectAttributes.addFlashAttribute(
+        ERROR, ((CategoryResolution.Refused) resolution).message());
+    return null;
   }
 
   /**
@@ -278,20 +297,6 @@ class ImportController {
    */
   private static String reviewAnchoredAtCategory(long importCategoryId) {
     return REDIRECT_REVIEW + "#category-" + importCategoryId;
-  }
-
-  /**
-   * The chosen category id from the {@code <select>}. Its "— pick a category —" default submits
-   * blank — the common user slip — which becomes a flashable message like every other review form,
-   * rather than a binding 400. A non-numeric value cannot come from the select, so it is left to
-   * fail loudly the way {@link #mapAccount} treats its own id.
-   */
-  private static long requireCategoryId(String accountId) {
-    String trimmed = blankToNull(accountId);
-    if (trimmed == null) {
-      throw new IllegalArgumentException("Pick a category to map to");
-    }
-    return Long.parseLong(trimmed);
   }
 
   /** Open the campaign — one open session at a time (import.md §2). */

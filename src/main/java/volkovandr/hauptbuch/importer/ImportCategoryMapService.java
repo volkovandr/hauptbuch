@@ -10,6 +10,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import volkovandr.hauptbuch.categories.CategoryResolution;
+import volkovandr.hauptbuch.categories.CategoryResolutionService;
 import volkovandr.hauptbuch.categories.CategoryService;
 import volkovandr.hauptbuch.categories.TagService;
 import volkovandr.hauptbuch.importer.repository.ImportCategoryRepository;
@@ -22,14 +24,17 @@ import volkovandr.hauptbuch.importer.repository.ImportCategoryTagRepository;
  * The map is many-to-one — several Money paths consolidate onto one category, which is the whole
  * point of mapping 20 years of taxonomy drift onto a small curated tree.
  *
- * <p>Bulk assignment ({@link #bulkMapToCategory}, {@link #bulkAddTag}) exists because ~300 paths
- * one at a time would stall the campaign. Nothing here writes to {@code transaction} / {@code
- * posting} — the map only records the resolution; f2 books through {@code LedgerService}, routing
- * to the paying account's currency leaf via {@code CurrencyLeafService} (§5.2 — the map never
- * targets a leaf itself).
+ * <p>One action does both: picking a category (or typing a new {@code Parent - Child} one) and the
+ * tag pills are submitted together and written together ({@link #mapResolved} / {@link
+ * #bulkMapResolved} <em>replace</em> the row's category and its whole tag set). A missing category
+ * is created through {@code categories}' own resolver — the same one the register uses — so there
+ * is no second "create a category" path (CLAUDE.md §0). Bulk assignment exists because ~300 paths
+ * one at a time would stall the campaign.
  *
- * <p>This is the mutation side; {@link ImportCategoryMapPanel} assembles the read model the review
- * renders (the {@link ImportAccountMapService} / {@link ImportAccountMapPanel} split).
+ * <p>Nothing here writes to {@code transaction} / {@code posting} — the map only records the
+ * resolution; f2 books through {@code LedgerService}, routing to the paying account's currency leaf
+ * via {@code CurrencyLeafService} (§5.2 — the map never targets a leaf itself). This is the
+ * mutation side; {@link ImportCategoryMapPanel} assembles the read model the review renders.
  */
 @Service
 public class ImportCategoryMapService {
@@ -40,6 +45,7 @@ public class ImportCategoryMapService {
   private final ImportCategoryRepository importCategoryRepository;
   private final ImportCategoryTagRepository importCategoryTagRepository;
   private final CategoryService categoryService;
+  private final CategoryResolutionService categoryResolutionService;
   private final TagService tagService;
 
   ImportCategoryMapService(
@@ -47,86 +53,81 @@ public class ImportCategoryMapService {
       ImportCategoryRepository importCategoryRepository,
       ImportCategoryTagRepository importCategoryTagRepository,
       CategoryService categoryService,
+      CategoryResolutionService categoryResolutionService,
       TagService tagService) {
     this.importSessionService = importSessionService;
     this.importCategoryRepository = importCategoryRepository;
     this.importCategoryTagRepository = importCategoryTagRepository;
     this.categoryService = categoryService;
+    this.categoryResolutionService = categoryResolutionService;
     this.tagService = tagService;
   }
 
   /**
-   * Map one Money path to a Hauptbuch category (import.md §5.2). The target must be a postable
-   * category leaf — {@code categories} refuses a group or an auto-managed currency leaf, so a Money
-   * path can never land on one.
+   * Resolve a typed {@code Parent - Child} category path, <strong>creating</strong> the leaf under
+   * its existing parent (import.md §5.2) — the "create a new category" field of the map form, which
+   * always means create, exactly as the account map's new-account field always opens an account.
+   * Delegates to {@code categories}' resolver so the taxonomy rules (leaves-only, subdivision of a
+   * posted-to parent) stay in one place.
+   *
+   * <p>Deliberately <strong>not</strong> {@code @Transactional}: the resolver may create a category
+   * in its own transaction and, on a rejected create, returns {@link CategoryResolution.Refused}
+   * rather than throwing — sharing a transaction here would turn that into an {@code
+   * UnexpectedRollbackException} at commit (see {@link CategoryResolutionService}). The caller
+   * inspects the result and only calls {@link #mapResolved} on a {@link
+   * CategoryResolution.Resolved}.
+   */
+  public CategoryResolution resolveNewCategory(String parentChildPath) {
+    return categoryResolutionService.resolveCategory(
+        parentChildPath, CategoryResolutionService.DECISION_CREATE);
+  }
+
+  /**
+   * Map one Money path to a resolved category id and replace its tags in one write (import.md §5.2,
+   * §8). {@code tagIds} are the chip field's pills — the register's chip field (register §3.6), so
+   * a typed {@code Parent:Child} chip resolves or creates the tag on Enter and its id rides here;
+   * the set <em>replaces</em> the row's tags (empty clears them).
    *
    * @throws IllegalStateException if no campaign is open
    * @throws IllegalArgumentException if the row is not in the open campaign, or the target is not a
    *     postable category leaf
    */
   @Transactional
-  public void mapToCategory(long importCategoryId, long accountId) {
+  public void mapResolved(long importCategoryId, long accountId, List<Long> tagIds) {
     ImportCategory row = requireRowInOpenSession(importCategoryId);
-    requirePostableCategory(accountId, row.moneyPath());
-    importCategoryRepository.mapToCategory(importCategoryId, accountId);
-    LOG.info("Import category path \"{}\" mapped to category {}", row.moneyPath(), accountId);
+    requirePostableCategory(accountId);
+    write(importCategoryId, accountId, row.moneyPath(), liveTagIds(tagIds));
   }
 
   /**
-   * Replace one map row's tags with the pills its field currently shows (import.md §5.2, §8). The
-   * field is the register's chip field (register §3.6): typing a {@code Parent:Child} chip and
-   * pressing Enter resolves — or creates, this being the taxonomy-consolidation moment — the tag
-   * through {@code categories}' {@link TagService#resolveChip} and appends a pill carrying its id;
-   * "Save tags" then submits that id set, which this rewrites the row's junction rows to. An empty
-   * set clears the row's tags. Unknown or soft-deleted ids are dropped rather than rejected — the
-   * pill set is machine-produced, not typed.
+   * Map every ticked Money path to one resolved category id and replace each row's tags with one
+   * set (import.md §5.2) — the bulk half of the screen. The selection and the target are validated
+   * once, not per row.
    *
    * @throws IllegalStateException if no campaign is open
-   * @throws IllegalArgumentException if the row is not in the open campaign
+   * @throws IllegalArgumentException if nothing is ticked, a ticked id is not in the campaign, or
+   *     the target is not a postable category leaf
    */
   @Transactional
-  public void setTags(long importCategoryId, List<Long> tagIds) {
-    ImportCategory row = requireRowInOpenSession(importCategoryId);
-    Set<Long> live = liveTagIds(tagIds);
-    importCategoryTagRepository.clearTags(importCategoryId);
-    live.forEach(tagId -> importCategoryTagRepository.addTag(importCategoryId, tagId));
-    LOG.debug("Import category path \"{}\" tags set to {}", row.moneyPath(), live);
-  }
-
-  /**
-   * Map every selected Money path to one category (import.md §5.2) — the bulk half of the screen.
-   * Each row is validated as being in the open campaign; the target is validated once.
-   *
-   * @throws IllegalStateException if no campaign is open
-   * @throws IllegalArgumentException if any row is not in the open campaign, or the target is not a
-   *     postable category leaf
-   */
-  @Transactional
-  public void bulkMapToCategory(List<Long> importCategoryIds, long accountId) {
+  public void bulkMapResolved(List<Long> importCategoryIds, long accountId, List<Long> tagIds) {
     List<ImportCategory> rows = requireSelection(importCategoryIds);
-    requirePostableCategory(accountId, rows.get(0).moneyPath());
-    rows.forEach(row -> importCategoryRepository.mapToCategory(row.importCategoryId(), accountId));
+    requirePostableCategory(accountId);
+    Set<Long> live = liveTagIds(tagIds);
+    for (ImportCategory row : rows) {
+      write(row.importCategoryId(), accountId, row.moneyPath(), live);
+    }
     LOG.info("Import: {} category paths bulk-mapped to category {}", rows.size(), accountId);
   }
 
-  /**
-   * Add one tag to every selected Money path (import.md §5.2, §8) — {@code Audi:Fuel}, {@code
-   * Audi:Insurance}, {@code Audi:Repair} all want the same {@code Cars:Audi}. The chip is resolved
-   * (or created) once and <em>added</em> to each row — it does not replace the rows' other tags.
-   *
-   * @throws IllegalStateException if no campaign is open
-   * @throws IllegalArgumentException if any row is not in the open campaign
-   */
-  @Transactional
-  public void bulkAddTag(List<Long> importCategoryIds, String chip) {
-    List<ImportCategory> rows = requireSelection(importCategoryIds);
-    long tagId =
-        tagService
-            .resolveChip(chip)
-            .orElseThrow(() -> new IllegalArgumentException("Type a tag as Parent:Child"))
-            .tagId();
-    rows.forEach(row -> importCategoryTagRepository.addTag(row.importCategoryId(), tagId));
-    LOG.info("Import: tag {} added to {} category paths", tagId, rows.size());
+  private void write(long importCategoryId, long accountId, String moneyPath, Set<Long> tagIds) {
+    importCategoryRepository.mapToCategory(importCategoryId, accountId);
+    importCategoryTagRepository.clearTags(importCategoryId);
+    tagIds.forEach(tagId -> importCategoryTagRepository.addTag(importCategoryId, tagId));
+    LOG.info(
+        "Import category path \"{}\" mapped to category {} with tags {}",
+        moneyPath,
+        accountId,
+        tagIds);
   }
 
   private Set<Long> liveTagIds(List<Long> tagIds) {
@@ -142,12 +143,10 @@ public class ImportCategoryMapService {
     return live;
   }
 
-  private void requirePostableCategory(long accountId, String moneyPath) {
+  private void requirePostableCategory(long accountId) {
     if (!categoryService.isPostableCategory(accountId)) {
       throw new IllegalArgumentException(
-          "\""
-              + moneyPath
-              + "\" must map to a category leaf — not a group or an auto-managed currency leaf");
+          "That is not a category leaf — pick one of its subcategories, or a real category");
     }
   }
 
