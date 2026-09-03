@@ -558,5 +558,33 @@
         </li>
       </ul>
     </section>
+
+    <!--
+      Payee summary (import.md §5.3; plan d2). Payees are auto-created, never mapped — a fourth map
+      with several thousand rows would sink the campaign — so the review shows only counts: how many
+      distinct payees the staged files name, how many are seen just once, and how many rows carry a
+      name that was wholly destroyed on export (§4.4) and will book with no payee. The consolidation
+      (case-folding, keeping the best-capitalised spelling) happens at commit, in
+      PayeeService.resolveImportedPayee.
+    -->
+    <section class="panel" th:unless="${review.payees().empty()}">
+      <p class="eyebrow">Payees</p>
+      <p class="muted">
+        <span
+          th:text="${review.payees().distinctPayees()} + ' distinct payees, ' + ${review.payees().seenOnce()} + ' seen only once'"
+          >4812 distinct payees, 3140 seen only once</span
+        >. Payees are created automatically as the campaign commits — case variants of one merchant
+        are consolidated and kept at their best-capitalised spelling.
+      </p>
+      <p class="muted" th:if="${review.payees().destroyedRows() > 0}">
+        <span
+          class="warning"
+          th:text="${review.payees().destroyedRows()} + ' staged transactions'"
+          >27 staged transactions</span
+        >
+        carry a payee name that was destroyed on export (all question marks). These will book with
+        no payee — a valid state, the same as a transfer.
+      </p>
+    </section>
   </main>
 </html>

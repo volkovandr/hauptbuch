@@ -81,10 +81,13 @@ class ImportReviewServiceTest {
             List.of(),
             List.of());
     when(importAccountMapPanel.forSession(SESSION_ID)).thenReturn(panel);
+    when(importStatisticsRepository.payeeResolution(SESSION_ID))
+        .thenReturn(new ImportPayeeSummary(4812, 3140, 27));
 
     ImportReview review = service().review().orElseThrow();
 
     assertThat(review.empty()).isFalse();
+    assertThat(review.payees()).isEqualTo(new ImportPayeeSummary(4812, 3140, 27));
     assertThat(review.accounts())
         .singleElement()
         .satisfies(

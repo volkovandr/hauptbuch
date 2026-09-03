@@ -99,9 +99,22 @@ public class PayeeRepository {
    * The first live payee with exactly this name, city, and country (case-insensitive on name),
    * treating {@code null} city/country as "no value". Used to reuse an existing payee on commit
    * rather than create a duplicate each time (register §3.4) — so re-picking {@code Rewe ·
-   * Dortmund} lands the same payee, and the ghost suggestion keeps working.
+   * Dortmund} lands the same payee, and the ghost suggestion keeps working. The lowest-id of {@link
+   * #findLiveByAddress}, so ordinary entry and the import resolution agree on which row is the
+   * merchant.
    */
   public Optional<Payee> findByAddress(String name, String city, String countryCode) {
+    return findLiveByAddress(name, city, countryCode).stream().findFirst();
+  }
+
+  /**
+   * Every live payee with this name (case-insensitive), city, and country, ordered by id — normally
+   * one, but 20 years of Money data can leave case-only variants of one merchant ({@code REWE},
+   * {@code rewe}). {@link #findByAddress} takes the first; the import payee resolution (import.md
+   * §5.3; plan d2) renames it to the best-capitalised spelling. {@code null} city/country match "no
+   * value".
+   */
+  public List<Payee> findLiveByAddress(String name, String city, String countryCode) {
     return jdbcClient
         .sql(
             SELECT_PAYEES
@@ -109,12 +122,25 @@ public class PayeeRepository {
                 + " and lower(name) = lower(:name)"
                 + " and city is not distinct from :city"
                 + " and country_code is not distinct from :countryCode"
-                + " order by payee_id limit 1")
+                + " order by payee_id")
         .param(NAME, name)
         .param(CITY, city)
         .param(COUNTRY_CODE, countryCode)
         .query(Payee.class)
-        .optional();
+        .list();
+  }
+
+  /**
+   * Rename a payee. Used by the import payee resolution (plan d2) when a better-capitalised
+   * spelling of an existing payee turns up ({@code REWE} → {@code Rewe}); the address stays put, so
+   * this is a name-only update.
+   */
+  public void rename(long payeeId, String name) {
+    jdbcClient
+        .sql("update payee set name = :name where payee_id = :payeeId")
+        .param(NAME, name)
+        .param(PAYEE_ID, payeeId)
+        .update();
   }
 
   /** Find a payee by id. */

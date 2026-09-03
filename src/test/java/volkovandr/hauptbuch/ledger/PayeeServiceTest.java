@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.ledger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -129,6 +130,61 @@ class PayeeServiceTest {
     assertThat(payeeService.resolvePayee(null, null)).isNull();
     assertThat(payeeService.resolvePayee(null, "  ")).isNull();
     verify(payeeRepository, never()).insert(any(), any(), any());
+  }
+
+  @Test
+  void resolveImportedPayeeReturnsNullForAnAbsentOrDestroyedName() {
+    // A wholly-destroyed or absent Money `P` field (import.md §4.4) books with no payee.
+    assertThat(payeeService.resolveImportedPayee(null)).isNull();
+    assertThat(payeeService.resolveImportedPayee("   ")).isNull();
+    verify(payeeRepository, never()).insert(any(), any(), any());
+  }
+
+  @Test
+  void resolveImportedPayeeParsesTheAddressWithTheSharedParserAndInsertsWhenNew() {
+    // The same parseCreateNew the register uses — not a copy (import.md §5.3, CLAUDE.md §0).
+    when(countryRepository.resolveAlias("Germany")).thenReturn(Optional.of("DEU"));
+    when(payeeRepository.findLiveByAddress("Rewe", "Dortmund", "DEU")).thenReturn(List.of());
+    when(payeeRepository.insert("Rewe", "Dortmund", "DEU")).thenReturn(11L);
+
+    assertThat(payeeService.resolveImportedPayee("Rewe - Dortmund - Germany")).isEqualTo(11L);
+    verify(payeeRepository).insert("Rewe", "Dortmund", "DEU");
+  }
+
+  @Test
+  void resolveImportedPayeeReusesAnExistingVariantWithoutRenamingWhenItIsAlreadyBestCapitalised() {
+    when(payeeRepository.findLiveByAddress("REWE", null, null))
+        .thenReturn(List.of(new Payee(9L, "Rewe", null, null, null)));
+
+    assertThat(payeeService.resolveImportedPayee("REWE")).isEqualTo(9L);
+    verify(payeeRepository, never()).rename(anyLong(), any());
+    verify(payeeRepository, never()).insert(any(), any(), any());
+  }
+
+  @Test
+  void resolveImportedPayeeRenamesAnExistingVariantToTheBetterCapitalisedSpelling() {
+    // Money's 20 years of case drift consolidate onto one payee, kept at the best spelling seen
+    // (import.md §5.3): an existing "rewe" is renamed when "Rewe" arrives.
+    when(payeeRepository.findLiveByAddress("Rewe", null, null))
+        .thenReturn(List.of(new Payee(9L, "rewe", null, null, null)));
+
+    assertThat(payeeService.resolveImportedPayee("Rewe")).isEqualTo(9L);
+    verify(payeeRepository).rename(9L, "Rewe");
+    verify(payeeRepository, never()).insert(any(), any(), any());
+  }
+
+  @Test
+  void resolveImportedPayeeKeepsTheLowestIdVariantAsIdentityAndRenamesItToTheBestSpelling() {
+    // Legacy duplicates: the identity is the lowest id — the one findByAddress (ordinary entry)
+    // also reuses — so import and hand-entry stay on the same row. That row is promoted to the
+    // best spelling across the variants and the incoming text ("Rewe").
+    when(payeeRepository.findLiveByAddress("Rewe", null, null))
+        .thenReturn(
+            List.of(
+                new Payee(4L, "rewe", null, null, null), new Payee(9L, "REWE", null, null, null)));
+
+    assertThat(payeeService.resolveImportedPayee("Rewe")).isEqualTo(4L);
+    verify(payeeRepository).rename(4L, "Rewe");
   }
 
   @Test

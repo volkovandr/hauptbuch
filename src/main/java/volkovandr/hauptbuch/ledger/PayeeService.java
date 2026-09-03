@@ -1,9 +1,11 @@
 package volkovandr.hauptbuch.ledger;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.ledger.repository.CountryRepository;
@@ -144,5 +146,56 @@ public class PayeeService {
         .findByAddress(draft.name(), draft.city(), draft.countryCode())
         .map(Payee::payeeId)
         .orElseGet(() -> payeeRepository.insert(draft.name(), draft.city(), draft.countryCode()));
+  }
+
+  /**
+   * Resolve a Money {@code P} field to a payee id for the import commit (import.md §5.3; plan d2) —
+   * the routine f2 calls for every staged row. Payees are auto-created, not mapped: the text is
+   * parsed with the <em>same</em> {@link #parseCreateNew} the register uses (there is no second
+   * parser, CLAUDE.md §0), matched case-insensitively on the resulting {@code Name - City -
+   * Country}, and inserted only when genuinely new.
+   *
+   * <p>The payee <em>identity</em> is the one ordinary entry also reuses — the lowest-id live match
+   * ({@link PayeeRepository#findByAddress}) — so a hand-entered transaction and an imported one for
+   * the same merchant land on the same row. Where 20 years of Money data has left case-only
+   * variants ({@code REWE}, {@code rewe}, {@code Rewe}), that row is renamed to the
+   * best-capitalised spelling across the variants and the incoming text ({@link
+   * #capitalisationRank} — proper case beats all-caps beats lower-case). A wholly destroyed or
+   * absent name yields {@code null} — booking with no payee, already a valid state (§4.4).
+   */
+  @Transactional
+  public Long resolveImportedPayee(String payeeText) {
+    if (payeeText == null || payeeText.isBlank()) {
+      return null;
+    }
+    PayeeDraft draft = parseCreateNew(payeeText);
+    List<Payee> variants =
+        payeeRepository.findLiveByAddress(draft.name(), draft.city(), draft.countryCode());
+    if (variants.isEmpty()) {
+      return payeeRepository.insert(draft.name(), draft.city(), draft.countryCode());
+    }
+    Payee identity = variants.get(0); // findLiveByAddress orders by id — the findByAddress pick
+    String bestName =
+        Stream.concat(variants.stream().map(Payee::name), Stream.of(draft.name()))
+            .max(Comparator.comparingInt(PayeeService::capitalisationRank))
+            .orElseThrow();
+    if (!bestName.equals(identity.name())) {
+      payeeRepository.rename(identity.payeeId(), bestName);
+    }
+    return identity.payeeId();
+  }
+
+  /**
+   * How well a spelling is capitalised, for consolidating Money's case-only variants (import.md
+   * §5.3): {@code 2} for proper case (starts upper-case, has a lower-case letter — {@code Rewe}),
+   * {@code 1} for all-caps ({@code REWE}), {@code 0} for anything starting lower-case ({@code
+   * rewe}). The higher-ranked spelling is the one the consolidated payee keeps.
+   */
+  private static int capitalisationRank(String name) {
+    String trimmed = name.strip();
+    if (trimmed.isEmpty() || !Character.isUpperCase(trimmed.charAt(0))) {
+      return 0;
+    }
+    return trimmed.chars().anyMatch(Character::isLowerCase) ? 2 : 1;
   }
 }
