@@ -57,6 +57,11 @@ public class TagService {
     return walkSegments(chip, true);
   }
 
+  /** Whether a live tag with this id exists — the importer's guard before it stores a chosen id. */
+  public boolean exists(long tagId) {
+    return tagRepository.findById(tagId).filter(tag -> tag.deletedAt() == null).isPresent();
+  }
+
   /**
    * Resolve a tag echo from the AI parser to an <em>existing</em> tag, <strong>without creating
    * anything</strong> (data-model §13.3, plan stage 9d). The AI emits a tag only when a

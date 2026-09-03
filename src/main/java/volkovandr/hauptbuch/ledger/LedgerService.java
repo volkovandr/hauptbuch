@@ -172,6 +172,15 @@ public class LedgerService {
   }
 
   /**
+   * Every live tag's canonical {@code Parent:Child} label, ascending (register §3.6) — the tag
+   * datalist suggestions. Exposed for the importer's category map (import.md §5.2), whose tag field
+   * mirrors the register's chip field, and any other caller that needs the vocabulary as text.
+   */
+  public List<String> liveTagLabels() {
+    return tagReadRepository.liveTagLabels();
+  }
+
+  /**
    * The account's own opening balance (data-model T-DM-4), or empty when it has none — the target
    * side of the importer's opening-balance reconciliation (import.md §5.1; plan c3). Resolved by
    * finding the account's per-currency {@code Opening Balances} leaf and the earliest live

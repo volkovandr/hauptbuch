@@ -4,6 +4,7 @@ import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.importer.ImportAccountStatistics;
+import volkovandr.hauptbuch.importer.ImportCategorySignEvidence;
 import volkovandr.hauptbuch.importer.ImportStagedOpeningBalance;
 
 /**
@@ -73,6 +74,41 @@ public class ImportStatisticsRepository {
             """)
         .param("sessionId", importSessionId)
         .query(ImportStagedOpeningBalance.class)
+        .list();
+  }
+
+  /**
+   * Sign evidence per Money category path in a session (import.md §5.2; plan d1) — for each path a
+   * staged line references, how many of those lines carry a positive amount (a spend, in
+   * Hauptbuch's sign convention) and how many a negative one (a receipt), so the category map can
+   * label a path expense-vs-income at a glance. Grouped, filtered aggregate over {@code
+   * import_file} → {@code import_transaction} → {@code import_posting}, scoped to category legs (a
+   * non-null path): SQL-resident logic (three tables, grouping, filtered counts), covered in the
+   * {@code sqlLogicTest} tier (CLAUDE.md §6). Ordered by path so the review reads in the same order
+   * as the map rows.
+   *
+   * <p>Transactions in a state that will <strong>not</strong> book — {@code mirrored} / {@code
+   * excluded} (§6) — are left out, so the hint reflects what the campaign actually commits; at d1
+   * every staged row is still {@code ready}, but slice e sets those states.
+   */
+  public List<ImportCategorySignEvidence> perCategoryPath(long importSessionId) {
+    return jdbcClient
+        .sql(
+            """
+            select p.money_category_path                       as money_path,
+                   count(*) filter (where p.amount > 0)         as debit_line_count,
+                   count(*) filter (where p.amount < 0)         as credit_line_count
+              from import_file f
+              join import_transaction t on t.import_file_id = f.import_file_id
+              join import_posting p on p.import_transaction_id = t.import_transaction_id
+             where f.import_session_id = :sessionId
+               and p.money_category_path is not null
+               and t.state not in ('mirrored', 'excluded')
+             group by p.money_category_path
+             order by p.money_category_path
+            """)
+        .param("sessionId", importSessionId)
+        .query(ImportCategorySignEvidence.class)
         .list();
   }
 }

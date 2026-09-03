@@ -334,5 +334,210 @@
         </li>
       </ul>
     </section>
+
+    <!--
+      Category map (import.md §5.2; plan d1). One row per Money category path a staged file
+      references; each maps to ONE Hauptbuch category (a postable leaf — currency leaves and groups
+      are never offered, §5.2) AND zero or more tags: Audi:Fuel → Transportation - Car - Fuel + tag
+      Cars:Audi. ~300 Money paths collapse onto a small curated tree, so the panel also offers bulk
+      assignment: tick paths, then map them all to one category or add one tag across them.
+
+      Sign evidence per row — how many staged lines on the path are debits (spend) vs credits
+      (receipt) — makes income-vs-expense obvious before mapping. A row is <details>, open while
+      unmapped and collapsed once mapped (the account-map pattern).
+
+      Tags reuse the register's chip field (register §3.6): keyboard.js is loaded app-wide, so
+      typing a Parent:Child chip + Enter hx-posts to /categories/tags/resolve and appends a pill;
+      "Save tags" submits the pills' hidden tagIds, which replace the row's tag set.
+    -->
+    <section
+      class="panel"
+      id="category-map"
+      th:unless="${#lists.isEmpty(review.categoryMap().rows())}"
+    >
+      <p class="eyebrow">Category map</p>
+      <p class="muted">
+        Every Money category path maps to one Hauptbuch category before the campaign can commit.
+        Several paths may point at one category — that is how 20 years of taxonomy drift is
+        consolidated. Tags carry the second dimension: <span class="num">Audi:Fuel</span>,
+        <span class="num">Audi:Insurance</span> and <span class="num">Audi:Repair</span> share the
+        tag <span class="num">Cars:Audi</span> but land in different categories.
+      </p>
+
+      <!-- One datalist for every row's tag field and the bulk tag input (register's chip-field
+           suggestions). -->
+      <datalist id="import-tag-options">
+        <option
+          th:each="tl : ${review.categoryMap().tagOptions()}"
+          th:value="${tl}"
+        ></option>
+      </datalist>
+
+      <!-- Bulk form: the checkboxes live in each row (associated by form="import-category-bulk");
+           the controls sit here. Two submit buttons, one form — formaction picks the action so a
+           single checkbox set serves both (no bespoke JS). -->
+      <form
+        id="import-category-bulk"
+        method="post"
+        th:action="@{/import/review/categories/bulk-map}"
+        class="form"
+      >
+        <p class="field__label">Bulk-assign the ticked paths</p>
+        <div class="field">
+          <label class="field__label">Category</label>
+          <select name="accountId" class="input">
+            <option value="">— pick a category —</option>
+            <option
+              th:each="o : ${review.categoryMap().categoryOptions()}"
+              th:value="${o.accountId()}"
+              th:text="${o.path()}"
+            >
+              Food - Milk
+            </option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field__label">Tag (Parent:Child)</label>
+          <input
+            type="text"
+            name="tag"
+            class="input"
+            list="import-tag-options"
+            autocomplete="off"
+            placeholder="Cars:Audi"
+          />
+        </div>
+        <p class="actions">
+          <button
+            type="submit"
+            class="btn"
+            th:formaction="@{/import/review/categories/bulk-map}"
+          >
+            Map ticked to category
+          </button>
+          <button
+            type="submit"
+            class="btn btn--ghost"
+            th:formaction="@{/import/review/categories/bulk-tag}"
+          >
+            Add tag to ticked
+          </button>
+        </p>
+      </form>
+
+      <ul class="import-account-map">
+        <li th:each="row : ${review.categoryMap().rows()}">
+          <input
+            type="checkbox"
+            class="import-bulk-check"
+            name="importCategoryId"
+            th:value="${row.importCategoryId()}"
+            form="import-category-bulk"
+            aria-label="Select this path for bulk assignment"
+            title="Select for bulk assignment"
+          />
+          <details
+            class="import-account"
+            th:id="'category-' + ${row.importCategoryId()}"
+            th:open="${!row.mapped()}"
+          >
+            <summary class="import-account__summary">
+              <span class="num" th:text="${row.moneyPath()}">Audi:Fuel</span>
+              <span
+                class="muted"
+                th:if="${row.mapped()}"
+                th:text="' → ' + ${row.targetPath()}"
+                >→ Transportation - Car - Fuel</span
+              >
+              <span class="warning" th:unless="${row.mapped()}"> → not mapped</span>
+              <span
+                class="muted"
+                th:text="' · ' + ${row.debitLineCount()} + ' debit · ' + ${row.creditLineCount()} + ' credit'"
+              >
+                · 8 debit · 1 credit</span
+              >
+              <span
+                class="muted"
+                th:if="${row.proposedType() != null}"
+                th:text="' · ' + ${row.proposedType()}"
+              >
+                · expense</span
+              >
+              <span class="muted" th:if="${!#lists.isEmpty(row.tags())}">
+                · tags:
+                <span
+                  th:each="t, it : ${row.tags()}"
+                  th:text="${it.first} ? ${t.label()} : ', ' + ${t.label()}"
+                  >Cars:Audi</span
+                >
+              </span>
+            </summary>
+
+            <form
+              method="post"
+              th:action="@{/import/review/categories/{id}/map(id=${row.importCategoryId()})}"
+              class="form"
+            >
+              <div class="field">
+                <label class="field__label">Category</label>
+                <select name="accountId" class="input">
+                  <option value="">— pick a category —</option>
+                  <option
+                    th:each="o : ${review.categoryMap().categoryOptions()}"
+                    th:value="${o.accountId()}"
+                    th:selected="${row.targetAccountId() != null and o.accountId() == row.targetAccountId()}"
+                    th:text="${o.path()}"
+                  >
+                    Food - Milk
+                  </option>
+                </select>
+              </div>
+              <p class="actions"><button type="submit" class="btn">Map</button></p>
+            </form>
+
+            <!-- Tags — the register's chip field (register §3.6). The dynamic hx-target is emitted
+                 via th:attr: this project has no htmx Thymeleaf dialect (stage 6d note). -->
+            <form
+              method="post"
+              th:action="@{/import/review/categories/{id}/tags(id=${row.importCategoryId()})}"
+              class="form"
+            >
+              <div class="field field--tags" data-tag-field>
+                <label class="field__label">Tags</label>
+                <div class="chips">
+                  <span
+                    th:id="'category-tag-chips-' + ${row.importCategoryId()}"
+                    class="chips__list"
+                    data-tag-chips
+                  >
+                    <th:block th:each="t : ${row.tags()}">
+                      <th:block
+                        th:replace="~{fragments/entry-dock :: tagChip(tagId=${t.tagId()}, tagLabel=${t.label()}, fieldName='tagId')}"
+                      ></th:block>
+                    </th:block>
+                  </span>
+                  <input
+                    name="tagText"
+                    class="input chips__input"
+                    list="import-tag-options"
+                    autocomplete="off"
+                    placeholder="Cars:Audi"
+                    data-tag-input
+                    hx-post="/categories/tags/resolve"
+                    hx-trigger="tag-commit"
+                    hx-include="this"
+                    hx-swap="beforeend"
+                    th:attr="hx-target='#category-tag-chips-' + ${row.importCategoryId()}"
+                  />
+                </div>
+              </div>
+              <p class="actions">
+                <button type="submit" class="btn btn--ghost">Save tags</button>
+              </p>
+            </form>
+          </details>
+        </li>
+      </ul>
+    </section>
   </main>
 </html>

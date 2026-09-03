@@ -38,6 +38,20 @@ public class ImportCategoryRepository {
         .update();
   }
 
+  /**
+   * Point a map row at a Hauptbuch category (import.md §5.2; plan d1) — always a semantic posting
+   * leaf, never a currency leaf (the service validates that with {@code categories}). The map is
+   * many-to-one: several Money paths may consolidate onto one category, so nothing here stops a
+   * repeated {@code accountId}.
+   */
+  public void mapToCategory(long importCategoryId, long accountId) {
+    jdbcClient
+        .sql("update import_category set account_id = :accountId where import_category_id = :id")
+        .param("accountId", accountId)
+        .param("id", importCategoryId)
+        .update();
+  }
+
   /** The category map of a session, by Money path. */
   public List<ImportCategory> findBySession(long importSessionId) {
     return jdbcClient

@@ -108,6 +108,27 @@ class ImportScreenIntegrationTest {
   private static final String AMBIGUOUS_CARD =
       "!Type:CCard\nD01/02'2005\nT-9.99\nPShop\nLStuff\n^\n";
 
+  /** Two distinct category paths, one spent, one received — the category map's input (§5.2). */
+  private static final String BANK_TWO_CATEGORIES =
+      """
+      !Type:Bank
+      D01/07'2004
+      T-12.34
+      PGrocer
+      LFood:Groceries
+      ^
+      D02/07'2004
+      T-40.00
+      PGas Station
+      LAudi:Fuel
+      ^
+      D25/07'2004
+      T2000.00
+      PEmployer
+      LSalary
+      ^
+      """;
+
   /** Transfers to a counterparty that is really money lent to a person (import.md §5.4). */
   private static final String BANK_WITH_PERSON_TRANSFER =
       """
@@ -853,6 +874,169 @@ class ImportScreenIntegrationTest {
         .andExpect(redirectedUrl("/import"));
 
     assertNothingStaged();
+  }
+
+  private long importCategoryRowId(String moneyPath) {
+    return jdbcClient
+        .sql("select import_category_id from import_category where money_path = :p")
+        .param("p", moneyPath)
+        .query(Long.class)
+        .single();
+  }
+
+  private Long mappedCategoryAccountId(String moneyPath) {
+    return jdbcClient
+        .sql("select account_id from import_category where money_path = :p")
+        .param("p", moneyPath)
+        .query(Long.class)
+        .optional()
+        .orElse(null);
+  }
+
+  private java.util.List<Long> tagIdsForPath(String moneyPath) {
+    return jdbcClient
+        .sql(
+            "select ict.tag_id from import_category_tag ict"
+                + " join import_category ic on ic.import_category_id = ict.import_category_id"
+                + " where ic.money_path = :p order by ict.import_category_tag_id")
+        .param("p", moneyPath)
+        .query(Long.class)
+        .list();
+  }
+
+  private long insertTag(String name) {
+    return jdbcClient
+        .sql("insert into tag (name) values (:name) returning tag_id")
+        .param("name", name)
+        .query(Long.class)
+        .single();
+  }
+
+  @Test
+  void mapsCategoryPathToAnExistingCategory() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", BANK_TWO_CATEGORIES, "Current Account");
+    long car = insertAccount("Car", "expense");
+
+    mockMvc
+        .perform(
+            post("/import/review/categories/" + importCategoryRowId("Audi:Fuel") + "/map")
+                .param("accountId", Long.toString(car))
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#category-*"));
+
+    assertThat(mappedCategoryAccountId("Audi:Fuel")).isEqualTo(car);
+    assertThat(reviewHtml(session)).contains("→ Car");
+  }
+
+  @Test
+  void categoryMapShowsSignEvidenceAndRefusesGroupsAndCurrencyLeaves() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", BANK_TWO_CATEGORIES, "Current Account");
+    long vehicle = insertAccount("Vehicle", "expense");
+    jdbcClient
+        .sql(
+            "insert into account (name, type, parent_id, currency_code)"
+                + " values ('Car', 'expense', :p, 'EUR')")
+        .param("p", vehicle)
+        .update();
+
+    String html = reviewHtml(session);
+    // Sign evidence per path: Audi:Fuel is a spend (debit), Salary a receipt (credit).
+    assertThat(html).contains("1 debit").contains("1 credit");
+    // The group "Vehicle" is never an option — only its leaf "Vehicle - Car".
+    assertThat(html).contains("Vehicle - Car");
+
+    // Mapping a path onto the group is rejected with a reason.
+    mockMvc
+        .perform(
+            post("/import/review/categories/" + importCategoryRowId("Audi:Fuel") + "/map")
+                .param("accountId", Long.toString(vehicle))
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#category-*"));
+    assertThat(mappedCategoryAccountId("Audi:Fuel")).isNull();
+    assertThat(reviewHtml(session)).contains("category leaf");
+  }
+
+  @Test
+  void submittingTheCategoryMapWithNoPickShowsAnError() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", BANK_TWO_CATEGORIES, "Current Account");
+
+    mockMvc
+        .perform(
+            post("/import/review/categories/" + importCategoryRowId("Audi:Fuel") + "/map")
+                .param("accountId", "")
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#category-*"))
+        .andExpect(flash().attributeExists("error"));
+    assertThat(mappedCategoryAccountId("Audi:Fuel")).isNull();
+
+    mockMvc
+        .perform(
+            post("/import/review/categories/bulk-map")
+                .param("accountId", Long.toString(insertAccount("Car", "expense")))
+                .session(session))
+        .andExpect(redirectedUrl("/import/review#category-map"))
+        .andExpect(flash().attributeExists("error"));
+  }
+
+  @Test
+  void savesAndClearsCategoryPathTags() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", BANK_TWO_CATEGORIES, "Current Account");
+    long rowId = importCategoryRowId("Audi:Fuel");
+    long audi = insertTag("Audi");
+    long fuel = insertTag("Fuel");
+
+    mockMvc
+        .perform(
+            post("/import/review/categories/" + rowId + "/tags")
+                .param("tagId", Long.toString(audi))
+                .param("tagId", Long.toString(fuel))
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#category-*"));
+    assertThat(tagIdsForPath("Audi:Fuel")).containsExactly(audi, fuel);
+    assertThat(reviewHtml(session)).contains("tags:");
+
+    // An empty submission clears them.
+    mockMvc
+        .perform(post("/import/review/categories/" + rowId + "/tags").session(session))
+        .andExpect(redirectedUrlPattern("/import/review#category-*"));
+    assertThat(tagIdsForPath("Audi:Fuel")).isEmpty();
+  }
+
+  @Test
+  void bulkMapsAndBulkTagsSelectedPaths() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", BANK_TWO_CATEGORIES, "Current Account");
+    long car = insertAccount("Car", "expense");
+    long fuelRow = importCategoryRowId("Audi:Fuel");
+    long groceriesRow = importCategoryRowId("Food:Groceries");
+
+    mockMvc
+        .perform(
+            post("/import/review/categories/bulk-map")
+                .param("importCategoryId", Long.toString(fuelRow))
+                .param("importCategoryId", Long.toString(groceriesRow))
+                .param("accountId", Long.toString(car))
+                .session(session))
+        .andExpect(redirectedUrl("/import/review#category-map"));
+    assertThat(mappedCategoryAccountId("Audi:Fuel")).isEqualTo(car);
+    assertThat(mappedCategoryAccountId("Food:Groceries")).isEqualTo(car);
+
+    mockMvc
+        .perform(
+            post("/import/review/categories/bulk-tag")
+                .param("importCategoryId", Long.toString(fuelRow))
+                .param("importCategoryId", Long.toString(groceriesRow))
+                .param("tag", "Cars:Audi")
+                .session(session))
+        .andExpect(redirectedUrl("/import/review#category-map"));
+    // The chip was created and attached to both selected paths (§5.2, §8).
+    assertThat(tagIdsForPath("Audi:Fuel")).hasSize(1);
+    assertThat(tagIdsForPath("Food:Groceries"))
+        .containsExactlyElementsOf(tagIdsForPath("Audi:Fuel"));
   }
 
   private void assertNothingStaged() {
