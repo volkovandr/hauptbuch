@@ -313,6 +313,11 @@ a live `import_posting`**, not every row in `import_account`; the account map sc
 should likewise only demand a mapping for referenced names. Decide at c1 whether unreferenced
 unmapped rows are hidden, or pruned when the last file referencing them is removed.
 
+**Stale map targets:** a mapped `import_category.account_id` can stop being a postable leaf if the
+owner subdivides that category mid-campaign — a leaves-only violation that otherwise only surfaces
+at f2. The gate must re-check every mapped category id still resolves to a postable leaf
+(`.scratch/import/issues/01`).
+
 **Done when:** each issue class appears from crafted staging data and disappears when resolved; the
 gate reports itself locked with a reason and unlocks when all three conditions hold.
 
@@ -375,7 +380,12 @@ the committed accounts match the e′ statistics.
   (`PayeeRepository.findLiveByAddress` + `rename`). The review shows only counts —
   `ImportStatisticsRepository.payeeResolution` (`sqlLogicTest`): distinct payees, how many seen
   once, and how many rows carry a wholly-destroyed name and will book with `payee_id` null. New
-  `ImportPayeeSummary` panel on the review. No schema change.
+  `ImportPayeeSummary` panel on the review. No schema change. Rode along (d1 `/code-review`
+  findings): the category-map controller now validates the row / ticked selection **before** a
+  typed new-category path can create-and-subdivide anything; per-mapping log lines dropped to
+  DEBUG (category/account/person *creation* still logs INFO); a third finding — stale category-map
+  targets after a mid-campaign subdivision — is deferred to the e4 gate
+  (`.scratch/import/issues/01`).
 - **v0.13 (2026-09-03):** **d1 complete** (owner-confirmed 2026-09-03) — the category map (import.md
   §5.2, §8): one Money path → one Hauptbuch category **and** its tags, written together.
   `ImportCategoryMapService.mapResolved` / `bulkMapResolved` over `ImportCategoryRepository.mapToCategory`

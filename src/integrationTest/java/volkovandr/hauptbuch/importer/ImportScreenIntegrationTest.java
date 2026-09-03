@@ -1066,6 +1066,31 @@ class ImportScreenIntegrationTest {
   }
 
   @Test
+  void emptyBulkMapWithTypedNewCategoryDoesNotCreateTheCategory() throws Exception {
+    // Review finding (d1): a mistaken "Map ticked" with nothing selected must be refused BEFORE
+    // the typed path resolves — otherwise the leaf (and any subdivision) is created permanently.
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", BANK_TWO_CATEGORIES, "Current Account");
+    long transportation = insertAccount("Transportation", "expense");
+    insertChildAccount("Car", "expense", transportation);
+
+    mockMvc
+        .perform(
+            post("/import/review/categories/bulk-map")
+                .param("newCategoryPath", "Transportation - Car - Fuel")
+                .session(session))
+        .andExpect(redirectedUrl("/import/review#category-map"))
+        .andExpect(flash().attributeExists("error"));
+
+    assertThat(
+            jdbcClient
+                .sql("select count(*) from account where name = 'Fuel'")
+                .query(Integer.class)
+                .single())
+        .isZero();
+  }
+
+  @Test
   void bulkMapReplacesCategoryAndTagsOnTickedPaths() throws Exception {
     MockHttpSession session = openCampaign();
     stageNewFile(session, "current.qif", BANK_TWO_CATEGORIES, "Current Account");
