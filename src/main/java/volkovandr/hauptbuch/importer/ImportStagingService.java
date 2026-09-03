@@ -39,6 +39,7 @@ public class ImportStagingService {
   private final ImportPostingRepository importPostingRepository;
   private final ImportAccountRepository importAccountRepository;
   private final ImportCategoryRepository importCategoryRepository;
+  private final ImportMirrorMatchingService importMirrorMatchingService;
 
   ImportStagingService(
       ImportSessionService importSessionService,
@@ -47,7 +48,8 @@ public class ImportStagingService {
       ImportTransactionRepository importTransactionRepository,
       ImportPostingRepository importPostingRepository,
       ImportAccountRepository importAccountRepository,
-      ImportCategoryRepository importCategoryRepository) {
+      ImportCategoryRepository importCategoryRepository,
+      ImportMirrorMatchingService importMirrorMatchingService) {
     this.importSessionService = importSessionService;
     this.importPreviewService = importPreviewService;
     this.importFileRepository = importFileRepository;
@@ -55,6 +57,7 @@ public class ImportStagingService {
     this.importPostingRepository = importPostingRepository;
     this.importAccountRepository = importAccountRepository;
     this.importCategoryRepository = importCategoryRepository;
+    this.importMirrorMatchingService = importMirrorMatchingService;
   }
 
   /** The staged files of the open campaign, oldest first; empty when no campaign is open. */
@@ -85,6 +88,9 @@ public class ImportStagingService {
   public void removeFile(long importFileId) {
     if (importFileRepository.deleteById(importFileId) > 0) {
       LOG.info("Import file {} removed from staging", importFileId);
+      // A removed file can strand a surviving transfer's mirror (its partner leg is gone, V21 nulls
+      // the link) — re-match resets any now-unpaired sighting (import.md §6.1; plan e1).
+      importMirrorMatchingService.rematchCurrentSession();
     }
   }
 
@@ -94,13 +100,18 @@ public class ImportStagingService {
    */
   @Transactional
   public int removeFilesNamed(String filename) {
-    return importSessionService
-        .currentSession()
-        .map(
-            session ->
-                importFileRepository.deleteBySessionAndFilename(
-                    session.importSessionId(), filename))
-        .orElse(0);
+    int removed =
+        importSessionService
+            .currentSession()
+            .map(
+                session ->
+                    importFileRepository.deleteBySessionAndFilename(
+                        session.importSessionId(), filename))
+            .orElse(0);
+    if (removed > 0) {
+      importMirrorMatchingService.rematchCurrentSession();
+    }
+    return removed;
   }
 
   /**
@@ -165,6 +176,9 @@ public class ImportStagingService {
         upload.sourceFilename(),
         upload.moneyAccountName(),
         file.transactions().size());
+    // A newly staged file can supply the second sighting of a transfer already staged from another
+    // account's file — re-match against the current account map (import.md §6.1; plan e1).
+    importMirrorMatchingService.rematchCurrentSession();
     return stagedFile;
   }
 
