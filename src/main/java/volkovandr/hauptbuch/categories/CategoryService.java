@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
+import volkovandr.hauptbuch.accounts.AccountPath;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.accounts.ReservedNamePrefix;
 import volkovandr.hauptbuch.categories.repository.CategoryAiConfigRepository;
@@ -38,6 +39,12 @@ public class CategoryService {
 
   /** The account types the categories screen manages (data-model §6.5). */
   static final List<String> MANAGEABLE_TYPES = List.of("income", "expense");
+
+  /**
+   * The category separator the pickers render a {@code Parent - Child} path with (register §3.5) —
+   * also the one the importer's category map shows a target path with (import.md §5.2).
+   */
+  public static final String PATH_SEPARATOR = " - ";
 
   private final AccountService accountService;
   private final SettingsService settingsService;
@@ -75,6 +82,25 @@ public class CategoryService {
     return accountService.findLiveByTypesWithDepth(MANAGEABLE_TYPES).stream()
         .filter(n -> !n.account().currencyLeaf())
         .toList();
+  }
+
+  /**
+   * The categories a posting (or an import map row, import.md §5.2) may target — the live income /
+   * expense <em>posting leaves</em>, each with its full {@code Parent - Child} path. Excludes
+   * {@code CurrencyLeafService}'s auto-managed per-currency leaves and every semantic group (a
+   * posting lands only on leaves, data-model §5); routing to a currency leaf stays automatic at
+   * commit. The importer offers exactly this list, so a Money path can never be mapped onto a
+   * currency leaf or a group.
+   */
+  public List<AccountPath> postableCategoryPaths() {
+    return accountService.findPostableLeafPaths(MANAGEABLE_TYPES, PATH_SEPARATOR);
+  }
+
+  /**
+   * Whether an account id is one of {@link #postableCategoryPaths()} — the importer's map guard.
+   */
+  public boolean isPostableCategory(long accountId) {
+    return postableCategoryPaths().stream().anyMatch(p -> p.accountId() == accountId);
   }
 
   /** The live categories of one type that could take a new child, i.e. every category of it. */

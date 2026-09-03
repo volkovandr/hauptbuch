@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.importer.repository.ImportAccountRepository;
 import volkovandr.hauptbuch.importer.repository.ImportCategoryRepository;
+import volkovandr.hauptbuch.importer.repository.ImportCategoryTagRepository;
 import volkovandr.hauptbuch.importer.repository.ImportFileRepository;
 import volkovandr.hauptbuch.importer.repository.ImportPostingRepository;
 import volkovandr.hauptbuch.importer.repository.ImportSessionRepository;
@@ -35,6 +36,7 @@ class ImportStagingRepositoryIntegrationTest {
   @Autowired ImportPostingRepository importPostingRepository;
   @Autowired ImportAccountRepository importAccountRepository;
   @Autowired ImportCategoryRepository importCategoryRepository;
+  @Autowired ImportCategoryTagRepository importCategoryTagRepository;
   @Autowired JdbcClient jdbcClient;
 
   private long openSession() {
@@ -273,6 +275,63 @@ class ImportStagingRepositoryIntegrationTest {
     assertThat(importFileRepository.findBySession(sessionId))
         .extracting(ImportFile::sourceFilename)
         .containsExactly("keep.qif");
+  }
+
+  @Test
+  void mapToCategoryResolvesTheTargetAndIsManyToOne() {
+    long sessionId = openSession();
+    importCategoryRepository.upsertUnmapped(sessionId, "Audi:Fuel");
+    importCategoryRepository.upsertUnmapped(sessionId, "Audi:Repair");
+    long fuel = categoryRowId(sessionId, "Audi:Fuel");
+    long repair = categoryRowId(sessionId, "Audi:Repair");
+    long category = insertAccount("Car", "expense");
+
+    importCategoryRepository.mapToCategory(fuel, category);
+    importCategoryRepository.mapToCategory(repair, category);
+
+    assertThat(importCategoryRepository.findBySession(sessionId))
+        .allSatisfy(row -> assertThat(row.accountId()).isEqualTo(category));
+  }
+
+  @Test
+  void categoryTagJunctionRoundTripsAndAccumulatesPerSession() {
+    long sessionId = openSession();
+    importCategoryRepository.upsertUnmapped(sessionId, "Audi:Fuel");
+    importCategoryRepository.upsertUnmapped(sessionId, "Audi:Repair");
+    long fuel = categoryRowId(sessionId, "Audi:Fuel");
+    long repair = categoryRowId(sessionId, "Audi:Repair");
+    long audi = insertTag("Audi");
+    long holiday = insertTag("Holiday");
+
+    importCategoryTagRepository.addTag(fuel, audi);
+    importCategoryTagRepository.addTag(fuel, audi); // idempotent
+    importCategoryTagRepository.addTag(fuel, holiday);
+    importCategoryTagRepository.addTag(repair, audi);
+
+    assertThat(importCategoryTagRepository.tagIdsFor(fuel)).containsExactly(audi, holiday);
+    assertThat(importCategoryTagRepository.tagIdsBySession(sessionId))
+        .containsOnlyKeys(fuel, repair)
+        .satisfies(byRow -> assertThat(byRow.get(repair)).containsExactly(audi));
+
+    importCategoryTagRepository.clearTags(fuel);
+    assertThat(importCategoryTagRepository.tagIdsFor(fuel)).isEmpty();
+    assertThat(importCategoryTagRepository.tagIdsBySession(sessionId)).containsOnlyKeys(repair);
+  }
+
+  private long categoryRowId(long sessionId, String moneyPath) {
+    return importCategoryRepository.findBySession(sessionId).stream()
+        .filter(row -> row.moneyPath().equals(moneyPath))
+        .findFirst()
+        .orElseThrow()
+        .importCategoryId();
+  }
+
+  private long insertTag(String name) {
+    return jdbcClient
+        .sql("insert into tag (name) values (:name) returning tag_id")
+        .param("name", name)
+        .query(Long.class)
+        .single();
   }
 
   private long mapRowId(long sessionId, String moneyAccountName) {

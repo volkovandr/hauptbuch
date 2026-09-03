@@ -29,13 +29,15 @@ class ImportReviewServiceTest {
   @Mock ImportStatisticsRepository importStatisticsRepository;
   @Mock ImportAccountMapPanel importAccountMapPanel;
   @Mock ImportOpeningBalancePanel importOpeningBalancePanel;
+  @Mock ImportCategoryMapPanel importCategoryMapPanel;
 
   private ImportReviewService service() {
     return new ImportReviewService(
         importSessionService,
         importStatisticsRepository,
         importAccountMapPanel,
-        importOpeningBalancePanel);
+        importOpeningBalancePanel,
+        importCategoryMapPanel);
   }
 
   private void openSession() {
@@ -52,7 +54,10 @@ class ImportReviewServiceTest {
 
     assertThat(service().review()).isEmpty();
     verifyNoInteractions(
-        importStatisticsRepository, importAccountMapPanel, importOpeningBalancePanel);
+        importStatisticsRepository,
+        importAccountMapPanel,
+        importOpeningBalancePanel,
+        importCategoryMapPanel);
   }
 
   @Test

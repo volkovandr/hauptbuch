@@ -5,24 +5,27 @@ import java.util.Map;
 
 /**
  * The render model for the import review page (import.md §9). e′ delivered the per-account
- * statistics; c1 adds the account map; c3 adds the opening-balance reconciliation cells beside it.
- * The category map and the issues list attach as further panels in slices d and e.
+ * statistics; c1 adds the account map; c3 adds the opening-balance reconciliation cells beside it;
+ * d1 adds the category map. The issues list attaches as a further panel in slice e.
  *
  * @param accounts one row per Money account that has a staged file, ordered by account name
  * @param accountMap the account-map panel (import.md §5.1; plan c1)
  * @param openingBalances the opening-balance reconciliation cells, keyed by {@code import_account}
  *     id (import.md §5.1; plan c3)
+ * @param categoryMap the category-map panel (import.md §5.2; plan d1)
  */
 public record ImportReview(
     List<AccountStatisticsRow> accounts,
     ImportAccountMap accountMap,
-    Map<Long, ImportOpeningBalanceCells> openingBalances) {
+    Map<Long, ImportOpeningBalanceCells> openingBalances,
+    ImportCategoryMap categoryMap) {
 
   /** Defensive copies. */
   public ImportReview {
     accounts = accounts == null ? List.of() : List.copyOf(accounts);
     accountMap = accountMap == null ? new ImportAccountMap(null, null, null, null) : accountMap;
     openingBalances = openingBalances == null ? Map.of() : Map.copyOf(openingBalances);
+    categoryMap = categoryMap == null ? new ImportCategoryMap(null, null, null) : categoryMap;
   }
 
   /** True when nothing has been staged yet — the page shows only its explanatory copy. */
