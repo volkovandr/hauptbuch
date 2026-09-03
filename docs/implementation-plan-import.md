@@ -252,7 +252,7 @@ routing stays with `CurrencyLeafService` and the paying account's currency.
 **Done when:** a path maps to category + N tags, bulk assignment covers a multi-select, the counts
 come from a `sqlLogicTest`-first query, and the screen refuses to offer currency leaves.
 
-### d2 — Payee resolution and counts
+### d2 — Payee resolution and counts ✅ **complete** (owner-confirmed 2026-09-03)
 Payees are **auto-created, not mapped** (§5.3): resolution is a routine, reusing
 `PayeeService.parseCreateNew` (the existing `Name - City - Country` parser and its `country_alias`
 validation) and the address lookup — **there must not be a second parser**. Matching is
@@ -370,7 +370,7 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
-- **v0.14 (2026-09-03):** **d2 implemented** (owner-confirmation pending) — payee resolution and
+- **v0.14 (2026-09-03):** **d2 complete** (owner-confirmed 2026-09-03) — payee resolution and
   counts (import.md §5.3). `PayeeService.resolveImportedPayee(payeeText)` is the routine f2 will
   call per staged row: reuses the register's `parseCreateNew` (no second parser), matches
   case-insensitively on the parsed `Name - City - Country`, inserts only when new. **Decision the
