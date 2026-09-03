@@ -64,6 +64,26 @@ public class ImportCategoryMapService {
   }
 
   /**
+   * Reject a single-row map action whose target row is not in the open campaign (import.md §5.2) —
+   * a no-op on success. The controller calls this <strong>before</strong> {@link
+   * #resolveNewCategory}, so a mistaken submit (a stale row id) is refused before a typed
+   * new-category path can create — and subdivide — anything in the taxonomy.
+   */
+  public void requireMappableRow(long importCategoryId) {
+    requireRowInOpenSession(importCategoryId);
+  }
+
+  /**
+   * Reject a bulk map action with nothing ticked, or a ticked id not in the open campaign
+   * (import.md §5.2) — a no-op on success. Called before {@link #resolveNewCategory} for the same
+   * reason as {@link #requireMappableRow}: an empty "Map ticked" must not leave a new category
+   * behind.
+   */
+  public void requireMappableSelection(List<Long> importCategoryIds) {
+    requireSelection(importCategoryIds);
+  }
+
+  /**
    * Resolve a typed {@code Parent - Child} category path, <strong>creating</strong> the leaf under
    * its existing parent (import.md §5.2) — the "create a new category" field of the map form, which
    * always means create, exactly as the account map's new-account field always opens an account.
@@ -116,14 +136,16 @@ public class ImportCategoryMapService {
     for (ImportCategory row : rows) {
       write(row.importCategoryId(), accountId, row.moneyPath(), live);
     }
-    LOG.info("Import: {} category paths bulk-mapped to category {}", rows.size(), accountId);
+    LOG.debug("Import: {} category paths bulk-mapped to category {}", rows.size(), accountId);
   }
 
   private void write(long importCategoryId, long accountId, String moneyPath, Set<Long> tagIds) {
     importCategoryRepository.mapToCategory(importCategoryId, accountId);
     importCategoryTagRepository.clearTags(importCategoryId);
     tagIds.forEach(tagId -> importCategoryTagRepository.addTag(importCategoryId, tagId));
-    LOG.info(
+    // A path→category mapping is routine and high-frequency (~300 paths, bulk-assigned): DEBUG, not
+    // INFO (CLAUDE.md §5). Creating the category itself still logs INFO, in `categories`.
+    LOG.debug(
         "Import category path \"{}\" mapped to category {} with tags {}",
         moneyPath,
         accountId,

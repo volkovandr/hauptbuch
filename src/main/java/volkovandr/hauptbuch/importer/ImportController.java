@@ -211,6 +211,9 @@ class ImportController {
       RedirectAttributes redirectAttributes) {
     List<Long> tags = tagIds == null ? List.of() : tagIds;
     try {
+      // Validate the target row first — resolveCategoryChoice can CREATE (and subdivide) a
+      // category, so a stale/mistaken submit must be refused before that (review finding, d1).
+      importCategoryMapService.requireMappableRow(importCategoryId);
       Long resolved = resolveCategoryChoice(accountId, newCategoryPath, redirectAttributes);
       if (resolved != null) {
         importCategoryMapService.mapResolved(importCategoryId, resolved, tags);
@@ -237,6 +240,10 @@ class ImportController {
     List<Long> ids = importCategoryIds == null ? List.of() : importCategoryIds;
     List<Long> tags = tagIds == null ? List.of() : tagIds;
     try {
+      // Validate the ticked selection first — resolveCategoryChoice can CREATE (and subdivide) a
+      // category, so an empty or mistaken "Map ticked" must be refused before that (review
+      // finding, d1).
+      importCategoryMapService.requireMappableSelection(ids);
       Long resolved = resolveCategoryChoice(accountId, newCategoryPath, redirectAttributes);
       if (resolved != null) {
         importCategoryMapService.bulkMapResolved(ids, resolved, tags);

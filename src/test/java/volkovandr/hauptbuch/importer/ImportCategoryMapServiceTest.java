@@ -179,4 +179,29 @@ class ImportCategoryMapServiceTest {
 
     verify(importCategoryRepository, never()).mapToCategory(anyLong(), anyLong());
   }
+
+  @Test
+  void requireMappableRowThrowsForStaleRowSoControllerChecksBeforeCategoryCreation() {
+    openSession();
+    when(importCategoryRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(10L, "Audi:Fuel")));
+
+    service().requireMappableRow(10L); // in the campaign — no throw
+    assertThatThrownBy(() -> service().requireMappableRow(999L))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void requireMappableSelectionThrowsForNothingTickedOrAnUnknownId() {
+    openSession();
+    when(importCategoryRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(unmapped(10L, "Audi:Fuel")));
+
+    service().requireMappableSelection(List.of(10L)); // valid — no throw
+    assertThatThrownBy(() -> service().requireMappableSelection(List.of()))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Tick at least one");
+    assertThatThrownBy(() -> service().requireMappableSelection(List.of(10L, 999L)))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
 }

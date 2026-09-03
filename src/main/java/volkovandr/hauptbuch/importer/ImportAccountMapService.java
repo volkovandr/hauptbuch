@@ -87,7 +87,9 @@ public class ImportAccountMapService {
           "\"" + row.moneyAccountName() + "\" must map to an asset or liability account");
     }
     importAccountRepository.mapToAccount(importAccountId, accountId, null);
-    LOG.info(
+    // A mapping to an existing account creates nothing structural — DEBUG, not INFO (CLAUDE.md §5);
+    // mapToNew / mapToPerson stay at INFO because they can open an account or provision a person.
+    LOG.debug(
         "Import account \"{}\" mapped to account {} ({})",
         row.moneyAccountName(),
         accountId,
