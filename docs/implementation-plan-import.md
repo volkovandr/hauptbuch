@@ -365,6 +365,17 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.14 (2026-09-03):** **d2 implemented** (owner-confirmation pending) — payee resolution and
+  counts (import.md §5.3). `PayeeService.resolveImportedPayee(payeeText)` is the routine f2 will
+  call per staged row: reuses the register's `parseCreateNew` (no second parser), matches
+  case-insensitively on the parsed `Name - City - Country`, inserts only when new. **Decision the
+  design left open, settled here (owner call):** case-only variants of one merchant consolidate onto
+  one payee and it is kept at the **best-capitalised** spelling seen — proper case (`Rewe`) outranks
+  all-caps (`REWE`) outranks lower-case (`rewe`); a better spelling *renames* the existing payee
+  (`PayeeRepository.findLiveByAddress` + `rename`). The review shows only counts —
+  `ImportStatisticsRepository.payeeResolution` (`sqlLogicTest`): distinct payees, how many seen
+  once, and how many rows carry a wholly-destroyed name and will book with `payee_id` null. New
+  `ImportPayeeSummary` panel on the review. No schema change.
 - **v0.13 (2026-09-03):** **d1 complete** (owner-confirmed 2026-09-03) — the category map (import.md
   §5.2, §8): one Money path → one Hauptbuch category **and** its tags, written together.
   `ImportCategoryMapService.mapResolved` / `bulkMapResolved` over `ImportCategoryRepository.mapToCategory`

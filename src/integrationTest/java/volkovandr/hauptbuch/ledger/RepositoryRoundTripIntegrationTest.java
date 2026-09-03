@@ -396,6 +396,27 @@ class RepositoryRoundTripIntegrationTest {
   }
 
   @Test
+  void findLiveByAddressReturnsEveryCaseVariantAndRenameUpdatesTheName() {
+    long rewe = payeeRepository.insert("Rewe", "Dortmund", "DEU");
+    long shouty = payeeRepository.insert("REWE", "Dortmund", "DEU");
+    payeeRepository.insert("Rewe", "Berlin", "DEU"); // different city — not a variant
+    payeeRepository.insert("Rewe", "Dortmund", null); // different country — not a variant
+
+    assertThat(payeeRepository.findLiveByAddress("rewe", "Dortmund", "DEU"))
+        .extracting(Payee::payeeId)
+        .containsExactly(rewe, shouty);
+
+    payeeRepository.rename(shouty, "Rewe");
+    assertThat(payeeRepository.findById(shouty).orElseThrow().name()).isEqualTo("Rewe");
+
+    // A payee with no address is matched by nulls, same as findByAddress.
+    long bare = payeeRepository.insert("Kiosk", null, null);
+    assertThat(payeeRepository.findLiveByAddress("KIOSK", null, null))
+        .extracting(Payee::payeeId)
+        .containsExactly(bare);
+  }
+
+  @Test
   void countryListAndAliasLookupReadFromTheSeed() {
     // The country reference list and its alias lookup (register §3.4) — plain reads over the V4
     // seed.

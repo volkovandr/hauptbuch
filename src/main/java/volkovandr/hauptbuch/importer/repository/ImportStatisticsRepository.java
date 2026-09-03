@@ -5,6 +5,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.importer.ImportAccountStatistics;
 import volkovandr.hauptbuch.importer.ImportCategorySignEvidence;
+import volkovandr.hauptbuch.importer.ImportPayeeSummary;
 import volkovandr.hauptbuch.importer.ImportStagedOpeningBalance;
 
 /**
@@ -15,6 +16,8 @@ import volkovandr.hauptbuch.importer.ImportStagedOpeningBalance;
  */
 @Repository
 public class ImportStatisticsRepository {
+
+  private static final String SESSION_ID = "sessionId";
 
   private final JdbcClient jdbcClient;
 
@@ -44,7 +47,7 @@ public class ImportStatisticsRepository {
              group by f.money_account_name
              order by f.money_account_name
             """)
-        .param("sessionId", importSessionId)
+        .param(SESSION_ID, importSessionId)
         .query(ImportAccountStatistics.class)
         .list();
   }
@@ -72,7 +75,7 @@ public class ImportStatisticsRepository {
                and p.funding
              order by f.money_account_name, t.date, t.import_transaction_id
             """)
-        .param("sessionId", importSessionId)
+        .param(SESSION_ID, importSessionId)
         .query(ImportStagedOpeningBalance.class)
         .list();
   }
@@ -107,8 +110,54 @@ public class ImportStatisticsRepository {
              group by p.money_category_path
              order by p.money_category_path
             """)
-        .param("sessionId", importSessionId)
+        .param(SESSION_ID, importSessionId)
         .query(ImportCategorySignEvidence.class)
         .list();
+  }
+
+  /**
+   * The payee figures for a session's review (import.md §5.3; plan d2): the distinct payee count,
+   * how many of those are seen on just one staged transaction, and how many staged rows carry a
+   * wholly-destroyed name (§4.4) and so book with no payee. Payees are never mapped, so this is all
+   * the review shows for them.
+   *
+   * <p>SQL-resident logic (grouping, case folding, filtered aggregates over {@code import_file} →
+   * {@code import_transaction}), covered in the {@code sqlLogicTest} tier (CLAUDE.md §6). The
+   * distinct / seen-once counts group on the case-folded {@code payee_text} with surrounding and
+   * repeated whitespace normalised — an approximation of {@code PayeeService.resolveImportedPayee},
+   * which additionally parses the {@code Name - City - Country} address; close enough for the
+   * sanity check the owner runs against Money's own list. Rows in a non-booking state ({@code
+   * mirrored} / {@code excluded}, §6) are excluded, as in {@link #perCategoryPath}.
+   */
+  public ImportPayeeSummary payeeResolution(long importSessionId) {
+    return jdbcClient
+        .sql(
+            """
+            with staged as (
+              select t.payee_text, t.payee_destroyed
+                from import_file f
+                join import_transaction t on t.import_file_id = f.import_file_id
+               where f.import_session_id = :sessionId
+                 and t.state not in ('mirrored', 'excluded')
+            ),
+            named as (
+              -- collapse every whitespace run to one space first, then trim the ends, so a
+              -- leading tab folds the same as a leading space (the parser splits on \\s too).
+              select btrim(regexp_replace(lower(payee_text), '\\s+', ' ', 'g')) as payee_key
+                from staged
+               where payee_text is not null
+            ),
+            grouped as (
+              select payee_key, count(*) as sightings
+                from named
+               group by payee_key
+            )
+            select (select count(*) from grouped)                        as distinct_payees,
+                   (select count(*) from grouped where sightings = 1)    as seen_once,
+                   (select count(*) from staged where payee_destroyed)   as destroyed_rows
+            """)
+        .param(SESSION_ID, importSessionId)
+        .query(ImportPayeeSummary.class)
+        .single();
   }
 }

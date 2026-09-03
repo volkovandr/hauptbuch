@@ -140,6 +140,24 @@ class ImportScreenIntegrationTest {
       ^
       """;
 
+  /**
+   * One good payee, one wholly destroyed on export (import.md §4.4) — the payee summary's input.
+   */
+  private static final String BANK_WITH_DESTROYED_PAYEE =
+      """
+      !Type:Bank
+      D15/07'2004
+      T-12.34
+      PGrocer
+      LFood
+      ^
+      D28/07'2004
+      T-5.00
+      P????
+      LFood
+      ^
+      """;
+
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
 
@@ -536,6 +554,19 @@ class ImportScreenIntegrationTest {
         .perform(get("/import/review").session(session))
         .andExpect(content().string(containsString("net -17,34")))
         .andExpect(content().string(containsString("net -28,00")));
+  }
+
+  @Test
+  void reviewPageSummarisesPayeeCountsAndDestroyedNames() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", BANK_WITH_DESTROYED_PAYEE, "Current Account");
+
+    mockMvc
+        .perform(get("/import/review").session(session))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Payees")))
+        .andExpect(content().string(containsString("1 distinct payees, 1 seen only once")))
+        .andExpect(content().string(containsString("1 staged transactions")));
   }
 
   @Test
