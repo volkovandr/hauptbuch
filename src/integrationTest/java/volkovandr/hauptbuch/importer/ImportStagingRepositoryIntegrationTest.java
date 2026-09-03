@@ -263,6 +263,56 @@ class ImportStagingRepositoryIntegrationTest {
   }
 
   @Test
+  void deletingFileClearsSurvivingMirrorLinkInsteadOfBlocking() {
+    // V21: `import_posting.mirror_pair_id` is `on delete set null`, so removing one staged file
+    // (plan b3) never fails on a transfer whose mirror leg lived in it — the surviving sighting's
+    // link clears and ImportMirrorMatchingService re-matches (import.md §6.1; plan e1).
+    long sessionId = openSession();
+    long keptFile = stageFile(sessionId, "kept.qif").importFileId();
+    long goneFile = stageFile(sessionId, "gone.qif").importFileId();
+    long keptTx = stageTransaction(keptFile, "unreconciled", false);
+    long goneTx = stageTransaction(goneFile, "unreconciled", false);
+    importPostingRepository.insert(leg(keptTx, "20.00", null, null, "Savings", null, false));
+    importPostingRepository.insert(
+        leg(goneTx, "-20.00", null, null, "Current Account", null, false));
+    long keptLeg = postingId(keptTx);
+    long goneLeg = postingId(goneTx);
+    setMirrorPair(keptLeg, goneLeg);
+    setMirrorPair(goneLeg, keptLeg);
+
+    assertThat(importFileRepository.deleteById(goneFile)).isEqualTo(1);
+
+    assertThat(mirrorPairId(keptLeg)).isNull();
+  }
+
+  private long postingId(long transactionId) {
+    return jdbcClient
+        .sql(
+            "select import_posting_id from import_posting where import_transaction_id = :t"
+                + " order by import_posting_id limit 1")
+        .param("t", transactionId)
+        .query(Long.class)
+        .single();
+  }
+
+  private void setMirrorPair(long postingId, long mirrorId) {
+    jdbcClient
+        .sql("update import_posting set mirror_pair_id = :m where import_posting_id = :id")
+        .param("m", mirrorId)
+        .param("id", postingId)
+        .update();
+  }
+
+  private Long mirrorPairId(long postingId) {
+    return jdbcClient
+        .sql("select mirror_pair_id from import_posting where import_posting_id = :id")
+        .param("id", postingId)
+        .query(Long.class)
+        .optional()
+        .orElse(null);
+  }
+
+  @Test
   void deleteBySessionAndFilenameRemovesEverySameNamedFile() {
     long sessionId = openSession();
     stageFile(sessionId, "export.qif");

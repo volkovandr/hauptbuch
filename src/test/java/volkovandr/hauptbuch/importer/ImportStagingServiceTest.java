@@ -45,6 +45,7 @@ class ImportStagingServiceTest {
   @Mock ImportPostingRepository importPostingRepository;
   @Mock ImportAccountRepository importAccountRepository;
   @Mock ImportCategoryRepository importCategoryRepository;
+  @Mock ImportMirrorMatchingService importMirrorMatchingService;
 
   private ImportStagingService service() {
     return new ImportStagingService(
@@ -54,7 +55,8 @@ class ImportStagingServiceTest {
         importTransactionRepository,
         importPostingRepository,
         importAccountRepository,
-        importCategoryRepository);
+        importCategoryRepository,
+        importMirrorMatchingService);
   }
 
   private static PendingImportUpload upload() {
@@ -198,6 +200,8 @@ class ImportStagingServiceTest {
     verify(importPostingRepository).insert(categoryLeg("12.34", null, "Food"));
     // Funding leg: the transaction total (Σ line amounts) on the file's own account (a credit, −).
     verify(importPostingRepository).insert(fundingLeg("-12.34"));
+    // A staged file can supply a transfer's second sighting — re-match runs (plan e1).
+    verify(importMirrorMatchingService).rematchCurrentSession();
   }
 
   @Test
@@ -333,11 +337,21 @@ class ImportStagingServiceTest {
   }
 
   @Test
-  void removeFileDelegatesToTheRepository() {
+  void removeFileDelegatesToTheRepositoryAndReMatches() {
     when(importFileRepository.deleteById(FILE_ID)).thenReturn(1);
 
     service().removeFile(FILE_ID);
 
     verify(importFileRepository).deleteById(FILE_ID);
+    verify(importMirrorMatchingService).rematchCurrentSession();
+  }
+
+  @Test
+  void removeFileThatRemovedNothingDoesNotReMatch() {
+    when(importFileRepository.deleteById(FILE_ID)).thenReturn(0);
+
+    service().removeFile(FILE_ID);
+
+    verifyNoInteractions(importMirrorMatchingService);
   }
 }

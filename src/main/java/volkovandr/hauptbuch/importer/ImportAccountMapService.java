@@ -50,6 +50,7 @@ public class ImportAccountMapService {
   private final PersonService personService;
   private final PersonProvisioningService personProvisioningService;
   private final CurrencyService currencyService;
+  private final ImportMirrorMatchingService importMirrorMatchingService;
 
   ImportAccountMapService(
       ImportSessionService importSessionService,
@@ -57,13 +58,15 @@ public class ImportAccountMapService {
       AccountService accountService,
       PersonService personService,
       PersonProvisioningService personProvisioningService,
-      CurrencyService currencyService) {
+      CurrencyService currencyService,
+      ImportMirrorMatchingService importMirrorMatchingService) {
     this.importSessionService = importSessionService;
     this.importAccountRepository = importAccountRepository;
     this.accountService = accountService;
     this.personService = personService;
     this.personProvisioningService = personProvisioningService;
     this.currencyService = currencyService;
+    this.importMirrorMatchingService = importMirrorMatchingService;
   }
 
   /**
@@ -94,6 +97,7 @@ public class ImportAccountMapService {
         row.moneyAccountName(),
         accountId,
         target.name());
+    importMirrorMatchingService.rematchCurrentSession();
   }
 
   /**
@@ -117,6 +121,7 @@ public class ImportAccountMapService {
         row.moneyAccountName(),
         created.accountId(),
         created.name());
+    importMirrorMatchingService.rematchCurrentSession();
   }
 
   /**
@@ -158,6 +163,7 @@ public class ImportAccountMapService {
         row.moneyAccountName(),
         leaf.accountId(),
         currencyCode);
+    importMirrorMatchingService.rematchCurrentSession();
   }
 
   /**

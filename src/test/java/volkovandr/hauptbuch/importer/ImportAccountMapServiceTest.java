@@ -44,6 +44,7 @@ class ImportAccountMapServiceTest {
   @Mock PersonService personService;
   @Mock PersonProvisioningService personProvisioningService;
   @Mock CurrencyService currencyService;
+  @Mock ImportMirrorMatchingService importMirrorMatchingService;
 
   private ImportAccountMapService service() {
     return new ImportAccountMapService(
@@ -52,7 +53,8 @@ class ImportAccountMapServiceTest {
         accountService,
         personService,
         personProvisioningService,
-        currencyService);
+        currencyService,
+        importMirrorMatchingService);
   }
 
   private void openSession() {
@@ -81,6 +83,8 @@ class ImportAccountMapServiceTest {
     service().mapToExisting(10L, 42L);
 
     verify(importAccountRepository).mapToAccount(10L, 42L, null);
+    // Every account-map edit re-runs mirror matching — the map changes under it (plan e1).
+    verify(importMirrorMatchingService).rematchCurrentSession();
   }
 
   @Test
