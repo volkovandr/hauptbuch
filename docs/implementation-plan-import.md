@@ -241,7 +241,7 @@ overlapping ordinary transactions are handled once, at commit, by the duplicate 
 
 ## Slice d — the category map (§5.2) and payees (§5.3)
 
-### d1 — Path → category + tags
+### d1 — Path → category + tags ✅ **complete** (owner-confirmed 2026-09-03)
 The heart of the mapping work: `Audi:Fuel` → category `Transportation › Car › Fuel` **+ tag
 `Cars:Audi`**, keyed on the full Money path. ~300 paths onto a much smaller curated tree, so the
 screen needs **bulk assignment** (map many selected paths to one category, or one tag across a
@@ -365,7 +365,7 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
-- **v0.13 (2026-09-03):** **d1 implemented** (owner-confirmation pending) — the category map (import.md
+- **v0.13 (2026-09-03):** **d1 complete** (owner-confirmed 2026-09-03) — the category map (import.md
   §5.2, §8): one Money path → one Hauptbuch category **and** its tags, written together.
   `ImportCategoryMapService.mapResolved` / `bulkMapResolved` over `ImportCategoryRepository.mapToCategory`
   and the new `ImportCategoryTagRepository` (junction); `ImportCategoryMapPanel` assembles the
