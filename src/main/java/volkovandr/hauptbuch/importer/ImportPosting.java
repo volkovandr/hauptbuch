@@ -24,6 +24,10 @@ import java.math.BigDecimal;
  * @param className the {@code /Class} suffix — a tag at commit (§8), or null
  * @param mirrorPairId the other sighting of a transfer once matched within staging (§6.1), else
  *     null; set by slice e
+ * @param counterAmount for a resolved <em>cross-currency</em> transfer leg (§6.2; plan e2a), the
+ *     leg's amount in the target account's currency — the mirror sighting's funding-leg total, same
+ *     sign as {@code amount}; null on every other leg and on an unresolved park. {@code
+ *     base_amount} is still not fixed here — that is e3
  * @param funding true for the one synthesised leg on the file's own account that carries the record
  *     total (§7) — the figure ticked against Money's balance (§9.4); false for every category leg
  *     and every transfer leg, including an opening-balance self-transfer leg that names the same
@@ -38,4 +42,5 @@ public record ImportPosting(
     String moneyAccountName,
     String className,
     Long mirrorPairId,
+    BigDecimal counterAmount,
     boolean funding) {}
