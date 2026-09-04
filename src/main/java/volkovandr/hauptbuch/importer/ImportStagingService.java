@@ -86,6 +86,9 @@ public class ImportStagingService {
    */
   @Transactional
   public void removeFile(long importFileId) {
+    // Must run BEFORE the delete: it needs the about-to-vanish mirror postings still in place to
+    // find the survivors pointing at them (import.md §6.2/§6.4; plan e2b).
+    importMirrorMatchingService.clearOrphanedResolutionsBeforeFileRemoval(importFileId);
     if (importFileRepository.deleteById(importFileId) > 0) {
       LOG.info("Import file {} removed from staging", importFileId);
       // A removed file can strand a surviving transfer's mirror (its partner leg is gone, V21 nulls
@@ -104,9 +107,13 @@ public class ImportStagingService {
         importSessionService
             .currentSession()
             .map(
-                session ->
-                    importFileRepository.deleteBySessionAndFilename(
-                        session.importSessionId(), filename))
+                session -> {
+                  // Must run BEFORE the delete — see removeFile (plan e2b).
+                  importMirrorMatchingService.clearOrphanedResolutionsBeforeFilesRemoval(
+                      session.importSessionId(), filename);
+                  return importFileRepository.deleteBySessionAndFilename(
+                      session.importSessionId(), filename);
+                })
             .orElse(0);
     if (removed > 0) {
       importMirrorMatchingService.rematchCurrentSession();

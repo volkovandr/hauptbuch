@@ -45,4 +45,26 @@ public class ImportMirrorMatchingService {
                   mirrored);
             });
   }
+
+  /**
+   * Clear the counter-currency amount of any surviving posting whose recorded mirror lies in {@code
+   * importFileId} — call this <strong>before</strong> that file's cascade delete (plan e2b). The
+   * on-delete-set-null FK (V21) already clears {@code mirror_pair_id} on the survivor; without
+   * this, the now-orphaned {@code counter_amount} left behind would be indistinguishable from a
+   * legitimate hand-entered far amount (§6.4 — also {@code mirror_pair_id is null}) on the next
+   * {@link #rematchCurrentSession}, and could silently book a stale figure.
+   */
+  @Transactional
+  public void clearOrphanedResolutionsBeforeFileRemoval(long importFileId) {
+    importMirrorRepository.clearCounterAmountOfMirrorsIn(importFileId);
+  }
+
+  /**
+   * The {@code (session, filename)} counterpart — every staged file of that name may be removed
+   * (the §2 "replace" clash resolution removes them all before staging the replacement).
+   */
+  @Transactional
+  public void clearOrphanedResolutionsBeforeFilesRemoval(long importSessionId, String filename) {
+    importMirrorRepository.clearCounterAmountOfMirrorsInFilesNamed(importSessionId, filename);
+  }
 }

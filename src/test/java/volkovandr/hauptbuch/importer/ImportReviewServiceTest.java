@@ -30,6 +30,7 @@ class ImportReviewServiceTest {
   @Mock ImportAccountMapPanel importAccountMapPanel;
   @Mock ImportOpeningBalancePanel importOpeningBalancePanel;
   @Mock ImportCategoryMapPanel importCategoryMapPanel;
+  @Mock ImportCrossCurrencyParkService importCrossCurrencyParkService;
 
   private ImportReviewService service() {
     return new ImportReviewService(
@@ -37,7 +38,8 @@ class ImportReviewServiceTest {
         importStatisticsRepository,
         importAccountMapPanel,
         importOpeningBalancePanel,
-        importCategoryMapPanel);
+        importCategoryMapPanel,
+        importCrossCurrencyParkService);
   }
 
   private void openSession() {
@@ -57,7 +59,8 @@ class ImportReviewServiceTest {
         importStatisticsRepository,
         importAccountMapPanel,
         importOpeningBalancePanel,
-        importCategoryMapPanel);
+        importCategoryMapPanel,
+        importCrossCurrencyParkService);
   }
 
   @Test
@@ -99,6 +102,37 @@ class ImportReviewServiceTest {
             });
     assertThat(review.accountMap()).isSameAs(panel);
     assertThat(review.openingBalanceFor(1L)).isEqualTo(ImportOpeningBalanceCells.EMPTY);
+  }
+
+  @Test
+  void formatsTheCrossCurrencyParksForTheOpenSession() {
+    openSession();
+    when(importStatisticsRepository.perMoneyAccount(SESSION_ID)).thenReturn(List.of());
+    when(importCrossCurrencyParkService.parksForSession(SESSION_ID))
+        .thenReturn(
+            List.of(
+                new ImportCrossCurrencyPark(
+                    10L,
+                    20L,
+                    LocalDate.of(2016, 6, 6),
+                    "Euro",
+                    "Franc",
+                    new BigDecimal("100.00"),
+                    false)));
+
+    ImportReview review = service().review().orElseThrow();
+
+    assertThat(review.crossCurrencyParks())
+        .singleElement()
+        .satisfies(
+            row -> {
+              assertThat(row.importPostingId()).isEqualTo(10L);
+              assertThat(row.date()).isEqualTo("06.06.2016");
+              assertThat(row.nearMoneyAccountName()).isEqualTo("Euro");
+              assertThat(row.farMoneyAccountName()).isEqualTo("Franc");
+              assertThat(row.amount()).isEqualTo("100,00");
+              assertThat(row.farExpectFile()).isFalse();
+            });
   }
 
   @Test

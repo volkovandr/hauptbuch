@@ -98,6 +98,17 @@ class ImportMirrorMatchingSqlLogicTest {
         .single();
   }
 
+  private void setExpectFile(long sessionId, String moneyAccountName, boolean expectFile) {
+    jdbcClient
+        .sql(
+            "update import_account set expect_file = :e"
+                + " where import_session_id = :s and money_account_name = :n")
+        .param("e", expectFile)
+        .param("s", sessionId)
+        .param("n", moneyAccountName)
+        .update();
+  }
+
   private void mapAccount(long sessionId, String moneyAccountName, Long accountId) {
     jdbcClient
         .sql(
@@ -538,7 +549,9 @@ class ImportMirrorMatchingSqlLogicTest {
         stageTransfer(francFile, LocalDate.of(2020, 1, 1), "Franc", "Euro", "150.00");
 
     importMirrorRepository.rematch(session);
-    assertThat(importMirrorRepository.rematch(session)).isEqualTo(1);
+    // The second run marks nothing new — the resolution is preserved rather than cleared and
+    // rebuilt (e2b), so there is no fresh "mirrored" transition to count.
+    assertThat(importMirrorRepository.rematch(session)).isZero();
 
     assertThat(stateOf(txnOf(euroLeg))).isEqualTo("ready");
     assertThat(stateOf(txnOf(francLeg))).isEqualTo("mirrored");
@@ -559,5 +572,110 @@ class ImportMirrorMatchingSqlLogicTest {
     assertThat(stateOf(txnOf(legA))).isEqualTo("ready");
     assertThat(stateOf(txnOf(legB))).isEqualTo("mirrored");
     assertThat(counterAmountOf(legA)).isNull();
+  }
+
+  // ── e2b: manual match / hand-entered far amount survive rematch (§6.4/§6.5) ─────────────────
+
+  @Test
+  void rematchPreservesHandEnteredFarAmountAcrossUnrelatedMapEdit() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    stageFile(session, "Franc", account("Sparen", "CHF"));
+    setExpectFile(session, "Franc", false);
+    long euroLeg = stageTransfer(euroFile, LocalDate.of(2023, 1, 1), "Euro", "Franc", "-100.00");
+    importMirrorRepository.rematch(session);
+    assertThat(
+            importMirrorRepository.closeParkWithFarAmount(
+                session, euroLeg, new BigDecimal("150.00")))
+        .isTrue();
+
+    // rematch() re-runs on every account-map edit elsewhere in the campaign (I-5) — simulated here
+    // by simply calling it again — and must not undo the hand-entered figure: there is no second
+    // sighting to re-derive it from.
+    importMirrorRepository.rematch(session);
+
+    assertThat(counterAmountOf(euroLeg)).isEqualByComparingTo("150.00");
+    assertThat(mirrorPairOf(euroLeg)).isNull();
+    assertThat(stateOf(txnOf(euroLeg))).isEqualTo("ready");
+  }
+
+  @Test
+  void rematchPreservesManualMatchAcrossUnrelatedMapEdit() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    long francFile = stageFile(session, "Franc", account("Sparen", "CHF"));
+    // A three-way ambiguous same-day set: manually resolving one pair still leaves the other two
+    // ambiguous between themselves (not the "down to one" shape that would auto-resolve on its
+    // own, which rematchAutoResolvesTheRemainingPairOfAnAmbiguousSetAfterOneIsManuallyMatched
+    // covers) — isolating "preserved" from "auto-resolved" here.
+    long euroA = stageTransfer(euroFile, LocalDate.of(2024, 2, 2), "Euro", "Franc", "-100.00");
+    final long euroB =
+        stageTransfer(euroFile, LocalDate.of(2024, 2, 2), "Euro", "Franc", "-200.00");
+    final long euroC =
+        stageTransfer(euroFile, LocalDate.of(2024, 2, 2), "Euro", "Franc", "-400.00");
+    long francA = stageTransfer(francFile, LocalDate.of(2024, 2, 2), "Franc", "Euro", "150.00");
+    final long francB =
+        stageTransfer(francFile, LocalDate.of(2024, 2, 2), "Franc", "Euro", "305.00");
+    final long francC =
+        stageTransfer(francFile, LocalDate.of(2024, 2, 2), "Franc", "Euro", "610.00");
+    importMirrorRepository.rematch(session);
+    assertThat(importMirrorRepository.manualMatch(session, euroA, francA)).isTrue();
+
+    // rematch() re-runs on every account-map edit elsewhere in the campaign (I-5) — simulated here
+    // by simply calling it again — and must not undo the manual match, even though it cannot
+    // re-derive an ambiguous shape on its own.
+    importMirrorRepository.rematch(session);
+
+    assertThat(mirrorPairOf(euroA)).isEqualTo(francA);
+    assertThat(counterAmountOf(euroA)).isEqualByComparingTo("150.00");
+    assertThat(stateOf(txnOf(euroA))).isEqualTo("ready");
+    assertThat(stateOf(txnOf(francA))).isEqualTo("mirrored");
+    // The still-ambiguous remainder (B vs C) stays parked, undisturbed by the preserved match.
+    assertThat(stateOf(txnOf(euroB))).isEqualTo("parked");
+    assertThat(stateOf(txnOf(euroC))).isEqualTo("parked");
+    assertThat(stateOf(txnOf(francB))).isEqualTo("parked");
+    assertThat(stateOf(txnOf(francC))).isEqualTo("parked");
+  }
+
+  @Test
+  void rematchAutoResolvesTheRemainingPairOfAnAmbiguousSetAfterOneIsManuallyMatched() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    long francFile = stageFile(session, "Franc", account("Sparen", "CHF"));
+    long euroA = stageTransfer(euroFile, LocalDate.of(2025, 3, 3), "Euro", "Franc", "-100.00");
+    final long euroB =
+        stageTransfer(euroFile, LocalDate.of(2025, 3, 3), "Euro", "Franc", "-200.00");
+    long francA = stageTransfer(francFile, LocalDate.of(2025, 3, 3), "Franc", "Euro", "150.00");
+    final long francB =
+        stageTransfer(francFile, LocalDate.of(2025, 3, 3), "Franc", "Euro", "305.00");
+    importMirrorRepository.rematch(session);
+    importMirrorRepository.manualMatch(session, euroA, francA);
+
+    // Now only one pair remains on that (file, named, date) shape — no longer ambiguous.
+    importMirrorRepository.rematch(session);
+
+    assertThat(mirrorPairOf(euroB)).isEqualTo(francB);
+    assertThat(counterAmountOf(euroB)).isEqualByComparingTo("305.00");
+    assertThat(stateOf(txnOf(euroB))).isEqualTo("ready");
+    assertThat(stateOf(txnOf(francB))).isEqualTo("mirrored");
+  }
+
+  @Test
+  void rematchInvalidatesResolvedCrossCurrencyParkWhenItsOwnCrossingNoLongerHolds() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    stageFile(session, "Franc", account("Sparen", "CHF"));
+    setExpectFile(session, "Franc", false);
+    long euroLeg = stageTransfer(euroFile, LocalDate.of(2026, 4, 4), "Euro", "Franc", "-100.00");
+    importMirrorRepository.rematch(session);
+    importMirrorRepository.closeParkWithFarAmount(session, euroLeg, new BigDecimal("150.00"));
+
+    // Remap "Franc" to a EUR account: the hand-entered figure no longer means anything, since the
+    // leg is not cross-currency any more — it must be cleared, not silently kept.
+    mapAccount(session, "Franc", account("Franc EUR", "EUR"));
+    importMirrorRepository.rematch(session);
+
+    assertThat(counterAmountOf(euroLeg)).isNull();
+    assertThat(stateOf(txnOf(euroLeg))).isEqualTo("ready");
   }
 }

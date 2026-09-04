@@ -560,6 +560,92 @@
     </section>
 
     <!--
+      Cross-currency parks (import.md §6.2/§6.4/§6.5; plan e2b). A cross-currency transfer parks on
+      first sighting — QIF states no far-side amount, and base_amount is a frozen fact that must
+      never be invented. Most parks resolve automatically once the mirror is staged (e2a); what is
+      left here is what that pass could not disambiguate on its own: an ambiguous same-day set or a
+      cross-currency split leg (manual match), and a transfer to an account whose export will never
+      arrive (hand-entered far amount, gated on that account's expect-file being cleared, §6.4).
+    -->
+    <section
+      class="panel"
+      id="cross-currency"
+      th:unless="${#lists.isEmpty(review.crossCurrencyParks())}"
+    >
+      <p class="eyebrow">Cross-currency parks</p>
+      <p class="muted">
+        A cross-currency transfer parks until its mirror supplies the real far-currency amount —
+        most resolve automatically once staged. What remains here needs the owner: pair two parked
+        sightings by hand, or type the far amount for a transfer whose counterparty's export will
+        never arrive.
+      </p>
+      <ul class="import-uploads">
+        <li th:each="row : ${review.crossCurrencyParks()}">
+          <span class="num" th:text="${row.date()}">06.06.2016</span>
+          <span
+            th:text="' ' + ${row.nearMoneyAccountName()} + ' → ' + ${row.farMoneyAccountName()}"
+          >
+            Euro → Franc</span
+          >
+          <span class="muted num" th:text="' · ' + ${row.amount()}"> · 100,00</span>
+
+          <!-- Manual match (§6.5): pick the other parked sighting from the same list. -->
+          <form
+            method="post"
+            th:action="@{/import/review/cross-currency/{id}/match(id=${row.importPostingId()})}"
+            class="form"
+          >
+            <div class="field">
+              <label class="field__label">Match with</label>
+              <select name="mirrorPostingId" class="input">
+                <option value="">— choose the other sighting —</option>
+                <option
+                  th:each="other : ${review.crossCurrencyParks()}"
+                  th:unless="${other.importPostingId() == row.importPostingId()}"
+                  th:value="${other.importPostingId()}"
+                  th:text="${other.date()} + ' ' + ${other.nearMoneyAccountName()} + ' → ' + ${other.farMoneyAccountName()} + ' · ' + ${other.amount()}"
+                >
+                  06.06.2016 Franc → Euro · 150,00</option
+                >
+              </select>
+            </div>
+            <p class="actions"><button type="submit" class="btn">Match</button></p>
+          </form>
+
+          <!-- Hand-entered far amount (§6.4): only offered once the far account's expect-file is
+               cleared — otherwise a real mirror may still arrive and must not be pre-empted. -->
+          <form
+            th:if="${!row.farExpectFile()}"
+            method="post"
+            th:action="@{/import/review/cross-currency/{id}/close(id=${row.importPostingId()})}"
+            class="form"
+          >
+            <div class="field">
+              <label class="field__label">
+                Hand-enter the far amount (<span th:text="${row.farMoneyAccountName()}">Franc</span>'s
+                own currency)
+              </label>
+              <input
+                type="text"
+                name="farAmount"
+                class="input"
+                inputmode="decimal"
+                autocomplete="off"
+                placeholder="150,00"
+              />
+            </div>
+            <p class="actions"><button type="submit" class="btn">Close park</button></p>
+          </form>
+          <p class="muted" th:if="${row.farExpectFile()}">
+            Still expecting <span th:text="${row.farMoneyAccountName()}">Franc</span>'s own export
+            — clear its expect-file flag in the account map above to hand-enter the far amount
+            instead.
+          </p>
+        </li>
+      </ul>
+    </section>
+
+    <!--
       Payee summary (import.md §5.3; plan d2). Payees are auto-created, never mapped — a fourth map
       with several thousand rows would sink the campaign — so the review shows only counts: how many
       distinct payees the staged files name, how many are seen just once, and how many rows carry a

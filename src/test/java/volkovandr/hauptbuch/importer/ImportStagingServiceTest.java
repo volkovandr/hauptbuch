@@ -352,16 +352,20 @@ class ImportStagingServiceTest {
 
     service().removeFile(FILE_ID);
 
+    // The orphan clean-up must run before the delete (plan e2b) — a survivor's stale
+    // counter_amount would otherwise be indistinguishable from a hand-entered one (§6.4).
+    verify(importMirrorMatchingService).clearOrphanedResolutionsBeforeFileRemoval(FILE_ID);
     verify(importFileRepository).deleteById(FILE_ID);
     verify(importMirrorMatchingService).rematchCurrentSession();
   }
 
   @Test
-  void removeFileThatRemovedNothingDoesNotReMatch() {
+  void removeFileThatRemovedNothingStillCleansUpButDoesNotReMatch() {
     when(importFileRepository.deleteById(FILE_ID)).thenReturn(0);
 
     service().removeFile(FILE_ID);
 
-    verifyNoInteractions(importMirrorMatchingService);
+    verify(importMirrorMatchingService).clearOrphanedResolutionsBeforeFileRemoval(FILE_ID);
+    verify(importMirrorMatchingService, never()).rematchCurrentSession();
   }
 }

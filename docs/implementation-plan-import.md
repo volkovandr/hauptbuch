@@ -299,15 +299,28 @@ which already owns `rematch`), with the cross-currency and remap-clears cases cr
 an ambiguous set stays parked; a map edit that removes the currency crossing un-parks and clears the
 far amount; re-running is idempotent.
 
-### e2b — The cross-currency issues surface: manual match and hand-entered far amount
+### e2b — The cross-currency issues surface: manual match and hand-entered far amount ✅ **implemented** (owner-confirmation pending)
 The review's cross-currency panel (a focused precursor to e4's full issues list): parked
 cross-currency transfers, an explicit **manual match** of two parked sightings, and — for a transfer
 to an account whose `expect-file` was cleared and whose file will never arrive (§6.4) — a
 **hand-entered far amount** that closes the park. Both paths set `counter_amount` and move the
 transaction to `ready`.
 
+**Rematch-survival decision (owner call, 2026-09-04):** neither resolution is re-derivable (a manual
+match is by definition ambiguous; a hand-entered figure has no second sighting at all), yet `rematch`
+re-runs on every unrelated account-map edit (I-5). `ImportMirrorRepository.rematch` was changed to
+**preserve** a cross-currency resolution across such a re-run instead of blindly clearing it — a
+resolved posting is invalidated only when its own crossing no longer holds under the current map — no
+migration needed. File removal is handled explicitly: `clearCounterAmountOfMirrorsIn`/`…InFilesNamed`
+run **before** the cascade delete so a survivor's now-orphaned `counter_amount` (its mirror gone) is
+never mistaken for a legitimate hand-entered one on the next rematch.
+
 **Done when:** a manual match and a hand-entered far amount both close a park; nothing books a
-derived or guessed amount.
+derived or guessed amount. Both met — `ImportCrossCurrencyParkSqlLogicTest`, three new cases in
+`ImportMirrorMatchingSqlLogicTest` (rematch preserves a manual match / a hand-entered amount across
+an unrelated edit, and auto-resolves a remaining ambiguous pair once one sibling is manually
+resolved), `ImportCrossCurrencyParkServiceTest` and `ImportCrossCurrencyParkIntegrationTest` all
+green under `./gradlew check`.
 
 ### e3 — Rate write-back (V23) and the non-base pair
 When a mirror supplies both real native amounts, that pair **is** the conversion rate for that date
@@ -390,6 +403,23 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.17 (2026-09-04):** **e2b implemented** (owner-confirmation pending) — the cross-currency
+  panel's manual match (§6.5) and hand-entered far amount (§6.4), in `ImportCrossCurrencyParkService`
+  / `ImportMirrorRepository.manualMatch` / `.closeParkWithFarAmount`. **Rematch-survival decision
+  (owner call):** since neither resolution is re-derivable, `ImportMirrorRepository.rematch` no
+  longer blindly clears a cross-currency resolution on every unrelated map edit (I-5) — it now
+  **preserves** one and invalidates it only when the posting's own crossing no longer holds under
+  the current map (`invalidateStaleCrossCurrencyResolutions`), no migration needed. A same-currency
+  mirror link (e1) is unaffected — still fully re-derivable, still cleared and rebuilt every run.
+  Two knock-on fixes this required: (1) `matchAndResolveCrossCurrency`'s candidate set now excludes
+  an already-resolved posting, so resolving one pair of an ambiguous same-day set lets a genuinely
+  unambiguous sibling pair auto-resolve on the next rematch instead of staying falsely ambiguous;
+  (2) file removal (`ImportStagingService.removeFile`/`removeFilesNamed`) now clears a survivor's
+  `counter_amount` **before** the cascade delete (`clearCounterAmountOfMirrorsIn`/`…InFilesNamed`) —
+  otherwise an orphaned resolution (its mirror gone, V21's FK already nulled `mirror_pair_id`) would
+  be indistinguishable from a legitimate hand-entered one on the next rematch. `rematch`'s return
+  value (mirrored-count) is now a true idempotency signal — a re-run with nothing new to mark
+  returns 0, not the count from its original resolution.
 - **v0.16 (2026-09-04):** **Slice e2 split into e2a / e2b** (too large for one session), and **e2a
   implemented** (owner-confirmation pending) — cross-currency parking and automatic resolution
   (import.md §6.2). **§6.5 settled (owner call):** the cross-currency matching signature is loosened
