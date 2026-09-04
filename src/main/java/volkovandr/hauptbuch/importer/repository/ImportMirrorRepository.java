@@ -1,31 +1,53 @@
 package volkovandr.hauptbuch.importer.repository;
 
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import volkovandr.hauptbuch.importer.ImportCrossCurrencyPark;
 
 /**
- * Native-SQL transfer mirror matching within staging (import.md §6.1; plan e1) and cross-currency
- * parking (§6.2/§6.5; plan e2a). A transfer appears <strong>twice</strong> — once in each account's
- * export — and the second sighting must be recognised and skipped so the commit (f2) books it once.
+ * Native-SQL transfer mirror matching within staging (import.md §6.1; plan e1), cross-currency
+ * parking (§6.2/§6.5; plan e2a) and its manual resolution (§6.4/§6.5; plan e2b). A transfer appears
+ * <strong>twice</strong> — once in each account's export — and the second sighting must be
+ * recognised and skipped so the commit (f2) books it once.
  *
- * <p>Two matching rules, by whether the transfer crosses a currency boundary (the file's own mapped
- * account currency vs the account its transfer leg names):
+ * <p>Three matching rules, by whether the transfer crosses a currency boundary (the file's own
+ * mapped account currency vs the account its transfer leg names):
  *
  * <ul>
  *   <li><strong>Same currency (e1):</strong> match on the <em>posting pair</em> — same date, the
  *       two mapped account ids crossing, and equal-and-opposite amount. Never a transaction-level
  *       signature, because a Money split line can itself be a transfer whose mirror arrives as an
  *       ordinary unsplit transaction (§6.1).
- *   <li><strong>Cross currency (e2a):</strong> QIF states no far-side amount and {@code
+ *   <li><strong>Cross currency, automatic (e2a):</strong> QIF states no far-side amount and {@code
  *       base_amount} is a frozen fact that must never be invented (§6.2), so the transaction
  *       <em>parks</em> ({@code state = 'parked'}, blocking the gate) until the mirror supplies the
  *       real far amount. The pair is matched on the <strong>loosened</strong> signature — date +
  *       the two mapped account ids crossing, near-side amount ignored — and only when that directed
- *       shape is unambiguous 1:1. Anything ambiguous stays parked for a manual match (§6.5; plan
- *       e2b), as does a cross-currency <em>split</em> leg. On a match the surviving sighting's
- *       transfer leg takes the mirror's funding-leg amount as its {@code counter_amount} (V22); the
- *       rate write-back and {@code base_amount} are e3.
+ *       shape is unambiguous 1:1. Anything ambiguous stays parked for a manual match (§6.5), as
+ *       does a cross-currency <em>split</em> leg.
+ *   <li><strong>Cross currency, manual (e2b):</strong> {@link #manualMatch} lets the owner pair two
+ *       parked legs the automatic pass could not disambiguate, and {@link #closeParkWithFarAmount}
+ *       lets the owner type the far amount by hand for a counterparty whose export will never
+ *       arrive (§6.4, {@code expect-file} cleared) — there is no second sighting to match against
+ *       at all.
  * </ul>
+ *
+ * <p>On a resolution — automatic or manual — the surviving sighting's transfer leg takes the real
+ * far-currency amount as its {@code counter_amount} (V22), same sign as {@code amount}; a matched
+ * (as opposed to hand-entered) resolution also links {@code mirror_pair_id} and marks the redundant
+ * sighting {@code mirrored}. No {@code base_amount}, no rate write-back — that is e3.
+ *
+ * <p><strong>A cross-currency resolution is not always re-derivable</strong> — a manual match is by
+ * definition a shape the automatic pass cannot disambiguate on its own, and a hand-entered far
+ * amount has no second sighting to re-derive from at all. So {@link #rematch}, which the campaign
+ * re-runs on every account-map edit (I-5), <em>preserves</em> a cross-currency resolution across an
+ * unrelated edit instead of blindly clearing it, and invalidates one only when it is no longer a
+ * cross-currency transfer leg under the <strong>current</strong> map (§{@link
+ * #invalidateStaleCrossCurrencyResolutions}). A same-currency mirror link (e1) stays fully
+ * re-derivable and is cleared and rebuilt every run, as before.
  *
  * <p>Matching runs entirely inside staging, against rows the importer produced, so it can never
  * swallow a transaction the owner entered by hand — that risk is handled once, explicitly, by the
@@ -40,6 +62,12 @@ import org.springframework.stereotype.Repository;
 public class ImportMirrorRepository {
 
   private static final String SESSION_ID = "sessionId";
+  private static final String FILE_ID = "fileId";
+  private static final String FILENAME = "filename";
+  private static final String POSTING_ID = "postingId";
+  private static final String MIRROR_ID = "mirrorId";
+  private static final String READY = "ready";
+  private static final String MIRRORED = "mirrored";
 
   // A mapped account's currency, in the queries below, is
   // `coalesce(<row>.target_currency_code, <account>.currency_code)`: an existing target takes
@@ -140,9 +168,12 @@ public class ImportMirrorRepository {
   /**
    * The <strong>resolvable cross-currency</strong> transfer pairs of a session —
    * <em>symmetric</em>, like {@link #MATCHED_PAIRS}. A transfer leg qualifies when its two mapped
-   * accounts have <em>different</em> currencies, its transaction is not already a booked mirror,
-   * and it is a <em>simple</em> transfer (exactly one non-funding leg): a cross-currency split leg
-   * is left parked for the manual match (e2b).
+   * accounts have <em>different</em> currencies, its transaction is not already a booked mirror, it
+   * is not <strong>already resolved</strong> ({@code counter_amount is null} — excluding an
+   * already-resolved sibling keeps it from inflating {@code shape_count} for a still-parked leg
+   * that shares its (file, named, date) shape, e.g. after e2b resolves one pair of an ambiguous
+   * same-day set), and it is a <em>simple</em> transfer (exactly one non-funding leg): a
+   * cross-currency split leg is left parked for the manual match (e2b).
    *
    * <p>Pairing is on the loosened signature — {@code (file_account_id, named_account_id, date)}
    * crossing, near amount ignored — and only when that directed shape holds exactly one sighting on
@@ -167,6 +198,7 @@ public class ImportMirrorRepository {
                p.amount                as amount,
                p.money_account_name    as money_account_name,
                p.funding               as funding,
+               p.counter_amount        as counter_amount,
                t.date                  as txn_date,
                t.state                 as txn_state,
                f.import_session_id     as session_id,
@@ -198,6 +230,7 @@ public class ImportMirrorRepository {
          where s.money_account_name is not null
            and not s.funding
            and s.txn_state in ('ready', 'parked')
+           and s.counter_amount is null
            and s.non_funding_legs = 1
            and fa.account_id is not null
            and la.account_id is not null
@@ -264,9 +297,43 @@ public class ImportMirrorRepository {
           join import_transaction t on t.import_transaction_id = p.import_transaction_id
           join import_file f on f.import_file_id = t.import_file_id
          where f.import_session_id = :sessionId
-           and p.mirror_pair_id is not null
            and p.counter_amount is not null
       )
+      """;
+
+  /**
+   * The currently-resolved cross-currency postings of a session (a posting with {@code
+   * counter_amount} set — set by {@link #matchAndResolveCrossCurrency}, {@link #manualMatch} or
+   * {@link #closeParkWithFarAmount}) whose crossing no longer holds under the
+   * <strong>current</strong> map: the two mapped accounts' currencies are unknown or now equal. A
+   * posting's own crossing fully determines this — its {@code file_account_id}/{@code
+   * named_account_id} are always looked up from the same shared {@code import_account} rows its
+   * former mirror partner would use, so checking the row on its own is equivalent to checking the
+   * pair.
+   */
+  private static final String STALE_CROSS_CURRENCY_RESOLUTIONS =
+      """
+      with resolved as (
+        select p.import_posting_id as pos_id,
+               coalesce(fa.target_currency_code, fac.currency_code) as near_currency,
+               coalesce(la.target_currency_code, lac.currency_code) as far_currency
+          from import_posting p
+          join import_transaction t on t.import_transaction_id = p.import_transaction_id
+          join import_file f on f.import_file_id = t.import_file_id
+          join import_account fa on fa.import_session_id = f.import_session_id
+                               and fa.money_account_name = f.money_account_name
+          left join import_account la on la.import_session_id = f.import_session_id
+                                     and la.money_account_name = p.money_account_name
+          left join account fac on fac.account_id = fa.account_id
+          left join account lac on lac.account_id = la.account_id
+         where f.import_session_id = :sessionId
+           and p.counter_amount is not null
+      )
+      select pos_id
+        from resolved
+       where near_currency is null
+          or far_currency is null
+          or near_currency = far_currency
       """;
 
   private final JdbcClient jdbcClient;
@@ -276,24 +343,56 @@ public class ImportMirrorRepository {
   }
 
   /**
-   * Re-run mirror matching and cross-currency parking for a session (import.md §6.1/§6.2). Clears
-   * the session's prior mirror marks and far amounts, matches same-currency pairs (links the
-   * posting pair, marks the skippable sighting {@code mirrored}), resolves the unambiguous
-   * cross-currency pairs the same way, and parks every cross-currency transfer that is still
-   * unresolved (un-parking any that stopped being cross-currency). Idempotent and re-runnable — the
-   * account map keeps changing under it as the campaign proceeds.
+   * Re-run mirror matching and cross-currency parking for a session (import.md §6.1/§6.2/§6.5).
+   * Invalidates any cross-currency resolution that is no longer valid under the current map,
+   * matches same-currency pairs (links the posting pair, marks the skippable sighting {@code
+   * mirrored}), resolves the unambiguous cross-currency pairs the same way, and parks every
+   * cross-currency transfer that is still unresolved (un-parking any that stopped being
+   * cross-currency). Idempotent and re-runnable — the account map keeps changing under it as the
+   * campaign proceeds — and it <strong>preserves</strong> a manual match or a hand-entered far
+   * amount (e2b) rather than clearing and failing to re-derive it.
    *
    * @return the number of transactions marked {@code mirrored} (same-currency + cross-currency)
    */
   public int rematch(long importSessionId) {
-    clearSessionMirrors(importSessionId);
+    invalidateStaleCrossCurrencyResolutions(importSessionId);
+    resetMirroredState(importSessionId);
+    clearSameCurrencyMirrorLinks(importSessionId);
     int sameCurrency = matchAndMark(importSessionId);
     int crossCurrency = matchAndResolveCrossCurrency(importSessionId);
     reparkUnresolvedCrossCurrencyTransfers(importSessionId);
     return sameCurrency + crossCurrency;
   }
 
-  private void clearSessionMirrors(long importSessionId) {
+  /**
+   * Clear {@code mirror_pair_id}/{@code counter_amount} on every cross-currency-resolved posting
+   * (automatic, manual or hand-entered) whose crossing no longer holds under the current map — see
+   * {@link #STALE_CROSS_CURRENCY_RESOLUTIONS}. A still-valid resolution is left untouched, which is
+   * what lets a manual match or a hand-entered far amount survive a rematch triggered by an
+   * unrelated account-map edit.
+   */
+  private void invalidateStaleCrossCurrencyResolutions(long importSessionId) {
+    jdbcClient
+        .sql(
+            """
+            update import_posting p
+               set mirror_pair_id = null, counter_amount = null
+             where p.import_posting_id in (
+            """
+                + STALE_CROSS_CURRENCY_RESOLUTIONS
+                + ")")
+        .param(SESSION_ID, importSessionId)
+        .update();
+  }
+
+  /**
+   * Reset every {@code mirrored} transaction of a session back to {@code ready}, except one still
+   * holding a valid cross-currency resolution (a posting with {@code counter_amount} not null) —
+   * that transaction is the excluded sighting of a preserved cross-currency pair and must stay
+   * {@code mirrored}. A same-currency mirror link never carries {@code counter_amount}, so it is
+   * always reset and rebuilt fresh by {@link #matchAndMark}.
+   */
+  private void resetMirroredState(long importSessionId) {
     jdbcClient
         .sql(
             """
@@ -303,20 +402,33 @@ public class ImportMirrorRepository {
              where t.import_file_id = f.import_file_id
                and f.import_session_id = :sessionId
                and t.state = 'mirrored'
+               and not exists (
+                 select 1 from import_posting p
+                  where p.import_transaction_id = t.import_transaction_id
+                    and p.counter_amount is not null
+               )
             """)
         .param(SESSION_ID, importSessionId)
         .update();
+  }
+
+  /**
+   * Clear the {@code mirror_pair_id} of every same-currency mirror link (never carries {@code
+   * counter_amount}, unlike a cross-currency resolution) — always fully re-derivable, so it is
+   * unconditionally cleared and rebuilt by {@link #matchAndMark} every run.
+   */
+  private void clearSameCurrencyMirrorLinks(long importSessionId) {
     jdbcClient
         .sql(
             """
             update import_posting p
-               set mirror_pair_id = null,
-                   counter_amount = null
+               set mirror_pair_id = null
               from import_transaction t
               join import_file f on f.import_file_id = t.import_file_id
              where p.import_transaction_id = t.import_transaction_id
                and f.import_session_id = :sessionId
-               and (p.mirror_pair_id is not null or p.counter_amount is not null)
+               and p.mirror_pair_id is not null
+               and p.counter_amount is null
             """)
         .param(SESSION_ID, importSessionId)
         .update();
@@ -426,6 +538,272 @@ public class ImportMirrorRepository {
                    and it.state <> d.desired
                 """)
         .param(SESSION_ID, importSessionId)
+        .update();
+  }
+
+  /**
+   * The still-parked cross-currency transfer legs of a session — the review's cross-currency panel
+   * (import.md §9, §6.5; plan e2b). Each row is a candidate for {@link #manualMatch} against
+   * another row of this list, and — when {@code far_expect_file} is false (§6.4) — for {@link
+   * #closeParkWithFarAmount}.
+   */
+  public List<ImportCrossCurrencyPark> parkedCrossCurrencyLegs(long importSessionId) {
+    return jdbcClient
+        .sql(
+            """
+            select p.import_posting_id     as import_posting_id,
+                   p.import_transaction_id as import_transaction_id,
+                   t.date                  as date,
+                   f.money_account_name    as near_money_account_name,
+                   p.money_account_name    as far_money_account_name,
+                   p.amount                as amount,
+                   la.expect_file          as far_expect_file
+              from import_posting p
+              join import_transaction t on t.import_transaction_id = p.import_transaction_id
+              join import_file f on f.import_file_id = t.import_file_id
+              join import_account la on la.import_session_id = f.import_session_id
+                                   and la.money_account_name = p.money_account_name
+             where f.import_session_id = :sessionId
+               and t.state = 'parked'
+               and not p.funding
+               and p.money_account_name is not null
+               and p.counter_amount is null
+             order by t.date, p.import_posting_id
+            """)
+        .param(SESSION_ID, importSessionId)
+        .query(ImportCrossCurrencyPark.class)
+        .list();
+  }
+
+  /**
+   * Manually pair two parked cross-currency transfer legs as one transfer's two sightings
+   * (import.md §6.5; plan e2b) — the owner's resolution of a shape {@link
+   * #matchAndResolveCrossCurrency} could not disambiguate on its own (an ambiguous same-day set, or
+   * a cross-currency split leg). Requires both legs to be currently parked, unresolved, non-funding
+   * transfer legs of two different transactions whose mapped accounts cross each other — the same
+   * shape the automatic pass would have paired had it been unambiguous. A pair where both sides are
+   * a split is refused (the same rule {@link #MATCHED_PAIRS} applies to e1): neither can be
+   * excluded wholesale, and that residual is e4's problem.
+   *
+   * <p>Sets {@code counter_amount}/{@code mirror_pair_id} symmetrically (each leg's counterpart's
+   * funding-leg amount) and applies the same split-aware survivor rule as {@link #matchAndMark}: a
+   * split's other legs must still book, so only a wholly-simple sighting is excluded.
+   *
+   * @return true when the pair was matched; false when the two postings do not form a valid parked
+   *     crossing pair
+   */
+  public boolean manualMatch(long importSessionId, long importPostingId, long mirrorPostingId) {
+    if (importPostingId == mirrorPostingId) {
+      return false;
+    }
+    Optional<CrossingLeg> legA = crossingLeg(importSessionId, importPostingId);
+    Optional<CrossingLeg> legB = crossingLeg(importSessionId, mirrorPostingId);
+    if (legA.isEmpty() || legB.isEmpty()) {
+      return false;
+    }
+    CrossingLeg a = legA.get();
+    CrossingLeg b = legB.get();
+    if (!isMatchablePair(a, b)) {
+      return false;
+    }
+    setResolution(importPostingId, mirrorPostingId, b.fundingAmount());
+    setResolution(mirrorPostingId, importPostingId, a.fundingAmount());
+    setTransactionState(survivorTxnId(a, b), READY);
+    setTransactionState(excludedTxnId(a, b), MIRRORED);
+    return true;
+  }
+
+  /**
+   * Whether two parked legs form a valid crossing pair: different transactions, each mapped account
+   * naming the other, and not <em>both</em> a split — the same "both split" refusal {@link
+   * #MATCHED_PAIRS} applies to e1 (neither could be excluded wholesale).
+   */
+  private static boolean isMatchablePair(CrossingLeg a, CrossingLeg b) {
+    boolean crosses =
+        a.fileAccountId() == b.namedAccountId() && a.namedAccountId() == b.fileAccountId();
+    boolean bothSplit = a.nonFundingLegs() > 1 && b.nonFundingLegs() > 1;
+    return crosses && a.txnId() != b.txnId() && !bothSplit;
+  }
+
+  /**
+   * The split-aware survivor rule {@link #matchAndMark}'s CASE expression applies over a whole
+   * matched set: a simple (one non-funding leg) sighting is wholly excludable; a split's other legs
+   * must still book, so it survives; between two simple sightings the earlier-staged (lower id) one
+   * is kept, matching {@link #MATCHED_PAIRS}'s tie-break.
+   */
+  private static long survivorTxnId(CrossingLeg a, CrossingLeg b) {
+    if (a.nonFundingLegs() == 1 && b.nonFundingLegs() == 1) {
+      return Math.min(a.txnId(), b.txnId());
+    }
+    return a.nonFundingLegs() == 1 ? b.txnId() : a.txnId();
+  }
+
+  private static long excludedTxnId(CrossingLeg a, CrossingLeg b) {
+    long survivor = survivorTxnId(a, b);
+    return survivor == a.txnId() ? b.txnId() : a.txnId();
+  }
+
+  /**
+   * Close a park by hand-entering the far-currency amount (import.md §6.4; plan e2b) — for a
+   * transfer to an account whose {@code expect-file} was cleared, so its own export will never
+   * arrive to supply a real mirror. No {@code mirror_pair_id} is set: there is no second sighting.
+   * The owner's typed figure is the only source — nothing here derives or guesses it, but a figure
+   * that is zero or carries the wrong sign is nonsense for a transfer leg (§6.2 — {@code
+   * counter_amount} stands in for this same leg once the far currency is known, so it must share
+   * {@code amount}'s sign) and is refused rather than booked.
+   *
+   * @return true when the park was closed; false when the posting is not a currently-parked,
+   *     unresolved cross-currency transfer leg whose named account's {@code expect-file} is
+   *     cleared, or the amount is zero or does not match the leg's own direction
+   */
+  public boolean closeParkWithFarAmount(
+      long importSessionId, long importPostingId, BigDecimal farAmount) {
+    Optional<CrossingLeg> leg = crossingLeg(importSessionId, importPostingId);
+    if (leg.isEmpty() || leg.get().farExpectFile()) {
+      return false;
+    }
+    if (farAmount.signum() == 0 || farAmount.signum() != leg.get().amount().signum()) {
+      return false;
+    }
+    jdbcClient
+        .sql("update import_posting set counter_amount = :amount where import_posting_id = :id")
+        .param("amount", farAmount)
+        .param("id", importPostingId)
+        .update();
+    setTransactionState(leg.get().txnId(), READY);
+    return true;
+  }
+
+  /**
+   * Clear the {@code counter_amount} of any surviving posting whose recorded mirror lies in {@code
+   * importFileId} — called <strong>before</strong> that file's cascade delete (plan e2b). The
+   * on-delete-set-null FK (V21) already clears {@code mirror_pair_id}; without this, the
+   * now-orphaned {@code counter_amount} would be indistinguishable from a legitimate hand-entered
+   * far amount (§6.4 — also {@code mirror_pair_id is null}) on the next {@link #rematch}, and could
+   * silently book a stale figure.
+   */
+  public void clearCounterAmountOfMirrorsIn(long importFileId) {
+    jdbcClient
+        .sql(
+            """
+            update import_posting p
+               set counter_amount = null
+              from import_posting mp
+              join import_transaction mt on mt.import_transaction_id = mp.import_transaction_id
+             where p.mirror_pair_id = mp.import_posting_id
+               and mt.import_file_id = :fileId
+            """)
+        .param(FILE_ID, importFileId)
+        .update();
+  }
+
+  /**
+   * The {@code (session, filename)} counterpart of {@link #clearCounterAmountOfMirrorsIn} — every
+   * staged file of that name may be about to be removed (the §2 "replace" clash resolution).
+   */
+  public void clearCounterAmountOfMirrorsInFilesNamed(long importSessionId, String filename) {
+    jdbcClient
+        .sql(
+            """
+            update import_posting p
+               set counter_amount = null
+              from import_posting mp
+              join import_transaction mt on mt.import_transaction_id = mp.import_transaction_id
+              join import_file mf on mf.import_file_id = mt.import_file_id
+             where p.mirror_pair_id = mp.import_posting_id
+               and mf.import_session_id = :sessionId
+               and mf.filename = :filename
+            """)
+        .param(SESSION_ID, importSessionId)
+        .param(FILENAME, filename)
+        .update();
+  }
+
+  /**
+   * One parked, unresolved, cross-currency, non-funding transfer leg's shape — the common lookup
+   * behind {@link #manualMatch} and {@link #closeParkWithFarAmount}.
+   *
+   * @param txnId the leg's staged transaction
+   * @param amount this leg's own signed near-currency amount (§6.2) — a resolution's {@code
+   *     counter_amount} must carry the same sign, since it stands in for this same leg once the far
+   *     currency is known
+   * @param fundingAmount that transaction's funding-leg total (its own file's currency) — what the
+   *     counterpart leg's {@code counter_amount} takes
+   * @param nonFundingLegs how many non-funding legs the transaction has (1 = a simple transfer,
+   *     wholly excludable when matched; more = a split, whose other legs must still book)
+   * @param fileAccountId the mapped Hauptbuch account of the file this leg was staged from
+   * @param namedAccountId the mapped Hauptbuch account this leg transfers to
+   * @param farExpectFile whether the named account is still awaiting its own export (§5.1) — the
+   *     hand-entered path's gate (§6.4)
+   */
+  private record CrossingLeg(
+      long txnId,
+      BigDecimal amount,
+      BigDecimal fundingAmount,
+      int nonFundingLegs,
+      long fileAccountId,
+      long namedAccountId,
+      boolean farExpectFile) {}
+
+  private Optional<CrossingLeg> crossingLeg(long importSessionId, long importPostingId) {
+    return jdbcClient
+        .sql(
+            """
+            select p.import_transaction_id as txn_id,
+                   p.amount                as amount,
+                   (select coalesce(sum(p2.amount), 0) from import_posting p2
+                     where p2.import_transaction_id = p.import_transaction_id
+                       and p2.funding) as funding_amount,
+                   (select count(*) from import_posting p2
+                     where p2.import_transaction_id = p.import_transaction_id
+                       and not p2.funding) as non_funding_legs,
+                   fa.account_id as file_account_id,
+                   la.account_id as named_account_id,
+                   la.expect_file as far_expect_file
+              from import_posting p
+              join import_transaction t on t.import_transaction_id = p.import_transaction_id
+              join import_file f on f.import_file_id = t.import_file_id
+              join import_account fa on fa.import_session_id = f.import_session_id
+                                   and fa.money_account_name = f.money_account_name
+              join import_account la on la.import_session_id = f.import_session_id
+                                   and la.money_account_name = p.money_account_name
+              left join account fac on fac.account_id = fa.account_id
+              left join account lac on lac.account_id = la.account_id
+             where p.import_posting_id = :postingId
+               and f.import_session_id = :sessionId
+               and t.state = 'parked'
+               and not p.funding
+               and p.money_account_name is not null
+               and p.counter_amount is null
+               and fa.account_id is not null
+               and la.account_id is not null
+               and coalesce(fa.target_currency_code, fac.currency_code) is not null
+               and coalesce(la.target_currency_code, lac.currency_code) is not null
+               and coalesce(fa.target_currency_code, fac.currency_code)
+                 <> coalesce(la.target_currency_code, lac.currency_code)
+            """)
+        .param(POSTING_ID, importPostingId)
+        .param(SESSION_ID, importSessionId)
+        .query(CrossingLeg.class)
+        .optional();
+  }
+
+  private void setResolution(long importPostingId, long mirrorPostingId, BigDecimal counterAmount) {
+    jdbcClient
+        .sql(
+            "update import_posting set mirror_pair_id = :mirrorId, counter_amount = :counterAmount"
+                + " where import_posting_id = :id")
+        .param(MIRROR_ID, mirrorPostingId)
+        .param("counterAmount", counterAmount)
+        .param("id", importPostingId)
+        .update();
+  }
+
+  private void setTransactionState(long importTransactionId, String state) {
+    jdbcClient
+        .sql("update import_transaction set state = :state where import_transaction_id = :id")
+        .param("state", state)
+        .param("id", importTransactionId)
         .update();
   }
 }

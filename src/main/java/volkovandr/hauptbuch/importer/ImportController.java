@@ -50,6 +50,7 @@ class ImportController {
   private final ImportReviewService importReviewService;
   private final ImportAccountMapService importAccountMapService;
   private final ImportCategoryMapService importCategoryMapService;
+  private final ImportCrossCurrencyParkService importCrossCurrencyParkService;
 
   ImportController(
       ImportSessionService importSessionService,
@@ -57,13 +58,15 @@ class ImportController {
       ImportStagingService importStagingService,
       ImportReviewService importReviewService,
       ImportAccountMapService importAccountMapService,
-      ImportCategoryMapService importCategoryMapService) {
+      ImportCategoryMapService importCategoryMapService,
+      ImportCrossCurrencyParkService importCrossCurrencyParkService) {
     this.importSessionService = importSessionService;
     this.importPreviewService = importPreviewService;
     this.importStagingService = importStagingService;
     this.importReviewService = importReviewService;
     this.importAccountMapService = importAccountMapService;
     this.importCategoryMapService = importCategoryMapService;
+    this.importCrossCurrencyParkService = importCrossCurrencyParkService;
   }
 
   /** The screen: the open campaign (or the button to start one) and the pending uploads. */
@@ -252,6 +255,49 @@ class ImportController {
       redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
     }
     return REDIRECT_REVIEW + "#category-map";
+  }
+
+  /**
+   * Manually match two parked cross-currency transfers as one transfer's two sightings (import.md
+   * §6.5; plan e2b) — the owner's resolution of a shape automatic matching could not disambiguate.
+   * A rejected pick comes back to the review with the reason.
+   */
+  @PostMapping(BASE + "/review/cross-currency/{importPostingId}/match")
+  String matchCrossCurrencyPark(
+      @PathVariable long importPostingId,
+      @RequestParam(required = false) String mirrorPostingId,
+      RedirectAttributes redirectAttributes) {
+    try {
+      String chosen = blankToNull(mirrorPostingId);
+      if (chosen == null) {
+        redirectAttributes.addFlashAttribute(ERROR, "Choose the other parked sighting to match");
+      } else {
+        importCrossCurrencyParkService.manualMatch(importPostingId, Long.parseLong(chosen));
+      }
+    } catch (IllegalArgumentException | IllegalStateException rejected) {
+      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
+    }
+    return REDIRECT_REVIEW + "#cross-currency";
+  }
+
+  /**
+   * Close a park by hand-entering the far-currency amount (import.md §6.4; plan e2b) — for a
+   * transfer to an account whose {@code expect-file} was cleared. A rejected amount comes back to
+   * the review with the reason.
+   */
+  @PostMapping(BASE + "/review/cross-currency/{importPostingId}/close")
+  String closeCrossCurrencyPark(
+      @PathVariable long importPostingId,
+      @RequestParam(required = false) String farAmount,
+      RedirectAttributes redirectAttributes) {
+    try {
+      String typed = blankToNull(farAmount);
+      importCrossCurrencyParkService.closeParkWithFarAmount(
+          importPostingId, typed == null ? null : MoneyFormat.parse(typed));
+    } catch (IllegalArgumentException | IllegalStateException rejected) {
+      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
+    }
+    return REDIRECT_REVIEW + "#cross-currency";
   }
 
   /**

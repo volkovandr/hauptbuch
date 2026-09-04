@@ -1,8 +1,8 @@
 # Personal Finance Manager — Import: Sessions, Maps & the QIF/Money Dialect
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.3
-**Date:** 2026-09-01
+**Status:** Draft v0.4
+**Date:** 2026-09-04
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (§5.12, FR-IMP-01–05),
 `data-model.md`,
@@ -340,19 +340,25 @@ Clearing `expect-file` on the counterparty account (§5.1) resolves its pending 
 transfers are accepted exactly as the one file states them. For a **cross-currency** transfer to
 such an account the far amount is still unknown and must be supplied by hand before the gate opens.
 
-### 6.5 Open questions: to be clarified before the implementation
+### 6.5 The matching signature, and the still-open rate question
 
-- Matching on absolute amount will not work for cross currency transfers, because the far
-  side's amount is different. We should either losen the matching rules for cross-currency transfers
-  and/or let the user match these manually.
-- Transfers between accounts of different currencies neither of which is the base currency
-  will not produce a currency exchange rate record. We should either ask the user to provide the 
-  exchange rate for any of the currency for that date, or use the most recent rate available for
-  any of these currencies.
+**Settled (owner call, 2026-09-04; plan e2a/e2b).** Matching on absolute amount does not work for a
+cross-currency transfer — the far side's amount is different — so the signature is **loosened** for
+this case: date + the two mapped account ids crossing, near-side amount ignored (§6.2). The pair
+auto-resolves only when that directed shape is unambiguous 1:1 (e2a); the one amount signal kept is
+**sign** (the two legs of a real mirror are opposite-signed), which rejects a coincidental pairing of
+two independent opposite-direction transfers on the same day. Anything ambiguous — two same-day
+transfers between the same pair of accounts, or a cross-currency **split** leg — stays parked for the
+owner to resolve by hand: an explicit **manual match** of two parked sightings, or — for a
+counterparty whose `expect-file` is cleared (§6.4) — a **hand-entered far amount** (e2b). Neither
+path derives or guesses a number; both set `counter_amount` the same way an automatic resolution
+does.
 
-Both questions are still open, but real cross-currency pairs now exist in the sample (two EUR ↔
-RUR transfers, e.g. `-599,999.64` RUR / `[EUR account]` mirrored by `+11,707.31` EUR /
-`[RUR account]`, same date) — real numbers for slice e's fixtures rather than an invented pair.
+**Still open, for e3:** transfers between accounts of different currencies **neither of which is the
+base currency** will not produce a currency exchange rate record on their own. Either the owner
+supplies the rate for that date, or the existing carry-forward `rateAsOf` covers it — to be settled
+against the real cross-currency pairs already in the sample (two EUR ↔ RUR transfers, e.g.
+`-599,999.64` RUR / `[EUR account]` mirrored by `+11,707.31` EUR / `[RUR account]`, same date).
 
 ---
 
@@ -547,6 +553,10 @@ needs it: the `Name - City - Country` payee-address convention (§5.3), and `C` 
 
 ## Changelog
 
+- **v0.4 (2026-09-04):** §6.5 settled (plan e2a/e2b) — the cross-currency matching signature is
+  loosened (date + crossing account ids, sign kept as the one amount signal) and auto-resolves only
+  when unambiguous; an ambiguous set or a cross-currency split leg is closed by the owner's manual
+  match or (§6.4) a hand-entered far amount. The rate/non-base-currency question stays open for e3.
 - **v0.3 (2026-09-01):** §4.1 / §5.1 — the Money account a file is for is **deduced from its
   opening-balance self-transfer** (payee `Opening Balance`, `L[Same Account]`) and confirmed on the
   upload preview, instead of always typed at upload. Manual entry (still on the preview) is the

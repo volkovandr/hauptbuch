@@ -6,8 +6,8 @@ import java.util.Map;
 /**
  * The render model for the import review page (import.md §9). e′ delivered the per-account
  * statistics; c1 adds the account map; c3 adds the opening-balance reconciliation cells beside it;
- * d1 adds the category map; d2 adds the payee summary. The issues list attaches as a further panel
- * in slice e.
+ * d1 adds the category map; d2 adds the payee summary; e2b adds the cross-currency panel. The full
+ * issues list attaches as a further panel in e4.
  *
  * @param accounts one row per Money account that has a staged file, ordered by account name
  * @param accountMap the account-map panel (import.md §5.1; plan c1)
@@ -16,13 +16,16 @@ import java.util.Map;
  * @param categoryMap the category-map panel (import.md §5.2; plan d1)
  * @param payees the payee counts — payees are auto-created, never mapped, so the review only counts
  *     them (import.md §5.3; plan d2)
+ * @param crossCurrencyParks the still-parked cross-currency transfers (import.md §6.2/§6.5; plan
+ *     e2b), date-ordered — the manual-match / hand-entered panel
  */
 public record ImportReview(
     List<AccountStatisticsRow> accounts,
     ImportAccountMap accountMap,
     Map<Long, ImportOpeningBalanceCells> openingBalances,
     ImportCategoryMap categoryMap,
-    ImportPayeeSummary payees) {
+    ImportPayeeSummary payees,
+    List<CrossCurrencyParkRow> crossCurrencyParks) {
 
   /** Defensive copies. */
   public ImportReview {
@@ -31,6 +34,7 @@ public record ImportReview(
     openingBalances = openingBalances == null ? Map.of() : Map.copyOf(openingBalances);
     categoryMap = categoryMap == null ? new ImportCategoryMap(null, null, null) : categoryMap;
     payees = payees == null ? ImportPayeeSummary.EMPTY : payees;
+    crossCurrencyParks = crossCurrencyParks == null ? List.of() : List.copyOf(crossCurrencyParks);
   }
 
   /** True when nothing has been staged yet — the page shows only its explanatory copy. */
@@ -58,4 +62,24 @@ public record ImportReview(
    */
   public record AccountStatisticsRow(
       String moneyAccountName, long transactionCount, String netSum, String dateRange) {}
+
+  /**
+   * One still-parked cross-currency transfer leg, pre-formatted for display (import.md §6.2/§6.5;
+   * plan e2b).
+   *
+   * @param importPostingId the manual-match / hand-entered action's target
+   * @param date German-formatted {@code dd.MM.yyyy}
+   * @param nearMoneyAccountName the file's own Money account name (the near side)
+   * @param farMoneyAccountName the Money account this leg transfers to (the far side)
+   * @param amount the near-side signed amount, German-formatted to two places
+   * @param farExpectFile whether the far account is still awaiting its own export (§5.1) — false
+   *     opens the hand-entered path (§6.4)
+   */
+  public record CrossCurrencyParkRow(
+      long importPostingId,
+      String date,
+      String nearMoneyAccountName,
+      String farMoneyAccountName,
+      String amount,
+      boolean farExpectFile) {}
 }
