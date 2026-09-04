@@ -55,8 +55,8 @@ it safe to ship into a book that stays in daily use.
   invariant boundary, and it is the one both callers share.
 - **Migrations are step-local** (the stage-7/9 precedent): **V19** = the staging schema (b1),
   **V20** = `import_posting.funding` (b-slice), **V21** = `import_posting.mirror_pair_id` on-delete
-  behaviour (e1), **V22** = widening `exchange_rate.source` with `'import'` (e3). Next free number
-  is V22.
+  behaviour (e1), **V22** = `import_posting.counter_amount` (e2a), **V23** = widening
+  `exchange_rate.source` with `'import'` (e3). Next free number is V23.
 - **Everything lives in `importer`, including its controller** (§12, CLAUDE.md §3). Its screens
   hang off `/import`.
 - **Open questions and where each is settled:** ~~**Q-IMP-1** (`L` on a split; a split containing a
@@ -280,20 +280,38 @@ Multi-table grouping ⇒ **`sqlLogicTest`, written first**, with the split-leg c
 **Done when:** the second sighting is marked `mirrored` and excluded from the commit, re-running
 after a map edit is idempotent, and the split-leg mirror matches.
 
-### e2 — Cross-currency parking, and matching them by hand
-A cross-currency transfer **parks** on first sighting (§6.2): QIF carries no far-side amount, and
-`base_amount` is a frozen fact that must never be invented. Settle **§6.5**: the absolute-amount
-signature cannot match a cross-currency pair, so the automatic signature is **loosened for that case**
-(date + both mapped account ids, near-side amount only) and any residual ambiguity is resolved by an
-explicit **manual match** in the issues list. Also: a parked transfer to an account whose
-`expect-file` was cleared needs its far amount **entered by hand** (§6.4).
+### e2a — Cross-currency parking and automatic resolution ✅ **implemented** (owner-confirmation pending)
+A cross-currency transfer **parks** (§6.2): QIF carries no far-side amount, and `base_amount` is a
+frozen fact that must never be invented. Whether a transfer *is* cross-currency depends on the
+account map (the file's own account currency vs the named account's), so this rides in the same
+post-map `rematch` pass as e1's mirror matching. **§6.5 settled (owner call, 2026-09-04):** the
+signature is **loosened** for the cross-currency case — date + the two mapped account ids crossing,
+near-side amount ignored — and the pair **auto-resolves only when that directed shape is unambiguous
+1:1**; anything ambiguous (two same-day transfers between the same pair, a cross-currency *split*
+leg) stays `parked` for e2b's manual match. On a resolve the surviving sighting's transfer leg takes
+the mirror's funding-leg amount as its `counter_amount` (**V22**), same sign as `amount`; the mirror
+sighting is marked `mirrored` like a same-currency one. No `base_amount`, no rate write-back — that
+is e3.
 
-**Done when:** a cross-currency pair from two fixture files parks then resolves; a manual match and a
-hand-entered far amount both close a park; nothing books a derived or guessed amount.
+Multi-table grouping ⇒ **`sqlLogicTest`, written first** (folded into `ImportMirrorMatchingSqlLogicTest`,
+which already owns `rematch`), with the cross-currency and remap-clears cases crafted explicitly.
+**Done when:** a cross-currency pair from two fixture files parks then auto-resolves when unambiguous;
+an ambiguous set stays parked; a map edit that removes the currency crossing un-parks and clears the
+far amount; re-running is idempotent.
 
-### e3 — Rate write-back (V22) and the non-base pair
+### e2b — The cross-currency issues surface: manual match and hand-entered far amount
+The review's cross-currency panel (a focused precursor to e4's full issues list): parked
+cross-currency transfers, an explicit **manual match** of two parked sightings, and — for a transfer
+to an account whose `expect-file` was cleared and whose file will never arrive (§6.4) — a
+**hand-entered far amount** that closes the park. Both paths set `counter_amount` and move the
+transaction to `ready`.
+
+**Done when:** a manual match and a hand-entered far amount both close a park; nothing books a
+derived or guessed amount.
+
+### e3 — Rate write-back (V23) and the non-base pair
 When a mirror supplies both real native amounts, that pair **is** the conversion rate for that date
-(§6.3): widen `exchange_rate.source` to allow `'import'` (**V22**) and write it back; the
+(§6.3): widen `exchange_rate.source` to allow `'import'` (**V23**) and write it back; the
 transaction's `base_amount` is frozen from the same pair. Settle **Q-IMP-4** for a pair where
 *neither* currency is the base one — the importer cannot invent the missing rate, so the owner
 supplies it (or the existing carry-forward `rateAsOf` covers it, if it can).
@@ -372,10 +390,28 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.16 (2026-09-04):** **Slice e2 split into e2a / e2b** (too large for one session), and **e2a
+  implemented** (owner-confirmation pending) — cross-currency parking and automatic resolution
+  (import.md §6.2). **§6.5 settled (owner call):** the cross-currency matching signature is loosened
+  (date + crossing account ids, near amount ignored) and auto-resolves **only** on an unambiguous
+  1:1 shape; ambiguous sets and cross-currency split legs stay `parked` for e2b's manual match.
+  Rides in `ImportMirrorRepository.rematch` (parking is a post-map computation, like the mirror
+  match): a currency-aware guard added to the e1 same-currency rule (so a coincidental
+  equal-and-opposite amount across two currencies is not mistaken for a same-currency mirror), a
+  second matching CTE for the loosened cross-currency rule, and a re-park step. The loosened rule
+  keeps one amount signal — **sign**: a real mirror's two transfer legs are opposite-signed, which
+  rejects a coincidental pairing of two independent opposite-direction transfers across the same
+  accounts on one day (e2a `/code-review` finding). **V22** adds `import_posting.counter_amount` —
+  the resolved transfer leg's amount in the target currency (the mirror's funding-leg total), set in
+  SQL; `base_amount` and the rate write-back remain e3. e3's `exchange_rate.source` migration is
+  consequently **V23**. Test coverage folded into `ImportMirrorMatchingSqlLogicTest` (it owns
+  `rematch`). Rode along: `PayeeService.resolveImportedPayee` now books payee-less instead of
+  throwing on a non-blank `P` field that parses to no name (`.scratch/import/issues/02`, filed
+  during the e1 review).
 - **v0.15 (2026-09-04):** **e1 complete** (owner-confirmed 2026-09-04) — transfer mirror matching
   within staging (import.md §6.1). Flyway renumbering: **V21** landed
-  (`import_posting.mirror_pair_id` → `on delete set null`), so e3's `exchange_rate.source` migration
-  is now **V22**, not the `V20` the pre-slice-e numbering note names (V20 was taken by e′).
+  (`import_posting.mirror_pair_id` → `on delete set null`); the later slice-e migrations shifted up
+  accordingly (see the step-local migrations note and v0.16).
 - **v0.14 (2026-09-03):** **d2 complete** (owner-confirmed 2026-09-03) — payee resolution and
   counts (import.md §5.3). `PayeeService.resolveImportedPayee(payeeText)` is the routine f2 will
   call per staged row: reuses the register's `parseCreateNew` (no second parser), matches

@@ -23,8 +23,9 @@ public class ImportPostingRepository {
 
   /**
    * Stage one leg. Exactly one of {@code moneyCategoryPath} / {@code moneyAccountName} is set;
-   * {@code funding} marks the synthesised funding leg (§7); {@code importPostingId} and {@code
-   * mirrorPairId} on the draft are ignored (slice e links mirrors).
+   * {@code funding} marks the synthesised funding leg (§7); {@code importPostingId}, {@code
+   * mirrorPairId} and {@code counterAmount} on the draft are ignored — slice e links mirrors and
+   * stamps the far amount directly in SQL ({@code ImportMirrorRepository}).
    */
   public void insert(ImportPosting posting) {
     jdbcClient

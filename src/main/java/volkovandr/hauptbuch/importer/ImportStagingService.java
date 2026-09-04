@@ -222,6 +222,7 @@ public class ImportStagingService {
             fundingAccountName,
             null,
             null,
+            null,
             true));
   }
 
@@ -240,6 +241,7 @@ public class ImportStagingService {
                 null,
                 line.className(),
                 null,
+                null,
                 false));
       }
       case ImportedTarget.AccountReference reference ->
@@ -252,6 +254,7 @@ public class ImportStagingService {
                   null,
                   reference.accountName(),
                   line.className(),
+                  null,
                   null,
                   false));
     }

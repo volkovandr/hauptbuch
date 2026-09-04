@@ -16,11 +16,20 @@ import volkovandr.hauptbuch.importer.repository.ImportMirrorRepository;
 
 /**
  * SQL-logic tier (CLAUDE.md §6): {@link ImportMirrorRepository#rematch} — transfer mirror matching
- * within staging (import.md §6.1; plan e1). The logic lives in the SQL: a self-join over {@code
- * import_posting} → {@code import_transaction} → {@code import_file} → {@code import_account} on
- * both sides, a window function pairing identical same-day transfers 1:1, and a filtered aggregate
- * that tells a simple transfer (excludable whole) from a split (only its transfer leg is a mirror).
- * Crafted staging rows via raw {@link JdbcClient}; the query under test is the real repository.
+ * within staging (import.md §6.1; plan e1) <strong>and</strong> cross-currency parking (§6.2/§6.5;
+ * plan e2a). The logic lives in the SQL: a self-join over {@code import_posting} → {@code
+ * import_transaction} → {@code import_file} → {@code import_account} on both sides, a window
+ * function pairing identical same-day transfers 1:1, and a filtered aggregate that tells a simple
+ * transfer (excludable whole) from a split (only its transfer leg is a mirror).
+ *
+ * <p>The cross-currency cases exercise the second matching rule: a transfer whose two mapped
+ * account currencies differ carries no far-side amount in QIF, so it <em>parks</em> until the
+ * mirror supplies the real far amount. The parked-then-resolved pair is matched on the
+ * <strong>loosened</strong> signature — date + the two mapped account ids crossing, near-side
+ * amount ignored — and only when that directed shape is unambiguous 1:1; anything ambiguous stays
+ * parked for a manual match (e2b).
+ *
+ * <p>Crafted staging rows via raw {@link JdbcClient}; the query under test is the real repository.
  * {@code @Transactional} rolls each test back on the reused container.
  */
 @SpringBootTest
@@ -46,11 +55,17 @@ class ImportMirrorMatchingSqlLogicTest {
   }
 
   private long account(String name) {
+    return account(name, "EUR");
+  }
+
+  /** An asset account in {@code currencyCode} (EUR and CHF are both seeded by V2). */
+  private long account(String name, String currencyCode) {
     return jdbcClient
         .sql(
-            "insert into account (name, type, currency_code) values (:n, 'asset', 'EUR')"
+            "insert into account (name, type, currency_code) values (:n, 'asset', :c)"
                 + " returning account_id")
         .param("n", name)
+        .param("c", currencyCode)
         .query(Long.class)
         .single();
   }
@@ -163,6 +178,15 @@ class ImportMirrorMatchingSqlLogicTest {
         .single();
   }
 
+  private BigDecimal counterAmountOf(long postingId) {
+    return jdbcClient
+        .sql("select counter_amount from import_posting where import_posting_id = :id")
+        .param("id", postingId)
+        .query(BigDecimal.class)
+        .optional()
+        .orElse(null);
+  }
+
   // ── tests ──────────────────────────────────────────────────────────────────
 
   @Test
@@ -252,12 +276,12 @@ class ImportMirrorMatchingSqlLogicTest {
   }
 
   @Test
-  void differentAmountsNeverMatch() {
+  void differentAmountsInOneCurrencyNeverMatch() {
     long session = openSession();
     long fileA = stageFile(session, "A", account("A"));
     long fileB = stageFile(session, "B", account("B"));
-    // A cross-currency transfer: the far side's native amount differs — parked, not matched (slice
-    // e2). e1 only pairs equal-and-opposite legs.
+    // Both accounts EUR, so this is not a cross-currency park — the e1 rule applies, and it only
+    // pairs equal-and-opposite legs. Unequal legs in one currency are two unrelated transfers.
     long legA = stageTransfer(fileA, LocalDate.of(2008, 8, 8), "A", "B", "-100.00");
     long legB = stageTransfer(fileB, LocalDate.of(2008, 8, 8), "B", "A", "90.00");
 
@@ -374,5 +398,166 @@ class ImportMirrorMatchingSqlLogicTest {
 
     assertThat(importMirrorRepository.rematch(session)).isZero();
     assertThat(stateOf(txnOf(legB))).isEqualTo("ready");
+  }
+
+  // ── cross-currency parking (import.md §6.2/§6.5; plan e2a) ──────────────────
+
+  @Test
+  void loneCrossCurrencyTransferParksUntilItsMirrorArrives() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    stageFile(session, "Franc", account("Sparen", "CHF"));
+
+    // Only the EUR side is staged so far: €100 out of Euro, into the CHF account.
+    long euroLeg = stageTransfer(euroFile, LocalDate.of(2015, 5, 5), "Euro", "Franc", "-100.00");
+
+    assertThat(importMirrorRepository.rematch(session)).isZero();
+    assertThat(stateOf(txnOf(euroLeg))).isEqualTo("parked");
+    assertThat(counterAmountOf(euroLeg)).isNull();
+  }
+
+  @Test
+  void unambiguousCrossCurrencyPairResolvesAndCarriesEachFarFundingAmount() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    long francFile = stageFile(session, "Franc", account("Sparen", "CHF"));
+
+    // €100 leaves Euro; CHF 150 arrives in Franc — the far amount the EUR file cannot state.
+    long euroLeg = stageTransfer(euroFile, LocalDate.of(2016, 6, 6), "Euro", "Franc", "-100.00");
+    long francLeg = stageTransfer(francFile, LocalDate.of(2016, 6, 6), "Franc", "Euro", "150.00");
+
+    assertThat(importMirrorRepository.rematch(session)).isEqualTo(1);
+
+    // Earlier-staged sighting survives and books; the later one is the skippable mirror.
+    assertThat(stateOf(txnOf(euroLeg))).isEqualTo("ready");
+    assertThat(stateOf(txnOf(francLeg))).isEqualTo("mirrored");
+    assertThat(mirrorPairOf(euroLeg)).isEqualTo(francLeg);
+    assertThat(mirrorPairOf(francLeg)).isEqualTo(euroLeg);
+    // Each transfer leg carries the *other* file's funding-leg amount, sign preserved: the EUR
+    // leg's counterpart is CHF +150 (Franc's funding leg), the CHF leg's is EUR −100.
+    assertThat(counterAmountOf(euroLeg)).isEqualByComparingTo("150.00");
+    assertThat(counterAmountOf(francLeg)).isEqualByComparingTo("-100.00");
+  }
+
+  @Test
+  void ambiguousSameDayCrossCurrencyTransfersAllStayParkedForManualMatch() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    long francFile = stageFile(session, "Franc", account("Sparen", "CHF"));
+
+    // Two Euro→Franc and two Franc→Euro on one day: the loosened signature (date + crossing ids)
+    // cannot tell which pairs with which without a rate — e2a leaves them all parked for e2b.
+    long euroA = stageTransfer(euroFile, LocalDate.of(2017, 7, 7), "Euro", "Franc", "-100.00");
+    long euroB = stageTransfer(euroFile, LocalDate.of(2017, 7, 7), "Euro", "Franc", "-200.00");
+    long francA = stageTransfer(francFile, LocalDate.of(2017, 7, 7), "Franc", "Euro", "150.00");
+    long francB = stageTransfer(francFile, LocalDate.of(2017, 7, 7), "Franc", "Euro", "305.00");
+
+    assertThat(importMirrorRepository.rematch(session)).isZero();
+    assertThat(
+            List.of(
+                stateOf(txnOf(euroA)),
+                stateOf(txnOf(euroB)),
+                stateOf(txnOf(francA)),
+                stateOf(txnOf(francB))))
+        .containsOnly("parked");
+    assertThat(mirrorPairOf(euroA)).isNull();
+    assertThat(counterAmountOf(francA)).isNull();
+  }
+
+  @Test
+  void oppositeDirectionCrossCurrencyTransfersWithBothMirrorsAbsentDoNotFalselyPair() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    long francFile = stageFile(session, "Franc", account("Sparen", "CHF"));
+
+    // A genuine EUR→CHF transfer whose CHF-side mirror is not staged, and an unrelated CHF→EUR
+    // transfer whose EUR-side mirror is not staged — same day, same two accounts. Both directed
+    // shapes are 1:1, but the two near legs are same-signed (each is money *into* the named
+    // account), so they are not the two halves of one transfer — the sign guard keeps them parked
+    // until their real mirrors arrive.
+    long outbound = stageTransfer(euroFile, LocalDate.of(2022, 3, 3), "Euro", "Franc", "-100.00");
+    long inbound = stageTransfer(francFile, LocalDate.of(2022, 3, 3), "Franc", "Euro", "-80.00");
+
+    assertThat(importMirrorRepository.rematch(session)).isZero();
+    assertThat(stateOf(txnOf(outbound))).isEqualTo("parked");
+    assertThat(stateOf(txnOf(inbound))).isEqualTo("parked");
+    assertThat(mirrorPairOf(outbound)).isNull();
+    assertThat(counterAmountOf(outbound)).isNull();
+  }
+
+  @Test
+  void parksOnlyOnceBothSidesAreMappedToKnownCurrencies() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    long francFile = stageFile(session, "Franc", null); // counterparty not mapped yet
+
+    long euroLeg = stageTransfer(euroFile, LocalDate.of(2018, 8, 8), "Euro", "Franc", "-100.00");
+    stageTransfer(francFile, LocalDate.of(2018, 8, 8), "Franc", "Euro", "150.00");
+
+    // Franc's currency is unknown, so cross-currency cannot be established — nothing parks.
+    assertThat(importMirrorRepository.rematch(session)).isZero();
+    assertThat(stateOf(txnOf(euroLeg))).isEqualTo("ready");
+
+    mapAccount(session, "Franc", account("Sparen", "CHF"));
+    assertThat(importMirrorRepository.rematch(session)).isEqualTo(1);
+    assertThat(stateOf(txnOf(euroLeg))).isEqualTo("ready");
+    assertThat(counterAmountOf(euroLeg)).isEqualByComparingTo("150.00");
+  }
+
+  @Test
+  void remappingCounterpartyToSameCurrencyUnparksAndClearsCounterAmount() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    long francFile = stageFile(session, "Franc", account("Sparen", "CHF"));
+    long euroLeg = stageTransfer(euroFile, LocalDate.of(2019, 9, 9), "Euro", "Franc", "-100.00");
+    final long francLeg =
+        stageTransfer(francFile, LocalDate.of(2019, 9, 9), "Franc", "Euro", "150.00");
+
+    importMirrorRepository.rematch(session);
+    assertThat(stateOf(txnOf(euroLeg))).isEqualTo("ready");
+    assertThat(counterAmountOf(euroLeg)).isEqualByComparingTo("150.00");
+
+    // Point "Franc" at a EUR account instead: the two legs no longer cross a currency boundary, so
+    // the park and its counter amount are cleared on the next run. The legs are €100 vs €150, so
+    // the e1 rule does not pair them either — both end up plain, unmatched.
+    mapAccount(session, "Franc", account("Franc EUR", "EUR"));
+    assertThat(importMirrorRepository.rematch(session)).isZero();
+    assertThat(stateOf(txnOf(euroLeg))).isEqualTo("ready");
+    assertThat(stateOf(txnOf(francLeg))).isEqualTo("ready");
+    assertThat(counterAmountOf(euroLeg)).isNull();
+    assertThat(counterAmountOf(francLeg)).isNull();
+  }
+
+  @Test
+  void rerunKeepsCrossCurrencyResolutionStable() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    long francFile = stageFile(session, "Franc", account("Sparen", "CHF"));
+    long euroLeg = stageTransfer(euroFile, LocalDate.of(2020, 1, 1), "Euro", "Franc", "-100.00");
+    final long francLeg =
+        stageTransfer(francFile, LocalDate.of(2020, 1, 1), "Franc", "Euro", "150.00");
+
+    importMirrorRepository.rematch(session);
+    assertThat(importMirrorRepository.rematch(session)).isEqualTo(1);
+
+    assertThat(stateOf(txnOf(euroLeg))).isEqualTo("ready");
+    assertThat(stateOf(txnOf(francLeg))).isEqualTo("mirrored");
+    assertThat(mirrorPairOf(euroLeg)).isEqualTo(francLeg);
+    assertThat(counterAmountOf(euroLeg)).isEqualByComparingTo("150.00");
+  }
+
+  @Test
+  void sameCurrencyTransferIsNeverParked() {
+    long session = openSession();
+    long fileA = stageFile(session, "A", account("A", "EUR"));
+    long fileB = stageFile(session, "B", account("B", "EUR"));
+    long legA = stageTransfer(fileA, LocalDate.of(2021, 2, 2), "A", "B", "-40.00");
+    long legB = stageTransfer(fileB, LocalDate.of(2021, 2, 2), "B", "A", "40.00");
+
+    // Same currency: the e1 rule owns this — an equal-and-opposite pair still mirrors, never parks.
+    assertThat(importMirrorRepository.rematch(session)).isEqualTo(1);
+    assertThat(stateOf(txnOf(legA))).isEqualTo("ready");
+    assertThat(stateOf(txnOf(legB))).isEqualTo("mirrored");
+    assertThat(counterAmountOf(legA)).isNull();
   }
 }

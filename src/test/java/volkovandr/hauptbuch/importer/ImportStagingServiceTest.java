@@ -109,12 +109,12 @@ class ImportStagingServiceTest {
 
   private static ImportPosting categoryLeg(String amount, String note, String path) {
     return new ImportPosting(
-        null, TX_ID, new BigDecimal(amount), note, path, null, null, null, false);
+        null, TX_ID, new BigDecimal(amount), note, path, null, null, null, null, false);
   }
 
   private static ImportPosting fundingLeg(String amount) {
     return new ImportPosting(
-        null, TX_ID, new BigDecimal(amount), null, null, "Current Account", null, null, true);
+        null, TX_ID, new BigDecimal(amount), null, null, "Current Account", null, null, null, true);
   }
 
   @Test
@@ -234,7 +234,16 @@ class ImportStagingServiceTest {
     verify(importPostingRepository)
         .insert(
             new ImportPosting(
-                null, TX_ID, new BigDecimal("200.00"), null, null, "Savings", null, null, false));
+                null,
+                TX_ID,
+                new BigDecimal("200.00"),
+                null,
+                null,
+                "Savings",
+                null,
+                null,
+                null,
+                false));
     verify(importPostingRepository).insert(fundingLeg("-200.00"));
   }
 
@@ -323,6 +332,7 @@ class ImportStagingServiceTest {
                 null,
                 null,
                 "Current Account",
+                null,
                 null,
                 null,
                 false));

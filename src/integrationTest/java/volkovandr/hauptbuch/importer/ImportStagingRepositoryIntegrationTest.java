@@ -74,7 +74,16 @@ class ImportStagingRepositoryIntegrationTest {
       String className,
       boolean funding) {
     return new ImportPosting(
-        null, transactionId, new BigDecimal(amount), note, path, account, className, null, funding);
+        null,
+        transactionId,
+        new BigDecimal(amount),
+        note,
+        path,
+        account,
+        className,
+        null,
+        null,
+        funding);
   }
 
   @Test
@@ -310,6 +319,33 @@ class ImportStagingRepositoryIntegrationTest {
         .query(Long.class)
         .optional()
         .orElse(null);
+  }
+
+  @Test
+  void findByTransactionMapsTheCounterAmountStampedByMirrorMatching() {
+    // V22: a resolved cross-currency transfer leg carries its far-currency amount (import.md §6.2;
+    // plan e2a). ImportMirrorRepository writes it in SQL; the round-trip must map it back.
+    long fileId = stageFile(openSession(), "export.qif").importFileId();
+    long transactionId = stageTransaction(fileId, "unreconciled", false);
+    importPostingRepository.insert(
+        leg(transactionId, "100.00", null, null, "Savings", null, false));
+    importPostingRepository.insert(
+        leg(transactionId, "-100.00", null, null, "Current Account", null, true));
+    long transferLeg = postingId(transactionId);
+    jdbcClient
+        .sql("update import_posting set counter_amount = :c where import_posting_id = :id")
+        .param("c", new BigDecimal("150.00"))
+        .param("id", transferLeg)
+        .update();
+
+    assertThat(importPostingRepository.findByTransaction(transactionId))
+        .filteredOn(p -> !p.funding())
+        .singleElement()
+        .satisfies(p -> assertThat(p.counterAmount()).isEqualByComparingTo("150.00"));
+    assertThat(importPostingRepository.findByTransaction(transactionId))
+        .filteredOn(ImportPosting::funding)
+        .singleElement()
+        .satisfies(p -> assertThat(p.counterAmount()).isNull());
   }
 
   @Test
