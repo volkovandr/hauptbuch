@@ -1,6 +1,6 @@
 # resolveImportedPayee throws on a punctuation-only P field instead of booking payee-less
 
-Status: needs-triage
+Status: resolved
 Severity: minor (latent until f2)
 Area: Import commit — payee resolution (`PayeeService.resolveImportedPayee`, plan d2)
 
@@ -33,3 +33,9 @@ name segment. Keep `parseCreateNew` itself strict for the register's inline-crea
 
 Filed 2026-09-03 from a `/code-review` pass during import slice e1 (findings were against the
 already-committed d1/d2 range, not e1).
+
+Resolved 2026-09-04 (e2a `/code-review` pass): `resolveImportedPayee` now catches the
+`parseCreateNew` `IllegalArgumentException` and returns `null` — book payee-less, per the method's
+documented contract. `parseCreateNew` stays strict for the register's inline-create path.
+`PayeeServiceTest.resolveImportedPayeeReturnsNullForNonBlankTextThatParsesToNoName` covers it. The
+"Related" pre-existing-duplicate note stays with the FR-DM payee-merge tool, unchanged.

@@ -161,14 +161,22 @@ public class PayeeService {
    * variants ({@code REWE}, {@code rewe}, {@code Rewe}), that row is renamed to the
    * best-capitalised spelling across the variants and the incoming text ({@link
    * #capitalisationRank} — proper case beats all-caps beats lower-case). A wholly destroyed or
-   * absent name yields {@code null} — booking with no payee, already a valid state (§4.4).
+   * absent name yields {@code null} — booking with no payee, already a valid state (§4.4). A
+   * non-blank {@code P} field that parses to no usable name segment ({@code "-"}, {@code " - "}, or
+   * a {@code "??? - ???"} shape left by the §4.4 {@code ?}-substitution) is treated the same as
+   * absent rather than aborting f2's atomic commit.
    */
   @Transactional
   public Long resolveImportedPayee(String payeeText) {
     if (payeeText == null || payeeText.isBlank()) {
       return null;
     }
-    PayeeDraft draft = parseCreateNew(payeeText);
+    PayeeDraft draft;
+    try {
+      draft = parseCreateNew(payeeText);
+    } catch (IllegalArgumentException noNameSegment) {
+      return null;
+    }
     List<Payee> variants =
         payeeRepository.findLiveByAddress(draft.name(), draft.city(), draft.countryCode());
     if (variants.isEmpty()) {
