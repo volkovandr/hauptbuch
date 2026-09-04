@@ -54,7 +54,9 @@ it safe to ship into a book that stays in daily use.
   resolution in staging, and the dock's shape does not fit a 40k-row batch. `LedgerService` is the
   invariant boundary, and it is the one both callers share.
 - **Migrations are step-local** (the stage-7/9 precedent): **V19** = the staging schema (b1),
-  **V20** = widening `exchange_rate.source` with `'import'` (e3). Next free number is V19.
+  **V20** = `import_posting.funding` (b-slice), **V21** = `import_posting.mirror_pair_id` on-delete
+  behaviour (e1), **V22** = widening `exchange_rate.source` with `'import'` (e3). Next free number
+  is V22.
 - **Everything lives in `importer`, including its controller** (§12, CLAUDE.md §3). Its screens
   hang off `/import`.
 - **Open questions and where each is settled:** ~~**Q-IMP-1** (`L` on a split; a split containing a
@@ -267,7 +269,7 @@ against the existing parser (not a copy of it), and it is the same routine f2 wi
 
 ## Slice e — mirrors, cross-currency parks, the issues list
 
-### e1 — Mirror matching within staging
+### e1 — Mirror matching within staging ✅ **complete** (owner-confirmed 2026-09-04)
 The **posting-pair** signature — (date, both mapped account ids, absolute amount) — never a
 transaction-level one, because a split line can itself be a transfer whose mirror arrives weeks
 later as an ordinary unsplit transaction (§6.1). Matching runs **entirely inside staging**, so it
@@ -289,9 +291,9 @@ explicit **manual match** in the issues list. Also: a parked transfer to an acco
 **Done when:** a cross-currency pair from two fixture files parks then resolves; a manual match and a
 hand-entered far amount both close a park; nothing books a derived or guessed amount.
 
-### e3 — Rate write-back (V20) and the non-base pair
+### e3 — Rate write-back (V22) and the non-base pair
 When a mirror supplies both real native amounts, that pair **is** the conversion rate for that date
-(§6.3): widen `exchange_rate.source` to allow `'import'` (**V20**) and write it back; the
+(§6.3): widen `exchange_rate.source` to allow `'import'` (**V22**) and write it back; the
 transaction's `base_amount` is frozen from the same pair. Settle **Q-IMP-4** for a pair where
 *neither* currency is the base one — the importer cannot invent the missing rate, so the owner
 supplies it (or the existing carry-forward `rateAsOf` covers it, if it can).
@@ -370,6 +372,10 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.15 (2026-09-04):** **e1 complete** (owner-confirmed 2026-09-04) — transfer mirror matching
+  within staging (import.md §6.1). Flyway renumbering: **V21** landed
+  (`import_posting.mirror_pair_id` → `on delete set null`), so e3's `exchange_rate.source` migration
+  is now **V22**, not the `V20` the pre-slice-e numbering note names (V20 was taken by e′).
 - **v0.14 (2026-09-03):** **d2 complete** (owner-confirmed 2026-09-03) — payee resolution and
   counts (import.md §5.3). `PayeeService.resolveImportedPayee(payeeText)` is the routine f2 will
   call per staged row: reuses the register's `parseCreateNew` (no second parser), matches
