@@ -141,6 +141,15 @@ class PayeeServiceTest {
   }
 
   @Test
+  void resolveImportedPayeeReturnsNullForNonBlankTextThatParsesToNoName() {
+    // A non-blank `P` field with no usable name segment ("-", " - ", or a "??? - ???" shape from
+    // the §4.4 substitution) must book payee-less, not throw and abort f2's atomic commit.
+    assertThat(payeeService.resolveImportedPayee("-")).isNull();
+    assertThat(payeeService.resolveImportedPayee(" - ")).isNull();
+    verify(payeeRepository, never()).insert(any(), any(), any());
+  }
+
+  @Test
   void resolveImportedPayeeParsesTheAddressWithTheSharedParserAndInsertsWhenNew() {
     // The same parseCreateNew the register uses — not a copy (import.md §5.3, CLAUDE.md §0).
     when(countryRepository.resolveAlias("Germany")).thenReturn(Optional.of("DEU"));
