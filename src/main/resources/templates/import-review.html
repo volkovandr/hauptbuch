@@ -61,23 +61,6 @@
           ><span class="muted"> — still expecting its own export</span>
         </li>
       </ul>
-      <!-- Bulk escape hatch (plan c2's deferred "clear every account" ergonomics, closed here):
-           a file being staged never auto-clears expect-file (§5.1) — the owner still confirms it
-           explicitly — but toggling dozens of rows one at a time once every export has arrived
-           does not scale. Clears only rows whose Money account name already has a staged file; a
-           row still genuinely awaiting its own export is left untouched. -->
-      <form
-        th:if="${!#lists.isEmpty(review.issues().expectingFile())}"
-        method="post"
-        th:action="@{/import/review/accounts/clear-expect-file}"
-        class="form"
-      >
-        <p class="actions">
-          <button type="submit" class="btn btn--ghost">
-            Stop expecting a file for every account whose export is already staged
-          </button>
-        </p>
-      </form>
       <ul class="import-uploads" th:if="${!#lists.isEmpty(review.issues().unmappedCategories())}">
         <li th:each="row : ${review.issues().unmappedCategories()}">
           <a th:href="'#category-' + ${row.importCategoryId()}" th:text="${row.moneyPath()}"
@@ -153,8 +136,8 @@
       A row carries three independent forms (separate <form>s — nesting is invalid HTML): map to an
       account, map to a person (§5.4 — resolves through PersonProvisioningService to that person's
       per-currency leaf, so the row then holds an ordinary account id), and the expect-file toggle
-      (§5.1) — a per-account, manually-set gate escape hatch for a counterparty whose own export is
-      not coming (§6.4).
+      (§5.1) — the manual override of the flag's automatic lifecycle (staged file clears it, file
+      removal re-arms it), chiefly for a counterparty whose own export is not coming (§6.4).
     -->
     <section class="panel" th:unless="${#lists.isEmpty(review.accountMap().rows())}">
       <p class="eyebrow">Account map</p>
@@ -188,9 +171,16 @@
                 · expecting a file</span
               >
               <span
-                class="muted"
+                class="warning"
                 th:if="${row.expectFile() and row.fileProvided()}"
-                title="This account's own export has been staged; clear the flag once its data is complete"
+                title="This account's file is staged but expect-file was re-armed by hand — the gate stays locked"
+              >
+                · expect-file re-armed</span
+              >
+              <span
+                class="muted"
+                th:if="${row.fileProvided()}"
+                title="This account's own export has been staged"
               >
                 · file provided</span
               >
@@ -308,20 +298,23 @@
               th:replace="~{fragments/currency-picker :: dialogMount(fieldId='import-person-currency-' + ${row.importAccountId()})}"
             ></div>
 
-            <!-- Expect-file toggle (import.md §5.1, §6.4): the gate stays locked while any account
-                 still expects its own export. A hidden field carries the flipped value. -->
+            <!-- Expect-file toggle (import.md §5.1, §6.4): staging this account's own file clears
+                 the flag automatically and removing that file re-arms it; this manual override is
+                 mainly for a counterparty whose export is never coming. The gate stays locked while
+                 any account still expects its own export. A hidden field carries the flipped
+                 value. -->
             <form
               method="post"
               th:action="@{/import/review/accounts/{id}/expect-file(id=${row.importAccountId()})}"
               class="form"
             >
               <p class="muted" th:if="${row.expectFile() and !row.fileProvided()}">
-                Still expecting this account's own export — the campaign cannot commit until every
-                account's file is staged or this is cleared.
+                Still expecting this account's own export — the campaign cannot commit until its file
+                is staged, or clear this to declare that no file is coming for it.
               </p>
               <p class="muted" th:if="${row.expectFile() and row.fileProvided()}">
-                This account's file has been staged. Clear this once you're satisfied its data is
-                complete.
+                This account's file is staged but the flag has been re-armed by hand — the campaign
+                cannot commit until it is cleared again.
               </p>
               <p class="muted" th:unless="${row.expectFile()}">
                 Not expecting a file for this account.

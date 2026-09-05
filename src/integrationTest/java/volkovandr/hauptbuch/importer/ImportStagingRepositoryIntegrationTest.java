@@ -44,9 +44,13 @@ class ImportStagingRepositoryIntegrationTest {
   }
 
   private ImportFile stageFile(long sessionId, String filename) {
+    return stageFile(sessionId, filename, "Current Account");
+  }
+
+  private ImportFile stageFile(long sessionId, String filename, String moneyAccountName) {
     return importFileRepository.insert(
         new ImportFile(
-            null, sessionId, filename, "Current Account", "utf_8", "day_month", "asset", 2, null));
+            null, sessionId, filename, moneyAccountName, "utf_8", "day_month", "asset", 2, null));
   }
 
   private long stageTransaction(long fileId, String cleared, boolean openingBalance) {
@@ -214,24 +218,7 @@ class ImportStagingRepositoryIntegrationTest {
   }
 
   @Test
-  void clearExpectFileForProvidedFilesOnlyClearsRowsWithStagedFile() {
-    long sessionId = openSession();
-    // "Current Account" has a staged file; "Savings" is only referenced as a transfer
-    // counterparty — its own export genuinely has not arrived.
-    stageFile(sessionId, "export.qif");
-    importAccountRepository.upsertUnmapped(sessionId, "Current Account");
-    importAccountRepository.upsertUnmapped(sessionId, "Savings");
-    long currentRow = mapRowId(sessionId, "Current Account");
-    long savingsRow = mapRowId(sessionId, "Savings");
-
-    assertThat(importAccountRepository.clearExpectFileForProvidedFiles(sessionId)).isEqualTo(1);
-
-    assertThat(expectFileOf(sessionId, currentRow)).isFalse();
-    assertThat(expectFileOf(sessionId, savingsRow)).isTrue();
-  }
-
-  @Test
-  void clearExpectFileForProvidedFilesIsIdempotentAndSessionScoped() {
+  void clearExpectFileForStagedAccountClearsThatNameOnlyAndIsSessionScoped() {
     long sessionId = openSession();
     // A second, already-committed session — only one session may be 'open' at a time.
     long otherSession =
@@ -241,16 +228,48 @@ class ImportStagingRepositoryIntegrationTest {
                     + " import_session_id")
             .query(Long.class)
             .single();
-    stageFile(sessionId, "export.qif");
     importAccountRepository.upsertUnmapped(sessionId, "Current Account");
-    stageFile(otherSession, "other.qif");
+    // "Savings" is only referenced as a transfer counterparty — its own export has not arrived.
+    importAccountRepository.upsertUnmapped(sessionId, "Savings");
     importAccountRepository.upsertUnmapped(otherSession, "Current Account");
+    long currentRow = mapRowId(sessionId, "Current Account");
+    long savingsRow = mapRowId(sessionId, "Savings");
 
-    assertThat(importAccountRepository.clearExpectFileForProvidedFiles(sessionId)).isEqualTo(1);
-    // Already cleared — a second run finds nothing left to clear.
-    assertThat(importAccountRepository.clearExpectFileForProvidedFiles(sessionId)).isZero();
-    // The other session's row is untouched.
+    importAccountRepository.clearExpectFileForStagedAccount(sessionId, "Current Account");
+
+    assertThat(expectFileOf(sessionId, currentRow)).isFalse();
+    assertThat(expectFileOf(sessionId, savingsRow)).isTrue();
     assertThat(expectFileOf(otherSession, mapRowId(otherSession, "Current Account"))).isTrue();
+  }
+
+  @Test
+  void clearExpectFileForStagedAccountLeavesOtherRowsAloneWhenTheNameIsUnknown() {
+    long sessionId = openSession();
+    importAccountRepository.upsertUnmapped(sessionId, "Current Account");
+    long rowId = mapRowId(sessionId, "Current Account");
+
+    // No row of that name — no throw, and the unrelated row keeps its flag.
+    importAccountRepository.clearExpectFileForStagedAccount(sessionId, "Nothing Here");
+
+    assertThat(expectFileOf(sessionId, rowId)).isTrue();
+  }
+
+  @Test
+  void rearmExpectFileWhenNoStagedFileReArmsOnlyWithNoStagedFileNamingTheAccount() {
+    long sessionId = openSession();
+    importAccountRepository.upsertUnmapped(sessionId, "Current Account");
+    long rowId = mapRowId(sessionId, "Current Account");
+    importAccountRepository.setExpectFile(rowId, false);
+
+    // No staged file names it as its own — the flag re-arms.
+    importAccountRepository.rearmExpectFileWhenNoStagedFile(sessionId, "Current Account");
+    assertThat(expectFileOf(sessionId, rowId)).isTrue();
+
+    // A staged file still names it (an account can accumulate several) — the flag stays as set.
+    importAccountRepository.setExpectFile(rowId, false);
+    stageFile(sessionId, "current.qif", "Current Account");
+    importAccountRepository.rearmExpectFileWhenNoStagedFile(sessionId, "Current Account");
+    assertThat(expectFileOf(sessionId, rowId)).isFalse();
   }
 
   private boolean expectFileOf(long sessionId, long importAccountId) {
@@ -292,6 +311,20 @@ class ImportStagingRepositoryIntegrationTest {
         .filter(row -> row.importAccountId() == importAccountId)
         .findFirst()
         .orElseThrow();
+  }
+
+  @Test
+  void findBySessionAndFilenameReturnsEveryStagedFileOfThatName() {
+    long sessionId = openSession();
+    // Two coincident files of one name for different accounts (§2), plus an unrelated file.
+    stageFile(sessionId, "export.qif", "Current Account");
+    stageFile(sessionId, "export.qif", "Savings");
+    stageFile(sessionId, "other.qif", "Credit Card");
+
+    assertThat(importFileRepository.findBySessionAndFilename(sessionId, "export.qif"))
+        .extracting(ImportFile::moneyAccountName)
+        .containsExactlyInAnyOrder("Current Account", "Savings");
+    assertThat(importFileRepository.findBySessionAndFilename(sessionId, "absent.qif")).isEmpty();
   }
 
   @Test

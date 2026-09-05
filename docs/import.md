@@ -214,11 +214,17 @@ distinct destroyed names can be indistinguishable on the map screen with no safe
 back on. The file is refused before anything stages, the same way an `!Type:Invst` file is.
 
 **`expect-file` flag.** Independent of the mapping, each Money account name carries "am I still
-waiting for this account's own export?". Clearing it resolves that account's pending mirrors (§6)
-and is the *only* escape hatch in the commit gate — a per-account, recorded, visible status change
-rather than a blanket override. It does **not** change any transaction: a transfer to a
-non-imported account is still booked in full on both legs (sum-to-zero leaves no choice); that
-account simply ends up holding only the postings other files happened to mention.
+waiting for this account's own export?". It defaults `true` on first reference and follows the
+staged files automatically: **staging a file that names an account as its own clears it** — Money
+never exports partial account history, so that account's data is now provided in full — and
+**removing that file re-arms it** (unless another staged file still names the account, since an
+account can accumulate several). On top of that it is **toggleable by hand in either direction**:
+the one manual case that matters is a transfer counterparty whose own export is *never* coming —
+the owner clears the flag by hand to accept its transfers as the one file states them. Clearing it
+resolves that account's pending mirrors (§6) and is the *only* escape hatch in the commit gate. It
+does **not** change any transaction: a transfer to a non-imported account is still booked in full
+on both legs (sum-to-zero leaves no choice); that account simply ends up holding only the postings
+other files happened to mention.
 
 **Opening balances.** Money exports an opening balance as a single-line self-transfer with payee
 `Opening Balance` (`L[Same Account]`) — the one place the file names its own account, which is why

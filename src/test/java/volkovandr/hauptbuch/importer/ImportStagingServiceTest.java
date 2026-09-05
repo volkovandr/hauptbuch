@@ -181,6 +181,8 @@ class ImportStagingServiceTest {
                 1,
                 null));
     verify(importAccountRepository).upsertUnmapped(SESSION_ID, "Current Account");
+    // Staging the file settles its own account's expect-file — not the counterparties' (issue 03).
+    verify(importAccountRepository).clearExpectFileForStagedAccount(SESSION_ID, "Current Account");
     verify(importCategoryRepository).upsertUnmapped(SESSION_ID, "Food");
     verify(importTransactionRepository)
         .insert(
@@ -230,6 +232,9 @@ class ImportStagingServiceTest {
     service().stage(upload());
 
     verify(importAccountRepository).upsertUnmapped(SESSION_ID, "Savings");
+    // Only the file's own account is settled — the transfer counterparty still awaits its export.
+    verify(importAccountRepository).clearExpectFileForStagedAccount(SESSION_ID, "Current Account");
+    verify(importAccountRepository, never()).clearExpectFileForStagedAccount(SESSION_ID, "Savings");
     verify(importCategoryRepository, never()).upsertUnmapped(anyLong(), any());
     verify(importPostingRepository)
         .insert(
@@ -360,12 +365,81 @@ class ImportStagingServiceTest {
   }
 
   @Test
-  void removeFileThatRemovedNothingStillCleansUpButDoesNotReMatch() {
+  void removeFileReArmsExpectFileForTheAccountItWasFor() {
+    when(importFileRepository.findById(FILE_ID)).thenReturn(Optional.of(stagedFile()));
+    when(importFileRepository.deleteById(FILE_ID)).thenReturn(1);
+
+    service().removeFile(FILE_ID);
+
+    // The account it staged is awaiting an export again (issue 03) — the repo skips this if
+    // another staged file still names it.
+    verify(importAccountRepository).rearmExpectFileWhenNoStagedFile(SESSION_ID, "Current Account");
+  }
+
+  @Test
+  void removeFileThatRemovedNothingStillCleansUpButDoesNotReMatchOrReArm() {
+    when(importFileRepository.findById(FILE_ID)).thenReturn(Optional.of(stagedFile()));
     when(importFileRepository.deleteById(FILE_ID)).thenReturn(0);
 
     service().removeFile(FILE_ID);
 
     verify(importMirrorMatchingService).clearOrphanedResolutionsBeforeFileRemoval(FILE_ID);
     verify(importMirrorMatchingService, never()).rematchCurrentSession();
+    verify(importAccountRepository, never()).rearmExpectFileWhenNoStagedFile(anyLong(), any());
+  }
+
+  @Test
+  void removeFilesNamedReArmsExpectFileForEachAccountThoseFilesWereFor() {
+    openSession();
+    when(importFileRepository.findBySessionAndFilename(SESSION_ID, "shared.qif"))
+        .thenReturn(
+            List.of(
+                stagedFileFor("shared.qif", "Current Account"),
+                stagedFileFor("shared.qif", "Savings")));
+    when(importFileRepository.deleteBySessionAndFilename(SESSION_ID, "shared.qif")).thenReturn(2);
+
+    service().removeFilesNamed("shared.qif");
+
+    verify(importAccountRepository).rearmExpectFileWhenNoStagedFile(SESSION_ID, "Current Account");
+    verify(importAccountRepository).rearmExpectFileWhenNoStagedFile(SESSION_ID, "Savings");
+  }
+
+  @Test
+  void removeFilesNamedThatRemovedNothingDoesNotReArm() {
+    openSession();
+    when(importFileRepository.findBySessionAndFilename(SESSION_ID, "shared.qif"))
+        .thenReturn(List.of(stagedFileFor("shared.qif", "Current Account")));
+    when(importFileRepository.deleteBySessionAndFilename(SESSION_ID, "shared.qif")).thenReturn(0);
+
+    service().removeFilesNamed("shared.qif");
+
+    verify(importAccountRepository, never()).rearmExpectFileWhenNoStagedFile(anyLong(), any());
+    verify(importMirrorMatchingService, never()).rematchCurrentSession();
+  }
+
+  @Test
+  void removeFilesNamedWithoutAnOpenSessionDoesNothing() {
+    when(importSessionService.currentSession()).thenReturn(Optional.empty());
+
+    assertThat(service().removeFilesNamed("shared.qif")).isZero();
+
+    verifyNoInteractions(importFileRepository, importAccountRepository);
+  }
+
+  private static ImportFile stagedFile() {
+    return stagedFileFor("export.qif", "Current Account");
+  }
+
+  private static ImportFile stagedFileFor(String filename, String moneyAccountName) {
+    return new ImportFile(
+        FILE_ID,
+        SESSION_ID,
+        filename,
+        moneyAccountName,
+        "utf_8",
+        "day_month",
+        "asset",
+        1,
+        OffsetDateTime.now());
   }
 }

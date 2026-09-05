@@ -86,11 +86,20 @@ public class ImportStagingService {
    */
   @Transactional
   public void removeFile(long importFileId) {
+    // The removed file's own account may need its expect-file re-armed (below) — read the row while
+    // it is still there.
+    ImportFile removed = importFileRepository.findById(importFileId).orElse(null);
     // Must run BEFORE the delete: it needs the about-to-vanish mirror postings still in place to
     // find the survivors pointing at them (import.md §6.2/§6.4; plan e2b).
     importMirrorMatchingService.clearOrphanedResolutionsBeforeFileRemoval(importFileId);
     if (importFileRepository.deleteById(importFileId) > 0) {
       LOG.info("Import file {} removed from staging", importFileId);
+      // The account this file was for is awaiting an export again — unless another staged file
+      // still names it (.scratch/import/issues/03).
+      if (removed != null) {
+        importAccountRepository.rearmExpectFileWhenNoStagedFile(
+            removed.importSessionId(), removed.moneyAccountName());
+      }
       // A removed file can strand a surviving transfer's mirror (its partner leg is gone, V21 nulls
       // the link) — re-match resets any now-unpaired sighting (import.md §6.1; plan e1).
       importMirrorMatchingService.rematchCurrentSession();
@@ -103,19 +112,23 @@ public class ImportStagingService {
    */
   @Transactional
   public int removeFilesNamed(String filename) {
-    int removed =
-        importSessionService
-            .currentSession()
-            .map(
-                session -> {
-                  // Must run BEFORE the delete — see removeFile (plan e2b).
-                  importMirrorMatchingService.clearOrphanedResolutionsBeforeFilesRemoval(
-                      session.importSessionId(), filename);
-                  return importFileRepository.deleteBySessionAndFilename(
-                      session.importSessionId(), filename);
-                })
-            .orElse(0);
+    ImportSession session = importSessionService.currentSession().orElse(null);
+    if (session == null) {
+      return 0;
+    }
+    long sessionId = session.importSessionId();
+    // The files (hence the accounts they are for) — read while they are still there, to re-arm
+    // their expect-file once they go (.scratch/import/issues/03).
+    List<ImportFile> filesForName =
+        importFileRepository.findBySessionAndFilename(sessionId, filename);
+    // Must run BEFORE the delete — see removeFile (plan e2b).
+    importMirrorMatchingService.clearOrphanedResolutionsBeforeFilesRemoval(sessionId, filename);
+    int removed = importFileRepository.deleteBySessionAndFilename(sessionId, filename);
     if (removed > 0) {
+      filesForName.forEach(
+          file ->
+              importAccountRepository.rearmExpectFileWhenNoStagedFile(
+                  sessionId, file.moneyAccountName()));
       importMirrorMatchingService.rematchCurrentSession();
     }
     return removed;
@@ -168,6 +181,11 @@ public class ImportStagingService {
 
     file.referencedAccountNames()
         .forEach(name -> importAccountRepository.upsertUnmapped(sessionId, name));
+    // Staging a file that names an account as its own settles that account's expect-file with no
+    // owner click — Money never exports partial history, so its data is now provided in full
+    // (.scratch/import/issues/03). Only the file's own account, never the transfer counterparties
+    // it happens to mention (their own exports may still be awaited).
+    importAccountRepository.clearExpectFileForStagedAccount(sessionId, upload.moneyAccountName());
     for (ImportedTransaction transaction : file.transactions()) {
       stageTransaction(
           sessionId,

@@ -731,7 +731,8 @@ class ImportScreenIntegrationTest {
     MockHttpSession session = openCampaign();
     stageNewFile(session, "current.qif", BANK_WITH_PERSON_TRANSFER, "Current Account");
 
-    // A staged file does not clear expect-file (plan c2) — it stays a manual toggle.
+    // "Loan to Max" is only a transfer counterparty here — no file of its own, so it still
+    // expects one and the manual toggle is the way to change that (issue 03).
     assertThat(expectFile("Loan to Max")).isTrue();
 
     mockMvc
@@ -752,44 +753,62 @@ class ImportScreenIntegrationTest {
   }
 
   @Test
-  void clearExpectFileForProvidedFilesClearsEveryAccountWithStagedFile() throws Exception {
-    // Reproduces an owner report: two accounts each got their own file staged, yet the review
-    // kept showing both as "still expecting a file" — expect-file is a purely manual flag (plan
-    // c2) that a staged file never clears on its own, and there was no way to clear it in bulk.
+  void stagingFileAutoClearsExpectFileForItsOwnAccountOnly() throws Exception {
+    // The owner report behind issue 03: two accounts each got their own file staged, yet the
+    // review kept listing both as "still expecting a file". Staging a file for an account is now
+    // conclusive that its data has arrived (Money never exports partial history), so the flag
+    // clears with no click; a transfer counterparty with no file of its own is left awaiting one.
     MockHttpSession session = openCampaign();
     stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
     stageNewFile(session, "savings.qif", SAVINGS_WITH_TRANSFER, "Savings");
-    assertThat(expectFile("Current Account")).isTrue();
-    assertThat(expectFile("Savings")).isTrue();
-
-    String beforeHtml = reviewHtml(session);
-    assertThat(beforeHtml).contains("still expecting its own export");
-    assertThat(beforeHtml).contains("Stop expecting a file for every account");
-
-    mockMvc
-        .perform(post("/import/review/accounts/clear-expect-file").session(session))
-        .andExpect(redirectedUrl("/import/review#issues"));
 
     assertThat(expectFile("Current Account")).isFalse();
     assertThat(expectFile("Savings")).isFalse();
-    String afterHtml = reviewHtml(session);
-    assertThat(afterHtml).doesNotContain("still expecting its own export");
-    assertThat(afterHtml).doesNotContain("Stop expecting a file for every account");
+
+    String html = reviewHtml(session);
+    assertThat(html).doesNotContain("still expecting its own export");
+    assertThat(html).doesNotContain("Stop expecting a file for every account");
   }
 
   @Test
-  void clearExpectFileForProvidedFilesLeavesFileLessCounterpartyUntouched() throws Exception {
-    // "Current Account" has its own file; "Loan to Max" is only a transfer target whose own
-    // export genuinely has not arrived — the bulk action must not accept its pending mirror.
+  void stagingFileLeavesFilelessCounterpartyStillExpectingExport() throws Exception {
     MockHttpSession session = openCampaign();
     stageNewFile(session, "current.qif", BANK_WITH_PERSON_TRANSFER, "Current Account");
 
+    assertThat(expectFile("Current Account")).isFalse();
+    // "Loan to Max" is only a transfer target — no file of its own has been staged.
+    assertThat(expectFile("Loan to Max")).isTrue();
+    assertThat(reviewHtml(session)).contains("still expecting its own export");
+  }
+
+  @Test
+  void removingStagedFileReArmsExpectFileForTheAccountItWasFor() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+    assertThat(expectFile("Current Account")).isFalse();
+
     mockMvc
-        .perform(post("/import/review/accounts/clear-expect-file").session(session))
-        .andExpect(redirectedUrl("/import/review#issues"));
+        .perform(post("/import/files/" + stagedFileId("current.qif") + "/remove").session(session))
+        .andExpect(redirectedUrl("/import"));
+
+    // The data that justified clearing the flag is gone — the account awaits an export again.
+    assertThat(expectFile("Current Account")).isTrue();
+  }
+
+  @Test
+  void removingOneOfTwoFilesForAnAccountLeavesExpectFileCleared() throws Exception {
+    // An account can accumulate more than one staged file — removing one must not re-arm the flag
+    // while another still names the account as its own (issue 03).
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current-a.qif", DAY_MONTH_BANK, "Current Account");
+    stageNewFile(session, "current-b.qif", DAY_MONTH_BANK, "Current Account");
+
+    mockMvc
+        .perform(
+            post("/import/files/" + stagedFileId("current-a.qif") + "/remove").session(session))
+        .andExpect(redirectedUrl("/import"));
 
     assertThat(expectFile("Current Account")).isFalse();
-    assertThat(expectFile("Loan to Max")).isTrue();
   }
 
   @Test

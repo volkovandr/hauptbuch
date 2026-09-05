@@ -418,14 +418,12 @@ now resolved) — the gate re-checks every **referenced** mapped category id aga
 `stale`. `ImportCategoryMap.Row#stale()` gives the category-map panel itself the same fact, so a
 stale row now renders **open** with a warning instead of collapsed with "→ null".
 
-**The "clear every account" ergonomics deferred at plan c2 — closed here.** An owner report during
-review (2026-09-05): two accounts each had their own file staged, yet the Issues panel kept
-showing both as still expecting a file — `expect-file` is a purely manual flag (§5.1) that a
-staged file never clears on its own, and until now the only way to clear it was one row at a time
-in the account map. Added `ImportAccountRepository#clearExpectFileForProvidedFiles` (an `exists`
-join against `import_file`, clearing only rows whose Money account name actually has a staged
-file — a counterparty with no file of its own is left genuinely awaiting one) and a bulk button in
-the issues panel next to the "still expecting a file" list.
+**The "clear every account" ergonomics deferred at plan c2 — closed here** with a bulk-clear
+button (`ImportAccountRepository#clearExpectFileForProvidedFiles` + a button in the issues panel).
+*Superseded by `.scratch/import/issues/03` (2026-09-05): the button and its endpoint/service/repo
+method were removed once `expect-file` started tracking file presence directly — staging a file
+auto-clears the flag for that file's own account, removing the file re-arms it, so nothing is left
+to clear in bulk.*
 
 **Gate, as built:** `ImportIssues#locked()` is true while any referenced account is unmapped or
 still `expect-file`, any referenced category path is unmapped or stale, or any cross-currency
@@ -490,6 +488,17 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.24 (2026-09-05):** **`expect-file` tracks file presence** (`.scratch/import/issues/03`).
+  Overturns c2's "purely manual toggle" and v0.23's bulk-clear button: `ImportStagingService.stage`
+  now clears `expect-file` for the staged file's own account (`ImportAccountRepository
+  #clearExpectFileForStagedAccount`) and `removeFile` / `removeFilesNamed` re-arm it when no other
+  staged file still names the account (`#rearmExpectFileWhenNoStagedFile`, `removeFilesNamed`
+  reading the affected files via new `ImportFileRepository#findBySessionAndFilename`). The manual
+  toggle stays
+  for the "no file is ever coming" counterparty case. Removed:
+  `ImportAccountRepository#clearExpectFileForProvidedFiles`, `ImportAccountMapService
+  #clearExpectFileForProvidedFiles`, the `POST /import/review/accounts/clear-expect-file` endpoint,
+  and the issues-panel button.
 - **v0.23 (2026-09-05):** **e4 review follow-up.** Two fixes from the owner's review of e4: (1) the
   unresolved-park count was labelled "transfer(s)" in the issues panel but counts still-parked
   *legs* (`ImportMirrorRepository#parkedCrossCurrencyLegs`) — an unresolved pair with both
@@ -502,6 +511,7 @@ the committed accounts match the e′ statistics.
   and the only way to clear it was one row at a time. Closes plan c2's deferred "clear every
   account" ergonomics: new `ImportAccountRepository#clearExpectFileForProvidedFiles` (clears only
   rows whose Money account name has a staged file) plus a bulk button in the issues panel.
+  *(Superseded by v0.24 — both removed once `expect-file` began tracking file presence directly.)*
 - **v0.22 (2026-09-05):** **e4 implemented** (owner-confirmation pending) — the review's issues
   list and commit-gate state (import.md §9.3). New `ImportIssuesPanel`/`ImportIssues`; new
   `ImportMirrorRepository#unresolvedSplitMirrors` (the same-currency both-split residual `e1`'s
@@ -640,7 +650,11 @@ the committed accounts match the e′ statistics.
   is fine, and it makes §5.4's "personhood exists only in the map" true by construction — f2 gets no
   person branch); `import_account.person_id` is consequently left unused for now. (2) `expect-file`
   is a **purely manual** per-account toggle — a staged file does **not** auto-clear it (kept out of
-  scope; the "clear every account" ergonomics are e4's problem). New `importer → debts` edge
+  scope; the "clear every account" ergonomics are e4's problem). *(Superseded by
+  `.scratch/import/issues/03`, 2026-09-05: staging a file now auto-clears `expect-file` for that
+  file's own account and removing the file re-arms it; the manual toggle survives only for the
+  "no file is ever coming" counterparty case, and e4's bulk-clear button is gone.)* New
+  `importer → debts` edge
   (`PersonProvisioningService`, `PersonService`), already sanctioned by §12. Panel assembly moved to
   `ImportAccountMapPanel` (same render-model-assembler shape as `ImportReviewService`) to keep the
   mutation service's coupling in check.
