@@ -497,6 +497,26 @@ class ImportMirrorMatchingSqlLogicTest {
   }
 
   @Test
+  void zeroAmountLegNeverFalselyMatchesRealCrossCurrencyLeg() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    long francFile = stageFile(session, "Franc", account("Sparen", "CHF"));
+
+    // A degenerate zero-amount split line (e.g. a €0.00 fee) staged as a transfer leg to Franc —
+    // sign(0) = 0, which must never read as "opposite" to a real leg's positive or negative sign.
+    long zeroTxn = stageTransaction(euroFile, LocalDate.of(2022, 4, 4));
+    final long zeroLeg = leg(zeroTxn, "0.00", null, "Franc", false);
+    leg(zeroTxn, "0.00", null, "Euro", true);
+    long francLeg = stageTransfer(francFile, LocalDate.of(2022, 4, 4), "Franc", "Euro", "100.00");
+
+    assertThat(importMirrorRepository.rematch(session)).isZero();
+    assertThat(stateOf(zeroTxn)).isEqualTo("parked");
+    assertThat(stateOf(txnOf(francLeg))).isEqualTo("parked");
+    assertThat(mirrorPairOf(zeroLeg)).isNull();
+    assertThat(counterAmountOf(zeroLeg)).isNull();
+  }
+
+  @Test
   void parksOnlyOnceBothSidesAreMappedToKnownCurrencies() {
     long session = openSession();
     long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));

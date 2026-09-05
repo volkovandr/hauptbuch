@@ -15,29 +15,49 @@ import volkovandr.hauptbuch.importer.repository.ImportMirrorRepository;
 /**
  * Unit tier (CLAUDE.md §6): {@link ImportMirrorMatchingService} orchestration with the repository
  * mocked — it resolves the open campaign and delegates, and is a no-op when none is open (plan e1).
- * The matching logic itself is SQL-resident and lives in {@link ImportMirrorMatchingSqlLogicTest}.
+ * Also triggers {@link ImportCrossCurrencyRateWriteBackService} after a rematch (plan e3); that
+ * service's own candidate-forwarding logic is covered in {@link
+ * ImportCrossCurrencyRateWriteBackServiceTest}. The matching logic itself is SQL-resident and lives
+ * in {@link ImportMirrorMatchingSqlLogicTest}.
  */
 @ExtendWith(MockitoExtension.class)
 class ImportMirrorMatchingServiceTest {
 
+  private static final long SESSION_ID = 7L;
+
   @Mock ImportSessionService importSessionService;
   @Mock ImportMirrorRepository importMirrorRepository;
+  @Mock ImportCrossCurrencyRateWriteBackService rateWriteBackService;
 
   private ImportMirrorMatchingService service() {
-    return new ImportMirrorMatchingService(importSessionService, importMirrorRepository);
+    return new ImportMirrorMatchingService(
+        importSessionService, importMirrorRepository, rateWriteBackService);
   }
 
-  @Test
-  void reMatchesTheOpenSession() {
+  private void openSession() {
     when(importSessionService.currentSession())
         .thenReturn(
             Optional.of(
                 new ImportSession(
-                    7L, ImportSessionState.OPEN, null, null, OffsetDateTime.now(), null)));
+                    SESSION_ID, ImportSessionState.OPEN, null, null, OffsetDateTime.now(), null)));
+  }
+
+  @Test
+  void reMatchesTheOpenSession() {
+    openSession();
 
     service().rematchCurrentSession();
 
-    verify(importMirrorRepository).rematch(7L);
+    verify(importMirrorRepository).rematch(SESSION_ID);
+  }
+
+  @Test
+  void triggersTheRateWriteBackAfterRematch() {
+    openSession();
+
+    service().rematchCurrentSession();
+
+    verify(rateWriteBackService).writeBackObservedRates(SESSION_ID);
   }
 
   @Test
@@ -47,5 +67,6 @@ class ImportMirrorMatchingServiceTest {
     service().rematchCurrentSession();
 
     verifyNoInteractions(importMirrorRepository);
+    verifyNoInteractions(rateWriteBackService);
   }
 }

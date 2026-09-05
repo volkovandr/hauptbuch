@@ -19,7 +19,8 @@ import volkovandr.hauptbuch.importer.repository.ImportMirrorRepository;
  *
  * <p>The mutations live in {@link ImportMirrorRepository}, alongside the automatic matching they
  * complement; this class is the validation and session-scoping seam its controller caller uses (the
- * {@link ImportAccountMapService} / {@link ImportAccountMapPanel} split).
+ * {@link ImportAccountMapService} / {@link ImportAccountMapPanel} split). After a successful
+ * resolution it also triggers {@link ImportCrossCurrencyRateWriteBackService} (plan e3, §6.3).
  */
 @Service
 public class ImportCrossCurrencyParkService {
@@ -28,11 +29,15 @@ public class ImportCrossCurrencyParkService {
 
   private final ImportSessionService importSessionService;
   private final ImportMirrorRepository importMirrorRepository;
+  private final ImportCrossCurrencyRateWriteBackService rateWriteBackService;
 
   ImportCrossCurrencyParkService(
-      ImportSessionService importSessionService, ImportMirrorRepository importMirrorRepository) {
+      ImportSessionService importSessionService,
+      ImportMirrorRepository importMirrorRepository,
+      ImportCrossCurrencyRateWriteBackService rateWriteBackService) {
     this.importSessionService = importSessionService;
     this.importMirrorRepository = importMirrorRepository;
+    this.rateWriteBackService = rateWriteBackService;
   }
 
   /**
@@ -74,6 +79,7 @@ public class ImportCrossCurrencyParkService {
               + mirrorPostingId
               + " are not a matchable parked cross-currency pair");
     }
+    rateWriteBackService.writeBackObservedRates(sessionId);
     LOG.debug(
         "Import postings {} and {} manually matched as a cross-currency transfer pair",
         importPostingId,
@@ -103,6 +109,7 @@ public class ImportCrossCurrencyParkService {
               + " is not a closeable park — check it is still parked, its counterparty's file is"
               + " not expected, and the amount is nonzero and matches the transfer's direction");
     }
+    rateWriteBackService.writeBackObservedRates(sessionId);
     LOG.debug("Import posting {} closed with a hand-entered far amount", importPostingId);
   }
 

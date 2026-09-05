@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,9 +17,11 @@ import volkovandr.hauptbuch.importer.repository.ImportMirrorRepository;
 
 /**
  * SQL-logic tier (CLAUDE.md §6): {@link ImportMirrorRepository#parkedCrossCurrencyLegs}, {@link
- * ImportMirrorRepository#manualMatch}, {@link ImportMirrorRepository#closeParkWithFarAmount} and
+ * ImportMirrorRepository#manualMatch}, {@link ImportMirrorRepository#closeParkWithFarAmount},
  * {@link ImportMirrorRepository#clearCounterAmountOfMirrorsIn} — the e2b resolutions for a
- * cross-currency park automatic matching (e2a) could not resolve on its own (import.md §6.4/§6.5).
+ * cross-currency park automatic matching (e2a) could not resolve on its own (import.md §6.4/§6.5) —
+ * and {@link ImportMirrorRepository#resolvedCrossCurrencyRateCandidates}, the plan-e3 rate
+ * write-back's raw-facts input (§6.3).
  *
  * <p>Crafted staging rows via raw {@link JdbcClient}; the queries under test are the real
  * repository methods. {@code @Transactional} rolls each test back on the reused container.
@@ -263,6 +266,48 @@ class ImportCrossCurrencyParkSqlLogicTest {
     assertThat(stateOf(txnOf(francLeg))).isEqualTo("mirrored");
     assertThat(mirrorPairOf(splitTransferLeg)).isEqualTo(francLeg);
     assertThat(counterAmountOf(splitTransferLeg)).isEqualByComparingTo("60.00");
+    // francLeg's counter_amount is splitTransferLeg's OWN amount, negated (-40.00) — the portion of
+    // the split that actually crossed to Franc — never the split's whole funding total (-100.00),
+    // which also covers the unrelated €60 Food leg.
+    assertThat(counterAmountOf(francLeg)).isEqualByComparingTo("-40.00");
+  }
+
+  @Test
+  void manualMatchRefusesTwoLegsMovingInTheSameDirection() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    long francFile = stageFile(session, "Franc", account("Sparen", "CHF"));
+    // Both legs read as money moving INTO the far account (positive) — a real mirror's two legs are
+    // always opposite-signed (one side's money-in is the other side's money-out), so this pair
+    // cannot be one real transfer's two sightings, however tempting the account-crossing looks.
+    long euroLeg =
+        stageParkedTransfer(euroFile, LocalDate.of(2020, 6, 6), "Euro", "Franc", "-100.00");
+    long francLeg =
+        stageParkedTransfer(francFile, LocalDate.of(2020, 6, 6), "Franc", "Euro", "-150.00");
+
+    assertThat(importMirrorRepository.manualMatch(session, euroLeg, francLeg)).isFalse();
+    assertThat(mirrorPairOf(euroLeg)).isNull();
+    assertThat(counterAmountOf(euroLeg)).isNull();
+    assertThat(stateOf(txnOf(euroLeg))).isEqualTo("parked");
+  }
+
+  @Test
+  void manualMatchRefusesZeroAmountLeg() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    long francFile = stageFile(session, "Franc", account("Sparen", "CHF"));
+    // sign(0) = 0, which must never read as "opposite" to a real leg's sign — a zero-amount leg
+    // (e.g. a degenerate €0.00 split line) is never a valid mirror match, however the accounts
+    // cross.
+    long zeroTxn = stageTransaction(euroFile, LocalDate.of(2020, 7, 7));
+    long zeroLeg = leg(zeroTxn, "0.00", null, "Franc", false);
+    leg(zeroTxn, "0.00", null, "Euro", true);
+    long francLeg =
+        stageParkedTransfer(francFile, LocalDate.of(2020, 7, 7), "Franc", "Euro", "100.00");
+
+    assertThat(importMirrorRepository.manualMatch(session, zeroLeg, francLeg)).isFalse();
+    assertThat(mirrorPairOf(zeroLeg)).isNull();
+    assertThat(counterAmountOf(zeroLeg)).isNull();
   }
 
   @Test
@@ -382,6 +427,66 @@ class ImportCrossCurrencyParkSqlLogicTest {
     assertThat(closed).isFalse();
     assertThat(counterAmountOf(euroLeg)).isNull();
     assertThat(stateOf(txnOf(euroLeg))).isEqualTo("parked");
+  }
+
+  // ── resolvedCrossCurrencyRateCandidates (plan e3, §6.3) ───────────────────────
+
+  @Test
+  void resolvedCrossCurrencyRateCandidatesReportsBothSightingsOfAnAutomaticallyResolvedPair() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    long francFile = stageFile(session, "Franc", account("Sparen", "CHF"));
+    LocalDate date = LocalDate.of(2026, 5, 5);
+    long euroLeg = stageParkedTransfer(euroFile, date, "Euro", "Franc", "-100.00");
+    long francLeg = stageParkedTransfer(francFile, date, "Franc", "Euro", "150.00");
+    importMirrorRepository.manualMatch(session, euroLeg, francLeg);
+
+    List<ImportCrossCurrencyRateCandidate> candidates =
+        importMirrorRepository.resolvedCrossCurrencyRateCandidates(session);
+
+    // Symmetric: the resolved pair yields a candidate from each of its two sightings, both
+    // carrying the same real EUR/CHF amounts (just the currency/amount order flipped).
+    assertThat(candidates).hasSize(2);
+    assertThat(candidates)
+        .allSatisfy(
+            c -> {
+              assertThat(c.date()).isEqualTo(date);
+              assertThat(Set.of(c.currencyA(), c.currencyB())).isEqualTo(Set.of("EUR", "CHF"));
+            });
+  }
+
+  @Test
+  void resolvedCrossCurrencyRateCandidatesReportsHandEnteredResolution() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    stageFile(session, "Franc", account("Sparen", "CHF"), false);
+    LocalDate date = LocalDate.of(2026, 6, 6);
+    long euroLeg = stageParkedTransfer(euroFile, date, "Euro", "Franc", "-100.00");
+    importMirrorRepository.closeParkWithFarAmount(session, euroLeg, new BigDecimal("150.00"));
+
+    List<ImportCrossCurrencyRateCandidate> candidates =
+        importMirrorRepository.resolvedCrossCurrencyRateCandidates(session);
+
+    assertThat(candidates)
+        .singleElement()
+        .satisfies(
+            c -> {
+              assertThat(c.date()).isEqualTo(date);
+              assertThat(c.currencyA()).isEqualTo("EUR");
+              assertThat(c.amountA()).isEqualByComparingTo("100.00");
+              assertThat(c.currencyB()).isEqualTo("CHF");
+              assertThat(c.amountB()).isEqualByComparingTo("150.00");
+            });
+  }
+
+  @Test
+  void resolvedCrossCurrencyRateCandidatesExcludesStillParkedLegs() {
+    long session = openSession();
+    long euroFile = stageFile(session, "Euro", account("Giro", "EUR"));
+    stageFile(session, "Franc", account("Sparen", "CHF"));
+    stageParkedTransfer(euroFile, LocalDate.of(2026, 7, 7), "Euro", "Franc", "-100.00");
+
+    assertThat(importMirrorRepository.resolvedCrossCurrencyRateCandidates(session)).isEmpty();
   }
 
   // ── clearCounterAmountOfMirrorsIn (file-removal orphan clean-up, §6.4 vs. a stale link) ──────

@@ -280,7 +280,7 @@ Multi-table grouping ⇒ **`sqlLogicTest`, written first**, with the split-leg c
 **Done when:** the second sighting is marked `mirrored` and excluded from the commit, re-running
 after a map edit is idempotent, and the split-leg mirror matches.
 
-### e2a — Cross-currency parking and automatic resolution ✅ **implemented** (owner-confirmation pending)
+### e2a — Cross-currency parking and automatic resolution ✅ **complete** (owner-confirmed 2026-09-04)
 A cross-currency transfer **parks** (§6.2): QIF carries no far-side amount, and `base_amount` is a
 frozen fact that must never be invented. Whether a transfer *is* cross-currency depends on the
 account map (the file's own account currency vs the named account's), so this rides in the same
@@ -299,7 +299,7 @@ which already owns `rematch`), with the cross-currency and remap-clears cases cr
 an ambiguous set stays parked; a map edit that removes the currency crossing un-parks and clears the
 far amount; re-running is idempotent.
 
-### e2b — The cross-currency issues surface: manual match and hand-entered far amount ✅ **implemented** (owner-confirmation pending)
+### e2b — The cross-currency issues surface: manual match and hand-entered far amount ✅ **complete** (owner-confirmed 2026-09-04)
 The review's cross-currency panel (a focused precursor to e4's full issues list): parked
 cross-currency transfers, an explicit **manual match** of two parked sightings, and — for a transfer
 to an account whose `expect-file` was cleared and whose file will never arrive (§6.4) — a
@@ -322,15 +322,58 @@ an unrelated edit, and auto-resolves a remaining ambiguous pair once one sibling
 resolved), `ImportCrossCurrencyParkServiceTest` and `ImportCrossCurrencyParkIntegrationTest` all
 green under `./gradlew check`.
 
-### e3 — Rate write-back (V23) and the non-base pair
+### e3 — Rate write-back (V23) and the non-base pair ✅ **implemented** (owner-confirmation pending)
 When a mirror supplies both real native amounts, that pair **is** the conversion rate for that date
 (§6.3): widen `exchange_rate.source` to allow `'import'` (**V23**) and write it back; the
 transaction's `base_amount` is frozen from the same pair. Settle **Q-IMP-4** for a pair where
 *neither* currency is the base one — the importer cannot invent the missing rate, so the owner
 supplies it (or the existing carry-forward `rateAsOf` covers it, if it can).
 
+**Settled (§6.5, Q-IMP-4).** `exchange_rate` is `ledger`'s own table (data-model §3.7), so the
+importer never writes to it directly (CLAUDE.md §1) — `ImportMirrorRepository` only reports the raw
+facts. `ImportMirrorRepository#resolvedCrossCurrencyRateCandidates` returns every
+currently-resolved cross-currency leg's two real native amounts (automatic match, manual match, and
+hand-entered far amount alike — a hand-typed real figure is as genuine a fact as a mirror's), and
+each importer service (`ImportMirrorMatchingService` after a rematch, `ImportCrossCurrencyParkService`
+after a successful manual match or close) offers every candidate to `ledger`'s new
+`ExchangeRateService#recordObservedRate`, which alone decides and writes: it inserts the implied
+rate **only** when one of the two currencies is the book's base currency (the pair then directly
+states a base-relative rate); when neither is, nothing is written — never invented — via
+`ExchangeRateRepository#insertIfAbsent` (`on conflict (currency_code, date) do nothing`, so an
+existing ECB/manual row for the day is never clobbered). `posting.base_amount` itself stays unset at
+staging (there is no such column on `import_posting`) — it is fixed only at the commit (f2), from
+`amount`/`counter_amount` directly when one side is base, else falling back to the existing
+carry-forward `rateAsOf`; f2 must refuse rather than invent if that also has nothing.
+
 **Done when:** the migration applies, a resolved cross-currency mirror leaves a rate row with
-`source = 'import'`, and the non-base case has a settled, tested answer.
+`source = 'import'` ✅, and the non-base case has a settled, tested answer ✅ — `ExchangeRateServiceTest`
+(unit: the base-currency branches, the neither-is-base and no-base-currency-yet no-ops, the
+zero-amount no-op), `ExchangeRateRepositoryIntegrationTest` (the never-overwrite insert),
+`ImportCrossCurrencyParkSqlLogicTest`'s `resolvedCrossCurrencyRateCandidates` section (the raw-facts
+read, symmetric across both sightings, excludes still-parked legs), and
+`ImportMirrorMatchingServiceTest`/`ImportCrossCurrencyParkServiceTest` (the orchestration —
+candidates offered after a resolution, none offered on a rejected one) all green under
+`./gradlew check`.
+
+**Code-review findings folded in (2026-09-04):** the first design had `ImportMirrorRepository` write
+`exchange_rate`/read `settings` via raw SQL directly — a module-boundary reach-around invisible to
+`ApplicationModules.verify()` — corrected to the read/decide split above. The review also caught two
+real bugs in the already-`✅ complete` e2b `manualMatch`: (1) `isMatchablePair` had no opposite-sign
+guard, unlike the automatic matcher — two unrelated same-direction transfers crossing the same
+accounts on the same day could be manually paired as if they were one transfer; fixed by requiring
+opposite-signed legs, same as the automatic path. (2) A manually-matched split counterpart's
+`counter_amount` was set from the whole split's *funding total*, not the specific leg's own amount —
+overstating the crossed amount by whatever the split's other (unrelated) legs added up to; fixed to
+use the counterpart's own signed amount, negated, which is correct for both a simple transfer and a
+split leg alike (and let `CrossingLeg` drop the now-unneeded `fundingAmount` field).
+
+**Second review pass folded in:** (3) the opposite-sign guard itself (both the automatic SQL and
+the `manualMatch` fix above) read a degenerate zero-amount leg as "opposite" to any real leg via a
+bare `> 0` comparison — fixed to `sign(a) * sign(b) < 0` (SQL) / `signum() * signum() < 0` (Java),
+which is `0`, never negative, when either amount is zero. (4) `recordObservedRate` had no guard
+against the two currencies being literally the same; added, defensively, at the method's own
+boundary. (5) `ImportMirrorMatchingService` and `ImportCrossCurrencyParkService` each carried their
+own copy of the write-back loop; extracted to a shared `ImportCrossCurrencyRateWriteBackService`.
 
 ### e4 — The issues list
 The review's third panel (§9.3): unresolved mirrors, unresolved parks, unmapped paths, unparseable
@@ -403,6 +446,25 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.20 (2026-09-05):** **e3 — second review pass folded in.** The opposite-sign mirror guard
+  (SQL and `manualMatch`) mistreated a zero-amount leg as opposite-signed to any real one; fixed to
+  a sign-product check. `ExchangeRateService.recordObservedRate` now refuses a same-currency pair at
+  its own boundary. The write-back loop `ImportMirrorMatchingService`/`ImportCrossCurrencyParkService`
+  each carried is extracted to a shared `ImportCrossCurrencyRateWriteBackService`.
+- **v0.19 (2026-09-04):** **e3 implemented** (owner-confirmation pending) — `V23` widens
+  `exchange_rate.source` to `'import'`; `ledger`'s new `ExchangeRateService.recordObservedRate`
+  writes the implied rate of a resolved cross-currency pair whenever one currency is base,
+  `on conflict do nothing` (never overwrites an existing row). The importer never writes
+  `exchange_rate` itself — `ImportMirrorRepository.resolvedCrossCurrencyRateCandidates` reports the
+  raw facts (every currently-resolved leg, automatic/manual/hand-entered alike) and each importer
+  service offers them to `ledger` after a resolution. **Q-IMP-4 settled:** when neither currency is
+  base, nothing is written; `posting.base_amount` freezing itself is deferred to f2 (no such column
+  exists on `import_posting`). **Code-review pass folded in:** the first cut had the importer write
+  `exchange_rate`/read `settings` via raw SQL — a module-boundary reach-around — corrected to the
+  read/decide split above; also fixed two real e2b `manualMatch` bugs the review caught (missing
+  opposite-sign guard; a split counterpart's `counter_amount` taken from the whole funding total
+  instead of its own crossed amount) — see e3's entry above for detail.
+- **v0.18 (2026-09-04):** **e2a and e2b marked complete** (owner-confirmed 2026-09-04).
 - **v0.17 (2026-09-04):** **e2b implemented** (owner-confirmation pending) — the cross-currency
   panel's manual match (§6.5) and hand-entered far amount (§6.4), in `ImportCrossCurrencyParkService`
   / `ImportMirrorRepository.manualMatch` / `.closeParkWithFarAmount`. **Rematch-survival decision

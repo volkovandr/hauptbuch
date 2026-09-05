@@ -20,7 +20,10 @@ import volkovandr.hauptbuch.importer.repository.ImportMirrorRepository;
 /**
  * Unit tier (CLAUDE.md §6): {@link ImportCrossCurrencyParkService} with {@link
  * ImportMirrorRepository} mocked — the review's cross-currency panel (import.md §9), the manual
- * match (§6.5) and hand-entered far amount (§6.4) guards, and the no-open-session guard.
+ * match (§6.5) and hand-entered far amount (§6.4) guards, the no-open-session guard, and that a
+ * successful resolution triggers {@link ImportCrossCurrencyRateWriteBackService} (plan e3, §6.3)
+ * while a rejected one does not. That service's own candidate-forwarding logic is covered in {@link
+ * ImportCrossCurrencyRateWriteBackServiceTest}.
  */
 @ExtendWith(MockitoExtension.class)
 class ImportCrossCurrencyParkServiceTest {
@@ -29,9 +32,11 @@ class ImportCrossCurrencyParkServiceTest {
 
   @Mock ImportSessionService importSessionService;
   @Mock ImportMirrorRepository importMirrorRepository;
+  @Mock ImportCrossCurrencyRateWriteBackService rateWriteBackService;
 
   private ImportCrossCurrencyParkService service() {
-    return new ImportCrossCurrencyParkService(importSessionService, importMirrorRepository);
+    return new ImportCrossCurrencyParkService(
+        importSessionService, importMirrorRepository, rateWriteBackService);
   }
 
   private void openSession() {
@@ -83,6 +88,16 @@ class ImportCrossCurrencyParkServiceTest {
   }
 
   @Test
+  void manualMatchTriggersTheRateWriteBackAfterSuccessfulMatch() {
+    openSession();
+    when(importMirrorRepository.manualMatch(SESSION_ID, 10L, 20L)).thenReturn(true);
+
+    service().manualMatch(10L, 20L);
+
+    verify(rateWriteBackService).writeBackObservedRates(SESSION_ID);
+  }
+
+  @Test
   void manualMatchRejectsPairTheRepositoryRefuses() {
     openSession();
     when(importMirrorRepository.manualMatch(SESSION_ID, 10L, 20L)).thenReturn(false);
@@ -91,6 +106,8 @@ class ImportCrossCurrencyParkServiceTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("10")
         .hasMessageContaining("20");
+
+    verifyNoInteractions(rateWriteBackService);
   }
 
   @Test
@@ -101,6 +118,7 @@ class ImportCrossCurrencyParkServiceTest {
         .isInstanceOf(IllegalStateException.class);
 
     verifyNoInteractions(importMirrorRepository);
+    verifyNoInteractions(rateWriteBackService);
   }
 
   @Test
@@ -115,6 +133,17 @@ class ImportCrossCurrencyParkServiceTest {
   }
 
   @Test
+  void closeParkWithFarAmountTriggersTheRateWriteBackAfterSuccessfulClose() {
+    openSession();
+    BigDecimal amount = new BigDecimal("150.00");
+    when(importMirrorRepository.closeParkWithFarAmount(SESSION_ID, 10L, amount)).thenReturn(true);
+
+    service().closeParkWithFarAmount(10L, amount);
+
+    verify(rateWriteBackService).writeBackObservedRates(SESSION_ID);
+  }
+
+  @Test
   void closeParkWithFarAmountNeedsAnAmount() {
     openSession();
 
@@ -123,6 +152,7 @@ class ImportCrossCurrencyParkServiceTest {
         .hasMessageContaining("amount");
 
     verifyNoInteractions(importMirrorRepository);
+    verifyNoInteractions(rateWriteBackService);
   }
 
   @Test
@@ -134,6 +164,8 @@ class ImportCrossCurrencyParkServiceTest {
     assertThatThrownBy(() -> service().closeParkWithFarAmount(10L, amount))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("10");
+
+    verifyNoInteractions(rateWriteBackService);
   }
 
   @Test
@@ -144,5 +176,6 @@ class ImportCrossCurrencyParkServiceTest {
         .isInstanceOf(IllegalStateException.class);
 
     verifyNoInteractions(importMirrorRepository);
+    verifyNoInteractions(rateWriteBackService);
   }
 }
