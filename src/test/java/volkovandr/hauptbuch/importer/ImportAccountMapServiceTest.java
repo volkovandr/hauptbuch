@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.importer;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -291,6 +292,26 @@ class ImportAccountMapServiceTest {
         .isInstanceOf(IllegalArgumentException.class);
 
     verify(importAccountRepository, never()).setExpectFile(anyLong(), anyBoolean());
+  }
+
+  @Test
+  void clearExpectFileForProvidedFilesDelegatesToTheOpenSessionAndReturnsTheCount() {
+    openSession();
+    when(importAccountRepository.clearExpectFileForProvidedFiles(SESSION_ID)).thenReturn(2);
+
+    assertThat(service().clearExpectFileForProvidedFiles()).isEqualTo(2);
+
+    verify(importAccountRepository).clearExpectFileForProvidedFiles(SESSION_ID);
+  }
+
+  @Test
+  void clearExpectFileForProvidedFilesWithoutAnOpenSessionIsRejected() {
+    when(importSessionService.currentSession()).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service().clearExpectFileForProvidedFiles())
+        .isInstanceOf(IllegalStateException.class);
+
+    verifyNoInteractions(importAccountRepository);
   }
 
   @Test

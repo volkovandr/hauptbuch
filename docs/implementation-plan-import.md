@@ -418,6 +418,15 @@ now resolved) — the gate re-checks every **referenced** mapped category id aga
 `stale`. `ImportCategoryMap.Row#stale()` gives the category-map panel itself the same fact, so a
 stale row now renders **open** with a warning instead of collapsed with "→ null".
 
+**The "clear every account" ergonomics deferred at plan c2 — closed here.** An owner report during
+review (2026-09-05): two accounts each had their own file staged, yet the Issues panel kept
+showing both as still expecting a file — `expect-file` is a purely manual flag (§5.1) that a
+staged file never clears on its own, and until now the only way to clear it was one row at a time
+in the account map. Added `ImportAccountRepository#clearExpectFileForProvidedFiles` (an `exists`
+join against `import_file`, clearing only rows whose Money account name actually has a staged
+file — a counterparty with no file of its own is left genuinely awaiting one) and a bulk button in
+the issues panel next to the "still expecting a file" list.
+
 **Gate, as built:** `ImportIssues#locked()` is true while any referenced account is unmapped or
 still `expect-file`, any referenced category path is unmapped or stale, or any cross-currency
 transfer is parked — the three conditions above (accounts-mapped and categories-mapped both being
@@ -481,6 +490,18 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.23 (2026-09-05):** **e4 review follow-up.** Two fixes from the owner's review of e4: (1) the
+  unresolved-park count was labelled "transfer(s)" in the issues panel but counts still-parked
+  *legs* (`ImportMirrorRepository#parkedCrossCurrencyLegs`) — an unresolved pair with both
+  sightings staged contributes two, overstating the transfer tally, so the wording now says
+  "leg(s)"; `ImportIssuesPanel` also takes that count from `ImportReviewService` (which already
+  fetches the list for the cross-currency panel) instead of re-querying it, and the stale-category
+  check fetches `postableCategoryPaths()` once per session instead of once per referenced row. (2)
+  An owner report: two accounts each had their own file staged, yet the issues panel kept showing
+  both as still expecting a file — `expect-file` never auto-clears on staging (§5.1, by design),
+  and the only way to clear it was one row at a time. Closes plan c2's deferred "clear every
+  account" ergonomics: new `ImportAccountRepository#clearExpectFileForProvidedFiles` (clears only
+  rows whose Money account name has a staged file) plus a bulk button in the issues panel.
 - **v0.22 (2026-09-05):** **e4 implemented** (owner-confirmation pending) — the review's issues
   list and commit-gate state (import.md §9.3). New `ImportIssuesPanel`/`ImportIssues`; new
   `ImportMirrorRepository#unresolvedSplitMirrors` (the same-currency both-split residual `e1`'s

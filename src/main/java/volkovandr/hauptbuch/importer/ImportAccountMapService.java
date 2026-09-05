@@ -182,6 +182,27 @@ public class ImportAccountMapService {
   }
 
   /**
+   * Clear {@code expect-file} in bulk for every account-map row of the open campaign whose Money
+   * account name already has a staged file (§5.1) — the "clear every account" ergonomics
+   * deliberately left out of scope at plan c2 and closed here at e4, since toggling the flag one
+   * row at a time does not scale once dozens of files have been staged. A row whose export
+   * genuinely has not arrived yet (no matching file) is left untouched.
+   *
+   * @return how many rows were cleared
+   * @throws IllegalStateException if no campaign is open
+   */
+  @Transactional
+  public int clearExpectFileForProvidedFiles() {
+    long sessionId = requireOpenSessionId();
+    int cleared = importAccountRepository.clearExpectFileForProvidedFiles(sessionId);
+    LOG.info(
+        "Import session {} cleared expect-file for {} account(s) whose file is already staged",
+        sessionId,
+        cleared);
+    return cleared;
+  }
+
+  /**
    * Record the opening-balance reconciliation for one map row (import.md §5.1; plan c3). Money's
    * opening balance is a self-transfer and the target Hauptbuch account usually already has one —
    * the owner picks the winner: {@code keep_hauptbuch} drops Money's, {@code take_money} voids
@@ -222,14 +243,7 @@ public class ImportAccountMapService {
   }
 
   private ImportAccount requireRowInOpenSession(long importAccountId) {
-    long sessionId =
-        importSessionService
-            .currentSession()
-            .orElseThrow(
-                () ->
-                    new IllegalStateException(
-                        "No import session is open — start one before mapping accounts."))
-            .importSessionId();
+    long sessionId = requireOpenSessionId();
     return importAccountRepository.findBySession(sessionId).stream()
         .filter(row -> row.importAccountId() == importAccountId)
         .findFirst()
@@ -237,5 +251,15 @@ public class ImportAccountMapService {
             () ->
                 new IllegalArgumentException(
                     "No account-map row " + importAccountId + " in the open campaign"));
+  }
+
+  private long requireOpenSessionId() {
+    return importSessionService
+        .currentSession()
+        .orElseThrow(
+            () ->
+                new IllegalStateException(
+                    "No import session is open — start one before mapping accounts."))
+        .importSessionId();
   }
 }

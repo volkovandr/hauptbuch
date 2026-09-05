@@ -33,7 +33,7 @@
       gate; the owner resolves it by hand. Orphan map rows a file removal left behind (§5) are
       excluded from every list here (ImportIssuesPanel) — they are harmless clutter, not a blocker.
     -->
-    <section class="panel" th:unless="${review.empty()}">
+    <section class="panel" id="issues" th:unless="${review.empty()}">
       <p class="eyebrow">Issues &amp; commit gate</p>
       <p th:if="${review.issues().locked()}" class="warning">
         The campaign cannot commit yet:
@@ -61,6 +61,23 @@
           ><span class="muted"> — still expecting its own export</span>
         </li>
       </ul>
+      <!-- Bulk escape hatch (plan c2's deferred "clear every account" ergonomics, closed here):
+           a file being staged never auto-clears expect-file (§5.1) — the owner still confirms it
+           explicitly — but toggling dozens of rows one at a time once every export has arrived
+           does not scale. Clears only rows whose Money account name already has a staged file; a
+           row still genuinely awaiting its own export is left untouched. -->
+      <form
+        th:if="${!#lists.isEmpty(review.issues().expectingFile())}"
+        method="post"
+        th:action="@{/import/review/accounts/clear-expect-file}"
+        class="form"
+      >
+        <p class="actions">
+          <button type="submit" class="btn btn--ghost">
+            Stop expecting a file for every account whose export is already staged
+          </button>
+        </p>
+      </form>
       <ul class="import-uploads" th:if="${!#lists.isEmpty(review.issues().unmappedCategories())}">
         <li th:each="row : ${review.issues().unmappedCategories()}">
           <a th:href="'#category-' + ${row.importCategoryId()}" th:text="${row.moneyPath()}"

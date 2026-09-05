@@ -213,6 +213,46 @@ class ImportStagingRepositoryIntegrationTest {
     assertThat(expectFileOf(sessionId, rowId)).isTrue();
   }
 
+  @Test
+  void clearExpectFileForProvidedFilesOnlyClearsRowsWithStagedFile() {
+    long sessionId = openSession();
+    // "Current Account" has a staged file; "Savings" is only referenced as a transfer
+    // counterparty — its own export genuinely has not arrived.
+    stageFile(sessionId, "export.qif");
+    importAccountRepository.upsertUnmapped(sessionId, "Current Account");
+    importAccountRepository.upsertUnmapped(sessionId, "Savings");
+    long currentRow = mapRowId(sessionId, "Current Account");
+    long savingsRow = mapRowId(sessionId, "Savings");
+
+    assertThat(importAccountRepository.clearExpectFileForProvidedFiles(sessionId)).isEqualTo(1);
+
+    assertThat(expectFileOf(sessionId, currentRow)).isFalse();
+    assertThat(expectFileOf(sessionId, savingsRow)).isTrue();
+  }
+
+  @Test
+  void clearExpectFileForProvidedFilesIsIdempotentAndSessionScoped() {
+    long sessionId = openSession();
+    // A second, already-committed session — only one session may be 'open' at a time.
+    long otherSession =
+        jdbcClient
+            .sql(
+                "insert into import_session (state) values ('committed') returning"
+                    + " import_session_id")
+            .query(Long.class)
+            .single();
+    stageFile(sessionId, "export.qif");
+    importAccountRepository.upsertUnmapped(sessionId, "Current Account");
+    stageFile(otherSession, "other.qif");
+    importAccountRepository.upsertUnmapped(otherSession, "Current Account");
+
+    assertThat(importAccountRepository.clearExpectFileForProvidedFiles(sessionId)).isEqualTo(1);
+    // Already cleared — a second run finds nothing left to clear.
+    assertThat(importAccountRepository.clearExpectFileForProvidedFiles(sessionId)).isZero();
+    // The other session's row is untouched.
+    assertThat(expectFileOf(otherSession, mapRowId(otherSession, "Current Account"))).isTrue();
+  }
+
   private boolean expectFileOf(long sessionId, long importAccountId) {
     return importAccountRepository.findBySession(sessionId).stream()
         .filter(row -> row.importAccountId() == importAccountId)
