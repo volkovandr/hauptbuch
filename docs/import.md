@@ -444,21 +444,30 @@ referenced account is still marked `expect-file`; zero unresolved cross-currency
 ledger duplicate scan has been adjudicated. A mapped category whose target has since stopped being
 a postable leaf (a mid-campaign subdivision) counts as unmapped for this purpose.
 
-**The ledger duplicate scan** runs once, at commit time, after mapping: staged transactions are
-compared against the *live* ledger on **date + account + amount + category**, and every hit is
-**presented for the owner to decide**. It is never a silent auto-skip — that is what makes it safe
+**The ledger duplicate scan** (plan f1) compares every staged transaction that will book against
+the *live* ledger on **date + funding account + amount + category** — a staged transaction matches
+a live one when they share the date, the mapped funding account and that leg's amount, and at least
+one non-funding staged leg lands on the same category (the mapped node, or the currency leaf the
+ledger already posted to). Every hit is **presented for the owner to decide** — `import` books the
+staged row anyway, `skip` drops it. It is never a silent auto-skip; that is what makes it safe
 despite Hauptbuch having been in daily use throughout the campaign.
 
-**Open question**: when does the Review refresh? 
-- On every new file being imported
-- On every mapping created or edited
-- On every exchange rate entry created or edited
+**Q-IMP-5, settled at plan f1: a re-runnable snapshot, no ledger lock.** The scan is run from a
+button on the review and stored as one snapshot per campaign with its own `ran_at`. There is **no
+ledger lock** while it runs. The gate stays locked while the scan has never run, while any match is
+still un-adjudicated, or while the snapshot no longer reflects the current state:
 
-But this does not cover the search for duplicates in the ledger, which is only run at commit time.
-Should we implement a "refresh" button to allow the user to re-run the check for duplicates?
-This might take long, should be run in the background, but what happens when the user enters a 
-new transaction in the ledger while the duplicate check is running?
-Should we lock the ledger while the duplicate check is running?
+- an **importer-side** change that could move a match — a file staged or removed, a mapping edited,
+  a cross-currency park resolved — **discards the snapshot outright**, so the gate shows the scan
+  un-run until the owner runs it again;
+- a **ledger-side** change — a transaction created / edited / voided on another screen — is caught
+  by time: the snapshot is **stale** whenever `ran_at` predates the latest `transaction.updated_at`.
+
+Re-running re-detects the overlaps and **re-raises** any decision the owner made against a ledger
+transaction that has changed since (its `updated_at` now past what was recorded at adjudication) —
+whether or not the pair still matches, so a stale `skip` can never silently let a true duplicate
+book. The f2 commit re-runs the scan as its first step regardless, so the gate is a pre-check, not
+the last word.
 
 ---
 
@@ -495,6 +504,8 @@ the target's PK name). `import_*.transaction_id` FKs into `transaction` follow t
 | `import_category_tag` | junction: a mapped path's tags (`tag_id`) |
 | `import_transaction` | a staged transaction: date, payee text, note, reference no., cleared flag, opening-balance marker, state (`ready` / `parked` / `mirrored` / `excluded`) |
 | `import_posting` | a staged leg: signed amount, note, unresolved Money category path or account name, and the **mirror pair** link (§6.1) |
+| `import_duplicate_scan` | the campaign's current ledger-duplicate-scan snapshot: `ran_at` (one row per session, discarded on any importer-side change; plan f1) |
+| `import_duplicate_match` | one staged ↔ live overlap: `import_transaction_id`, `transaction_id`, `adjudication` (`pending`/`import`/`skip`), `ledger_seen_at` (the `transaction.updated_at` seen at adjudication — the re-raise fingerprint, §9) |
 
 ---
 
@@ -544,7 +555,7 @@ before building two map UIs on top of the parser is worth the small reordering.
 | **Q-IMP-2** | **`transaction.lifecycle` for imported transactions.** Assumed `confirmed` throughout; deliberately deferred for a separate discussion. |
 | **Q-IMP-3** | ~~Money classes (`Category/Class`).~~ **Settled (§8)** against a real sample: classes are used; a class name is a second tag source, handled through the same `?`-destruction rule as payees. |
 | **Q-IMP-4** | **Cross-currency transfers**: how to handle transfers when neigher of the currencies is the base currency. The importer cannot invent a rate; the owner must supply it. To be settled against a real sample at slice e. |
-| **Q-IMP-5** | **Ledger duplicate scan**: when to refresh the review surface, and how to handle a new ledger entry while the scan is running. To be settled against a real sample at slice f. |
+| **Q-IMP-5** | ~~**Ledger duplicate scan**: when to refresh the review surface, and how to handle a new ledger entry while the scan is running.~~ **Settled (§9, plan f1):** a re-runnable snapshot with its own `ran_at`, re-run from a button, **no ledger lock**; an importer-side change discards the snapshot, a ledger-side change makes it stale by time, and a re-run re-raises any decision made against a since-changed ledger transaction. |
 
 **A sample QIF export was supplied 2026-08-31** (three files: one credit-card, two current
 accounts sharing a currency pair, one a transfer counterparty of the other) and the §4 dialect

@@ -443,17 +443,42 @@ gate reports itself locked with a reason and unlocks once every condition it own
 
 ## Slice f — the commit
 
-### f1 — The ledger duplicate scan
-Staged rows compared against the **live** ledger on date + account + amount + category (§9), every
-hit **presented for the owner to adjudicate** — never a silent auto-skip, which is what makes it
-safe after weeks of daily use. Settle **Q-IMP-5** here: when the scan re-runs, and what happens if
-the owner books a transaction while it is running. Recommended answer to record and test: the scan
-is a **re-runnable snapshot** with its own timestamp, re-run from a button, and a stale adjudication
-is re-raised rather than trusted — **no ledger lock**.
+### f1 — The ledger duplicate scan — implemented (owner-confirmation pending)
+Staged rows compared against the **live** ledger, every hit **presented for the owner to
+adjudicate** — never a silent auto-skip, which is what makes it safe after weeks of daily use.
 
-Multi-table grouping across staging *and* ledger ⇒ **`sqlLogicTest`, written first**.
+**Q-IMP-5 settled here** (now ratified into `import.md` §9, §14): the scan is a **re-runnable
+snapshot** — one `import_duplicate_scan` row per campaign with its own `ran_at` (V24) — run from a
+button on the review, **no ledger lock**. The gate stays locked while the scan has never run, has an
+un-adjudicated match, or the snapshot is out of date: an **importer-side** change (a file
+staged/removed, a mapping edited, a park resolved) **discards** the snapshot at the source
+(`ImportDuplicateScanRepository#clearScan`, hooked into `ImportMirrorMatchingService.rematchCurrentSession`
+and `ImportCategoryMapService`), and a **ledger-side** change is caught by time — `ran_at` older than
+`max(transaction.updated_at)`. A re-run re-detects and **re-raises** any decision made against a
+ledger transaction whose `updated_at` has moved past what was captured at adjudication
+(`import_duplicate_match.ledger_seen_at`) — whether or not the pair still matches, so a stale `skip`
+that no longer overlaps is not silently dropped and re-booked. f2 re-runs the scan authoritatively
+as its first step, so this gate is a pre-check.
+
+**Match signature, settled here:** date + the mapped **funding account** + that leg's amount + at
+least one non-funding staged leg on the same category — the mapped node itself or a currency-leaf
+child of it (the ledger posts to the leaf; `CurrencyLeafService` routes there at f2). Two same-day,
+same-amount, same-category transactions are a false positive the owner adjudicates away — acceptable,
+since every hit is adjudicated. Opening-balance and non-`ready` staged rows are out of scope (the c3
+reconciliation owns opening-balance overlaps, §5.1).
+
+**Tier split:** the whole scan runs through one entry point, `ImportDuplicateScanRepository#rescan`
+(detection + reconcile — staging → ledger, `exists` sub-joins, the currency-leaf parent test,
+data-modifying CTEs) → `sqlLogicTest`, written first (`ImportDuplicateScanSqlLogicTest`, exercising
+`rescan` so the query under test is the production one). The panel/gate rendering and the
+run/adjudicate endpoints → `ImportDuplicateScanScreenIntegrationTest`; the service's validation and
+`stale`/`cleared` computation → `ImportDuplicateScanServiceTest` (unit); the snapshot-discard hooks →
+`ImportMirrorMatchingServiceTest` / `ImportCategoryMapServiceTest`.
+
 **Done when:** crafted overlaps are found and adjudicated both ways, and a decision made against a
-stale snapshot is re-raised, not silently applied.
+stale snapshot is re-raised, not silently applied ✅ — all suites green under `./gradlew check`; the
+gate reports itself locked (never run / stale / un-adjudicated) and unlocks once the scan is current
+with every match decided.
 
 ### f2 — Commit: background worker, one atomic transaction
 Every staged transaction written through **`LedgerService.recordTransaction`** — the same validated
@@ -488,6 +513,22 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.26 (2026-09-05):** **Q-IMP-5 settled + f1 implemented** (owner-confirmation pending) — the
+  ledger duplicate scan (import.md §9). V24 adds `import_duplicate_scan` (one re-runnable snapshot
+  per campaign, `ran_at`) and `import_duplicate_match` (staged ↔ live pair, `adjudication`,
+  `ledger_seen_at`). New `ImportDuplicateScanRepository` (one entry point, `rescan` —
+  detection + reconcile, `sqlLogicTest`-first), `ImportDuplicateScanService`,
+  `ImportDuplicateScan`/`ImportDuplicateMatch` read models, two `ImportController` endpoints
+  (`/import/review/duplicate-scan/run` and `…/{matchId}/adjudicate`), and the review-page panel.
+  `ImportReview#commitReady()` now combines e4's `ImportIssues.locked()` with the scan condition;
+  `ImportIssues` itself is unchanged (it still owns only three of the four §9 conditions). The
+  snapshot is discarded at the source on any importer-side change —
+  `ImportMirrorMatchingService.rematchCurrentSession` (files, account maps, park resolution) gains
+  an `ImportDuplicateScanRepository` dependency, and `ImportCategoryMapService` clears it directly.
+  **Settled:** Q-IMP-5 (re-runnable snapshot, no ledger lock; importer-side change discards,
+  ledger-side change is stale by time; a stale decision is re-raised, never dropped-and-rebooked —
+  import.md §9/§14) and the match signature (date + funding account + amount + a shared category
+  leaf). f2 (the commit itself) is unchanged and still pending.
 - **v0.25 (2026-09-05):** **e4 marked complete** (owner-confirmed 2026-09-05).
 - **v0.24 (2026-09-05):** **`expect-file` tracks file presence** (`.scratch/import/issues/03`).
   Overturns c2's "purely manual toggle" and v0.23's bulk-clear button: `ImportStagingService.stage`

@@ -19,6 +19,8 @@ import java.util.Map;
  * @param crossCurrencyParks the still-parked cross-currency transfers (import.md §6.2/§6.5; plan
  *     e2b), date-ordered — the manual-match / hand-entered panel
  * @param issues the issues list and commit-gate state (import.md §9.3; plan e4)
+ * @param duplicateScan the ledger duplicate scan panel and the fourth gate condition (import.md §9;
+ *     plan f1)
  */
 public record ImportReview(
     List<AccountStatisticsRow> accounts,
@@ -27,7 +29,8 @@ public record ImportReview(
     ImportCategoryMap categoryMap,
     ImportPayeeSummary payees,
     List<CrossCurrencyParkRow> crossCurrencyParks,
-    ImportIssues issues) {
+    ImportIssues issues,
+    ImportDuplicateScan duplicateScan) {
 
   /** Defensive copies. */
   public ImportReview {
@@ -38,11 +41,20 @@ public record ImportReview(
     payees = payees == null ? ImportPayeeSummary.EMPTY : payees;
     crossCurrencyParks = crossCurrencyParks == null ? List.of() : List.copyOf(crossCurrencyParks);
     issues = issues == null ? ImportIssues.EMPTY : issues;
+    duplicateScan = duplicateScan == null ? ImportDuplicateScan.EMPTY : duplicateScan;
   }
 
   /** True when nothing has been staged yet — the page shows only its explanatory copy. */
   public boolean empty() {
     return accounts.isEmpty();
+  }
+
+  /**
+   * Whether every commit-gate condition holds (import.md §9): e4's three ({@link
+   * ImportIssues#locked()}) and f1's ledger duplicate scan ({@link ImportDuplicateScan#cleared()}).
+   */
+  public boolean commitReady() {
+    return !issues.locked() && duplicateScan.cleared();
   }
 
   /**

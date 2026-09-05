@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import volkovandr.hauptbuch.importer.repository.ImportDuplicateScanRepository;
 import volkovandr.hauptbuch.importer.repository.ImportMirrorRepository;
 
 /**
@@ -28,10 +29,14 @@ class ImportMirrorMatchingServiceTest {
   @Mock ImportSessionService importSessionService;
   @Mock ImportMirrorRepository importMirrorRepository;
   @Mock ImportCrossCurrencyRateWriteBackService rateWriteBackService;
+  @Mock ImportDuplicateScanRepository importDuplicateScanRepository;
 
   private ImportMirrorMatchingService service() {
     return new ImportMirrorMatchingService(
-        importSessionService, importMirrorRepository, rateWriteBackService);
+        importSessionService,
+        importMirrorRepository,
+        rateWriteBackService,
+        importDuplicateScanRepository);
   }
 
   private void openSession() {
@@ -61,6 +66,15 @@ class ImportMirrorMatchingServiceTest {
   }
 
   @Test
+  void discardsTheDuplicateScanSnapshotAfterRematch() {
+    openSession();
+
+    service().rematchCurrentSession();
+
+    verify(importDuplicateScanRepository).clearScan(SESSION_ID);
+  }
+
+  @Test
   void doesNothingWithoutAnOpenSession() {
     when(importSessionService.currentSession()).thenReturn(Optional.empty());
 
@@ -68,5 +82,6 @@ class ImportMirrorMatchingServiceTest {
 
     verifyNoInteractions(importMirrorRepository);
     verifyNoInteractions(rateWriteBackService);
+    verifyNoInteractions(importDuplicateScanRepository);
   }
 }

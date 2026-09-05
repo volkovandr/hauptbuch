@@ -32,6 +32,7 @@ class ImportReviewServiceTest {
   @Mock ImportCategoryMapPanel importCategoryMapPanel;
   @Mock ImportCrossCurrencyParkService importCrossCurrencyParkService;
   @Mock ImportIssuesPanel importIssuesPanel;
+  @Mock ImportDuplicateScanService importDuplicateScanService;
 
   private ImportReviewService service() {
     return new ImportReviewService(
@@ -41,7 +42,8 @@ class ImportReviewServiceTest {
         importOpeningBalancePanel,
         importCategoryMapPanel,
         importCrossCurrencyParkService,
-        importIssuesPanel);
+        importIssuesPanel,
+        importDuplicateScanService);
   }
 
   private void openSession() {
@@ -63,7 +65,8 @@ class ImportReviewServiceTest {
         importOpeningBalancePanel,
         importCategoryMapPanel,
         importCrossCurrencyParkService,
-        importIssuesPanel);
+        importIssuesPanel,
+        importDuplicateScanService);
   }
 
   @Test
