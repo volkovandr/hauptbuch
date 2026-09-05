@@ -375,7 +375,7 @@ against the two currencies being literally the same; added, defensively, at the 
 boundary. (5) `ImportMirrorMatchingService` and `ImportCrossCurrencyParkService` each carried their
 own copy of the write-back loop; extracted to a shared `ImportCrossCurrencyRateWriteBackService`.
 
-### e4 — The issues list — implemented (owner-confirmation pending)
+### e4 — The issues list ✅ **complete** (owner-confirmed 2026-09-05)
 The review's third panel (§9.3): unresolved mirrors, unresolved parks, unmapped paths, unparseable
 lines, split-sum mismatches, destroyed-payee counts — each linking to where it is fixed. Plus the
 **gate state**: no account still `expect-file`, every path mapped, zero unresolved parks (the
@@ -488,6 +488,7 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.25 (2026-09-05):** **e4 marked complete** (owner-confirmed 2026-09-05).
 - **v0.24 (2026-09-05):** **`expect-file` tracks file presence** (`.scratch/import/issues/03`).
   Overturns c2's "purely manual toggle" and v0.23's bulk-clear button: `ImportStagingService.stage`
   now clears `expect-file` for the staged file's own account (`ImportAccountRepository
