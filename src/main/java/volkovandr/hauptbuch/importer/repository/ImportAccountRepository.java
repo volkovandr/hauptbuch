@@ -80,6 +80,34 @@ public class ImportAccountRepository {
   }
 
   /**
+   * Clear {@code expect-file} for every row of a session whose Money account name already has a
+   * staged file (import.md §5.1; plan e4) — the "clear every account" ergonomics flagged out of
+   * scope at plan c2: toggling the flag one row at a time does not scale once dozens of files have
+   * been staged. A row whose export genuinely has not arrived yet (no matching {@code import_file})
+   * is left untouched — this never accepts a transfer's pending mirror ahead of its own file
+   * arriving. Simple {@code exists} join against one other table — round-trip tier (CLAUDE.md §6).
+   *
+   * @return how many rows were cleared
+   */
+  public int clearExpectFileForProvidedFiles(long importSessionId) {
+    return jdbcClient
+        .sql(
+            """
+            update import_account a
+               set expect_file = false
+             where a.import_session_id = :sessionId
+               and a.expect_file
+               and exists (
+                 select 1 from import_file f
+                  where f.import_session_id = a.import_session_id
+                    and f.money_account_name = a.money_account_name
+               )
+            """)
+        .param(SESSION_ID, importSessionId)
+        .update();
+  }
+
+  /**
    * Record the opening-balance reconciliation outcome on one map row (import.md §5.1; plan c3):
    * {@code keep_hauptbuch} / {@code take_money} / {@code override}. {@code amount} is the explicit
    * figure for an {@code override} and {@code null} otherwise. The actual voiding / booking happens

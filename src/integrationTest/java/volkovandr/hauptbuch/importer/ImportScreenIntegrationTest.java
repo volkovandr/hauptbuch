@@ -752,6 +752,47 @@ class ImportScreenIntegrationTest {
   }
 
   @Test
+  void clearExpectFileForProvidedFilesClearsEveryAccountWithStagedFile() throws Exception {
+    // Reproduces an owner report: two accounts each got their own file staged, yet the review
+    // kept showing both as "still expecting a file" — expect-file is a purely manual flag (plan
+    // c2) that a staged file never clears on its own, and there was no way to clear it in bulk.
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+    stageNewFile(session, "savings.qif", SAVINGS_WITH_TRANSFER, "Savings");
+    assertThat(expectFile("Current Account")).isTrue();
+    assertThat(expectFile("Savings")).isTrue();
+
+    String beforeHtml = reviewHtml(session);
+    assertThat(beforeHtml).contains("still expecting its own export");
+    assertThat(beforeHtml).contains("Stop expecting a file for every account");
+
+    mockMvc
+        .perform(post("/import/review/accounts/clear-expect-file").session(session))
+        .andExpect(redirectedUrl("/import/review#issues"));
+
+    assertThat(expectFile("Current Account")).isFalse();
+    assertThat(expectFile("Savings")).isFalse();
+    String afterHtml = reviewHtml(session);
+    assertThat(afterHtml).doesNotContain("still expecting its own export");
+    assertThat(afterHtml).doesNotContain("Stop expecting a file for every account");
+  }
+
+  @Test
+  void clearExpectFileForProvidedFilesLeavesFileLessCounterpartyUntouched() throws Exception {
+    // "Current Account" has its own file; "Loan to Max" is only a transfer target whose own
+    // export genuinely has not arrived — the bulk action must not accept its pending mirror.
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", BANK_WITH_PERSON_TRANSFER, "Current Account");
+
+    mockMvc
+        .perform(post("/import/review/accounts/clear-expect-file").session(session))
+        .andExpect(redirectedUrl("/import/review#issues"));
+
+    assertThat(expectFile("Current Account")).isFalse();
+    assertThat(expectFile("Loan to Max")).isTrue();
+  }
+
+  @Test
   void summaryDistinguishesAnAccountWithItsOwnFileFromAnAwaitedOne() throws Exception {
     MockHttpSession session = openCampaign();
     // Names its own account "Savings" and transfers to "Current Account", a counterparty
