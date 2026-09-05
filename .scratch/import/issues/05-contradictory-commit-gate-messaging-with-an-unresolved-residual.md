@@ -1,0 +1,41 @@
+# The commit-gate panel shows "everything is mapped" directly above "resolve by hand before committing"
+
+Status: needs-triage
+Category: bug
+Severity: minor
+Area: Import review — issues & commit gate panel (`templates/import-review.html`, `#issues` section)
+
+## What happens
+
+When every account and category is mapped, nothing is expecting a file, and no cross-currency leg
+is parked, but there **is** an unresolved both-split mirror residual (issue 04), the `#issues`
+panel renders, in order:
+
+1. the `th:unless="${review.issues().locked()}"` muted line — *"Every referenced account and
+   category path is mapped, no account is still expecting a file, and no cross-currency transfer
+   leg is still parked."* (reads as "all clear")
+2. immediately below, the `unresolvedMirrors` warning list item ending *"…neither can be excluded
+   automatically. Resolve by hand before committing."*
+
+The owner gets opposite instructions in the same panel. The integration test
+`issuesListSurfacesTheBothSplitMirrorResidualWithoutBlockingTheGate` locks the juxtaposition in
+(it asserts the residual shows *and* `doesNotContain("The campaign cannot commit yet")`).
+
+f1 softens this a little — until the ledger duplicate scan is run and adjudicated the panel also
+carries a "…is not cleared" warning, so the page never reads as fully green while a residual sits
+there — but the specific "all mapped" muted line above the "resolve by hand" warning is unchanged.
+
+## Where to fix
+
+Small copy/logic change in the `#issues` section: the "all clear" muted line should not render
+while `unresolvedMirrors` (or any shown-but-non-blocking exception) is non-empty — replace it with
+a line that names what is left, e.g. *"Maps are complete. One transfer still needs resolving by
+hand before committing (below)."* Update the integration test's assertions to match.
+
+Depends on the outcome of issue 04: if the residual becomes a hard gate blocker there, this
+contradiction disappears on its own (the `locked()` warning would show instead).
+
+## Comments
+
+Filed 2026-09-05 from the first `/code-review high` pass during plan f1 (review targeted the
+committed e4 slice). Sibling of issue 04.
