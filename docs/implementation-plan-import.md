@@ -322,7 +322,7 @@ an unrelated edit, and auto-resolves a remaining ambiguous pair once one sibling
 resolved), `ImportCrossCurrencyParkServiceTest` and `ImportCrossCurrencyParkIntegrationTest` all
 green under `./gradlew check`.
 
-### e3 — Rate write-back (V23) and the non-base pair ✅ **implemented** (owner-confirmation pending)
+### e3 — Rate write-back (V23) and the non-base pair ✅ **complete** (owner-confirmed 2026-09-05)
 When a mirror supplies both real native amounts, that pair **is** the conversion rate for that date
 (§6.3): widen `exchange_rate.source` to allow `'import'` (**V23**) and write it back; the
 transaction's `base_amount` is frozen from the same pair. Settle **Q-IMP-4** for a pair where
@@ -446,6 +446,7 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.21 (2026-09-05):** **e3 marked complete** (owner-confirmed 2026-09-05).
 - **v0.20 (2026-09-05):** **e3 — second review pass folded in.** The opposite-sign mirror guard
   (SQL and `manualMatch`) mistreated a zero-amount leg as opposite-signed to any real one; fixed to
   a sign-product check. `ExchangeRateService.recordObservedRate` now refuses a same-currency pair at
