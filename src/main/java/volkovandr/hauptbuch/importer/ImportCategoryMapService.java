@@ -16,6 +16,7 @@ import volkovandr.hauptbuch.categories.CategoryService;
 import volkovandr.hauptbuch.categories.TagService;
 import volkovandr.hauptbuch.importer.repository.ImportCategoryRepository;
 import volkovandr.hauptbuch.importer.repository.ImportCategoryTagRepository;
+import volkovandr.hauptbuch.importer.repository.ImportDuplicateScanRepository;
 
 /**
  * The category map (import.md §5.2, §8; plan d1): resolves every Money category path a staged file
@@ -44,6 +45,7 @@ public class ImportCategoryMapService {
   private final ImportSessionService importSessionService;
   private final ImportCategoryRepository importCategoryRepository;
   private final ImportCategoryTagRepository importCategoryTagRepository;
+  private final ImportDuplicateScanRepository importDuplicateScanRepository;
   private final CategoryService categoryService;
   private final CategoryResolutionService categoryResolutionService;
   private final TagService tagService;
@@ -52,12 +54,14 @@ public class ImportCategoryMapService {
       ImportSessionService importSessionService,
       ImportCategoryRepository importCategoryRepository,
       ImportCategoryTagRepository importCategoryTagRepository,
+      ImportDuplicateScanRepository importDuplicateScanRepository,
       CategoryService categoryService,
       CategoryResolutionService categoryResolutionService,
       TagService tagService) {
     this.importSessionService = importSessionService;
     this.importCategoryRepository = importCategoryRepository;
     this.importCategoryTagRepository = importCategoryTagRepository;
+    this.importDuplicateScanRepository = importDuplicateScanRepository;
     this.categoryService = categoryService;
     this.categoryResolutionService = categoryResolutionService;
     this.tagService = tagService;
@@ -117,6 +121,10 @@ public class ImportCategoryMapService {
     ImportCategory row = requireRowInOpenSession(importCategoryId);
     requirePostableCategory(accountId);
     write(importCategoryId, accountId, row.moneyPath(), liveTagIds(tagIds));
+    // A category re-map moves which live ledger transactions a staged row overlaps — any prior
+    // duplicate scan is stale (plan f1). Unlike an account map, this does not pass through
+    // ImportMirrorMatchingService, so the snapshot is discarded here.
+    importDuplicateScanRepository.clearScan(row.importSessionId());
   }
 
   /**
@@ -136,6 +144,8 @@ public class ImportCategoryMapService {
     for (ImportCategory row : rows) {
       write(row.importCategoryId(), accountId, row.moneyPath(), live);
     }
+    // See mapResolved: a category re-map invalidates any prior duplicate scan (plan f1).
+    importDuplicateScanRepository.clearScan(rows.get(0).importSessionId());
     LOG.debug("Import: {} category paths bulk-mapped to category {}", rows.size(), accountId);
   }
 

@@ -21,6 +21,7 @@ import volkovandr.hauptbuch.categories.CategoryService;
 import volkovandr.hauptbuch.categories.TagService;
 import volkovandr.hauptbuch.importer.repository.ImportCategoryRepository;
 import volkovandr.hauptbuch.importer.repository.ImportCategoryTagRepository;
+import volkovandr.hauptbuch.importer.repository.ImportDuplicateScanRepository;
 
 /**
  * Unit tier (CLAUDE.md §6): {@link ImportCategoryMapService} with every repository and cross-module
@@ -37,6 +38,7 @@ class ImportCategoryMapServiceTest {
   @Mock ImportSessionService importSessionService;
   @Mock ImportCategoryRepository importCategoryRepository;
   @Mock ImportCategoryTagRepository importCategoryTagRepository;
+  @Mock ImportDuplicateScanRepository importDuplicateScanRepository;
   @Mock CategoryService categoryService;
   @Mock CategoryResolutionService categoryResolutionService;
   @Mock TagService tagService;
@@ -46,6 +48,7 @@ class ImportCategoryMapServiceTest {
         importSessionService,
         importCategoryRepository,
         importCategoryTagRepository,
+        importDuplicateScanRepository,
         categoryService,
         categoryResolutionService,
         tagService);
@@ -78,6 +81,8 @@ class ImportCategoryMapServiceTest {
     verify(importCategoryTagRepository).clearTags(10L);
     verify(importCategoryTagRepository).addTag(10L, 5L);
     verify(importCategoryTagRepository).addTag(10L, 6L);
+    // A category re-map invalidates any prior ledger duplicate scan (plan f1).
+    verify(importDuplicateScanRepository).clearScan(SESSION_ID);
   }
 
   @Test
@@ -156,6 +161,7 @@ class ImportCategoryMapServiceTest {
     verify(importCategoryRepository).mapToCategory(11L, 42L);
     verify(importCategoryTagRepository).addTag(10L, 9L);
     verify(importCategoryTagRepository).addTag(11L, 9L);
+    verify(importDuplicateScanRepository).clearScan(SESSION_ID);
     verify(categoryService, org.mockito.Mockito.times(1)).isPostableCategory(42L);
   }
 

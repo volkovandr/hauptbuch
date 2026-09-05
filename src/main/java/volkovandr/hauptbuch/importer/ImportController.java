@@ -51,6 +51,7 @@ class ImportController {
   private final ImportAccountMapService importAccountMapService;
   private final ImportCategoryMapService importCategoryMapService;
   private final ImportCrossCurrencyParkService importCrossCurrencyParkService;
+  private final ImportDuplicateScanService importDuplicateScanService;
 
   ImportController(
       ImportSessionService importSessionService,
@@ -59,7 +60,8 @@ class ImportController {
       ImportReviewService importReviewService,
       ImportAccountMapService importAccountMapService,
       ImportCategoryMapService importCategoryMapService,
-      ImportCrossCurrencyParkService importCrossCurrencyParkService) {
+      ImportCrossCurrencyParkService importCrossCurrencyParkService,
+      ImportDuplicateScanService importDuplicateScanService) {
     this.importSessionService = importSessionService;
     this.importPreviewService = importPreviewService;
     this.importStagingService = importStagingService;
@@ -67,6 +69,7 @@ class ImportController {
     this.importAccountMapService = importAccountMapService;
     this.importCategoryMapService = importCategoryMapService;
     this.importCrossCurrencyParkService = importCrossCurrencyParkService;
+    this.importDuplicateScanService = importDuplicateScanService;
   }
 
   /** The screen: the open campaign (or the button to start one) and the pending uploads. */
@@ -298,6 +301,39 @@ class ImportController {
       redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
     }
     return REDIRECT_REVIEW + "#cross-currency";
+  }
+
+  /**
+   * Run — or re-run — the commit-time ledger duplicate scan (import.md §9; plan f1). The scan is a
+   * re-runnable snapshot: this re-detects the overlaps against the current ledger and re-raises any
+   * decision the owner made against a since-changed ledger transaction (Q-IMP-5).
+   */
+  @PostMapping(BASE + "/review/duplicate-scan/run")
+  String runDuplicateScan(RedirectAttributes redirectAttributes) {
+    try {
+      importDuplicateScanService.runScan();
+    } catch (IllegalArgumentException | IllegalStateException rejected) {
+      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
+    }
+    return REDIRECT_REVIEW + "#duplicate-scan";
+  }
+
+  /**
+   * Adjudicate one duplicate-scan match (import.md §9; plan f1) — {@code import} books the staged
+   * transaction anyway at commit, {@code skip} drops it. A rejected decision comes back with the
+   * reason.
+   */
+  @PostMapping(BASE + "/review/duplicate-scan/{importDuplicateMatchId}/adjudicate")
+  String adjudicateDuplicateScan(
+      @PathVariable long importDuplicateMatchId,
+      @RequestParam(required = false) String decision,
+      RedirectAttributes redirectAttributes) {
+    try {
+      importDuplicateScanService.adjudicate(importDuplicateMatchId, blankToNull(decision));
+    } catch (IllegalArgumentException | IllegalStateException rejected) {
+      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
+    }
+    return REDIRECT_REVIEW + "#duplicate-scan";
   }
 
   /**

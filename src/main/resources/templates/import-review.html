@@ -27,8 +27,9 @@
       Issues & commit gate (import.md §9.3; plan e4). A dashboard of what still needs the owner's
       attention, each item linking down to where it is fixed: unmapped/stale account and category
       rows, accounts still awaiting their own export, and still-parked cross-currency transfer
-      legs — the three conditions the commit gate reads here (§9's fourth, the ledger duplicate scan, is
-      f1's, not yet built). The same-currency split-vs-split mirror residual (§6.1) is shown for
+      legs — three of the four commit-gate conditions (§9). The fourth, the ledger duplicate scan
+      (plan f1), is its own panel below and folds into the gate summary here via
+      review.commitReady(). The same-currency split-vs-split mirror residual (§6.1) is shown for
       visibility only — neither sighting can be excluded automatically, so it never blocks the
       gate; the owner resolves it by hand. Orphan map rows a file removal left behind (§5) are
       excluded from every list here (ImportIssuesPanel) — they are harmless clutter, not a blocker.
@@ -42,10 +43,18 @@
         >.
       </p>
       <p th:unless="${review.issues().locked()}" class="muted">
-        Every referenced account and category path is mapped, no account is still expecting a
-        file, and no cross-currency transfer leg is still parked. (The ledger duplicate scan still
-        runs at commit.)
+        Every referenced account and category path is mapped, no account is still expecting a file,
+        and no cross-currency transfer leg is still parked.
       </p>
+      <p th:unless="${review.duplicateScan().cleared()}" class="warning">
+        The <a href="#duplicate-scan">ledger duplicate scan</a> is not cleared — the campaign cannot
+        commit until it is run, current, and every match adjudicated.
+      </p>
+      <p
+        th:if="${review.commitReady()}"
+        class="muted"
+        th:text="'Every gate condition holds and the ledger duplicate scan is current — the campaign is ready to commit.'"
+      ></p>
 
       <ul class="import-uploads" th:if="${!#lists.isEmpty(review.issues().unmappedAccounts())}">
         <li th:each="row : ${review.issues().unmappedAccounts()}">
@@ -763,6 +772,116 @@
         carry a payee name that was destroyed on export (all question marks). These will book with
         no payee — a valid state, the same as a transfer.
       </p>
+    </section>
+
+    <!--
+      Ledger duplicate scan (import.md §9; plan f1). The campaign runs for weeks while Hauptbuch
+      stays in daily use, so some staged transactions may already be in the ledger by hand. This
+      compares every staged transaction that will book against the live ledger on date + funding
+      account + amount + category and lists every overlap for the owner to adjudicate — never a
+      silent auto-skip.
+
+      Q-IMP-5, settled here: the scan is a re-runnable snapshot with its own timestamp, re-run from
+      the button — no ledger lock. A decision made against a ledger transaction that has changed
+      since is re-raised to "pending" on the next run. It goes "stale" when a ledger transaction is
+      created / edited / voided after it last ran (an importer-side change — a file staged/removed,
+      a mapping edited — discards the snapshot outright instead).
+    -->
+    <section class="panel" id="duplicate-scan" th:unless="${review.empty()}">
+      <p class="eyebrow">Ledger duplicate scan</p>
+      <p class="muted" th:unless="${review.duplicateScan().everRun()}">
+        Not yet run. It compares every staged transaction against the live ledger and lists the
+        overlaps for you to keep or skip — the last check before the commit.
+      </p>
+      <p class="muted" th:if="${review.duplicateScan().everRun()}">
+        Last run <span th:text="${review.duplicateScan().ranAt()}">01.09.2026 14:03</span>.
+      </p>
+      <p
+        class="warning"
+        th:if="${review.duplicateScan().stale()}"
+        th:text="'A ledger transaction has changed since the scan last ran — re-run it before committing.'"
+      ></p>
+      <p
+        class="muted"
+        th:if="${review.duplicateScan().ranClean()}"
+      >
+        No overlaps with the live ledger.
+      </p>
+
+      <form method="post" th:action="@{/import/review/duplicate-scan/run}">
+        <p class="actions">
+          <button type="submit" class="btn"
+            th:text="${review.duplicateScan().everRun() ? 'Re-run scan' : 'Run scan'}">
+            Run scan</button>
+        </p>
+      </form>
+
+      <ul
+        class="import-uploads"
+        th:if="${!#lists.isEmpty(review.duplicateScan().pending())}"
+      >
+        <li th:each="row : ${review.duplicateScan().pending()}">
+          <span class="warning">Possible duplicate:</span>
+          <span class="num" th:text="${row.date()}">01.03.2024</span>
+          <span th:text="' ' + ${row.moneyAccountName()}"> Current Account</span>
+          <span class="muted num" th:text="' · ' + ${row.amount()}"> · −12,34</span>
+          <span
+            class="muted"
+            th:text="' · staged: ' + ${row.stagedPayee()} + ' · ledger: ' + ${row.ledgerPayee()} + ' (' + ${row.ledgerNote()} + ')'"
+          >
+            · staged: Grocer · ledger: Grocer (weekly shop)</span
+          >
+          <form
+            method="post"
+            th:action="@{/import/review/duplicate-scan/{id}/adjudicate(id=${row.matchId()})}"
+            class="form"
+          >
+            <p class="actions">
+              <button type="submit" name="decision" value="import" class="btn btn--ghost">
+                Import anyway
+              </button>
+              <button type="submit" name="decision" value="skip" class="btn">Skip it</button>
+            </p>
+          </form>
+        </li>
+      </ul>
+
+      <details th:if="${!#lists.isEmpty(review.duplicateScan().adjudicated())}">
+        <summary
+          th:text="${#lists.size(review.duplicateScan().adjudicated())} + ' match(es) already decided'"
+        >
+          2 match(es) already decided
+        </summary>
+        <ul class="import-uploads">
+          <li th:each="row : ${review.duplicateScan().adjudicated()}">
+            <span class="num" th:text="${row.date()}">01.03.2024</span>
+            <span th:text="' ' + ${row.moneyAccountName()}"> Current Account</span>
+            <span class="muted num" th:text="' · ' + ${row.amount()}"> · −12,34</span>
+            <strong
+              th:text="${row.decision() == 'skip' ? ' · skip' : ' · import anyway'}"
+            >
+              · skip</strong
+            >
+            <form
+              method="post"
+              th:action="@{/import/review/duplicate-scan/{id}/adjudicate(id=${row.matchId()})}"
+              class="form"
+            >
+              <p class="actions">
+                <button
+                  type="submit"
+                  name="decision"
+                  th:value="${row.decision() == 'skip' ? 'import' : 'skip'}"
+                  class="btn btn--ghost"
+                  th:text="${row.decision() == 'skip' ? 'Change to import' : 'Change to skip'}"
+                >
+                  Change decision
+                </button>
+              </p>
+            </form>
+          </li>
+        </ul>
+      </details>
     </section>
   </main>
 </html>

@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import volkovandr.hauptbuch.importer.repository.ImportDuplicateScanRepository;
 import volkovandr.hauptbuch.importer.repository.ImportMirrorRepository;
 
 /**
@@ -15,7 +16,12 @@ import volkovandr.hauptbuch.importer.repository.ImportMirrorRepository;
  *
  * <p>Also triggers {@link ImportCrossCurrencyRateWriteBackService} after each rematch (plan e3,
  * import.md §6.3) — every currently-resolved cross-currency leg is offered to {@code ledger}'s
- * observed-rate write-back.
+ * observed-rate write-back — and <strong>discards the ledger-duplicate-scan snapshot</strong> (plan
+ * f1): a file staged/removed, an account mapping edited, or a cross-currency park resolved can all
+ * move which staged rows a live ledger transaction overlaps, so any prior scan is now stale and the
+ * commit gate must show it un-run until the owner re-runs it. (A category-map edit is the one such
+ * change that does not pass through here — {@code ImportCategoryMapService} clears the snapshot
+ * itself.)
  */
 @Service
 public class ImportMirrorMatchingService {
@@ -25,14 +31,17 @@ public class ImportMirrorMatchingService {
   private final ImportSessionService importSessionService;
   private final ImportMirrorRepository importMirrorRepository;
   private final ImportCrossCurrencyRateWriteBackService rateWriteBackService;
+  private final ImportDuplicateScanRepository importDuplicateScanRepository;
 
   ImportMirrorMatchingService(
       ImportSessionService importSessionService,
       ImportMirrorRepository importMirrorRepository,
-      ImportCrossCurrencyRateWriteBackService rateWriteBackService) {
+      ImportCrossCurrencyRateWriteBackService rateWriteBackService,
+      ImportDuplicateScanRepository importDuplicateScanRepository) {
     this.importSessionService = importSessionService;
     this.importMirrorRepository = importMirrorRepository;
     this.rateWriteBackService = rateWriteBackService;
+    this.importDuplicateScanRepository = importDuplicateScanRepository;
   }
 
   /**
@@ -48,6 +57,7 @@ public class ImportMirrorMatchingService {
             session -> {
               int mirrored = importMirrorRepository.rematch(session.importSessionId());
               rateWriteBackService.writeBackObservedRates(session.importSessionId());
+              importDuplicateScanRepository.clearScan(session.importSessionId());
               LOG.debug(
                   "Import session {} mirror re-match: {} transaction(s) marked mirrored",
                   session.importSessionId(),
