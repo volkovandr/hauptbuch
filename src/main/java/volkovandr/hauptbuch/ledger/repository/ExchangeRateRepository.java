@@ -63,4 +63,30 @@ public class ExchangeRateRepository {
         .param(SOURCE, rate.source())
         .update();
   }
+
+  /**
+   * Insert a rate row unless one already exists for that {@code (currency_code, date)} — never
+   * overwrites an existing row (§3.7): an ECB or manual rate already on file for the day wins. Used
+   * by {@link volkovandr.hauptbuch.ledger.ExchangeRateService#recordObservedRate} (plan e3), which
+   * may be offered the same observed pair more than once and relies on this to make a repeat
+   * harmless.
+   *
+   * @return true when the row was inserted; false when one already existed for that day
+   */
+  public boolean insertIfAbsent(ExchangeRate rate) {
+    int rows =
+        jdbcClient
+            .sql(
+                """
+                insert into exchange_rate (currency_code, date, rate, source)
+                values (:currencyCode, :date, :rate, :source)
+                on conflict (currency_code, date) do nothing
+                """)
+            .param(CURRENCY_CODE, rate.currencyCode())
+            .param(DATE, rate.date())
+            .param(RATE, rate.rate())
+            .param(SOURCE, rate.source())
+            .update();
+    return rows > 0;
+  }
 }

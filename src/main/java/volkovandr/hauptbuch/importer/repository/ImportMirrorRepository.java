@@ -6,6 +6,7 @@ import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.importer.ImportCrossCurrencyPark;
+import volkovandr.hauptbuch.importer.ImportCrossCurrencyRateCandidate;
 
 /**
  * Native-SQL transfer mirror matching within staging (import.md §6.1; plan e1), cross-currency
@@ -38,7 +39,12 @@ import volkovandr.hauptbuch.importer.ImportCrossCurrencyPark;
  * <p>On a resolution — automatic or manual — the surviving sighting's transfer leg takes the real
  * far-currency amount as its {@code counter_amount} (V22), same sign as {@code amount}; a matched
  * (as opposed to hand-entered) resolution also links {@code mirror_pair_id} and marks the redundant
- * sighting {@code mirrored}. No {@code base_amount}, no rate write-back — that is e3.
+ * sighting {@code mirrored}. {@link #resolvedCrossCurrencyRateCandidates} (plan e3) reports every
+ * currently-resolved leg's own two real native amounts for the caller ({@code importer}'s service
+ * layer) to offer to {@code ledger}'s {@code ExchangeRateService} — writing to {@code
+ * exchange_rate} is {@code ledger}'s own table, so this repository never touches it directly
+ * (CLAUDE.md §1). {@code posting.base_amount} itself is still not fixed here — that is the commit
+ * (f2), which reads {@code amount}/{@code counter_amount} at booking time.
  *
  * <p><strong>A cross-currency resolution is not always re-derivable</strong> — a manual match is by
  * definition a shape the automatic pass cannot disambiguate on its own, and a hand-entered far
@@ -182,9 +188,12 @@ public class ImportMirrorRepository {
    *
    * <p>The one amount signal kept is <strong>sign</strong>: the two legs of any one transfer sum to
    * zero, so a real mirror's two transfer legs are opposite-signed (one leg is money into the far
-   * account, the other money out of it). Requiring {@code (a.amount > 0) <> (b.amount > 0)} rejects
-   * a coincidental pairing of two <em>independent</em> opposite-direction transfers that happen to
-   * cross the same accounts on the same day while both their real mirrors are still unstaged.
+   * account, the other money out of it). Requiring {@code sign(a.amount) * sign(b.amount) = -1}
+   * rejects a coincidental pairing of two <em>independent</em> opposite-direction transfers that
+   * happen to cross the same accounts on the same day while both their real mirrors are still
+   * unstaged — and, unlike a bare {@code (a.amount > 0) <> (b.amount > 0)}, never misreads a
+   * degenerate zero-amount leg as "opposite" to a real one ({@code sign(0) = 0}, so the product is
+   * {@code 0}, never {@code -1}).
    *
    * <p>{@code mirror_funding_amount} is the mirror sighting's funding-leg amount — the far side's
    * own file is authoritative for its own currency, and its funding leg carries that native total
@@ -260,7 +269,7 @@ public class ImportMirrorRepository {
          where a.txn_id <> b.txn_id
            and a.shape_count = 1
            and b.shape_count = 1
-           and (a.amount > 0) <> (b.amount > 0)
+           and sign(a.amount) * sign(b.amount) = -1
       )
       """;
 
@@ -580,14 +589,19 @@ public class ImportMirrorRepository {
    * (import.md §6.5; plan e2b) — the owner's resolution of a shape {@link
    * #matchAndResolveCrossCurrency} could not disambiguate on its own (an ambiguous same-day set, or
    * a cross-currency split leg). Requires both legs to be currently parked, unresolved, non-funding
-   * transfer legs of two different transactions whose mapped accounts cross each other — the same
-   * shape the automatic pass would have paired had it been unambiguous. A pair where both sides are
-   * a split is refused (the same rule {@link #MATCHED_PAIRS} applies to e1): neither can be
-   * excluded wholesale, and that residual is e4's problem.
+   * transfer legs of two different transactions whose mapped accounts cross each other and whose
+   * amounts are opposite-signed (a real mirror's two legs always are — one is money into the far
+   * account, the other money out of it, {@link #RESOLVABLE_CROSS_CURRENCY_PAIRS}'s same guard) —
+   * the same shape the automatic pass would have paired had it been unambiguous. A pair where both
+   * sides are a split is refused (the same rule {@link #MATCHED_PAIRS} applies to e1): neither can
+   * be excluded wholesale, and that residual is e4's problem.
    *
-   * <p>Sets {@code counter_amount}/{@code mirror_pair_id} symmetrically (each leg's counterpart's
-   * funding-leg amount) and applies the same split-aware survivor rule as {@link #matchAndMark}: a
-   * split's other legs must still book, so only a wholly-simple sighting is excluded.
+   * <p>Sets {@code counter_amount}/{@code mirror_pair_id} symmetrically — each leg's own signed
+   * amount, negated, becomes its counterpart's {@code counter_amount} (the real value that crossed,
+   * whether or not that leg's own transaction is a split; a split's <em>funding total</em> covers
+   * unrelated category legs too and would overstate the crossed amount) — and applies the same
+   * split-aware survivor rule as {@link #matchAndMark}: a split's other legs must still book, so
+   * only a wholly-simple sighting is excluded.
    *
    * @return true when the pair was matched; false when the two postings do not form a valid parked
    *     crossing pair
@@ -606,8 +620,8 @@ public class ImportMirrorRepository {
     if (!isMatchablePair(a, b)) {
       return false;
     }
-    setResolution(importPostingId, mirrorPostingId, b.fundingAmount());
-    setResolution(mirrorPostingId, importPostingId, a.fundingAmount());
+    setResolution(importPostingId, mirrorPostingId, b.amount().negate());
+    setResolution(mirrorPostingId, importPostingId, a.amount().negate());
     setTransactionState(survivorTxnId(a, b), READY);
     setTransactionState(excludedTxnId(a, b), MIRRORED);
     return true;
@@ -615,14 +629,21 @@ public class ImportMirrorRepository {
 
   /**
    * Whether two parked legs form a valid crossing pair: different transactions, each mapped account
-   * naming the other, and not <em>both</em> a split — the same "both split" refusal {@link
-   * #MATCHED_PAIRS} applies to e1 (neither could be excluded wholesale).
+   * naming the other, opposite-signed <strong>nonzero</strong> amounts (a real mirror's own two
+   * legs always are — the same guard {@link #RESOLVABLE_CROSS_CURRENCY_PAIRS} applies to the
+   * automatic path, which otherwise could accept two unrelated same-direction transfers that happen
+   * to cross the same accounts on the same day), and not <em>both</em> a split — the same "both
+   * split" refusal {@link #MATCHED_PAIRS} applies to e1 (neither could be excluded wholesale).
+   * {@code signum() * signum() < 0} — rather than a bare sign comparison — never misreads a
+   * degenerate zero-amount leg as "opposite" to a real one: zero's signum is {@code 0}, so the
+   * product is {@code 0}, never negative.
    */
   private static boolean isMatchablePair(CrossingLeg a, CrossingLeg b) {
     boolean crosses =
         a.fileAccountId() == b.namedAccountId() && a.namedAccountId() == b.fileAccountId();
+    boolean oppositeSign = a.amount().signum() * b.amount().signum() < 0;
     boolean bothSplit = a.nonFundingLegs() > 1 && b.nonFundingLegs() > 1;
-    return crosses && a.txnId() != b.txnId() && !bothSplit;
+    return crosses && oppositeSign && a.txnId() != b.txnId() && !bothSplit;
   }
 
   /**
@@ -658,11 +679,12 @@ public class ImportMirrorRepository {
    */
   public boolean closeParkWithFarAmount(
       long importSessionId, long importPostingId, BigDecimal farAmount) {
-    Optional<CrossingLeg> leg = crossingLeg(importSessionId, importPostingId);
-    if (leg.isEmpty() || leg.get().farExpectFile()) {
+    Optional<CrossingLeg> parked = crossingLeg(importSessionId, importPostingId);
+    if (parked.isEmpty() || parked.get().farExpectFile()) {
       return false;
     }
-    if (farAmount.signum() == 0 || farAmount.signum() != leg.get().amount().signum()) {
+    CrossingLeg leg = parked.get();
+    if (farAmount.signum() == 0 || farAmount.signum() != leg.amount().signum()) {
       return false;
     }
     jdbcClient
@@ -670,7 +692,7 @@ public class ImportMirrorRepository {
         .param("amount", farAmount)
         .param("id", importPostingId)
         .update();
-    setTransactionState(leg.get().txnId(), READY);
+    setTransactionState(leg.txnId(), READY);
     return true;
   }
 
@@ -720,6 +742,60 @@ public class ImportMirrorRepository {
   }
 
   /**
+   * Every currently-resolved cross-currency transfer leg of a session — automatic match, manual
+   * match, or a hand-entered far amount alike (plan e3, import.md §6.3) — as a rate candidate: this
+   * leg's own real native amount and the real far-currency amount it resolved to ({@code
+   * counter_amount}), the actual conversion rate of a real event on that date. The caller ({@code
+   * importer}'s service layer) offers each to {@code ledger}'s {@code ExchangeRateService}, which
+   * decides whether the pair states a base-relative rate at all and writes it back — this
+   * repository never touches {@code exchange_rate} itself (CLAUDE.md §1: that table belongs to
+   * {@code ledger}).
+   *
+   * <p>Deliberately <strong>not</strong> scoped to "just resolved by this call": it reports every
+   * currently-resolved leg of the session every time, relying on the write side's never-overwrite
+   * behaviour to make a repeat harmless. This sidesteps any dependency on exactly when a caller
+   * fetches it relative to a resolving update, and self-heals if the base currency was set after a
+   * resolution already happened. A resolved pair yields this from <strong>both</strong> its
+   * sightings (symmetric, like {@link #MATCHED_PAIRS}) — both compute the same implied rate, so
+   * which one the write side's {@code on conflict do nothing} keeps does not matter <em>for a
+   * genuine pair</em>. Ordered by posting id purely for deterministic test output — it does not
+   * settle which of two genuinely <strong>different</strong> same-day rates for one currency wins
+   * that write (a real but rare case, since the cache holds one rate per {@code (currency, date)});
+   * that residual ambiguity is inherent to the cache's own shape (data-model §3.7), not something
+   * this method can resolve, and the caller is free to correct the day's rate by hand afterward the
+   * same way any other {@code exchange_rate} row is corrected.
+   */
+  public List<ImportCrossCurrencyRateCandidate> resolvedCrossCurrencyRateCandidates(
+      long importSessionId) {
+    return jdbcClient
+        .sql(
+            """
+            select t.date                 as date,
+                   coalesce(fa.target_currency_code, fac.currency_code) as currency_a,
+                   p.amount                as amount_a,
+                   coalesce(la.target_currency_code, lac.currency_code) as currency_b,
+                   p.counter_amount        as amount_b
+              from import_posting p
+              join import_transaction t on t.import_transaction_id = p.import_transaction_id
+              join import_file f on f.import_file_id = t.import_file_id
+              join import_account fa on fa.import_session_id = f.import_session_id
+                                   and fa.money_account_name = f.money_account_name
+              join import_account la on la.import_session_id = f.import_session_id
+                                   and la.money_account_name = p.money_account_name
+              left join account fac on fac.account_id = fa.account_id
+              left join account lac on lac.account_id = la.account_id
+             where f.import_session_id = :sessionId
+               and not p.funding
+               and p.money_account_name is not null
+               and p.counter_amount is not null
+             order by p.import_posting_id
+            """)
+        .param(SESSION_ID, importSessionId)
+        .query(ImportCrossCurrencyRateCandidate.class)
+        .list();
+  }
+
+  /**
    * One parked, unresolved, cross-currency, non-funding transfer leg's shape — the common lookup
    * behind {@link #manualMatch} and {@link #closeParkWithFarAmount}.
    *
@@ -727,8 +803,6 @@ public class ImportMirrorRepository {
    * @param amount this leg's own signed near-currency amount (§6.2) — a resolution's {@code
    *     counter_amount} must carry the same sign, since it stands in for this same leg once the far
    *     currency is known
-   * @param fundingAmount that transaction's funding-leg total (its own file's currency) — what the
-   *     counterpart leg's {@code counter_amount} takes
    * @param nonFundingLegs how many non-funding legs the transaction has (1 = a simple transfer,
    *     wholly excludable when matched; more = a split, whose other legs must still book)
    * @param fileAccountId the mapped Hauptbuch account of the file this leg was staged from
@@ -739,7 +813,6 @@ public class ImportMirrorRepository {
   private record CrossingLeg(
       long txnId,
       BigDecimal amount,
-      BigDecimal fundingAmount,
       int nonFundingLegs,
       long fileAccountId,
       long namedAccountId,
@@ -751,9 +824,6 @@ public class ImportMirrorRepository {
             """
             select p.import_transaction_id as txn_id,
                    p.amount                as amount,
-                   (select coalesce(sum(p2.amount), 0) from import_posting p2
-                     where p2.import_transaction_id = p.import_transaction_id
-                       and p2.funding) as funding_amount,
                    (select count(*) from import_posting p2
                      where p2.import_transaction_id = p.import_transaction_id
                        and not p2.funding) as non_funding_legs,

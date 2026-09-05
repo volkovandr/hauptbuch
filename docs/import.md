@@ -354,11 +354,15 @@ counterparty whose `expect-file` is cleared (§6.4) — a **hand-entered far amo
 path derives or guesses a number; both set `counter_amount` the same way an automatic resolution
 does.
 
-**Still open, for e3:** transfers between accounts of different currencies **neither of which is the
-base currency** will not produce a currency exchange rate record on their own. Either the owner
-supplies the rate for that date, or the existing carry-forward `rateAsOf` covers it — to be settled
-against the real cross-currency pairs already in the sample (two EUR ↔ RUR transfers, e.g.
-`-599,999.64` RUR / `[EUR account]` mirrored by `+11,707.31` EUR / `[RUR account]`, same date).
+**Settled (owner call, 2026-09-04; plan e3), Q-IMP-4.** A resolved pair's two real native amounts
+are offered to `ledger` (whose table `exchange_rate` is, per CLAUDE.md §1 — the importer never
+writes it directly), which writes them back (`source = 'import'`, §6.3) only when one of the two
+currencies **is** the base currency — the pair then directly states a base-relative rate. Transfers between
+accounts of different currencies **neither of which is the base currency** cannot produce a rate
+from the pair alone: the importer does not invent one. Freezing that leg's `base_amount` is a commit
+(f2) concern, not e3's — it reads the two real amounts directly when one side is base, and otherwise
+falls back to the existing carry-forward `rateAsOf`; finding nothing there is f2's to refuse, not to
+guess around.
 
 ---
 
@@ -553,6 +557,9 @@ needs it: the `Name - City - Country` payee-address convention (§5.3), and `C` 
 
 ## Changelog
 
+- **v0.5 (2026-09-04):** §6.5's Q-IMP-4 settled (plan e3) — a resolved pair's rate is written back
+  only when one currency is base; when neither is, the importer writes nothing and `base_amount`
+  freezing falls to the commit (f2), via the existing carry-forward `rateAsOf` or a refusal.
 - **v0.4 (2026-09-04):** §6.5 settled (plan e2a/e2b) — the cross-currency matching signature is
   loosened (date + crossing account ids, sign kept as the one amount signal) and auto-resolves only
   when unambiguous; an ambiguous set or a cross-currency split leg is closed by the owner's manual

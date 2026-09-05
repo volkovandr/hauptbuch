@@ -12,6 +12,10 @@ import volkovandr.hauptbuch.importer.repository.ImportMirrorRepository;
  * and the commit gate always see current mirror state. The matching itself is SQL-resident in
  * {@link ImportMirrorRepository}; this is the orchestration seam its callers share. Idempotent: a
  * no-op when no campaign is open, and re-running changes nothing.
+ *
+ * <p>Also triggers {@link ImportCrossCurrencyRateWriteBackService} after each rematch (plan e3,
+ * import.md §6.3) — every currently-resolved cross-currency leg is offered to {@code ledger}'s
+ * observed-rate write-back.
  */
 @Service
 public class ImportMirrorMatchingService {
@@ -20,11 +24,15 @@ public class ImportMirrorMatchingService {
 
   private final ImportSessionService importSessionService;
   private final ImportMirrorRepository importMirrorRepository;
+  private final ImportCrossCurrencyRateWriteBackService rateWriteBackService;
 
   ImportMirrorMatchingService(
-      ImportSessionService importSessionService, ImportMirrorRepository importMirrorRepository) {
+      ImportSessionService importSessionService,
+      ImportMirrorRepository importMirrorRepository,
+      ImportCrossCurrencyRateWriteBackService rateWriteBackService) {
     this.importSessionService = importSessionService;
     this.importMirrorRepository = importMirrorRepository;
+    this.rateWriteBackService = rateWriteBackService;
   }
 
   /**
@@ -39,6 +47,7 @@ public class ImportMirrorMatchingService {
         .ifPresent(
             session -> {
               int mirrored = importMirrorRepository.rematch(session.importSessionId());
+              rateWriteBackService.writeBackObservedRates(session.importSessionId());
               LOG.debug(
                   "Import session {} mirror re-match: {} transaction(s) marked mirrored",
                   session.importSessionId(),
