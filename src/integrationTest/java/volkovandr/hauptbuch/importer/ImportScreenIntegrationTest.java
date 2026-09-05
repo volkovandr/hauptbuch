@@ -1115,6 +1115,130 @@ class ImportScreenIntegrationTest {
     assertThat(tagIdsForPath("Food:Groceries")).containsExactly(audi);
   }
 
+  @Test
+  void issuesListShowsUnmappedAccountsCategoriesAndTheLockedGate() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", BANK_TWO_CATEGORIES, "Current Account");
+
+    String html = reviewHtml(session);
+    assertThat(html).contains("Issues &amp; commit gate");
+    assertThat(html).contains("The campaign cannot commit yet");
+    assertThat(html).contains("account(s) not yet mapped");
+    assertThat(html).contains("category path(s) not yet mapped");
+    assertThat(html).contains("href=\"#account-" + mapRowId("Current Account") + "\"");
+    assertThat(html).contains("href=\"#category-" + importCategoryRowId("Audi:Fuel") + "\"");
+  }
+
+  @Test
+  void issuesListUnlocksOnceEveryReferencedAccountAndCategoryIsMapped() throws Exception {
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", DAY_MONTH_BANK, "Current Account");
+    long giro = insertAccount("Giro", "asset");
+    long car = insertAccount("Food", "expense");
+
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + mapRowId("Current Account") + "/map")
+                .param("accountId", Long.toString(giro))
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
+    mockMvc
+        .perform(
+            post("/import/review/accounts/" + mapRowId("Current Account") + "/expect-file")
+                .param("expectFile", "false")
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#account-*"));
+    mockMvc
+        .perform(
+            post("/import/review/categories/" + importCategoryRowId("Food") + "/map")
+                .param("accountId", Long.toString(car))
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#category-*"));
+
+    String html = reviewHtml(session);
+    assertThat(html).doesNotContain("The campaign cannot commit yet");
+    assertThat(html).contains("no cross-currency transfer leg is still parked");
+  }
+
+  @Test
+  void issuesListSurfacesTheBothSplitMirrorResidualWithoutBlockingTheGate() throws Exception {
+    // Two split transactions whose transfer leg mirrors each other — the one shape e1's automatic
+    // matching cannot resolve on either side (import.md §6.1; plan e4). Money's split $ amounts
+    // carry the header T's own sign (Q-IMP-1); the staged posting negates each ($-30.00 → the
+    // posted transfer leg is +30.00, matching its mirror's -30.00 one-for-one).
+    String currentSplit =
+        """
+        !Type:Bank
+        D14/04'2013
+        T-100.00
+        PMax
+        LFood
+        SFood
+        $-70.00
+        S[Savings]
+        $-30.00
+        ^
+        """;
+    String savingsSplit =
+        """
+        !Type:Bank
+        D14/04'2013
+        T-40.00
+        PMax
+        LFuel
+        SFuel
+        $-70.00
+        S[Current Account]
+        $30.00
+        ^
+        """;
+    MockHttpSession session = openCampaign();
+    stageNewFile(session, "current.qif", currentSplit, "Current Account");
+    stageNewFile(session, "savings.qif", savingsSplit, "Savings");
+    long giro = insertAccount("Giro", "asset");
+    long sparbuch = insertAccount("Sparbuch", "asset");
+    for (String[] mapping :
+        new String[][] {
+          {"Current Account", Long.toString(giro)}, {"Savings", Long.toString(sparbuch)}
+        }) {
+      mockMvc
+          .perform(
+              post("/import/review/accounts/" + mapRowId(mapping[0]) + "/map")
+                  .param("accountId", mapping[1])
+                  .session(session))
+          .andExpect(redirectedUrlPattern("/import/review#account-*"));
+    }
+    for (String moneyAccount : new String[] {"Current Account", "Savings"}) {
+      mockMvc
+          .perform(
+              post("/import/review/accounts/" + mapRowId(moneyAccount) + "/expect-file")
+                  .param("expectFile", "false")
+                  .session(session))
+          .andExpect(redirectedUrlPattern("/import/review#account-*"));
+    }
+    long food = insertAccount("Food", "expense");
+    mockMvc
+        .perform(
+            post("/import/review/categories/" + importCategoryRowId("Food") + "/map")
+                .param("accountId", Long.toString(food))
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#category-*"));
+    long fuel = insertAccount("Fuel", "expense");
+    mockMvc
+        .perform(
+            post("/import/review/categories/" + importCategoryRowId("Fuel") + "/map")
+                .param("accountId", Long.toString(fuel))
+                .session(session))
+        .andExpect(redirectedUrlPattern("/import/review#category-*"));
+
+    String html = reviewHtml(session);
+    // Neither side excludes automatically, so both bookings remain "ready" and the residual shows
+    // — but it is informational only, never a gate blocker.
+    assertThat(html).contains("Unresolved transfer:");
+    assertThat(html).contains("14.04.2013");
+    assertThat(html).doesNotContain("The campaign cannot commit yet");
+  }
+
   private void assertNothingStaged() {
     for (String table :
         new String[] {

@@ -110,4 +110,41 @@ public class ImportAccountRepository {
         .query(ImportAccount.class)
         .list();
   }
+
+  /**
+   * The account map rows of a session still <strong>referenced</strong> by a live staged row
+   * (import.md §9; plan e4) — either as a file's own account ({@code
+   * import_file.money_account_name}) or as some posting's transfer-counterparty target ({@code
+   * import_posting.money_account_name}). A map row persists across a file removal or replacement
+   * (§5, §2), so removing the file that introduced a name can leave it behind — an <strong>orphan
+   * </strong> {@link #findBySession} still returns but the commit gate must not demand a mapping
+   * for (plan e4's "orphan map rows"). SQL-resident logic (three tables, an {@code exists} join),
+   * covered in the {@code sqlLogicTest} tier (CLAUDE.md §6).
+   */
+  public List<ImportAccount> findReferencedBySession(long importSessionId) {
+    return jdbcClient
+        .sql(
+            """
+            select a.* from import_account a
+             where a.import_session_id = :sessionId
+               and (
+                 exists (
+                   select 1 from import_file f
+                    where f.import_session_id = a.import_session_id
+                      and f.money_account_name = a.money_account_name
+                 )
+                 or exists (
+                   select 1 from import_posting p
+                   join import_transaction t on t.import_transaction_id = p.import_transaction_id
+                   join import_file f on f.import_file_id = t.import_file_id
+                   where f.import_session_id = a.import_session_id
+                     and p.money_account_name = a.money_account_name
+                 )
+               )
+             order by a.money_account_name
+            """)
+        .param(SESSION_ID, importSessionId)
+        .query(ImportAccount.class)
+        .list();
+  }
 }

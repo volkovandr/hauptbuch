@@ -64,6 +64,17 @@ public record ImportCategoryMap(
     public boolean mapped() {
       return targetAccountId != null;
     }
+
+    /**
+     * Whether this row is mapped but its target no longer resolves to a postable category leaf — a
+     * mid-campaign subdivision turned the former leaf into a group ({@code
+     * .scratch/import/issues/01}), distinct from never having been mapped at all. {@code
+     * targetPath} is only ever null while stale <em>or</em> unmapped, so a mapped row with a null
+     * path is exactly the stale case.
+     */
+    public boolean stale() {
+      return targetAccountId != null && targetPath == null;
+    }
   }
 
   /**

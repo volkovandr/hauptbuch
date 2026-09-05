@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.importer.ImportCrossCurrencyPark;
 import volkovandr.hauptbuch.importer.ImportCrossCurrencyRateCandidate;
+import volkovandr.hauptbuch.importer.ImportUnresolvedMirror;
 
 /**
  * Native-SQL transfer mirror matching within staging (import.md §6.1; plan e1), cross-currency
@@ -83,25 +84,20 @@ public class ImportMirrorRepository {
   // alias pairs are `fa`/`fac` for the file's own account and `la`/`lac` for the named account.
 
   /**
-   * The matched <strong>same-currency</strong> mirror pairs of a session — <em>symmetric</em>:
-   * {@code (pos_id, mirror_id)} appears alongside its reverse. {@code legs} / {@code mirror_legs}
-   * are each side's non-funding-leg count (a windowed count over the transaction's postings), so
-   * the marking step can tell a simple transfer (exactly one non-funding leg — excludable whole)
-   * from a split (its transfer leg is a mirror, but the transaction still books its other legs). A
-   * pair where <em>both</em> sides are splits is dropped: neither can be excluded, and that
-   * residual is the e4 issues list's problem, not e1's.
+   * The staged non-funding transfer legs of a session whose two mapped accounts share a
+   * <strong>same</strong> currency, ranked 1:1 against same-day, same-shape siblings via {@code
+   * row_number()} over the directed transfer shape {@code (file_account_id, named_account_id, date,
+   * amount)} — the k-th sighting of a repeated same-day transfer lines up with the k-th sighting of
+   * its mirror shape, so two identical transfers on one day produce two pairs rather than one leg
+   * swallowing three. The common base both {@link #MATCHED_PAIRS} (e1's automatic matching) and
+   * {@link #UNRESOLVED_SPLIT_MIRROR_PAIRS} (e4's issues list) build on.
    *
-   * <p>Pairing is 1:1 via {@code row_number()} over the directed transfer shape {@code
-   * (file_account_id, named_account_id, date, amount)}: the k-th sighting of a repeated same-day
-   * transfer matches the k-th sighting of its mirror shape, so two identical transfers on one day
-   * produce two pairs rather than one leg swallowing three.
-   *
-   * <p>The {@code transfer_leg} CTE requires both sides to map to the <strong>same</strong>
-   * currency: a cross-currency transfer is handled by {@link #RESOLVABLE_CROSS_CURRENCY_PAIRS}, and
-   * a coincidental equal-and-opposite amount across two currencies must not be mistaken for a
-   * same-currency mirror.
+   * <p>Requiring the <strong>same</strong> currency on both sides is deliberate: a cross-currency
+   * transfer is handled by {@link #RESOLVABLE_CROSS_CURRENCY_PAIRS} instead, and a coincidental
+   * equal-and-opposite amount across two currencies must not be mistaken for a same-currency
+   * mirror.
    */
-  private static final String MATCHED_PAIRS =
+  private static final String SAME_CURRENCY_RANKED_TRANSFER_LEGS =
       """
       with scoped as (
         select p.import_posting_id     as pos_id,
@@ -126,6 +122,7 @@ public class ImportMirrorRepository {
                s.amount,
                s.txn_date,
                s.non_funding_legs,
+               s.file_money_account_name,
                fa.account_id as file_account_id,
                la.account_id as named_account_id
           from scoped s
@@ -151,25 +148,76 @@ public class ImportMirrorRepository {
                  order by pos_id
                ) as rn
           from transfer_leg tl
-      ),
-      matched_pair as (
-        select a.pos_id            as pos_id,
-               b.pos_id            as mirror_id,
-               a.txn_id            as txn_id,
-               b.txn_id            as mirror_txn_id,
-               a.non_funding_legs  as legs,
-               b.non_funding_legs  as mirror_legs
-          from ranked a
-          join ranked b
-            on b.file_account_id  = a.named_account_id
-           and b.named_account_id = a.file_account_id
-           and b.txn_date         = a.txn_date
-           and b.amount           = - a.amount
-           and b.rn               = a.rn
-         where a.txn_id <> b.txn_id
-           and not (a.non_funding_legs > 1 and b.non_funding_legs > 1)
       )
       """;
+
+  /**
+   * The matched <strong>same-currency</strong> mirror pairs of a session — <em>symmetric</em>:
+   * {@code (pos_id, mirror_id)} appears alongside its reverse. {@code legs} / {@code mirror_legs}
+   * are each side's non-funding-leg count (carried from {@link
+   * #SAME_CURRENCY_RANKED_TRANSFER_LEGS}), so the marking step can tell a simple transfer (exactly
+   * one non-funding leg — excludable whole) from a split (its transfer leg is a mirror, but the
+   * transaction still books its other legs). A pair where <em>both</em> sides are splits is
+   * dropped: neither can be excluded, and that residual is {@link #UNRESOLVED_SPLIT_MIRROR_PAIRS} —
+   * the e4 issues list's problem, not e1's.
+   */
+  private static final String MATCHED_PAIRS =
+      SAME_CURRENCY_RANKED_TRANSFER_LEGS
+          + """
+          , matched_pair as (
+            select a.pos_id            as pos_id,
+                   b.pos_id            as mirror_id,
+                   a.txn_id            as txn_id,
+                   b.txn_id            as mirror_txn_id,
+                   a.non_funding_legs  as legs,
+                   b.non_funding_legs  as mirror_legs
+              from ranked a
+              join ranked b
+                on b.file_account_id  = a.named_account_id
+               and b.named_account_id = a.file_account_id
+               and b.txn_date         = a.txn_date
+               and b.amount           = - a.amount
+               and b.rn               = a.rn
+             where a.txn_id <> b.txn_id
+               and not (a.non_funding_legs > 1 and b.non_funding_legs > 1)
+          )
+          """;
+
+  /**
+   * The <strong>unresolved</strong> counterpart of {@link #MATCHED_PAIRS} (import.md §6.1; plan
+   * e4): the same-currency transfer pairs whose both sightings are a split, which {@link
+   * #MATCHED_PAIRS}'s {@code where} clause deliberately excludes because neither side can be
+   * excluded wholesale (a split's other legs must still book). Left unresolved, both sightings stay
+   * {@code ready} and both book their own transfer leg — the review's issues list surfaces this so
+   * the owner can resolve it by hand; there is no automatic or manual fix, since excluding either
+   * side would also drop its unrelated category legs.
+   *
+   * <p>One row per pair — the symmetric duplicate {@link #SAME_CURRENCY_RANKED_TRANSFER_LEGS} would
+   * otherwise produce is dropped via {@code a.pos_id < b.pos_id} — ordered by date then transaction
+   * id for a stable display order.
+   */
+  private static final String UNRESOLVED_SPLIT_MIRROR_PAIRS =
+      SAME_CURRENCY_RANKED_TRANSFER_LEGS
+          + """
+          select a.txn_id                  as transaction_id,
+                 b.txn_id                  as mirror_transaction_id,
+                 a.txn_date                as date,
+                 a.file_money_account_name as money_account_name,
+                 b.file_money_account_name as mirror_money_account_name,
+                 a.amount                  as amount
+            from ranked a
+            join ranked b
+              on b.file_account_id  = a.named_account_id
+             and b.named_account_id = a.file_account_id
+             and b.txn_date         = a.txn_date
+             and b.amount           = - a.amount
+             and b.rn               = a.rn
+           where a.txn_id <> b.txn_id
+             and a.non_funding_legs > 1
+             and b.non_funding_legs > 1
+             and a.pos_id < b.pos_id
+           order by a.txn_date, a.txn_id
+          """;
 
   /**
    * The <strong>resolvable cross-currency</strong> transfer pairs of a session —
@@ -581,6 +629,20 @@ public class ImportMirrorRepository {
             """)
         .param(SESSION_ID, importSessionId)
         .query(ImportCrossCurrencyPark.class)
+        .list();
+  }
+
+  /**
+   * The still-unresolved same-currency, both-split transfer pairs of a session — the review's
+   * issues list (import.md §9, §6.1; plan e4). See {@link #UNRESOLVED_SPLIT_MIRROR_PAIRS} for why
+   * these can never be excluded automatically or by hand: unlike {@link #manualMatch}, there is no
+   * mutation here to offer.
+   */
+  public List<ImportUnresolvedMirror> unresolvedSplitMirrors(long importSessionId) {
+    return jdbcClient
+        .sql(UNRESOLVED_SPLIT_MIRROR_PAIRS)
+        .param(SESSION_ID, importSessionId)
+        .query(ImportUnresolvedMirror.class)
         .list();
   }
 

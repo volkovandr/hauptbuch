@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.importer;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.importer.ImportReview.AccountStatisticsRow;
@@ -14,8 +15,8 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
  * the verification device the owner ticks against Money's own balances (§9.4); c1 adds the account
  * map (§5.1) and c3 the opening-balance reconciliation cells beside it ({@link
  * ImportOpeningBalancePanel}); d1 the category map and d2 the payee summary (§5.3); e2b adds the
- * cross-currency panel ({@link ImportCrossCurrencyParkService}). The full issues list hangs off the
- * page in e4.
+ * cross-currency panel ({@link ImportCrossCurrencyParkService}); e4 the issues list and commit-gate
+ * state ({@link ImportIssuesPanel}).
  *
  * <p>Formatting happens here, not in the template: {@code netSum} is rendered bare in German style
  * (QIF carries no currency, §5.1) and the date span as {@code dd.MM.yyyy}. An empty review — no
@@ -32,6 +33,7 @@ public class ImportReviewService {
   private final ImportOpeningBalancePanel importOpeningBalancePanel;
   private final ImportCategoryMapPanel importCategoryMapPanel;
   private final ImportCrossCurrencyParkService importCrossCurrencyParkService;
+  private final ImportIssuesPanel importIssuesPanel;
 
   ImportReviewService(
       ImportSessionService importSessionService,
@@ -39,13 +41,15 @@ public class ImportReviewService {
       ImportAccountMapPanel importAccountMapPanel,
       ImportOpeningBalancePanel importOpeningBalancePanel,
       ImportCategoryMapPanel importCategoryMapPanel,
-      ImportCrossCurrencyParkService importCrossCurrencyParkService) {
+      ImportCrossCurrencyParkService importCrossCurrencyParkService,
+      ImportIssuesPanel importIssuesPanel) {
     this.importSessionService = importSessionService;
     this.importStatisticsRepository = importStatisticsRepository;
     this.importAccountMapPanel = importAccountMapPanel;
     this.importOpeningBalancePanel = importOpeningBalancePanel;
     this.importCategoryMapPanel = importCategoryMapPanel;
     this.importCrossCurrencyParkService = importCrossCurrencyParkService;
+    this.importIssuesPanel = importIssuesPanel;
   }
 
   /**
@@ -54,23 +58,27 @@ public class ImportReviewService {
    * ImportReview#empty} review, not {@code Optional.empty()}.
    */
   public Optional<ImportReview> review() {
-    return importSessionService
-        .currentSession()
-        .map(
-            session ->
-                new ImportReview(
-                    importStatisticsRepository.perMoneyAccount(session.importSessionId()).stream()
-                        .map(ImportReviewService::toRow)
-                        .toList(),
-                    importAccountMapPanel.forSession(session.importSessionId()),
-                    importOpeningBalancePanel.forSession(session.importSessionId()),
-                    importCategoryMapPanel.forSession(session.importSessionId()),
-                    importStatisticsRepository.payeeResolution(session.importSessionId()),
-                    importCrossCurrencyParkService
-                        .parksForSession(session.importSessionId())
-                        .stream()
-                        .map(ImportReviewService::toRow)
-                        .toList()));
+    return importSessionService.currentSession().map(this::toReview);
+  }
+
+  /**
+   * Fetches the cross-currency parks once and reuses it for both the panel's rows and the issues
+   * list's park count, rather than the panel and {@link ImportIssuesPanel} each re-running {@link
+   * ImportCrossCurrencyParkService#parksForSession} against the same session.
+   */
+  private ImportReview toReview(ImportSession session) {
+    List<ImportCrossCurrencyPark> parks =
+        importCrossCurrencyParkService.parksForSession(session.importSessionId());
+    return new ImportReview(
+        importStatisticsRepository.perMoneyAccount(session.importSessionId()).stream()
+            .map(ImportReviewService::toRow)
+            .toList(),
+        importAccountMapPanel.forSession(session.importSessionId()),
+        importOpeningBalancePanel.forSession(session.importSessionId()),
+        importCategoryMapPanel.forSession(session.importSessionId()),
+        importStatisticsRepository.payeeResolution(session.importSessionId()),
+        parks.stream().map(ImportReviewService::toRow).toList(),
+        importIssuesPanel.forSession(session.importSessionId(), parks.size()));
   }
 
   private static AccountStatisticsRow toRow(ImportAccountStatistics statistics) {
