@@ -175,21 +175,6 @@ class ImportController {
   }
 
   /**
-   * Clear {@code expect-file} in bulk for every account whose file has already been staged
-   * (import.md §5.1; plan e4) — the review's escape hatch from toggling dozens of rows one at a
-   * time once every export has actually arrived.
-   */
-  @PostMapping(BASE + "/review/accounts/clear-expect-file")
-  String clearExpectFileForProvidedFiles(RedirectAttributes redirectAttributes) {
-    try {
-      importAccountMapService.clearExpectFileForProvidedFiles();
-    } catch (IllegalStateException rejected) {
-      redirectAttributes.addFlashAttribute(ERROR, rejected.getMessage());
-    }
-    return REDIRECT_REVIEW + "#issues";
-  }
-
-  /**
    * Record the opening-balance reconciliation for one Money account (import.md §5.1; plan c3) —
    * {@code keep_hauptbuch} keeps the target account's own, {@code take_money} takes Money's staged
    * one (voiding Hauptbuch's at commit), {@code override} books the typed {@code amount}

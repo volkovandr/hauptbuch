@@ -80,30 +80,52 @@ public class ImportAccountRepository {
   }
 
   /**
-   * Clear {@code expect-file} for every row of a session whose Money account name already has a
-   * staged file (import.md §5.1; plan e4) — the "clear every account" ergonomics flagged out of
-   * scope at plan c2: toggling the flag one row at a time does not scale once dozens of files have
-   * been staged. A row whose export genuinely has not arrived yet (no matching {@code import_file})
-   * is left untouched — this never accepts a transfer's pending mirror ahead of its own file
-   * arriving. Simple {@code exists} join against one other table — round-trip tier (CLAUDE.md §6).
-   *
-   * @return how many rows were cleared
+   * Clear {@code expect-file} for the one map row a just-staged file names as its own account
+   * (import.md §5.1; {@code .scratch/import/issues/03}). Money never exports partial account
+   * history — a file that names an account as its own is conclusive that that account's data has
+   * been provided, so staging it settles the flag with no owner click. Addressed by {@code
+   * (session, name)} because staging has not yet looked the row up by id. A no-op if the row is
+   * already cleared or absent; the manual toggle can still re-arm it. Plain {@code update} by two
+   * columns — round-trip tier (CLAUDE.md §6).
    */
-  public int clearExpectFileForProvidedFiles(long importSessionId) {
-    return jdbcClient
+  public void clearExpectFileForStagedAccount(long importSessionId, String moneyAccountName) {
+    jdbcClient
+        .sql(
+            """
+            update import_account
+               set expect_file = false
+             where import_session_id = :sessionId
+               and money_account_name = :moneyAccountName
+            """)
+        .param(SESSION_ID, importSessionId)
+        .param("moneyAccountName", moneyAccountName)
+        .update();
+  }
+
+  /**
+   * Re-arm {@code expect-file} for a Money account whose own staged file has just been removed
+   * (import.md §5.1; {@code .scratch/import/issues/03}) — the data that justified clearing it is
+   * gone, so the account is awaiting an export again. Skipped when another staged file in the
+   * session still names that account as its own (an account can accumulate more than one file), so
+   * removing one of several leaves the flag clear. A no-op if the row is absent. Simple {@code not
+   * exists} join against one other table — round-trip tier (CLAUDE.md §6).
+   */
+  public void rearmExpectFileWhenNoStagedFile(long importSessionId, String moneyAccountName) {
+    jdbcClient
         .sql(
             """
             update import_account a
-               set expect_file = false
+               set expect_file = true
              where a.import_session_id = :sessionId
-               and a.expect_file
-               and exists (
+               and a.money_account_name = :moneyAccountName
+               and not exists (
                  select 1 from import_file f
                   where f.import_session_id = a.import_session_id
                     and f.money_account_name = a.money_account_name
                )
             """)
         .param(SESSION_ID, importSessionId)
+        .param("moneyAccountName", moneyAccountName)
         .update();
   }
 

@@ -106,6 +106,25 @@ public class ImportFileRepository {
   }
 
   /**
+   * The staged files of the given name in a session — {@link
+   * volkovandr.hauptbuch.importer.ImportStagingService#removeFilesNamed} reads them before the §2
+   * "replace" removal to know which accounts to re-arm {@code expect-file} for afterwards ({@code
+   * .scratch/import/issues/03}). Coincident files of one name can be for different accounts (§2).
+   */
+  public List<ImportFile> findBySessionAndFilename(long importSessionId, String filename) {
+    return jdbcClient
+        .sql(
+            "select "
+                + COLUMNS
+                + " from import_file where import_session_id = :sessionId and filename = :filename"
+                + " order by import_file_id")
+        .param(SESSION_ID, importSessionId)
+        .param(FILENAME, filename)
+        .query(ImportFile.class)
+        .list();
+  }
+
+  /**
    * Remove every staged file of the given name in a session — the "replace" half of the §2 clash
    * resolution. Rows affected.
    */

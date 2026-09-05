@@ -1,6 +1,6 @@
 # `expect-file` should be driven by file presence, not a manual click
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: medium
 Area: Import review — account map / `expect-file` (`ImportStagingService`, `ImportAccountMapService`, `ImportAccountRepository`)
@@ -101,3 +101,13 @@ available and when (2) considers an account settled — which is exactly the int
 
 Filed 2026-09-05 during the e4 review. The owner reset the session to work this as its own package
 rather than folding it into the e4 branch further.
+
+Resolved 2026-09-05. `ImportStagingService.stage` clears `expect-file` for the staged file's own
+account (`ImportAccountRepository#clearExpectFileForStagedAccount`); `removeFile` and
+`removeFilesNamed` re-arm it when no other staged file still names the account
+(`#rearmExpectFileWhenNoStagedFile`, `removeFilesNamed` reading the affected files via new
+`ImportFileRepository#findBySessionAndFilename`). The bulk-clear button and its
+endpoint/service/repo method (`clearExpectFileForProvidedFiles`, `POST
+/import/review/accounts/clear-expect-file`) are removed; the per-row manual toggle is unchanged.
+Docs updated: `import.md` §5.1, `implementation-plan-import.md` (c2 decision record, e4 section,
+changelog v0.24). `./gradlew check` green.

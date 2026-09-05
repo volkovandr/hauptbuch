@@ -22,9 +22,10 @@ import volkovandr.hauptbuch.ledger.CurrencyService;
  * names may target one account, which is how a merge and the junk-account cleanup are done.
  *
  * <p>Also owns the {@code expect-file} flag per Money account name — "is this account's own export
- * still awaited?" — which the commit gate reads (§9). A staged file does not clear it: it is a
- * per-account, recorded, visible status the owner changes by hand (§5.1), the gate's only escape
- * hatch for a counterparty whose own export is not coming (§6.4).
+ * still awaited?" — which the commit gate reads (§9). Staging a file for an account auto-clears it
+ * and removing that file re-arms it ({@link ImportStagingService}, {@code
+ * .scratch/import/issues/03}); the manual toggle here is the owner's override in either direction —
+ * chiefly to declare a counterparty whose own export is never coming (§6.4).
  *
  * <p>This class is the domain <em>mutations</em>; {@link ImportAccountMapPanel} assembles the read
  * model the review renders (the same render-model-assembler shape as {@link ImportReviewService}).
@@ -167,9 +168,11 @@ public class ImportAccountMapService {
   }
 
   /**
-   * Set the {@code expect-file} flag on a map row (§5.1, §6.4) — "am I still waiting for this
-   * account's own export?". The owner clears a counterparty account's flag to accept its transfers
-   * as the one file states them, or re-sets it to lock the gate again.
+   * Set the {@code expect-file} flag on a map row by hand (§5.1, §6.4) — the owner's override of
+   * the automatic lifecycle (staging a file clears it, removing that file re-arms it; {@link
+   * ImportStagingService}). Clearing a counterparty account's flag accepts its transfers as the one
+   * file states them — the declaration that its own export is never coming; re-setting it locks the
+   * gate again.
    *
    * @throws IllegalStateException if no campaign is open
    * @throws IllegalArgumentException if the row is not in the open campaign
@@ -179,27 +182,6 @@ public class ImportAccountMapService {
     ImportAccount row = requireRowInOpenSession(importAccountId);
     importAccountRepository.setExpectFile(importAccountId, expectFile);
     LOG.debug("Import account \"{}\" expect-file set to {}", row.moneyAccountName(), expectFile);
-  }
-
-  /**
-   * Clear {@code expect-file} in bulk for every account-map row of the open campaign whose Money
-   * account name already has a staged file (§5.1) — the "clear every account" ergonomics
-   * deliberately left out of scope at plan c2 and closed here at e4, since toggling the flag one
-   * row at a time does not scale once dozens of files have been staged. A row whose export
-   * genuinely has not arrived yet (no matching file) is left untouched.
-   *
-   * @return how many rows were cleared
-   * @throws IllegalStateException if no campaign is open
-   */
-  @Transactional
-  public int clearExpectFileForProvidedFiles() {
-    long sessionId = requireOpenSessionId();
-    int cleared = importAccountRepository.clearExpectFileForProvidedFiles(sessionId);
-    LOG.info(
-        "Import session {} cleared expect-file for {} account(s) whose file is already staged",
-        sessionId,
-        cleared);
-    return cleared;
   }
 
   /**
