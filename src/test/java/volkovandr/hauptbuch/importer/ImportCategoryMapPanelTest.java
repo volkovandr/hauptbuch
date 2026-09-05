@@ -114,6 +114,29 @@ class ImportCategoryMapPanelTest {
   }
 
   @Test
+  void flagsMappedRowStaleWhenTargetIsNoLongerPostable() {
+    // A mid-campaign subdivision turned the once-postable leaf into a group — the mapped id no
+    // longer appears in postableCategoryPaths() (plan e4, .scratch/import/issues/01).
+    when(importCategoryRepository.findBySession(SESSION_ID))
+        .thenReturn(List.of(row(10L, "Audi:Fuel", 42L)));
+    when(importStatisticsRepository.perCategoryPath(SESSION_ID))
+        .thenReturn(List.of(new ImportCategorySignEvidence("Audi:Fuel", 8, 1)));
+    when(categoryService.postableCategoryPaths()).thenReturn(List.of());
+    when(importCategoryTagRepository.tagIdsBySession(SESSION_ID)).thenReturn(Map.of());
+    when(ledgerService.labelsForTagIds(anyList())).thenReturn(Map.of());
+    when(ledgerService.liveTagLabels()).thenReturn(List.of());
+
+    assertThat(panel().forSession(SESSION_ID).rows())
+        .singleElement()
+        .satisfies(
+            row -> {
+              assertThat(row.mapped()).isTrue();
+              assertThat(row.stale()).isTrue();
+              assertThat(row.targetPath()).isNull();
+            });
+  }
+
+  @Test
   void panelIsEmptyWhenNothingHasBeenStaged() {
     when(importCategoryRepository.findBySession(SESSION_ID)).thenReturn(List.of());
     when(importStatisticsRepository.perCategoryPath(SESSION_ID)).thenReturn(List.of());

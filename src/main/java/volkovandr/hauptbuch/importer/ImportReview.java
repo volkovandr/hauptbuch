@@ -18,6 +18,7 @@ import java.util.Map;
  *     them (import.md §5.3; plan d2)
  * @param crossCurrencyParks the still-parked cross-currency transfers (import.md §6.2/§6.5; plan
  *     e2b), date-ordered — the manual-match / hand-entered panel
+ * @param issues the issues list and commit-gate state (import.md §9.3; plan e4)
  */
 public record ImportReview(
     List<AccountStatisticsRow> accounts,
@@ -25,7 +26,8 @@ public record ImportReview(
     Map<Long, ImportOpeningBalanceCells> openingBalances,
     ImportCategoryMap categoryMap,
     ImportPayeeSummary payees,
-    List<CrossCurrencyParkRow> crossCurrencyParks) {
+    List<CrossCurrencyParkRow> crossCurrencyParks,
+    ImportIssues issues) {
 
   /** Defensive copies. */
   public ImportReview {
@@ -35,6 +37,7 @@ public record ImportReview(
     categoryMap = categoryMap == null ? new ImportCategoryMap(null, null, null) : categoryMap;
     payees = payees == null ? ImportPayeeSummary.EMPTY : payees;
     crossCurrencyParks = crossCurrencyParks == null ? List.of() : List.copyOf(crossCurrencyParks);
+    issues = issues == null ? ImportIssues.EMPTY : issues;
   }
 
   /** True when nothing has been staged yet — the page shows only its explanatory copy. */

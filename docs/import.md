@@ -432,8 +432,11 @@ The review shows:
 4. **per-account statistics** — transaction count, net sum, and date range — which is the
    verification device: it is ticked against Money's own balance for that account.
 
-**The commit unlocks when:** no account is still marked `expect-file`; every Money category path is
-mapped; zero unresolved cross-currency parks; and the ledger duplicate scan has been adjudicated.
+**The commit unlocks when:** every referenced Money account name and category path is mapped
+(settled at plan e4: "referenced" excludes an orphan map row a file removal left behind, §5); no
+referenced account is still marked `expect-file`; zero unresolved cross-currency parks; and the
+ledger duplicate scan has been adjudicated. A mapped category whose target has since stopped being
+a postable leaf (a mid-campaign subdivision) counts as unmapped for this purpose.
 
 **The ledger duplicate scan** runs once, at commit time, after mapping: staged transactions are
 compared against the *live* ledger on **date + account + amount + category**, and every hit is
@@ -557,6 +560,12 @@ needs it: the `Name - City - Country` payee-address convention (§5.3), and `C` 
 
 ## Changelog
 
+- **v0.6 (2026-09-05):** §9's commit gate amended (plan e4) — "every referenced Money account name
+  and category path is mapped" replaces the earlier "every Money category path is mapped", making
+  explicit what was already implied: an account cannot commit unmapped either, and an orphan map
+  row a file removal left behind (§5) does not count as an unmet condition. A mapped category whose
+  target has since stopped being a postable leaf counts as unmapped, closing
+  `.scratch/import/issues/01`.
 - **v0.5 (2026-09-04):** §6.5's Q-IMP-4 settled (plan e3) — a resolved pair's rate is written back
   only when one currency is base; when neither is, the importer writes nothing and `base_amount`
   freezing falls to the commit (f2), via the existing carry-forward `rateAsOf` or a refusal.

@@ -396,6 +396,33 @@ class ImportMirrorMatchingSqlLogicTest {
     assertThat(stateOf(splitB)).isEqualTo("ready");
     assertThat(mirrorPairOf(transferLegInA)).isNull();
     assertThat(mirrorPairOf(transferLegInB)).isNull();
+
+    // e4: the issues list's query surfaces exactly this residual, once, with both account names.
+    assertThat(importMirrorRepository.unresolvedSplitMirrors(session))
+        .singleElement()
+        .satisfies(
+            row -> {
+              assertThat(row.date()).isEqualTo(LocalDate.of(2013, 4, 4));
+              assertThat(row.amount()).isEqualByComparingTo("30.00");
+              assertThat(List.of(row.moneyAccountName(), row.mirrorMoneyAccountName()))
+                  .containsExactlyInAnyOrder("A", "B");
+              assertThat(List.of(row.transactionId(), row.mirrorTransactionId()))
+                  .containsExactlyInAnyOrder(splitA, splitB);
+            });
+  }
+
+  @Test
+  void unresolvedSplitMirrorsIsEmptyWhenAnAutomaticOrManualMatchAlreadyResolvedTheTransfer() {
+    long session = openSession();
+    long fileA = stageFile(session, "A", account("A"));
+    long fileB = stageFile(session, "B", account("B"));
+    stageTransfer(fileA, LocalDate.of(2013, 5, 5), "A", "B", "-25.00");
+    stageTransfer(fileB, LocalDate.of(2013, 5, 5), "B", "A", "25.00");
+
+    importMirrorRepository.rematch(session);
+
+    // A plain (non-split) mirror resolves via matchAndMark — never a both-split residual.
+    assertThat(importMirrorRepository.unresolvedSplitMirrors(session)).isEmpty();
   }
 
   @Test

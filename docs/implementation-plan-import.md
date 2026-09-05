@@ -375,27 +375,62 @@ against the two currencies being literally the same; added, defensively, at the 
 boundary. (5) `ImportMirrorMatchingService` and `ImportCrossCurrencyParkService` each carried their
 own copy of the write-back loop; extracted to a shared `ImportCrossCurrencyRateWriteBackService`.
 
-### e4 — The issues list
+### e4 — The issues list — implemented (owner-confirmation pending)
 The review's third panel (§9.3): unresolved mirrors, unresolved parks, unmapped paths, unparseable
 lines, split-sum mismatches, destroyed-payee counts — each linking to where it is fixed. Plus the
 **gate state**: no account still `expect-file`, every path mapped, zero unresolved parks (the
 duplicate scan is f1's half of the gate).
 
-**Orphan map rows (from b3):** map rows are session-scoped and persist across a file removal or
-replacement (§5) — so removing/replacing a file to fix a mis-stated Money account name leaves the
-wrong name behind as an unmapped `import_account` row that no staged posting references. The
-"every account mapped" gate condition must therefore scope to account names **still referenced by
-a live `import_posting`**, not every row in `import_account`; the account map screen (slice c)
-should likewise only demand a mapping for referenced names. Decide at c1 whether unreferenced
-unmapped rows are hidden, or pruned when the last file referencing them is removed.
+**Settled here: unparseable lines and split-sum mismatches carry no row.** §4.5 already settled
+that either condition rejects the **whole file** before anything stages (`QifRejectedException` at
+upload/preview, b1/b2) — never staged-then-flagged. There is therefore no staged data either
+category could ever be read from; they are prevented upstream, not tracked on this panel. The
+issues list's five other named classes are all staged-data-backed and implemented:
 
-**Stale map targets:** a mapped `import_category.account_id` can stop being a postable leaf if the
-owner subdivides that category mid-campaign — a leaves-only violation that otherwise only surfaces
-at f2. The gate must re-check every mapped category id still resolves to a postable leaf
-(`.scratch/import/issues/01`).
+- **Unresolved mirrors** — a same-currency transfer whose **both** sightings are a split
+  (`ImportMirrorRepository#unresolvedSplitMirrors`, the residual `MATCHED_PAIRS`'s own `where`
+  clause deliberately excludes, per its e1 docstring). Informational only: neither side can be
+  excluded without also dropping its unrelated category legs, so there is no automatic or manual
+  fix to offer — the owner resolves it by hand (re-split in Money and re-export, or void the
+  duplicate leg in the ledger after commit). Does **not** block the gate.
+- **Unresolved parks** — the existing e2b cross-currency panel's count; blocks the gate.
+- **Unmapped paths** — both account names and category paths, **referenced-only** (see below);
+  blocks the gate.
+- **Destroyed-payee counts** — not duplicated here; the payee panel (d2) already reports and links
+  to it (`#payees`), so the issues panel adds only a one-line link when the count is non-zero.
 
-**Done when:** each issue class appears from crafted staging data and disappears when resolved; the
-gate reports itself locked with a reason and unlocks when all three conditions hold.
+**Orphan map rows (from b3) — settled here: hidden, not pruned.** Map rows are session-scoped and
+persist across a file removal or replacement (§5) — so removing/replacing a file to fix a
+mis-stated Money account name (or the last file naming a category path) leaves the wrong name
+behind as a map row no live staged file or posting references. The gate and issues list scope to
+rows still **referenced** by a live `import_file`/`import_posting`
+(`ImportAccountRepository#findReferencedBySession`,
+`ImportCategoryRepository#findReferencedBySession`) — a lower-risk fix than deleting rows, and
+sufficient to stop an orphan from blocking a commit it has nothing to do with. The account-map and
+category-map **panels themselves are left unchanged** (still list every row, orphans included) —
+an orphan reads as harmless "not mapped" clutter there, not a blocker, so there was nothing to fix
+in their own display.
+
+**Stale map targets — settled here.** A mapped `import_category.account_id` can stop being a
+postable leaf if the owner subdivides that category mid-campaign (`.scratch/import/issues/01`,
+now resolved) — the gate re-checks every **referenced** mapped category id against
+`CategoryService#isPostableCategory` and counts a failure alongside the never-mapped rows, marked
+`stale`. `ImportCategoryMap.Row#stale()` gives the category-map panel itself the same fact, so a
+stale row now renders **open** with a warning instead of collapsed with "→ null".
+
+**Gate, as built:** `ImportIssues#locked()` is true while any referenced account is unmapped or
+still `expect-file`, any referenced category path is unmapped or stale, or any cross-currency
+transfer is parked — the three conditions above (accounts-mapped and categories-mapped both being
+facets of "every path mapped"). The fourth §9 condition, the ledger duplicate scan, is f1's and not
+represented here; an unlocked `ImportIssues` is therefore necessary but not sufficient to commit.
+
+**Done when:** each issue class appears from crafted staging data and disappears when resolved ✅ —
+`ImportMirrorMatchingSqlLogicTest` (the both-split residual), `ImportMapReferenceSqlLogicTest` (the
+orphan-row scoping for both maps), `ImportIssuesPanelTest`, `ImportCategoryMapPanelTest` (the stale
+row), `ImportReviewServiceTest` and three new `ImportScreenIntegrationTest` cases (the locked
+banner with anchored links, the unlocked banner once every referenced row is resolved, and the
+both-split residual rendering without blocking the gate) all green under `./gradlew check`; the
+gate reports itself locked with a reason and unlocks once every condition it owns holds.
 
 ---
 
@@ -446,6 +481,18 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.22 (2026-09-05):** **e4 implemented** (owner-confirmation pending) — the review's issues
+  list and commit-gate state (import.md §9.3). New `ImportIssuesPanel`/`ImportIssues`; new
+  `ImportMirrorRepository#unresolvedSplitMirrors` (the same-currency both-split residual `e1`'s
+  `MATCHED_PAIRS` deliberately leaves unresolved) and
+  `ImportAccountRepository`/`ImportCategoryRepository#findReferencedBySession` (the orphan-row
+  scoping). **Settled here:** unparseable lines and split-sum mismatches carry no row (§4.5 already
+  rejects the whole file before staging, so neither can appear in staged data); destroyed-payee
+  counts are not duplicated, only linked to the existing payee panel; orphan map rows are
+  **hidden** from the gate/issues (not pruned, and the map panels' own row lists are left
+  unchanged); a stale category-map target (`.scratch/import/issues/01`, now resolved) is
+  re-checked against `CategoryService#isPostableCategory` and rendered open with a warning instead
+  of collapsed with "→ null". See e4's entry above for the full detail.
 - **v0.21 (2026-09-05):** **e3 marked complete** (owner-confirmed 2026-09-05).
 - **v0.20 (2026-09-05):** **e3 — second review pass folded in.** The opposite-sign mirror guard
   (SQL and `manualMatch`) mistreated a zero-amount leg as opposite-signed to any real one; fixed to

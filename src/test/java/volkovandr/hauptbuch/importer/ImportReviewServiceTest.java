@@ -31,6 +31,7 @@ class ImportReviewServiceTest {
   @Mock ImportOpeningBalancePanel importOpeningBalancePanel;
   @Mock ImportCategoryMapPanel importCategoryMapPanel;
   @Mock ImportCrossCurrencyParkService importCrossCurrencyParkService;
+  @Mock ImportIssuesPanel importIssuesPanel;
 
   private ImportReviewService service() {
     return new ImportReviewService(
@@ -39,7 +40,8 @@ class ImportReviewServiceTest {
         importAccountMapPanel,
         importOpeningBalancePanel,
         importCategoryMapPanel,
-        importCrossCurrencyParkService);
+        importCrossCurrencyParkService,
+        importIssuesPanel);
   }
 
   private void openSession() {
@@ -60,7 +62,8 @@ class ImportReviewServiceTest {
         importAccountMapPanel,
         importOpeningBalancePanel,
         importCategoryMapPanel,
-        importCrossCurrencyParkService);
+        importCrossCurrencyParkService,
+        importIssuesPanel);
   }
 
   @Test
@@ -133,6 +136,31 @@ class ImportReviewServiceTest {
               assertThat(row.amount()).isEqualTo("100,00");
               assertThat(row.farExpectFile()).isFalse();
             });
+  }
+
+  @Test
+  void foldsInTheIssuesForTheOpenSessionPassingTheAlreadyFetchedParkCount() {
+    openSession();
+    when(importStatisticsRepository.perMoneyAccount(SESSION_ID)).thenReturn(List.of());
+    when(importCrossCurrencyParkService.parksForSession(SESSION_ID))
+        .thenReturn(
+            List.of(
+                new ImportCrossCurrencyPark(
+                    10L,
+                    20L,
+                    LocalDate.of(2016, 6, 6),
+                    "Euro",
+                    "Franc",
+                    new BigDecimal("100.00"),
+                    false)));
+    ImportIssues issues =
+        new ImportIssues(
+            List.of(new ImportIssues.UnmappedRow(1L, "Cash")), List.of(), List.of(), 1, List.of());
+    // The panel's park-leg count is the size of the already-fetched cross-currency parks list —
+    // no second parkedCrossCurrencyLegs query for the same session.
+    when(importIssuesPanel.forSession(SESSION_ID, 1)).thenReturn(issues);
+
+    assertThat(service().review().orElseThrow().issues()).isSameAs(issues);
   }
 
   @Test

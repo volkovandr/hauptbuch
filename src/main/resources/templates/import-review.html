@@ -2,10 +2,9 @@
 <!--
   Import review (import.md §9). e′ added the per-account statistics — transaction count, net sum
   and date range — the verification device the owner ticks against Money's own balance for each
-  account (§9.4). c1 adds the account map (§5.1): every Money account name a staged file mentions
-  maps to a Hauptbuch account, existing or newly created here. The category map and issues list
-  attach as further panels in slices d and e. Server-rendered form POSTs, redirect after post; no
-  bespoke JS.
+  account (§9.4). c1 adds the account map (§5.1); d1/d2 the category map and payee summary; e2b the
+  cross-currency panel; e4 the issues list and commit-gate state. Server-rendered form POSTs,
+  redirect after post; no bespoke JS.
 -->
 <html
   lang="en"
@@ -18,12 +17,90 @@
     <section class="panel">
       <p class="eyebrow">Import review</p>
       <p class="muted">
-        The campaign is reviewed by its maps and its exceptions, not row by row. This page grows the
-        account map, the category map and the issues list as those steps land. For now it shows the
-        per-account statistics — check each against Money's own balance for that account before the
-        campaign commits.
+        The campaign is reviewed by its maps and its exceptions, not row by row. Individual staged
+        transactions are never mandatory to visit.
       </p>
       <p class="actions"><a class="btn btn--ghost" th:href="@{/import}">Back to the campaign</a></p>
+    </section>
+
+    <!--
+      Issues & commit gate (import.md §9.3; plan e4). A dashboard of what still needs the owner's
+      attention, each item linking down to where it is fixed: unmapped/stale account and category
+      rows, accounts still awaiting their own export, and still-parked cross-currency transfer
+      legs — the three conditions the commit gate reads here (§9's fourth, the ledger duplicate scan, is
+      f1's, not yet built). The same-currency split-vs-split mirror residual (§6.1) is shown for
+      visibility only — neither sighting can be excluded automatically, so it never blocks the
+      gate; the owner resolves it by hand. Orphan map rows a file removal left behind (§5) are
+      excluded from every list here (ImportIssuesPanel) — they are harmless clutter, not a blocker.
+    -->
+    <section class="panel" th:unless="${review.empty()}">
+      <p class="eyebrow">Issues &amp; commit gate</p>
+      <p th:if="${review.issues().locked()}" class="warning">
+        The campaign cannot commit yet:
+        <span th:each="reason, it : ${review.issues().lockReasons()}"
+          ><span th:text="${it.first} ? ${reason} : ', ' + ${reason}">reason</span></span
+        >.
+      </p>
+      <p th:unless="${review.issues().locked()}" class="muted">
+        Every referenced account and category path is mapped, no account is still expecting a
+        file, and no cross-currency transfer leg is still parked. (The ledger duplicate scan still
+        runs at commit.)
+      </p>
+
+      <ul class="import-uploads" th:if="${!#lists.isEmpty(review.issues().unmappedAccounts())}">
+        <li th:each="row : ${review.issues().unmappedAccounts()}">
+          <a th:href="'#account-' + ${row.importAccountId()}" th:text="${row.moneyAccountName()}"
+            >Cash</a
+          ><span class="muted"> — not mapped</span>
+        </li>
+      </ul>
+      <ul class="import-uploads" th:if="${!#lists.isEmpty(review.issues().expectingFile())}">
+        <li th:each="row : ${review.issues().expectingFile()}">
+          <a th:href="'#account-' + ${row.importAccountId()}" th:text="${row.moneyAccountName()}"
+            >Franc</a
+          ><span class="muted"> — still expecting its own export</span>
+        </li>
+      </ul>
+      <ul class="import-uploads" th:if="${!#lists.isEmpty(review.issues().unmappedCategories())}">
+        <li th:each="row : ${review.issues().unmappedCategories()}">
+          <a th:href="'#category-' + ${row.importCategoryId()}" th:text="${row.moneyPath()}"
+            >Audi:Fuel</a
+          ><span class="muted" th:unless="${row.stale()}"> — not mapped</span
+          ><span class="warning" th:if="${row.stale()}">
+            — its mapped category is no longer a postable leaf</span
+          >
+        </li>
+      </ul>
+      <p class="muted" th:if="${review.issues().unresolvedParkLegCount() > 0}">
+        <a href="#cross-currency"
+          ><span
+            th:text="${review.issues().unresolvedParkLegCount()} + ' cross-currency leg(s)'"
+            >2 cross-currency leg(s)</span
+          ></a
+        >
+        still parked.
+      </p>
+      <ul class="import-uploads" th:if="${!#lists.isEmpty(review.issues().unresolvedMirrors())}">
+        <li th:each="row : ${review.issues().unresolvedMirrors()}">
+          <span class="warning">Unresolved transfer:</span>
+          <span
+            th:text="${row.date()} + ' ' + ${row.moneyAccountName()} + ' ↔ ' + ${row.mirrorMoneyAccountName()} + ' · ' + ${row.amount()}"
+          >
+            04.04.2013 A ↔ B · 30,00</span
+          ><span class="muted">
+            — both sightings are a split; neither can be excluded automatically. Resolve by hand
+            before committing.</span
+          >
+        </li>
+      </ul>
+      <p class="muted" th:if="${review.payees().destroyedRows() > 0}">
+        <a href="#payees"
+          ><span th:text="${review.payees().destroyedRows()} + ' staged transaction(s)'"
+            >27 staged transaction(s)</span
+          ></a
+        >
+        carry a destroyed payee name — see the payee summary below.
+      </p>
     </section>
 
     <section class="panel">
@@ -445,7 +522,7 @@
           <details
             class="import-account"
             th:id="'category-' + ${row.importCategoryId()}"
-            th:open="${!row.mapped()}"
+            th:open="${!row.mapped() or row.stale()}"
           >
             <summary class="import-account__summary">
               <!-- The tick doubles as the row's bullet (interactive content in <summary> does not
@@ -462,11 +539,16 @@
               <span class="num" th:text="${row.moneyPath()}">Audi:Fuel</span>
               <span
                 class="muted"
-                th:if="${row.mapped()}"
+                th:if="${row.mapped() and !row.stale()}"
                 th:text="' → ' + ${row.targetPath()}"
                 >→ Transportation - Car - Fuel</span
               >
               <span class="warning" th:unless="${row.mapped()}"> → not mapped</span>
+              <!-- A mid-campaign subdivision can turn a once-postable leaf into a group (plan e4,
+                   .scratch/import/issues/01) — flagged rather than silently rendering "→ null". -->
+              <span class="warning" th:if="${row.stale()}">
+                → its mapped category is no longer a postable leaf — re-map it</span
+              >
               <span
                 class="muted"
                 th:text="' · ' + ${row.debitLineCount()} + ' debit · ' + ${row.creditLineCount()} + ' credit'"
@@ -653,7 +735,7 @@
       (case-folding, keeping the best-capitalised spelling) happens at commit, in
       PayeeService.resolveImportedPayee.
     -->
-    <section class="panel" th:unless="${review.payees().empty()}">
+    <section class="panel" id="payees" th:unless="${review.payees().empty()}">
       <p class="eyebrow">Payees</p>
       <p class="muted">
         <span

@@ -1,6 +1,6 @@
 # A category-map row whose target stopped being a postable leaf renders "→ null"
 
-Status: needs-triage
+Status: resolved
 Severity: minor
 Area: Import review — category map panel (`ImportCategoryMapPanel`)
 
@@ -31,3 +31,9 @@ collapsed-with-"→ null".
 Filed 2026-09-03 from a `/code-review` finding on the d1/d2 slices. The sibling findings from
 that review: the taxonomy-mutation-before-validation bug (fixed in the d2 commit) and the
 per-row INFO logging in the bulk loop (lowered to DEBUG in the d2 commit).
+
+Resolved 2026-09-05 at plan e4: `ImportCategoryMap.Row#stale()` gives the panel the fact directly
+(`targetAccountId != null and targetPath == null`), and the row now renders **open** with a
+warning instead of collapsed-with-"→ null". The commit gate re-checks every referenced mapped
+category id against `CategoryService#isPostableCategory` and counts a failure as an issue
+(`ImportIssuesPanel`), blocking the gate alongside a never-mapped path.

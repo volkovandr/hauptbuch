@@ -62,4 +62,33 @@ public class ImportCategoryRepository {
         .query(ImportCategory.class)
         .list();
   }
+
+  /**
+   * The category map rows of a session still <strong>referenced</strong> by a live staged posting
+   * (import.md §9; plan e4) — the category-side counterpart of {@link
+   * ImportAccountRepository#findReferencedBySession}. A map row persists across a file removal
+   * (§5), so removing the last file that named a path can leave it behind — an <strong>orphan
+   * </strong> {@link #findBySession} still returns but the commit gate must not demand a mapping
+   * for. SQL-resident logic (three tables, an {@code exists} join), covered in the {@code
+   * sqlLogicTest} tier (CLAUDE.md §6).
+   */
+  public List<ImportCategory> findReferencedBySession(long importSessionId) {
+    return jdbcClient
+        .sql(
+            """
+            select c.* from import_category c
+             where c.import_session_id = :sessionId
+               and exists (
+                 select 1 from import_posting p
+                 join import_transaction t on t.import_transaction_id = p.import_transaction_id
+                 join import_file f on f.import_file_id = t.import_file_id
+                 where f.import_session_id = c.import_session_id
+                   and p.money_category_path = c.money_path
+               )
+             order by c.money_path
+            """)
+        .param(SESSION_ID, importSessionId)
+        .query(ImportCategory.class)
+        .list();
+  }
 }
