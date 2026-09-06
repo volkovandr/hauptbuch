@@ -89,19 +89,6 @@
         >
         still parked.
       </p>
-      <ul class="import-uploads" th:if="${!#lists.isEmpty(review.issues().unresolvedMirrors())}">
-        <li th:each="row : ${review.issues().unresolvedMirrors()}">
-          <span class="warning">Unresolved transfer:</span>
-          <span
-            th:text="${row.date()} + ' ' + ${row.moneyAccountName()} + ' ↔ ' + ${row.mirrorMoneyAccountName()} + ' · ' + ${row.amount()}"
-          >
-            04.04.2013 A ↔ B · 30,00</span
-          ><span class="muted">
-            — both sightings are a split; neither can be excluded automatically. Resolve by hand
-            before committing.</span
-          >
-        </li>
-      </ul>
       <p class="muted" th:if="${review.payees().destroyedRows() > 0}">
         <a href="#payees"
           ><span th:text="${review.payees().destroyedRows()} + ' staged transaction(s)'"

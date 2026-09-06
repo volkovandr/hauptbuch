@@ -6,12 +6,10 @@ import java.util.List;
 /**
  * The review's issues list and commit-gate state (import.md §9.3; plan e4) — the exceptions the
  * campaign carries besides the maps themselves: accounts and category paths still unmapped or
- * stale, accounts still awaiting their own export, still-parked cross-currency transfer legs, and
- * the same-currency split-vs-split transfer residual e1's automatic matching cannot resolve on its
- * own (import.md §6.1). Orphan map rows — a Money name or path no live staged file or posting still
- * references, left behind by a file removal (§5) — are excluded from every list here by {@link
- * ImportIssuesPanel}; they are harmless clutter, not a blocker (plan e4's "orphan map rows"
- * decision).
+ * stale, accounts still awaiting their own export, and still-parked cross-currency transfer legs.
+ * Orphan map rows — a Money name or path no live staged file or posting still references, left
+ * behind by a file removal (§5) — are excluded from every list here by {@link ImportIssuesPanel};
+ * they are harmless clutter, not a blocker (plan e4's "orphan map rows" decision).
  *
  * <p><strong>Unparseable lines and split-sum mismatches</strong>, both named in import.md §9's
  * original issues-list sketch, carry no row here: §4.5 settled that either condition rejects the
@@ -32,19 +30,16 @@ public record ImportIssues(
     List<UnmappedRow> unmappedAccounts,
     List<UnmappedRow> expectingFile,
     List<CategoryRow> unmappedCategories,
-    long unresolvedParkLegCount,
-    List<MirrorRow> unresolvedMirrors) {
+    long unresolvedParkLegCount) {
 
   /** The empty issues list — a campaign with nothing to flag. */
-  public static final ImportIssues EMPTY =
-      new ImportIssues(List.of(), List.of(), List.of(), 0, List.of());
+  public static final ImportIssues EMPTY = new ImportIssues(List.of(), List.of(), List.of(), 0);
 
   /** Defensive copies of the lists. */
   public ImportIssues {
     unmappedAccounts = unmappedAccounts == null ? List.of() : List.copyOf(unmappedAccounts);
     expectingFile = expectingFile == null ? List.of() : List.copyOf(expectingFile);
     unmappedCategories = unmappedCategories == null ? List.of() : List.copyOf(unmappedCategories);
-    unresolvedMirrors = unresolvedMirrors == null ? List.of() : List.copyOf(unresolvedMirrors);
   }
 
   /** True when nothing here needs the owner's attention. */
@@ -52,8 +47,7 @@ public record ImportIssues(
     return unmappedAccounts.isEmpty()
         && expectingFile.isEmpty()
         && unmappedCategories.isEmpty()
-        && unresolvedParkLegCount == 0
-        && unresolvedMirrors.isEmpty();
+        && unresolvedParkLegCount == 0;
   }
 
   /**
@@ -109,17 +103,4 @@ public record ImportIssues(
    *     rather than never having been mapped at all
    */
   public record CategoryRow(long importCategoryId, String moneyPath, boolean stale) {}
-
-  /**
-   * One still-unresolved same-currency, both-split transfer pair (import.md §6.1; plan e4),
-   * pre-formatted for display — informational only, since neither sighting can be excluded
-   * automatically or by hand ({@code ImportMirrorRepository#unresolvedSplitMirrors}).
-   *
-   * @param date German-formatted {@code dd.MM.yyyy}
-   * @param moneyAccountName one sighting's Money account name
-   * @param mirrorMoneyAccountName the other sighting's Money account name
-   * @param amount the first sighting's signed amount, German-formatted to two places
-   */
-  public record MirrorRow(
-      String date, String moneyAccountName, String mirrorMoneyAccountName, String amount) {}
 }

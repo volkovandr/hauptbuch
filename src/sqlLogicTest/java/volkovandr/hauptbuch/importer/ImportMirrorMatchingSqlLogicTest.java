@@ -389,40 +389,17 @@ class ImportMirrorMatchingSqlLogicTest {
     final long transferLegInB = leg(splitB, "-30.00", null, "A", false);
     leg(splitB, "-40.00", null, "B", true);
 
-    // Neither transaction can be excluded wholesale — e1 leaves both booking; e4's issues list
-    // surfaces the residual.
+    // MATCHED_PAIRS' `not (a.non_funding_legs > 1 and b.non_funding_legs > 1)` guard drops this
+    // pair: neither transaction is excludable wholesale (its category legs must still book) and
+    // matchAndMark's `else` branch assumes the mirror side is the plain one. A real Money export
+    // cannot produce this shape — one side of a transfer is always the auto-generated single-line
+    // sighting (.scratch/import/issues/04, /07) — so the importer neither links nor surfaces it;
+    // both transactions simply stay `ready`.
     assertThat(importMirrorRepository.rematch(session)).isZero();
     assertThat(stateOf(splitA)).isEqualTo("ready");
     assertThat(stateOf(splitB)).isEqualTo("ready");
     assertThat(mirrorPairOf(transferLegInA)).isNull();
     assertThat(mirrorPairOf(transferLegInB)).isNull();
-
-    // e4: the issues list's query surfaces exactly this residual, once, with both account names.
-    assertThat(importMirrorRepository.unresolvedSplitMirrors(session))
-        .singleElement()
-        .satisfies(
-            row -> {
-              assertThat(row.date()).isEqualTo(LocalDate.of(2013, 4, 4));
-              assertThat(row.amount()).isEqualByComparingTo("30.00");
-              assertThat(List.of(row.moneyAccountName(), row.mirrorMoneyAccountName()))
-                  .containsExactlyInAnyOrder("A", "B");
-              assertThat(List.of(row.transactionId(), row.mirrorTransactionId()))
-                  .containsExactlyInAnyOrder(splitA, splitB);
-            });
-  }
-
-  @Test
-  void unresolvedSplitMirrorsIsEmptyWhenAnAutomaticOrManualMatchAlreadyResolvedTheTransfer() {
-    long session = openSession();
-    long fileA = stageFile(session, "A", account("A"));
-    long fileB = stageFile(session, "B", account("B"));
-    stageTransfer(fileA, LocalDate.of(2013, 5, 5), "A", "B", "-25.00");
-    stageTransfer(fileB, LocalDate.of(2013, 5, 5), "B", "A", "25.00");
-
-    importMirrorRepository.rematch(session);
-
-    // A plain (non-split) mirror resolves via matchAndMark — never a both-split residual.
-    assertThat(importMirrorRepository.unresolvedSplitMirrors(session)).isEmpty();
   }
 
   @Test
