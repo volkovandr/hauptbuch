@@ -17,11 +17,15 @@ import volkovandr.hauptbuch.importer.ImportDuplicateScanRow;
  * a freshly-computed set of overlaps. The detection is: for every staged transaction that will book
  * ({@code state = 'ready'}, not an opening balance — those are the c3 reconciliation's, §5.1), the
  * live ledger transactions that share its <strong>date</strong>, its <strong>funding
- * account</strong> and that leg's <strong>amount</strong>, and at least one non-funding leg on the
- * same <strong>category</strong> — the mapped category node itself or the currency leaf beneath it
- * the ledger already posted to ({@code CurrencyLeafService} routes to that leaf at the f2 commit;
- * the scan matches whichever the ledger used). A staged transaction can overlap more than one
- * ledger transaction, so each pair is its own {@code import_duplicate_match} row.
+ * account</strong> and that leg's <strong>amount</strong>, and at least one non-funding leg whose
+ * <strong>account</strong> and <strong>amount</strong> the ledger also posted. The non-funding
+ * account is the mapped category node itself or the currency leaf beneath it the ledger already
+ * posted to ({@code CurrencyLeafService} routes to that leaf at the f2 commit; the scan matches
+ * whichever the ledger used). The non-funding amount is that leg's native amount — {@code
+ * counter_amount} for a resolved cross-currency transfer leg (whose {@code amount} is only the
+ * funding-currency view; §6), {@code amount} otherwise — matched against the ledger's native {@code
+ * posting.amount}. A staged transaction can overlap more than one ledger transaction, so each pair
+ * is its own {@code import_duplicate_match} row.
  *
  * <p>The reconcile (Q-IMP-5, settled at plan f1 — a re-runnable snapshot, no ledger lock):
  *
@@ -74,7 +78,7 @@ public class ImportDuplicateScanRepository {
       staged_leg as (
         select p.import_transaction_id               as import_transaction_id,
                coalesce(ic.account_id, ia.account_id) as leg_account_id,
-               p.amount                              as leg_amount
+               coalesce(p.counter_amount, p.amount)   as leg_amount
           from import_posting p
           join import_transaction t on t.import_transaction_id = p.import_transaction_id
           join import_file f on f.import_file_id = t.import_file_id

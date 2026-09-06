@@ -57,7 +57,7 @@ split-vs-plain case (its guard excludes only `a.non_funding_legs > 1 AND b.non_f
 
 Empirical confirmation: the full migration corpus (10 QIF files, ~20 years, 3,079 transfer legs,
 717 split transactions containing a transfer line) contains **zero** (date, amount) pairs with a
-split-authored transfer leg on both sides. Worked example: `commerzbank.qif` 30/08'2014 is a split
+split-authored transfer leg on both sides. Worked example: `bankbbb.qif` 30/08'2014 is a split
 (`S[Cash-EUR] -674.99` + `Construction:equipment -45.97`); its mirror in `cash-eur.qif` is a plain
 `674.99` transfer — the ordinary split-on-one-side shape e1 handles.
 

@@ -60,7 +60,7 @@ class ImportScreenIntegrationTest {
       T0.00
       CX
       POpening Balance
-      L[Bank24ru-EUR]
+      L[BankAaa-EUR]
       ^
       D28/07'2004
       T-5.00
@@ -77,7 +77,7 @@ class ImportScreenIntegrationTest {
       T1000.00
       CX
       POpening Balance
-      L[Bank24ru-EUR]
+      L[BankAaa-EUR]
       ^
       D28/07'2004
       T-5.00
@@ -319,7 +319,7 @@ class ImportScreenIntegrationTest {
 
     mockMvc
         .perform(get("/import/uploads/" + token).session(session))
-        .andExpect(content().string(containsString("Bank24ru-EUR")))
+        .andExpect(content().string(containsString("BankAaa-EUR")))
         .andExpect(content().string(containsString("opening-balance record")));
 
     stage(session, token);
@@ -329,7 +329,7 @@ class ImportScreenIntegrationTest {
                 .sql("select money_account_name from import_file")
                 .query(String.class)
                 .single())
-        .isEqualTo("Bank24ru-EUR");
+        .isEqualTo("BankAaa-EUR");
   }
 
   @Test
@@ -826,8 +826,8 @@ class ImportScreenIntegrationTest {
   @Test
   void collapsedRowFlagsAnUnresolvedOpeningBalanceThenSummarisesTheOutcome() throws Exception {
     MockHttpSession session = openCampaign();
-    stageNewFile(session, "bank.qif", BANK_WITH_NONZERO_OPENING_BALANCE, "Bank24ru-EUR");
-    long rowId = mapRowId("Bank24ru-EUR");
+    stageNewFile(session, "bank.qif", BANK_WITH_NONZERO_OPENING_BALANCE, "BankAaa-EUR");
+    long rowId = mapRowId("BankAaa-EUR");
 
     assertThat(reviewHtml(session)).contains("opening balance unresolved");
 
@@ -847,7 +847,7 @@ class ImportScreenIntegrationTest {
   @Test
   void reviewShowsMoneysStagedOpeningBalanceAndItsProposedWinner() throws Exception {
     MockHttpSession session = openCampaign();
-    stageNewFile(session, "bank.qif", BANK_WITH_OPENING_BALANCE, "Bank24ru-EUR");
+    stageNewFile(session, "bank.qif", BANK_WITH_OPENING_BALANCE, "BankAaa-EUR");
 
     String html = reviewHtml(session);
     assertThat(html).contains("Opening balance");
@@ -861,8 +861,8 @@ class ImportScreenIntegrationTest {
   @Test
   void recordsEachOpeningBalanceOutcomeForMoneyAccount() throws Exception {
     MockHttpSession session = openCampaign();
-    stageNewFile(session, "bank.qif", BANK_WITH_OPENING_BALANCE, "Bank24ru-EUR");
-    long rowId = mapRowId("Bank24ru-EUR");
+    stageNewFile(session, "bank.qif", BANK_WITH_OPENING_BALANCE, "BankAaa-EUR");
+    long rowId = mapRowId("BankAaa-EUR");
 
     mockMvc
         .perform(
@@ -870,8 +870,8 @@ class ImportScreenIntegrationTest {
                 .param("choice", "take_money")
                 .session(session))
         .andExpect(redirectedUrlPattern("/import/review#account-*"));
-    assertThat(openingBalanceChoice("Bank24ru-EUR")).isEqualTo("take_money");
-    assertThat(openingBalanceAmount("Bank24ru-EUR")).isNull();
+    assertThat(openingBalanceChoice("BankAaa-EUR")).isEqualTo("take_money");
+    assertThat(openingBalanceAmount("BankAaa-EUR")).isNull();
 
     mockMvc
         .perform(
@@ -880,15 +880,15 @@ class ImportScreenIntegrationTest {
                 .param("amount", "1.234,56")
                 .session(session))
         .andExpect(redirectedUrlPattern("/import/review#account-*"));
-    assertThat(openingBalanceChoice("Bank24ru-EUR")).isEqualTo("override");
-    assertThat(openingBalanceAmount("Bank24ru-EUR")).isEqualByComparingTo("1234.56");
+    assertThat(openingBalanceChoice("BankAaa-EUR")).isEqualTo("override");
+    assertThat(openingBalanceAmount("BankAaa-EUR")).isEqualByComparingTo("1234.56");
   }
 
   @Test
   void overrideWithoutAnAmountComesBackToReviewWithTheReason() throws Exception {
     MockHttpSession session = openCampaign();
-    stageNewFile(session, "bank.qif", BANK_WITH_OPENING_BALANCE, "Bank24ru-EUR");
-    long rowId = mapRowId("Bank24ru-EUR");
+    stageNewFile(session, "bank.qif", BANK_WITH_OPENING_BALANCE, "BankAaa-EUR");
+    long rowId = mapRowId("BankAaa-EUR");
 
     mockMvc
         .perform(
@@ -898,7 +898,7 @@ class ImportScreenIntegrationTest {
         .andExpect(redirectedUrlPattern("/import/review#account-*"))
         .andExpect(flash().attributeExists("error"));
 
-    assertThat(openingBalanceChoice("Bank24ru-EUR")).isNull();
+    assertThat(openingBalanceChoice("BankAaa-EUR")).isNull();
   }
 
   private String openingBalanceChoice(String moneyAccountName) {
