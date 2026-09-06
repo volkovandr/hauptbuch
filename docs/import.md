@@ -488,13 +488,15 @@ would have to be remembered here too. **If it proves too slow, optimise *inside*
 (JDBC batching), where every caller benefits — never by routing around it.**
 
 Imported transactions book `confirmed` (Q-IMP-2). A resolved cross-currency transfer freezes each
-leg's `base_amount` at commit from the near-currency amounts and a single near→base factor: `1` when
-the near side is base; the observed pair (`counter_amount`) for the two-leg transfer whose far side
-is base; otherwise `ExchangeRateService.rateAsOf` — and the commit is **refused** (§6.5) if no rate
-is on file, so the owner can enter one and retry. The near amounts sum to zero, so the frozen base
-amounts do too. The one shape with no honest base valuation — a cross-currency *split* whose
-transfer leg is itself the base currency — is also refused (split it in Money and re-export); a1
-found one cross-currency split leg in 20 years, so this is effectively unreachable.
+leg's `base_amount` at commit. When the transfer leg **is** the base currency, the mirror-supplied
+`counter_amount` states this transaction's own conversion: the transfer leg's `base_amount` is that
+real amount, and the near-currency legs (funding + any category legs) share `−counter_amount` in
+proportion to their native amounts — no rate lookup, and it covers a split as well as a two-leg
+transfer. When **neither** side is the base currency there is no observed base value, so the near
+legs are valued at `ExchangeRateService.rateAsOf` and the commit is **refused** if no rate is on
+file (the owner adds one). The near amounts sum to zero, so the frozen base amounts do too. A
+resolution failure names the transaction's date, its funding Money account, its amount, its payee
+and any transfer counterparties, so the owner can find and fix it in Money.
 
 ---
 

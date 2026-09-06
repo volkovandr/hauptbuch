@@ -519,6 +519,15 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.31 (2026-09-06):** **cross-currency split with a base-currency transfer leg — now booked,
+  not refused** (owner hit it in a real campaign, staged txn 21123). The mirror's `counter_amount`
+  states this transaction's own conversion, so `CrossCurrencyBaseAmounts` (extracted from
+  `StagedTransactionResolver`) freezes the transfer leg's `base_amount` at that real figure and
+  shares `−counter_amount` across the near legs in proportion to their native amounts — exact, no
+  rate lookup, covers a split as well as a two-leg transfer. Only a still-genuinely-unresolvable
+  shape (near legs netting to zero, or neither side base with no rate on file) is refused. Every
+  resolution error now names the transaction's date, funding Money account, amount, payee and
+  transfer counterparties. `./gradlew check` green.
 - **v0.30 (2026-09-06):** **f2b implemented** (owner-confirmation pending) — the worker, the screen
   and the backup ceremony. `ImportCommitWorker` (`ReceiptBatchAnalyser` pattern: dedicated
   single-thread executor, in-memory `ImportCommitProgress`, broad outer guard) runs
