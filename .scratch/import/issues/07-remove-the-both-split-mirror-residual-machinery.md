@@ -1,6 +1,6 @@
 # Remove the both-split mirror residual machinery (dead code for a Money-impossible state)
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: minor (dead code + a latent false-positive path; no user-visible bug today)
 Area: Import review — mirror matching & issues list (`ImportMirrorRepository`, `ImportIssuesPanel`, `ImportIssues`, `templates/import-review.html`)
@@ -138,3 +138,7 @@ Kept the `MATCHED_PAIRS` `not (a.non_funding_legs > 1 and b.non_funding_legs > 1
 updated docstring, and a trimmed `bothSightingsSplitLinksNothing` (asserts neither side links and
 both stay `ready`). Docs: `implementation-plan-import.md` e4 stage + v0.27 changelog. `import.md`
 §6 needed no change (it never described the residual as a concept).
+
+### 2026-09-06 — resolved (owner-confirmed)
+
+Owner confirmed. Branch `import/qif-plan`, commit `227aa75` (+ `71b2bd9` note).
