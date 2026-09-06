@@ -89,8 +89,8 @@ public class QifParser {
     throw new QifRejectedException("Unrecognised QIF account header: \"" + header + "\".");
   }
 
-  private static ImportedTransaction toTransaction(List<String> fieldLines) {
-    RawRecord raw = RawRecord.from(fieldLines);
+  private static ImportedTransaction toTransaction(QifRecordReader.SourceRecord record) {
+    RawRecord raw = RawRecord.from(record.firstLine(), record.fieldLines());
     List<ImportedLine> lines =
         raw.splitLegs().isEmpty() ? List.of(raw.simpleLine()) : raw.splitLines();
     return new ImportedTransaction(
@@ -165,6 +165,7 @@ public class QifParser {
    * are kept in source order — a leg is complete only once its {@code $} amount arrives.
    */
   private record RawRecord(
+      int firstLine,
       String rawDate,
       String amountText,
       String duplicateAmountText,
@@ -175,17 +176,22 @@ public class QifParser {
       String targetText,
       List<SplitLeg> splitLegs) {
 
-    private static RawRecord from(List<String> fieldLines) {
-      Builder builder = new Builder();
+    private static RawRecord from(int firstLine, List<String> fieldLines) {
+      Builder builder = new Builder(firstLine);
       for (String fieldLine : fieldLines) {
         builder.accept(fieldLine.charAt(0), fieldLine.substring(1), fieldLine);
       }
       return builder.build();
     }
 
+    /** How error messages name the offending record — the owner has no other handle on it. */
+    private String describe() {
+      return "The QIF record starting at line " + firstLine;
+    }
+
     private String requireDate() {
       if (rawDate == null) {
-        throw new QifRejectedException("A QIF record is missing its D (date) field.");
+        throw new QifRejectedException(describe() + " is missing its D (date) field.");
       }
       return rawDate;
     }
@@ -196,7 +202,7 @@ public class QifParser {
 
     private ImportedLine simpleLine() {
       if (targetText == null) {
-        throw new QifRejectedException("A QIF record is missing its L (category/account) field.");
+        throw new QifRejectedException(describe() + " is missing its L (category/account) field.");
       }
       QifTarget.Resolved resolved = QifTarget.resolve(targetText);
       return new ImportedLine(
@@ -206,7 +212,8 @@ public class QifParser {
     private List<ImportedLine> splitLines() {
       String headerAmount = headerAmountText();
       if (headerAmount == null) {
-        throw new QifRejectedException("A split QIF record is missing its T (total) field.");
+        throw new QifRejectedException(
+            describe() + " is a split but is missing its T (total) field.");
       }
       List<ImportedLine> lines = new ArrayList<>();
       for (SplitLeg leg : splitLegs) {
@@ -217,18 +224,20 @@ public class QifParser {
       BigDecimal headerTotal = QifAmounts.parse(headerAmount);
       if (sum.compareTo(headerTotal) != 0) {
         throw new QifRejectedException(
-            "This split's lines sum to "
+            describe()
+                + " is a split whose lines sum to "
                 + sum.toPlainString()
-                + " but the record total (T) is "
+                + " but whose record total (T) is "
                 + headerTotal.toPlainString()
                 + " — Hauptbuch never adjusts a split to make it balance.");
       }
       return lines;
     }
 
-    private static ImportedLine splitLine(SplitLeg leg) {
+    private ImportedLine splitLine(SplitLeg leg) {
       if (leg.amountText == null) {
-        throw new QifRejectedException("The split line \"S" + leg.target + "\" has no $ amount.");
+        throw new QifRejectedException(
+            describe() + " has a split line \"S" + leg.target + "\" with no $ amount.");
       }
       QifTarget.Resolved resolved = QifTarget.resolve(leg.target);
       return new ImportedLine(
@@ -252,6 +261,7 @@ public class QifParser {
 
   /** Accumulates one record's fields as {@link RawRecord#from} walks its lines. */
   private static final class Builder {
+    private final int firstLine;
     private String rawDate;
     private String amountText;
     private String duplicateAmountText;
@@ -262,13 +272,22 @@ public class QifParser {
     private String targetText;
     private final List<SplitLeg> splitLegs = new ArrayList<>();
 
+    private Builder(int firstLine) {
+      this.firstLine = firstLine;
+    }
+
     private void accept(char letter, String value, String fieldLine) {
       if (assignFundingField(letter, value)
           || assignDetailField(letter, value)
           || assignSplitField(letter, value, fieldLine)) {
         return;
       }
-      throw new QifRejectedException("Unrecognised QIF field: \"" + fieldLine + "\".");
+      throw new QifRejectedException(
+          "Unrecognised QIF field \""
+              + fieldLine
+              + "\" in the record starting at line "
+              + firstLine
+              + ".");
     }
 
     /** {@code D}/{@code T}/{@code U}/{@code P} — the funding fields (§4.2). */
@@ -318,13 +337,18 @@ public class QifParser {
     private SplitLeg openLeg(String fieldLine) {
       if (splitLegs.isEmpty()) {
         throw new QifRejectedException(
-            "QIF split field \"" + fieldLine + "\" has no preceding S (category) line.");
+            "QIF split field \""
+                + fieldLine
+                + "\" in the record starting at line "
+                + firstLine
+                + " has no preceding S (category) line.");
       }
       return splitLegs.get(splitLegs.size() - 1);
     }
 
     private RawRecord build() {
       return new RawRecord(
+          firstLine,
           rawDate,
           amountText,
           duplicateAmountText,

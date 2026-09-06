@@ -23,16 +23,19 @@ class QifRecordReaderTest {
     assertThat(result.header()).isEqualTo("!Type:Bank");
     assertThat(result.records())
         .containsExactly(
-            List.of("D01/01'2020", "T10.00", "LFood"), List.of("D02/01'2020", "T-5.00", "LFuel"));
+            new QifRecordReader.SourceRecord(2, List.of("D01/01'2020", "T10.00", "LFood")),
+            new QifRecordReader.SourceRecord(6, List.of("D02/01'2020", "T-5.00", "LFuel")));
   }
 
   @Test
-  void toleratesBlankLinesBetweenRecords() {
+  void toleratesBlankLinesBetweenRecordsAndReportsTheTrueSourceLine() {
     String text = "!Type:Bank\n\nD01/01'2020\nT10.00\nLFood\n\n^\n\n";
 
     QifRecordReader.Result result = QifRecordReader.read(text);
 
-    assertThat(result.records()).containsExactly(List.of("D01/01'2020", "T10.00", "LFood"));
+    assertThat(result.records())
+        .containsExactly(
+            new QifRecordReader.SourceRecord(3, List.of("D01/01'2020", "T10.00", "LFood")));
   }
 
   @Test
@@ -42,8 +45,9 @@ class QifRecordReaderTest {
   }
 
   @Test
-  void rejectsTrailingRecordWithNoTerminator() {
+  void rejectsTrailingRecordWithNoTerminatorAndNamesItsLine() {
     assertThatThrownBy(() -> QifRecordReader.read("!Type:Bank\nD01/01'2020\nT10.00\nLFood\n"))
-        .isInstanceOf(QifRejectedException.class);
+        .isInstanceOf(QifRejectedException.class)
+        .hasMessageContaining("line 2");
   }
 }
