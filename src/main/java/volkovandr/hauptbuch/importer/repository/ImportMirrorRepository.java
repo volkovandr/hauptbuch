@@ -7,7 +7,6 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.importer.ImportCrossCurrencyPark;
 import volkovandr.hauptbuch.importer.ImportCrossCurrencyRateCandidate;
-import volkovandr.hauptbuch.importer.ImportUnresolvedMirror;
 
 /**
  * Native-SQL transfer mirror matching within staging (import.md §6.1; plan e1), cross-currency
@@ -89,8 +88,7 @@ public class ImportMirrorRepository {
    * row_number()} over the directed transfer shape {@code (file_account_id, named_account_id, date,
    * amount)} — the k-th sighting of a repeated same-day transfer lines up with the k-th sighting of
    * its mirror shape, so two identical transfers on one day produce two pairs rather than one leg
-   * swallowing three. The common base both {@link #MATCHED_PAIRS} (e1's automatic matching) and
-   * {@link #UNRESOLVED_SPLIT_MIRROR_PAIRS} (e4's issues list) build on.
+   * swallowing three. The common base {@link #MATCHED_PAIRS} (e1's automatic matching) builds on.
    *
    * <p>Requiring the <strong>same</strong> currency on both sides is deliberate: a cross-currency
    * transfer is handled by {@link #RESOLVABLE_CROSS_CURRENCY_PAIRS} instead, and a coincidental
@@ -157,9 +155,13 @@ public class ImportMirrorRepository {
    * are each side's non-funding-leg count (carried from {@link
    * #SAME_CURRENCY_RANKED_TRANSFER_LEGS}), so the marking step can tell a simple transfer (exactly
    * one non-funding leg — excludable whole) from a split (its transfer leg is a mirror, but the
-   * transaction still books its other legs). A pair where <em>both</em> sides are splits is
-   * dropped: neither can be excluded, and that residual is {@link #UNRESOLVED_SPLIT_MIRROR_PAIRS} —
-   * the e4 issues list's problem, not e1's.
+   * transaction still books its other legs). A pair where <em>both</em> sides are splits is dropped
+   * by the {@code not (a.non_funding_legs > 1 and b.non_funding_legs > 1)} guard: neither could be
+   * excluded wholesale, and the marking step's {@code else} branch assumes the mirror side is the
+   * plain one. That shape is not reachable from a real Money export — a transfer has one authored
+   * side (possibly a split line) and one auto-generated single-line side — so the guard is defence
+   * against crafted or corrupt data, not a case the importer resolves ({@code
+   * .scratch/import/issues/04}, {@code .scratch/import/issues/07}).
    */
   private static final String MATCHED_PAIRS =
       SAME_CURRENCY_RANKED_TRANSFER_LEGS
@@ -181,42 +183,6 @@ public class ImportMirrorRepository {
              where a.txn_id <> b.txn_id
                and not (a.non_funding_legs > 1 and b.non_funding_legs > 1)
           )
-          """;
-
-  /**
-   * The <strong>unresolved</strong> counterpart of {@link #MATCHED_PAIRS} (import.md §6.1; plan
-   * e4): the same-currency transfer pairs whose both sightings are a split, which {@link
-   * #MATCHED_PAIRS}'s {@code where} clause deliberately excludes because neither side can be
-   * excluded wholesale (a split's other legs must still book). Left unresolved, both sightings stay
-   * {@code ready} and both book their own transfer leg — the review's issues list surfaces this so
-   * the owner can resolve it by hand; there is no automatic or manual fix, since excluding either
-   * side would also drop its unrelated category legs.
-   *
-   * <p>One row per pair — the symmetric duplicate {@link #SAME_CURRENCY_RANKED_TRANSFER_LEGS} would
-   * otherwise produce is dropped via {@code a.pos_id < b.pos_id} — ordered by date then transaction
-   * id for a stable display order.
-   */
-  private static final String UNRESOLVED_SPLIT_MIRROR_PAIRS =
-      SAME_CURRENCY_RANKED_TRANSFER_LEGS
-          + """
-          select a.txn_id                  as transaction_id,
-                 b.txn_id                  as mirror_transaction_id,
-                 a.txn_date                as date,
-                 a.file_money_account_name as money_account_name,
-                 b.file_money_account_name as mirror_money_account_name,
-                 a.amount                  as amount
-            from ranked a
-            join ranked b
-              on b.file_account_id  = a.named_account_id
-             and b.named_account_id = a.file_account_id
-             and b.txn_date         = a.txn_date
-             and b.amount           = - a.amount
-             and b.rn               = a.rn
-           where a.txn_id <> b.txn_id
-             and a.non_funding_legs > 1
-             and b.non_funding_legs > 1
-             and a.pos_id < b.pos_id
-           order by a.txn_date, a.txn_id
           """;
 
   /**
@@ -633,20 +599,6 @@ public class ImportMirrorRepository {
   }
 
   /**
-   * The still-unresolved same-currency, both-split transfer pairs of a session — the review's
-   * issues list (import.md §9, §6.1; plan e4). See {@link #UNRESOLVED_SPLIT_MIRROR_PAIRS} for why
-   * these can never be excluded automatically or by hand: unlike {@link #manualMatch}, there is no
-   * mutation here to offer.
-   */
-  public List<ImportUnresolvedMirror> unresolvedSplitMirrors(long importSessionId) {
-    return jdbcClient
-        .sql(UNRESOLVED_SPLIT_MIRROR_PAIRS)
-        .param(SESSION_ID, importSessionId)
-        .query(ImportUnresolvedMirror.class)
-        .list();
-  }
-
-  /**
    * Manually pair two parked cross-currency transfer legs as one transfer's two sightings
    * (import.md §6.5; plan e2b) — the owner's resolution of a shape {@link
    * #matchAndResolveCrossCurrency} could not disambiguate on its own (an ambiguous same-day set, or
@@ -656,7 +608,8 @@ public class ImportMirrorRepository {
    * account, the other money out of it, {@link #RESOLVABLE_CROSS_CURRENCY_PAIRS}'s same guard) —
    * the same shape the automatic pass would have paired had it been unambiguous. A pair where both
    * sides are a split is refused (the same rule {@link #MATCHED_PAIRS} applies to e1): neither can
-   * be excluded wholesale, and that residual is e4's problem.
+   * be excluded wholesale, and that shape is not reachable from a real Money export ({@code
+   * .scratch/import/issues/07}).
    *
    * <p>Sets {@code counter_amount}/{@code mirror_pair_id} symmetrically — each leg's own signed
    * amount, negated, becomes its counterpart's {@code counter_amount} (the real value that crossed,

@@ -1,6 +1,5 @@
 package volkovandr.hauptbuch.importer;
 
-import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -9,8 +8,6 @@ import volkovandr.hauptbuch.accounts.AccountPath;
 import volkovandr.hauptbuch.categories.CategoryService;
 import volkovandr.hauptbuch.importer.repository.ImportAccountRepository;
 import volkovandr.hauptbuch.importer.repository.ImportCategoryRepository;
-import volkovandr.hauptbuch.importer.repository.ImportMirrorRepository;
-import volkovandr.hauptbuch.shared.MoneyFormat;
 
 /**
  * Assembles the review's issues list and commit-gate state (import.md §9.3; plan e4) — the read
@@ -38,21 +35,16 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
 @Service
 class ImportIssuesPanel {
 
-  private static final DateTimeFormatter GERMAN_DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy");
-
   private final ImportAccountRepository importAccountRepository;
   private final ImportCategoryRepository importCategoryRepository;
-  private final ImportMirrorRepository importMirrorRepository;
   private final CategoryService categoryService;
 
   ImportIssuesPanel(
       ImportAccountRepository importAccountRepository,
       ImportCategoryRepository importCategoryRepository,
-      ImportMirrorRepository importMirrorRepository,
       CategoryService categoryService) {
     this.importAccountRepository = importAccountRepository;
     this.importCategoryRepository = importCategoryRepository;
-    this.importMirrorRepository = importMirrorRepository;
     this.categoryService = categoryService;
   }
 
@@ -85,24 +77,7 @@ class ImportIssuesPanel {
                         row.importCategoryId(), row.moneyPath(), row.accountId() != null))
             .toList();
 
-    List<ImportIssues.MirrorRow> unresolvedMirrors =
-        importMirrorRepository.unresolvedSplitMirrors(importSessionId).stream()
-            .map(ImportIssuesPanel::toMirrorRow)
-            .toList();
-
     return new ImportIssues(
-        unmappedAccounts,
-        expectingFile,
-        unmappedCategories,
-        unresolvedParkLegCount,
-        unresolvedMirrors);
-  }
-
-  private static ImportIssues.MirrorRow toMirrorRow(ImportUnresolvedMirror mirror) {
-    return new ImportIssues.MirrorRow(
-        GERMAN_DATE.format(mirror.date()),
-        mirror.moneyAccountName(),
-        mirror.mirrorMoneyAccountName(),
-        MoneyFormat.number(mirror.amount(), 2));
+        unmappedAccounts, expectingFile, unmappedCategories, unresolvedParkLegCount);
   }
 }

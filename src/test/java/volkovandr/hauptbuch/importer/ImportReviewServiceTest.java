@@ -158,7 +158,7 @@ class ImportReviewServiceTest {
                     false)));
     ImportIssues issues =
         new ImportIssues(
-            List.of(new ImportIssues.UnmappedRow(1L, "Cash")), List.of(), List.of(), 1, List.of());
+            List.of(new ImportIssues.UnmappedRow(1L, "Cash")), List.of(), List.of(), 1);
     // The panel's park-leg count is the size of the already-fetched cross-currency parks list —
     // no second parkedCrossCurrencyLegs query for the same session.
     when(importIssuesPanel.forSession(SESSION_ID, 1)).thenReturn(issues);

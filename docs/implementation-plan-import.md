@@ -385,14 +385,16 @@ duplicate scan is f1's half of the gate).
 that either condition rejects the **whole file** before anything stages (`QifRejectedException` at
 upload/preview, b1/b2) — never staged-then-flagged. There is therefore no staged data either
 category could ever be read from; they are prevented upstream, not tracked on this panel. The
-issues list's five other named classes are all staged-data-backed and implemented:
+issues list's other named classes are all staged-data-backed and implemented:
 
-- **Unresolved mirrors** — a same-currency transfer whose **both** sightings are a split
-  (`ImportMirrorRepository#unresolvedSplitMirrors`, the residual `MATCHED_PAIRS`'s own `where`
-  clause deliberately excludes, per its e1 docstring). Informational only: neither side can be
-  excluded without also dropping its unrelated category legs, so there is no automatic or manual
-  fix to offer — the owner resolves it by hand (re-split in Money and re-export, or void the
-  duplicate leg in the ledger after commit). Does **not** block the gate.
+- **Unresolved mirrors** — *removed under `.scratch/import/issues/07` (2026-09-06).* e4 built a
+  `unresolvedSplitMirrors` query + issues-list row for a same-currency transfer whose **both**
+  sightings are a split. Triage established that shape is not reachable from a real Money export —
+  a transfer has one authored side (possibly a split line) and one auto-generated single-line
+  side — and the ~20-year corpus contains zero instances. The `MATCHED_PAIRS` guard
+  (`not (a.non_funding_legs > 1 and b.non_funding_legs > 1)`) stays as defence for crafted/corrupt
+  data; everything downstream of it (`unresolvedSplitMirrors`, `ImportUnresolvedMirror`,
+  `ImportIssues.MirrorRow`, the panel row, the template block) is gone.
 - **Unresolved parks** — the existing e2b cross-currency panel's count; blocks the gate.
 - **Unmapped paths** — both account names and category paths, **referenced-only** (see below);
   blocks the gate.
@@ -432,12 +434,13 @@ facets of "every path mapped"). The fourth §9 condition, the ledger duplicate s
 represented here; an unlocked `ImportIssues` is therefore necessary but not sufficient to commit.
 
 **Done when:** each issue class appears from crafted staging data and disappears when resolved ✅ —
-`ImportMirrorMatchingSqlLogicTest` (the both-split residual), `ImportMapReferenceSqlLogicTest` (the
+`ImportMirrorMatchingSqlLogicTest`, `ImportMapReferenceSqlLogicTest` (the
 orphan-row scoping for both maps), `ImportIssuesPanelTest`, `ImportCategoryMapPanelTest` (the stale
-row), `ImportReviewServiceTest` and three new `ImportScreenIntegrationTest` cases (the locked
-banner with anchored links, the unlocked banner once every referenced row is resolved, and the
-both-split residual rendering without blocking the gate) all green under `./gradlew check`; the
-gate reports itself locked with a reason and unlocks once every condition it owns holds.
+row), `ImportReviewServiceTest` and `ImportScreenIntegrationTest` cases (the locked
+banner with anchored links, and the unlocked banner once every referenced row is resolved) all
+green under `./gradlew check`; the gate reports itself locked with a reason and unlocks once every
+condition it owns holds. *(The both-split-residual surface these once covered was removed under
+`.scratch/import/issues/07`, 2026-09-06.)*
 
 ---
 
@@ -513,6 +516,16 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.27 (2026-09-06):** **both-split mirror residual surface removed** (`.scratch/import/issues/07`,
+  out of the triage of issues 04/05). e4's `unresolvedSplitMirrors` query and its issues-list row
+  guarded against a same-currency transfer whose both sightings are a Money split — a shape not
+  reachable from a real Money export (one authored side, one auto-generated single-line side; zero
+  instances in the ~20-year corpus). Removed: `ImportMirrorRepository#unresolvedSplitMirrors` +
+  `UNRESOLVED_SPLIT_MIRROR_PAIRS`, `ImportUnresolvedMirror`, `ImportIssues.MirrorRow` and the
+  record's `unresolvedMirrors` component, the `ImportIssuesPanel` mapping (it no longer depends on
+  `ImportMirrorRepository`), the `import-review.html` block, and the dead-only tests. **Kept:** the
+  `MATCHED_PAIRS` `not (a.non_funding_legs > 1 and b.non_funding_legs > 1)` guard (load-bearing for
+  `matchAndMark`'s branch logic) plus a trimmed `bothSightingsSplitLinksNothing` proving it.
 - **v0.26 (2026-09-05):** **Q-IMP-5 settled + f1 implemented** (owner-confirmation pending) — the
   ledger duplicate scan (import.md §9). V24 adds `import_duplicate_scan` (one re-runnable snapshot
   per campaign, `ran_at`) and `import_duplicate_match` (staged ↔ live pair, `adjudication`,
