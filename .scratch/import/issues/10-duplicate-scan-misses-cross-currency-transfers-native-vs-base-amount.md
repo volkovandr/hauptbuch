@@ -1,6 +1,6 @@
 # Duplicate scan never matches a cross-currency transfer — staged base amount vs ledger native amount
 
-Status: implemented — owner-confirmation pending
+Status: resolved (owner-confirmed 2026-09-06)
 Category: bug
 Severity: major (a true duplicate books silently at f2 — the exact "campaign ran for weeks while
 Hauptbuch stayed in daily use" scenario the scan exists to catch, defeated for every cross-currency

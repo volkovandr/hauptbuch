@@ -446,7 +446,7 @@ condition it owns holds. *(The both-split-residual surface these once covered wa
 
 ## Slice f — the commit
 
-### f1 — The ledger duplicate scan — implemented (owner-confirmation pending)
+### f1 — The ledger duplicate scan ✅ **complete** (owner-confirmed 2026-09-06)
 Staged rows compared against the **live** ledger, every hit **presented for the owner to
 adjudicate** — never a silent auto-skip, which is what makes it safe after weeks of daily use.
 
@@ -464,8 +464,11 @@ that no longer overlaps is not silently dropped and re-booked. f2 re-runs the sc
 as its first step, so this gate is a pre-check.
 
 **Match signature, settled here:** date + the mapped **funding account** + that leg's amount + at
-least one non-funding staged leg on the same category — the mapped node itself or a currency-leaf
-child of it (the ledger posts to the leaf; `CurrencyLeafService` routes there at f2). Two same-day,
+least one non-funding staged leg whose account and native amount the ledger also posted — the mapped
+node itself or a currency-leaf child of it (the ledger posts to the leaf; `CurrencyLeafService`
+routes there at f2). The non-funding leg's native amount is its `counter_amount` for a resolved
+cross-currency transfer (its `amount` is only the funding-currency view), its `amount` otherwise —
+`.scratch/import/issues/10`. Two same-day,
 same-amount, same-category transactions are a false positive the owner adjudicates away — acceptable,
 since every hit is adjudicated. Opening-balance and non-`ready` staged rows are out of scope (the c3
 reconciliation owns opening-balance overlaps, §5.1).
@@ -516,6 +519,13 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.28 (2026-09-06):** **f1 marked complete** (owner-confirmed 2026-09-06). One correctness fix
+  from the owner-review pass (`.scratch/import/issues/10`): the detection compared a staged
+  non-funding leg's `import_posting.amount` against the ledger's native `posting.amount`, so a
+  resolved **cross-currency transfer** — whose `amount` is the funding-currency view and whose real
+  native amount is in `counter_amount` — never matched. `MATCH_QUERY`'s `staged_leg` now selects
+  `coalesce(p.counter_amount, p.amount)`; same-currency legs unchanged. `ImportDuplicateScanSqlLogicTest`
+  gains a cross-currency match case and a same-currency regression guard.
 - **v0.27 (2026-09-06):** **both-split mirror residual surface removed** (`.scratch/import/issues/07`,
   out of the triage of issues 04/05). e4's `unresolvedSplitMirrors` query and its issues-list row
   guarded against a same-currency transfer whose both sightings are a Money split — a shape not
