@@ -161,15 +161,38 @@ class QifParserTest {
   }
 
   @Test
-  void rejectsRecordMissingDateField() {
+  void rejectsRecordMissingDateFieldAndNamesItsLine() {
     assertThatThrownBy(() -> parse("!Type:Bank\nT1.00\nLFood\n^\n"))
-        .isInstanceOf(QifRejectedException.class);
+        .isInstanceOf(QifRejectedException.class)
+        .hasMessageContaining("line 2")
+        .hasMessageContaining("D (date)");
   }
 
   @Test
-  void rejectsRecordMissingTargetField() {
-    assertThatThrownBy(() -> parse("!Type:Bank\nD01/01'2020\nT1.00\n^\n"))
-        .isInstanceOf(QifRejectedException.class);
+  void rejectsRecordMissingTargetFieldAndNamesItsLine() {
+    assertThatThrownBy(() -> parse("!Type:Bank\nD01/01'2020\nT1.00\n^\nD02/01'2020\nT2.00\n^\n"))
+        .isInstanceOf(QifRejectedException.class)
+        .hasMessageContaining("line 2")
+        .hasMessageContaining("L (category/account)");
+  }
+
+  @Test
+  void namesTheOffendingLineWhenTheBadRecordIsNotTheFirst() {
+    String text =
+        """
+        !Type:Bank
+        D01/01'2020
+        T1.00
+        LFood
+        ^
+        D02/01'2020
+        T2.00
+        ^
+        """;
+
+    assertThatThrownBy(() -> parse(text))
+        .isInstanceOf(QifRejectedException.class)
+        .hasMessageContaining("line 6");
   }
 
   @Test
