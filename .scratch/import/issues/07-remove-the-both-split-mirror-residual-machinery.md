@@ -121,3 +121,20 @@ every real campaign.
 Filed 2026-09-06 out of the triage of issues 04 and 05. See those files (both `wontfix`) for the
 full "why Money cannot produce this" reasoning and the corpus scan. Owner chose triage option 2:
 close 04 + 05 as `wontfix`, file this cleanup separately.
+
+### 2026-09-06 — implemented, owner-confirmation pending
+
+Branch `import/qif-plan`, commit `227aa75`. `./gradlew check` fully green.
+
+Removed `ImportMirrorRepository#unresolvedSplitMirrors` + `UNRESOLVED_SPLIT_MIRROR_PAIRS`,
+`ImportUnresolvedMirror`, `ImportIssues.MirrorRow` + the record's `unresolvedMirrors` component
+(5-arg → 4-arg constructor), the `ImportIssuesPanel` mirror mapping (the panel no longer injects
+`ImportMirrorRepository`), the `import-review.html` block, and the dead-only tests
+(`ImportScreenIntegrationTest.issuesListSurfacesTheBothSplitMirrorResidualWithoutBlockingTheGate`;
+the `unresolvedSplitMirrors` assertions in `ImportMirrorMatchingSqlLogicTest`, including the
+now-empty `unresolvedSplitMirrorsIsEmptyWhen…` case).
+
+Kept the `MATCHED_PAIRS` `not (a.non_funding_legs > 1 and b.non_funding_legs > 1)` guard with an
+updated docstring, and a trimmed `bothSightingsSplitLinksNothing` (asserts neither side links and
+both stay `ready`). Docs: `implementation-plan-import.md` e4 stage + v0.27 changelog. `import.md`
+§6 needed no change (it never described the residual as a concept).
