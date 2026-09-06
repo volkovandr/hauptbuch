@@ -30,7 +30,7 @@ class QifParserTest {
         !Type:Bank
         D26/11'2011
         T700,290.00
-        PBank24.ru
+        PBankAaa
         LOtherIncome:interest
         ^
         """;
@@ -41,7 +41,7 @@ class QifParserTest {
     assertThat(file.transactions()).hasSize(1);
     ImportedTransaction transaction = file.transactions().get(0);
     assertThat(transaction.rawDate()).isEqualTo("26/11'2011");
-    assertThat(transaction.payeeText()).isEqualTo("Bank24.ru");
+    assertThat(transaction.payeeText()).isEqualTo("BankAaa");
     assertThat(transaction.openingBalance()).isFalse();
     assertThat(transaction.lines()).hasSize(1);
     ImportedLine line = transaction.lines().get(0);
@@ -101,7 +101,7 @@ class QifParserTest {
         D11/03'2014
         CX
         T-599,999.64
-        L[Bank24ru-EUR]
+        L[BankAaa-EUR]
         ^
         """;
 
@@ -110,7 +110,7 @@ class QifParserTest {
     assertThat(transaction.clearedStatus()).isEqualTo(ClearedStatus.RECONCILED);
     assertThat(transaction.openingBalance()).isFalse();
     assertThat(transaction.lines().get(0).target())
-        .isEqualTo(new ImportedTarget.AccountReference("Bank24ru-EUR"));
+        .isEqualTo(new ImportedTarget.AccountReference("BankAaa-EUR"));
   }
 
   @Test
@@ -120,7 +120,7 @@ class QifParserTest {
         !Type:Bank
         D01/01'2020
         T-30.00
-        PBank24.ru
+        PBankAaa
         MSome note
         N1234
         LHHold:banking-fees
@@ -184,7 +184,7 @@ class QifParserTest {
         ^
         D02/01'2020
         T-599,999.64
-        L[Bank24ru-EUR]
+        L[BankAaa-EUR]
         ^
         D03/01'2020
         T707.46
@@ -211,7 +211,7 @@ class QifParserTest {
     assertThat(second.payeeText()).isNull();
     assertThat(second.memo()).isNull();
     assertThat(second.lines().get(0).target())
-        .isEqualTo(new ImportedTarget.AccountReference("Bank24ru-EUR"));
+        .isEqualTo(new ImportedTarget.AccountReference("BankAaa-EUR"));
 
     ImportedTransaction third = file.transactions().get(2);
     assertThat(third.rawDate()).isEqualTo("03/01'2020");
@@ -244,7 +244,7 @@ class QifParserTest {
         T0.00
         CX
         POpening Balance
-        L[Bank24ru-EUR]
+        L[BankAaa-EUR]
         ^
         D28/07'2014
         T-5.00
@@ -253,9 +253,9 @@ class QifParserTest {
         ^
         """;
 
-    assertThat(parser.detectAccountName(text)).contains("Bank24ru-EUR");
+    assertThat(parser.detectAccountName(text)).contains("BankAaa-EUR");
     // the deduced name also lands in the referenced set even when none was passed in
-    assertThat(parser.parse(null, text).referencedAccountNames()).contains("Bank24ru-EUR");
+    assertThat(parser.parse(null, text).referencedAccountNames()).contains("BankAaa-EUR");
   }
 
   @Test
@@ -265,7 +265,7 @@ class QifParserTest {
 
   @Test
   void flagsTheOpeningBalanceByItsPayeeMarkerWithoutBeingToldTheAccountName() {
-    String text = "!Type:CCard\nD19/07'2016\nT0.00\nCX\nPOpening Balance\nL[Advanzia-MC]\n^\n";
+    String text = "!Type:CCard\nD19/07'2016\nT0.00\nCX\nPOpening Balance\nL[BankCcc-MC]\n^\n";
 
     assertThat(parser.parse(null, text).transactions().get(0).openingBalance()).isTrue();
   }
@@ -372,7 +372,7 @@ class QifParserTest {
         LVacation:car-rental
         SVacation:car-rental
         $-115.05
-        S[Debt-Volkov]
+        S[Debt-Doe]
         $-46.02
         ^
         """;
@@ -381,8 +381,8 @@ class QifParserTest {
     ImportedTransaction transaction = file.transactions().get(0);
 
     assertThat(transaction.lines().get(1).target())
-        .isEqualTo(new ImportedTarget.AccountReference("Debt-Volkov"));
-    assertThat(file.referencedAccountNames()).contains("Debt-Volkov");
+        .isEqualTo(new ImportedTarget.AccountReference("Debt-Doe"));
+    assertThat(file.referencedAccountNames()).contains("Debt-Doe");
   }
 
   @Test
@@ -394,15 +394,15 @@ class QifParserTest {
         T0.00
         CX
         POpening Balance
-        L[Advanzia-MC]
+        L[BankCcc-MC]
         ^
         """;
 
-    ImportedTransaction transaction = parser.parse("Advanzia-MC", text).transactions().get(0);
+    ImportedTransaction transaction = parser.parse("BankCcc-MC", text).transactions().get(0);
 
     assertThat(transaction.openingBalance()).isTrue();
     assertThat(transaction.lines().get(0).target())
-        .isEqualTo(new ImportedTarget.AccountReference("Advanzia-MC"));
+        .isEqualTo(new ImportedTarget.AccountReference("BankCcc-MC"));
   }
 
   @Test
@@ -416,7 +416,7 @@ class QifParserTest {
         ^
         """;
 
-    assertThat(parser.parse("Advanzia-MC", text).transactions().get(0).openingBalance()).isFalse();
+    assertThat(parser.parse("BankCcc-MC", text).transactions().get(0).openingBalance()).isFalse();
   }
 
   @Test
@@ -485,20 +485,20 @@ class QifParserTest {
         !Type:Bank
         D01/01'2020
         T-5.00
-        L[Commerzbank-main]
+        L[BankBbb-main]
         ^
         D02/01'2020
         T-6.00
         LFood
         SFood
         $-2.00
-        S[Cash-RUR]
+        S[Cash-XXX]
         $-4.00
         ^
         """;
 
-    assertThat(parser.parse("Bank24ru-EUR", text).referencedAccountNames())
-        .containsExactlyInAnyOrder("Bank24ru-EUR", "Commerzbank-main", "Cash-RUR");
+    assertThat(parser.parse("BankAaa-EUR", text).referencedAccountNames())
+        .containsExactlyInAnyOrder("BankAaa-EUR", "BankBbb-main", "Cash-XXX");
   }
 
   @Test

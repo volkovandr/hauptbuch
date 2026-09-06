@@ -45,7 +45,7 @@ class ImportPreviewServiceTest {
       T0.00
       CX
       POpening Balance
-      L[Bank24ru-EUR]
+      L[BankAaa-EUR]
       ^
       D28/07'2014
       T-5.00
@@ -126,7 +126,7 @@ class ImportPreviewServiceTest {
   @Test
   void deducesTheAccountNameFromTheOpeningBalanceRecord() {
     assertThat(service.deduceAccountName(rawUpload(BANK_WITH_OPENING_BALANCE)))
-        .contains("Bank24ru-EUR");
+        .contains("BankAaa-EUR");
   }
 
   @Test
@@ -159,7 +159,7 @@ class ImportPreviewServiceTest {
 
     ImportPreview preview = service.preview(deduced);
 
-    assertThat(preview.accountName()).isEqualTo("Bank24ru-EUR");
+    assertThat(preview.accountName()).isEqualTo("BankAaa-EUR");
     assertThat(preview.accountNameDeduced()).isTrue();
   }
 }

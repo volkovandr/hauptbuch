@@ -20,9 +20,9 @@ class QifTargetTest {
 
   @Test
   void resolvesAbracketedAccountReference() {
-    QifTarget.Resolved resolved = QifTarget.resolve("[Bank24ru-EUR]");
+    QifTarget.Resolved resolved = QifTarget.resolve("[BankAaa-EUR]");
 
-    assertThat(resolved.target()).isEqualTo(new ImportedTarget.AccountReference("Bank24ru-EUR"));
+    assertThat(resolved.target()).isEqualTo(new ImportedTarget.AccountReference("BankAaa-EUR"));
     assertThat(resolved.className()).isNull();
   }
 

@@ -142,15 +142,15 @@ class ImportAccountMapServiceTest {
   void createsNewAccountFromChosenTypeAndCurrencyThenMapsToIt() {
     openSession();
     when(importAccountRepository.findBySession(SESSION_ID))
-        .thenReturn(List.of(unmapped(10L, "Bank24ru-EUR")));
+        .thenReturn(List.of(unmapped(10L, "BankAaa-EUR")));
     when(currencyService.exists("CHF")).thenReturn(true);
     when(accountService.openAccount(any(AccountDraft.class)))
-        .thenReturn(account(55L, "Bank24", "liability"));
+        .thenReturn(account(55L, "BankAaa", "liability"));
 
-    service().mapToNew(10L, "Bank24", "liability", "CHF");
+    service().mapToNew(10L, "BankAaa", "liability", "CHF");
 
     verify(accountService)
-        .openAccount(new AccountDraft("Bank24", "liability", null, "CHF", null, null));
+        .openAccount(new AccountDraft("BankAaa", "liability", null, "CHF", null, null));
     verify(importAccountRepository).mapToAccount(10L, 55L, "CHF");
   }
 
@@ -158,9 +158,9 @@ class ImportAccountMapServiceTest {
   void newAccountNeedsCurrency() {
     openSession();
     when(importAccountRepository.findBySession(SESSION_ID))
-        .thenReturn(List.of(unmapped(10L, "Bank24ru-EUR")));
+        .thenReturn(List.of(unmapped(10L, "BankAaa-EUR")));
 
-    assertThatThrownBy(() -> service().mapToNew(10L, "Bank24", "asset", null))
+    assertThatThrownBy(() -> service().mapToNew(10L, "BankAaa", "asset", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("currency");
 
@@ -172,10 +172,10 @@ class ImportAccountMapServiceTest {
   void rejectsUnknownCurrencyForNewAccount() {
     openSession();
     when(importAccountRepository.findBySession(SESSION_ID))
-        .thenReturn(List.of(unmapped(10L, "Bank24ru-EUR")));
+        .thenReturn(List.of(unmapped(10L, "BankAaa-EUR")));
     when(currencyService.exists("XXX")).thenReturn(false);
 
-    assertThatThrownBy(() -> service().mapToNew(10L, "Bank24", "asset", "XXX"))
+    assertThatThrownBy(() -> service().mapToNew(10L, "BankAaa", "asset", "XXX"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("XXX");
 

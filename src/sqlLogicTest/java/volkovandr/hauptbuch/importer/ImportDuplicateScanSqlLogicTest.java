@@ -80,6 +80,52 @@ class ImportDuplicateScanSqlLogicTest {
   }
 
   @Test
+  void matchesReimportedCrossCurrencyTransferOnTheResolvedNativeFarAmount() {
+    final long session = openSession();
+    long current = account("Current", "asset", null, "EUR");
+    long foreign = account("Foreign", "asset", null, "CHF");
+    final long fileId = stageFile(session, "Current");
+    mapAccount(session, "Current", current);
+    mapAccount(session, "Foreign", foreign);
+    long staged = stageTransaction(fileId, LocalDate.of(2024, 3, 1));
+    // The EUR file states only its own side; the mirror supplied the real far amount as
+    // counter_amount, leaving `amount` as the funding-currency view of the transfer leg (import.md
+    // §6). The ledger stores the mirror image — native `amount`, base-valued `base_amount`.
+    fundingLeg(staged, "Current", "100.00");
+    transferLeg(staged, "Foreign", "-100.00", "-92.50");
+
+    long ledgerTxn = ledgerTransaction("2024-03-01");
+    posting(ledgerTxn, current, "100.00", "100.00");
+    posting(ledgerTxn, foreign, "-92.50", "-100.00");
+
+    assertThat(scan(session))
+        .singleElement()
+        .extracting(ImportDuplicateMatch::importTransactionId, ImportDuplicateMatch::transactionId)
+        .containsExactly(staged, ledgerTxn);
+  }
+
+  @Test
+  void matchesReimportedSameCurrencyTransferThatCarriesNoCounterAmount() {
+    final long session = openSession();
+    long current = account("Current", "asset", null);
+    long savings = account("Savings", "asset", null);
+    final long fileId = stageFile(session, "Current");
+    mapAccount(session, "Current", current);
+    mapAccount(session, "Savings", savings);
+    long staged = stageTransaction(fileId, LocalDate.of(2024, 3, 1));
+    fundingLeg(staged, "Current", "-250.00");
+    transferLeg(staged, "Savings", "250.00", null);
+
+    long ledgerTxn = ledgerTransaction("2024-03-01");
+    posting(ledgerTxn, current, "-250.00");
+    posting(ledgerTxn, savings, "250.00");
+
+    assertThat(scan(session))
+        .extracting(ImportDuplicateMatch::transactionId)
+        .containsExactly(ledgerTxn);
+  }
+
+  @Test
   void noMatchWhenDateAmountOrCategoryDiffers() {
     final long session = openSession();
     long giro = account("Giro", "asset", null);
@@ -384,12 +430,17 @@ class ImportDuplicateScanSqlLogicTest {
   }
 
   private long account(String name, String type, Long parentId) {
+    return account(name, type, parentId, "EUR");
+  }
+
+  private long account(String name, String type, Long parentId, String currencyCode) {
     return jdbcClient
         .sql(
             "insert into account (name, type, currency_code, parent_id)"
-                + " values (:n, :t, 'EUR', :p) returning account_id")
+                + " values (:n, :t, :c, :p) returning account_id")
         .param("n", name)
         .param("t", type)
+        .param("c", currencyCode)
         .param("p", parentId)
         .query(Long.class)
         .single();
@@ -463,6 +514,20 @@ class ImportDuplicateScanSqlLogicTest {
         .update();
   }
 
+  private void transferLeg(
+      long transactionId, String moneyAccountName, String amount, String counterAmount) {
+    jdbcClient
+        .sql(
+            "insert into import_posting"
+                + " (import_transaction_id, amount, money_account_name, funding, counter_amount)"
+                + " values (:t, :a, :n, false, :c)")
+        .param("t", transactionId)
+        .param("a", new BigDecimal(amount))
+        .param("n", moneyAccountName)
+        .param("c", counterAmount == null ? null : new BigDecimal(counterAmount))
+        .update();
+  }
+
   private void categoryLeg(long transactionId, String moneyCategoryPath, String amount) {
     jdbcClient
         .sql(
@@ -489,6 +554,18 @@ class ImportDuplicateScanSqlLogicTest {
         .param("t", transactionId)
         .param("a", accountId)
         .param("amt", new BigDecimal(amount))
+        .update();
+  }
+
+  private void posting(long transactionId, long accountId, String amount, String baseAmount) {
+    jdbcClient
+        .sql(
+            "insert into posting (transaction_id, account_id, amount, base_amount)"
+                + " values (:t, :a, :amt, :base)")
+        .param("t", transactionId)
+        .param("a", accountId)
+        .param("amt", new BigDecimal(amount))
+        .param("base", new BigDecimal(baseAmount))
         .update();
   }
 }
