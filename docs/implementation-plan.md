@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.46
-**Date:** 2026-08-31
+**Status:** Draft v0.47
+**Date:** 2026-09-06
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md`, `import.md`
@@ -15,8 +15,7 @@
 > Scope note: stages 1–6 are specified in detail because their shape is forced by the data model and
 > the legibility constraint. **Stages 7 onward are deliberately rough** — once the UI is live at
 > stage 6, priorities will shift, and pinning detail now would be premature (the owner's standing
-> position). §3 is an **unordered backlog inventory** — nothing in it is sequenced or staged,
-> save the single item currently being built (Money migration, which has its own design doc);
+> position). §3 is an **unordered backlog inventory** — nothing in it is sequenced or staged;
 > priority is set during implementation, once the system is in use.
 >
 > **§2 is closed as of v0.44** — every stage in it is complete. Everything still to build lives in
@@ -29,6 +28,9 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.47 (2026-09-06):** **f2 complete — the whole Money migration (QIF import) complete**
+  (owner-confirmed). No scope change (routine). The sub-plan `implementation-plan-import.md` is
+  deleted; its summary is folded into §3's first bullet (the stage-7/9 pattern).
 - **v0.46 (2026-08-31):** **Money migration sequenced** into the sub-plan
   `implementation-plan-import.md` (the stage-7/9 sub-plan pattern), cutting `import.md` §13's a–f
   slices into session-sized steps. No scope change to the feature itself. It records one boundary
@@ -546,17 +548,62 @@ only if 2 s polling grates). Cross-currency receipt commits were also deferred h
 
 Requirements not yet placed in a stage. **No ordering, no stages assigned** — priority is set during
 implementation, once the system is in use. Listed by area so nothing is forgotten. The first bullet
-is the exception: it is the item being built right now, and it is listed first for that reason alone.
+is the exception: it is the just-completed Money migration, kept first as the record of what
+shipped; everything after it is unbuilt.
 
-- **Money migration (QIF import) — the item currently being built.** ~20 years of Microsoft Money
-  history, exported account by account, imported through a long-running staging session that
-  touches the ledger only once, at the end (FR-IMP-01–04; **settles Q9 — the format is QIF**).
-  Large enough to earn its own authoritative doc: **`docs/import.md`** owns the session/staging
-  model, the three maps (accounts incl. people, categories → category *plus tags*, payees), the
-  transfer-mirror rule, the commit gate, and the QIF/Money dialect — and carries its own a–f
-  slicing. The build sequence lives in the sub-plan **`implementation-plan-import.md`** (the
-  stage-7/9 pattern), which cuts those slices into session-sized steps. Deliberately **not** a §2
-  stage; §2 stays closed.
+- **Money migration (QIF import) ✅ complete** (owner-confirmed 2026-09-06). ~20 years of Microsoft
+  Money history, exported account by account, imported through a long-running staging session that
+  touches the ledger only once, at the end (FR-IMP-01–04; **settled Q9 — the format is QIF**).
+  Deliberately **not** a §2 stage; §2 stays closed. **`docs/import.md`** is the authoritative doc —
+  the session/staging model, the three maps (accounts incl. people, categories → category *plus
+  tags*, payees), the transfer-mirror rule, the commit gate, and the QIF/Money dialect. Built
+  through the sub-plan `implementation-plan-import.md` (the stage-7/9 pattern; deleted on
+  completion, this summary folded back), 16 session-sized steps across slices a–f, each shipped
+  green and owner-confirmed:
+  - **a — QIF parser** (unit tier only). Canonical `ImportedTransaction`/`ImportedLine` records + the
+    `^`-terminated record reader; `!Type:` header → asset/liability proposal, `!Type:Invst` rejected
+    by name; strict-UTF-8-probe-then-cp1252 charset detection and whole-file DD/MM vs MM/DD date
+    detection, each carrying its evidence line and an override; `S`/`E`/`$` splits (a split-sum
+    mismatch raises, never adjusts), `L[Account]` transfer legs, the `Opening Balance` self-transfer
+    marker, `?`-destroyed payees (whole name → no payee, partial → kept verbatim); a destroyed
+    **account** name rejects the whole file. Settled Q-IMP-1 / Q-IMP-3.
+  - **b — session, staging schema, upload → preview → stage.** V19's seven `import_*` tables; one
+    open session at a time; the `/import` preview (proposed type, charset, date format + evidence,
+    first ~50 decoded lines, record count); the Money account deduced from its opening-balance
+    record (hand-entered only as the fallback); staging writes
+    `import_file`/`import_transaction`/`import_posting` with targets as unresolved Money strings and
+    accumulates `import_account`/`import_category` rows across files; remove/replace a staged file.
+  - **e′ — per-account statistics** (pulled ahead of the maps). Count, net sum, date range per staged
+    Money account — the figure ticked against Money's own balance. The step that retires the
+    feature's biggest risk; the review page is born here as a skeleton the later slices hang panels
+    off.
+  - **c — the account map.** Money account → an existing or new Hauptbuch account (type proposed,
+    currency asked — QIF carries none) or a **Person** (via `PersonProvisioningService#ensureLeaf`,
+    after which the importer treats it as an ordinary account id); many-to-one is the merge and
+    junk-account story; `expect-file` per account; opening-balance reconciliation (earlier date
+    wins, ties toward the non-zero one) — the only conflict raised at map time.
+  - **d — the category map and payees.** Money path → category + N tags, keyed on the full path,
+    with bulk assignment and per-path sign evidence, targeting the semantic node (never a currency
+    leaf — routing stays with `CurrencyLeafService`). Payees auto-created through the existing
+    `PayeeService` parser (no second parser); the review reports counts only.
+  - **e — mirrors, cross-currency parks, the issues list.** The posting-pair mirror signature (date,
+    both mapped account ids, |amount|), matched entirely inside staging, re-runnable as the map
+    changes; cross-currency transfers **park** (no invented `base_amount`) and auto-resolve only on
+    an unambiguous 1:1 directed shape, else a manual match or hand-entered far amount (V22
+    `counter_amount`); a resolved pair carrying both real native amounts writes back an
+    `exchange_rate` row with `source = 'import'` (**V23**) — only when one side is the base currency,
+    never invented (Q-IMP-4); the issues list and the gate (`ImportIssues#locked()`).
+  - **f — the commit.** f1: the re-runnable ledger duplicate scan (V24 `import_duplicate_scan`
+    snapshot, no ledger lock), every hit adjudicated by the owner and never auto-skipped, a stale
+    decision re-raised rather than silently applied. f2: a background worker (the
+    `ReceiptBatchAnalyser` pattern) writes every staged transaction through
+    `LedgerService.recordTransaction` in **one** database transaction — a mid-run failure leaves the
+    ledger untouched and staging intact; staging is purged and the closing backup taken only on
+    success; the backup → commit → backup ceremony sits on the screen. Q-IMP-2 settled: imported
+    rows book `confirmed`.
+
+  FR-IMP-05's generic CSV importer (still a §3 backlog item, below) reuses this whole
+  staging/mapping/commit apparatus, changing only the parser.
 - **Reporting & analysis:** category×month matrix (FR-ANA-07); consolidated-balance timeline + trend
   line (FR-ANA-09); drill-down from cells (FR-ANA-10); spend by category/tag/payee, period
   comparisons, category trends (FR-ANA-01–04); net worth in base incl. **held-balance revaluation**
