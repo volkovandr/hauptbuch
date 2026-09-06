@@ -457,11 +457,12 @@ public class AccountRepository {
   }
 
   /**
-   * Re-parent an account — used only by the currency-leaf-aware subdivision operation to move a
-   * category's existing per-currency leaves under its new catch-all sibling (data-model §6.5); not
-   * a user-facing edit (re-parenting a posted-to account is otherwise forbidden, data-model §5).
+   * Set an account's parent — to another account, or to {@code null} for the top level. Used by the
+   * currency-leaf-aware subdivision operation (data-model §6.5) and by the account editor's
+   * re-parent move ({@code AccountReparenter}, issue account-management/03); the caller owns the
+   * validation (same type, parent has no postings, no cycle).
    */
-  public int updateParent(long accountId, long newParentId) {
+  public int updateParent(long accountId, Long newParentId) {
     return jdbcClient
         .sql("update account set parent_id = :newParentId where account_id = :accountId")
         .param(NEW_PARENT_ID, newParentId)

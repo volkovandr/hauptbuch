@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <!--
   Account edit page (plan stage 6a): the freely-editable fields — display name and the stored
-  register hue (register §2.8) — plus the close action.
+  register hue (register §2.8) — the parent (issue account-management/03), and the close action.
 
-  Type, currency, and parent are shown read-only: postings inherit the account's currency, and
-  re-parenting a posted-to account would break leaves-only (data-model §5); the stage-6b
-  subdivision operation is the sanctioned path for restructuring.
+  Type and currency are shown read-only: postings inherit the account's currency. The parent may
+  be changed here for a managed account (asset/liability, not a per-person debt leaf) — the account
+  stays a leaf, only its position moves. The move is refused (with the reason shown as a page-level
+  warning) when the new parent is a different type, holds postings, is closed, is itself an
+  auto-managed leaf, or sits inside this account's own subtree (leaves-only, data-model §5).
 -->
 <html
   lang="en"
@@ -24,6 +26,11 @@
         >
       </p>
     </div>
+
+    <!-- A refused re-parent move (POST /accounts/{id}/parent) flashes its reason here. Page-level,
+         not inside the Parent section: that section is hidden for an unmanaged account, and the
+         refusal still needs to be seen. -->
+    <p class="warning" th:if="${error}" th:text="${error}">That move was refused.</p>
 
     <section class="panel">
       <p class="eyebrow">Settings</p>
@@ -81,6 +88,39 @@
         <p class="actions">
           <button type="submit" class="btn">Save</button>
           <a th:href="@{/accounts}">Back to accounts</a>
+        </p>
+      </form>
+    </section>
+
+    <section class="panel" th:if="${parentCandidates != null}">
+      <p class="eyebrow">Structure</p>
+      <h2>Parent</h2>
+      <p class="muted">
+        Move this account under another same-type account, or back to the top level. The account
+        keeps every posting and its running balance is unaffected — only its place in the hierarchy
+        changes. The new parent must be the same type and must not itself hold postings.
+      </p>
+      <form
+        method="post"
+        th:action="@{/accounts/{id}/parent(id=${account.accountId()})}"
+        class="form"
+      >
+        <div class="field">
+          <label class="field__label" for="parentId">Parent</label>
+          <select id="parentId" name="parentId" class="input">
+            <option value="">— none (top level) —</option>
+            <option
+              th:each="p : ${parentCandidates}"
+              th:value="${p.accountId()}"
+              th:text="${p.name()}"
+              th:selected="${p.accountId() == currentParentId}"
+            >
+              Cash
+            </option>
+          </select>
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Move account</button>
         </p>
       </form>
     </section>

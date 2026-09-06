@@ -92,3 +92,26 @@ moved account's `parentId` changes.
   operations.
 - Bulk or drag-and-drop re-parenting; one account at a time from the editor is enough.
 - Any change to how a parent's balance is computed (it is already the sum of its descendants).
+
+## Comments
+
+### Implemented 2026-09-06 — awaiting owner confirmation
+
+Branch `account-management/reparent`.
+
+- New `AccountReparenter` (`accounts` module) owns the validated move: reuses the create path's
+  `requireManageable` / `requireUsableParent` (widened to package-private), adds the move-only rules
+  — per-person debt leaf can't be moved; new parent can't be a different type, hold postings, be
+  closed, be an auto-managed leaf, or sit in the account's own subtree (cycle check via
+  `findSubtreeAccountIds`, arbitrary depth). Its own class because `AccountService` is at the
+  static-analysis class-size ceiling.
+- `AccountRepository.updateParent` widened `long` → `Long` so it can clear to the top level.
+- `AccountsController`: new `POST /accounts/{id}/parent`; a refused move flashes the reason and
+  returns to the editor (page-level warning), a successful one returns to the list.
+- `account-edit.html`: new "Structure › Parent" section (same-type candidates + "top level",
+  current parent pre-selected), shown only for a managed non-person-leaf account.
+- Tests: `AccountReparenterTest` (11 unit), `AccountRepositoryIntegrationTest` (null-clear,
+  whole-subtree move), `AccountsScreenIntegrationTest` (offer control, pre-select, hide for person
+  leaf, move + back to top, refused-with-reason). `./gradlew check` green.
+- Reviewed via `/code-review`: hardened the new-parent checks (person/currency leaf, closed) and
+  moved the error banner to page level so a refused move on a hidden-section account still shows.

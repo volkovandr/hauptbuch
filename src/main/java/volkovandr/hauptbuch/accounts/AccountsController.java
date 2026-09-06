@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import volkovandr.hauptbuch.accounts.repository.CurrencyOptionRepository;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 import volkovandr.hauptbuch.web.NavItem;
@@ -48,11 +49,15 @@ class AccountsController {
           new HueOption(100, "Moss"));
 
   private final AccountService accountService;
+  private final AccountReparenter accountReparenter;
   private final CurrencyOptionRepository currencyOptionRepository;
 
   AccountsController(
-      AccountService accountService, CurrencyOptionRepository currencyOptionRepository) {
+      AccountService accountService,
+      AccountReparenter accountReparenter,
+      CurrencyOptionRepository currencyOptionRepository) {
     this.accountService = accountService;
+    this.accountReparenter = accountReparenter;
     this.currencyOptionRepository = currencyOptionRepository;
   }
 
@@ -92,7 +97,7 @@ class AccountsController {
     return REDIRECT_TO_LIST;
   }
 
-  /** The edit page for one account: name, stored hue, and the close action. */
+  /** The edit page for one account: name, stored hue, parent, and the close action. */
   @GetMapping("/accounts/{accountId}")
   String editAccount(@PathVariable long accountId, Model model) {
     Account account =
@@ -104,6 +109,12 @@ class AccountsController {
     model.addAttribute(
         "detection",
         accountService.detectionOf(accountId).orElse(new AccountDetection(null, false)));
+    // The Parent control is offered only for accounts the screen manages — not categories, system
+    // accounts, or auto-managed per-person debt leaves (issue account-management/03).
+    if (!account.personLeaf() && AccountService.MANAGEABLE_TYPES.contains(account.type())) {
+      model.addAttribute("parentCandidates", accountReparenter.parentCandidatesFor(accountId));
+      model.addAttribute("currentParentId", account.parentId());
+    }
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", account.name() + " · Hauptbuch");
     return EDIT_VIEW;
@@ -135,6 +146,26 @@ class AccountsController {
       @RequestParam(required = false) Integer hue,
       @RequestParam(required = false, defaultValue = "false") boolean showOnMainPage) {
     accountService.updateAccount(accountId, name, hue, showOnMainPage);
+    return REDIRECT_TO_LIST;
+  }
+
+  /**
+   * Move the account under a different parent, or — with a blank {@code parentId} — back to the top
+   * level (issue account-management/03). A refused move (wrong type, posted parent, a cycle) lands
+   * back on the editor with the reason; a successful one returns to the list, where the new
+   * position shows.
+   */
+  @PostMapping("/accounts/{accountId}/parent")
+  String changeParent(
+      @PathVariable long accountId,
+      @RequestParam(required = false) Long parentId,
+      RedirectAttributes redirectAttributes) {
+    try {
+      accountReparenter.changeParent(accountId, parentId);
+    } catch (IllegalArgumentException rejected) {
+      redirectAttributes.addFlashAttribute("error", rejected.getMessage());
+      return "redirect:" + BASE_PATH + "/" + accountId;
+    }
     return REDIRECT_TO_LIST;
   }
 
