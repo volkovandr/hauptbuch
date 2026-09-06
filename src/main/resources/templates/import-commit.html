@@ -4,7 +4,9 @@
   every staged transaction through LedgerService in one atomic transaction, wrapped in the
   backup → commit → backup ceremony. The pre-backup is the owner's own click (gated below); the
   worker takes the closing one on success. The page polls /import/commit/status while a run is in
-  flight — the receipts list-poll pattern, no bespoke JS.
+  flight — the receipts list-poll pattern, no bespoke JS. When the run finishes the poll response
+  swaps in the outcome and, on success, empties the ceremony section (an out-of-band swap) so the
+  now-stale backup/commit buttons disappear without a reload.
 -->
 <html
   lang="en"
@@ -29,100 +31,117 @@
       </p>
     </section>
 
-    <!-- Gate: the whole §9 commit gate must be open (the review's own summary is the detail). -->
-    <section class="panel" th:unless="${commit.gateReady()}">
-      <p class="eyebrow">The review is not clear</p>
-      <p class="warning">
-        The campaign cannot commit until every account and category is mapped, no account is still
-        awaiting its own export, no cross-currency transfer is parked, and
-        <span th:unless="${commit.scanCleared()}">the ledger duplicate scan has been run and every
-          match adjudicated</span
-        ><span th:if="${commit.scanCleared()}">the review's issues are resolved</span>.
-      </p>
-      <p class="actions"><a class="btn" th:href="@{/import/review}">Open the review</a></p>
-    </section>
-
-    <!-- The ceremony's first half: a manual safety backup, taken AFTER the last change. Since a
-         staging or ledger change invalidates the duplicate scan and the scan must be current to
-         commit, "a backup newer than the scan" is "a backup newer than the last change". -->
-    <section class="panel" th:if="${commit.gateReady()}">
-      <p class="eyebrow">1 · Take a safety backup</p>
-      <p class="muted" th:if="${commit.lastManualBackup() != null}">
-        Last manual backup
-        <span class="num" th:text="${commit.lastManualBackup()}">01.09.2026 14:00</span>; the
-        duplicate scan last ran
-        <span class="num" th:text="${commit.scanRanAt()}">01.09.2026 13:55</span>.
-      </p>
-      <p class="warning" th:unless="${commit.backupCurrent()}">
-        No safety backup has been taken since the campaign last changed — take one before committing.
-      </p>
-      <p class="muted" th:if="${commit.backupCurrent()}">
-        A current safety backup is in place. The restore procedure and commands are on the
-        <a th:href="@{/backup}">backup screen</a>.
-      </p>
-      <form method="post" th:action="@{/import/commit/backup}">
-        <p class="actions">
-          <button type="submit" class="btn" th:disabled="${commit.progress().running()}">
-            Take a safety backup now
-          </button>
+    <!-- The ceremony (the safety backup + the Commit button). Emptied by an out-of-band swap once
+         the run succeeds, so the stale buttons go away without a page reload. -->
+    <div id="import-commit-ceremony">
+      <!-- Gate: the whole §9 commit gate must be open (the review's own summary is the detail). -->
+      <section class="panel" th:unless="${commit.gateReady()}">
+        <p class="eyebrow">The review is not clear</p>
+        <p class="warning">
+          The campaign cannot commit until every account and category is mapped, no account is still
+          awaiting its own export, no cross-currency transfer is parked, and
+          <span th:unless="${commit.scanCleared()}">the ledger duplicate scan has been run and every
+            match adjudicated</span
+          ><span th:if="${commit.scanCleared()}">the review's issues are resolved</span>.
         </p>
-      </form>
-    </section>
+        <p class="actions"><a class="btn" th:href="@{/import/review}">Open the review</a></p>
+      </section>
 
-    <section class="panel" th:if="${commit.gateReady()}">
-      <p class="eyebrow">2 · Commit</p>
-      <p class="muted">
-        The worker runs in the background; this page shows its progress. When it finishes it takes
-        the closing backup — the new baseline.
-      </p>
-      <form method="post" th:action="@{/import/commit}">
-        <p class="actions">
-          <button type="submit" class="btn btn--danger" th:disabled="${!commit.canCommit()}">
-            Commit the campaign
-          </button>
+      <!-- The ceremony's first half: a manual safety backup, taken AFTER the last change. Since a
+           staging or ledger change invalidates the duplicate scan and the scan must be current to
+           commit, "a backup newer than the scan" is "a backup newer than the last change". -->
+      <section class="panel" th:if="${commit.gateReady()}">
+        <p class="eyebrow">1 · Take a safety backup</p>
+        <p class="muted" th:if="${commit.lastManualBackup() != null}">
+          Last manual backup
+          <span class="num" th:text="${commit.lastManualBackup()}">01.09.2026 14:00</span>; the
+          duplicate scan last ran
+          <span class="num" th:text="${commit.scanRanAt()}">01.09.2026 13:55</span>.
         </p>
-      </form>
-      <p class="muted" th:unless="${commit.canCommit() or commit.progress().running()}">
-        The button is disabled until a current safety backup is in place.
-      </p>
-    </section>
-
-    <!-- Progress: rendered here and re-fetched from /import/commit/status every 2 s while running
-         (self-replacing, so it stops polling once the run ends). -->
-    <section class="panel" th:fragment="progress" id="import-commit-progress">
-      <p class="eyebrow">Progress</p>
-
-      <p class="muted" th:if="${progress.status() == 'idle'}">Not started.</p>
-
-      <div th:if="${progress.running()}">
-        <p>
-          Booking…
-          <span
-            class="num"
-            th:text="${progress.done()} + ' / ' + ${progress.total()} + ' (' + ${progress.percent()} + '%)'"
-            >0 / 0 (0%)</span
-          >
+        <p class="warning" th:unless="${commit.backupCurrent()}">
+          No safety backup has been taken since the campaign last changed — take one before
+          committing.
         </p>
-        <div
-          id="import-commit-poll"
-          th:attr="hx-get=@{/import/commit/status}"
-          hx-trigger="every 2s"
-          hx-swap="outerHTML"
-          hx-target="#import-commit-progress"
-        ></div>
-      </div>
+        <p class="muted" th:if="${commit.backupCurrent()}">
+          A current safety backup is in place. The restore procedure and commands are on the
+          <a th:href="@{/backup}">backup screen</a>.
+        </p>
+        <form method="post" th:action="@{/import/commit/backup}">
+          <p class="actions">
+            <button type="submit" class="btn" th:disabled="${commit.progress().running()}">
+              Take a safety backup now
+            </button>
+          </p>
+        </form>
+      </section>
 
-      <p class="eyebrow" th:if="${progress.succeeded()}" th:text="${progress.message()}">
-        Committed 40123 transaction(s).
-      </p>
-      <p class="actions" th:if="${progress.succeeded()}">
-        <a class="btn" th:href="@{/register}">Open the register</a>
-      </p>
+      <section class="panel" th:if="${commit.gateReady()}">
+        <p class="eyebrow">2 · Commit</p>
+        <p class="muted">
+          The worker runs in the background; this page shows its progress. When it finishes it takes
+          the closing backup — the new baseline.
+        </p>
+        <form method="post" th:action="@{/import/commit}">
+          <p class="actions">
+            <button type="submit" class="btn btn--danger" th:disabled="${!commit.canCommit()}">
+              Commit the campaign
+            </button>
+          </p>
+        </form>
+        <p class="muted" th:unless="${commit.canCommit() or commit.progress().running()}">
+          The button is disabled until a current safety backup is in place.
+        </p>
+      </section>
+    </div>
 
-      <p class="warning" th:if="${progress.failed()}">
-        The commit failed and the ledger is unchanged — staging is intact, fix the cause and retry.
-        <span class="num" th:text="${progress.message()}">reason</span>
-      </p>
-    </section>
+    <!-- Progress: rendered here, and re-fetched from /import/commit/status every 2 s while running
+         (the returned section self-replaces, so it stops polling once the run ends). -->
+    <th:block th:fragment="progress">
+      <section class="panel" id="import-commit-progress">
+        <p class="eyebrow">Progress</p>
+
+        <p class="muted" th:if="${progress.status() == 'idle'}">Not started.</p>
+
+        <div th:if="${progress.running()}">
+          <p>
+            Booking…
+            <span
+              class="num"
+              th:text="${progress.done()} + ' / ' + ${progress.total()} + ' (' + ${progress.percent()} + '%)'"
+              >0 / 0 (0%)</span
+            >
+          </p>
+          <div
+            id="import-commit-poll"
+            th:attr="hx-get=@{/import/commit/status}"
+            hx-trigger="every 2s"
+            hx-swap="outerHTML"
+            hx-target="#import-commit-progress"
+          ></div>
+        </div>
+
+        <div th:if="${progress.succeeded()}">
+          <p class="eyebrow" th:text="${progress.message()}">Committed 40123 transaction(s).</p>
+          <p class="actions">
+            <a class="btn" th:href="@{/register}">Open the register</a>
+            <a class="btn btn--ghost" th:href="@{/import}">Back to import</a>
+          </p>
+        </div>
+
+        <p class="warning" th:if="${progress.failed()}">
+          The commit failed and the ledger is unchanged — staging is intact, fix the cause and
+          retry.
+          <span class="num" th:text="${progress.message()}">reason</span>
+        </p>
+      </section>
+
+      <!-- On success, wipe the ceremony section (the stale backup/commit buttons). Only present in
+           the poll response, never on the first page render. -->
+      <div
+        th:if="${progress.succeeded()}"
+        id="import-commit-ceremony"
+        hx-swap-oob="true"
+      ></div>
+    </th:block>
   </main>
 </html>

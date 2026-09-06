@@ -25,17 +25,14 @@ class ImportCommitController {
   private static final String REDIRECT_SCREEN = "redirect:/import";
   private static final String REDIRECT_COMMIT = "redirect:" + BASE;
 
-  private final ImportSessionService importSessionService;
   private final ImportCommitScreen importCommitScreen;
   private final ImportCommitWorker importCommitWorker;
   private final BackupService backupService;
 
   ImportCommitController(
-      ImportSessionService importSessionService,
       ImportCommitScreen importCommitScreen,
       ImportCommitWorker importCommitWorker,
       BackupService backupService) {
-    this.importSessionService = importSessionService;
     this.importCommitScreen = importCommitScreen;
     this.importCommitWorker = importCommitWorker;
     this.backupService = backupService;
@@ -91,15 +88,15 @@ class ImportCommitController {
     return REDIRECT_COMMIT;
   }
 
-  /** The polling fragment (plan f2b) — the {@code receipts.html} list-poll pattern. */
+  /**
+   * The polling fragment (plan f2b) — the {@code receipts.html} list-poll pattern. Reads the
+   * worker's own state, not the open session: a successful commit has already flipped the session
+   * to {@code committed}, so it can no longer be looked up as "the open one", yet the poll still
+   * needs to render the {@code done} panel.
+   */
   @GetMapping(BASE + "/status")
   String status(Model model) {
-    ImportCommitProgress progress =
-        importSessionService
-            .currentSession()
-            .map(session -> importCommitWorker.progressFor(session.importSessionId()))
-            .orElse(ImportCommitProgress.IDLE);
-    model.addAttribute("progress", progress);
+    model.addAttribute("progress", importCommitWorker.progress());
     return VIEW + " :: progress";
   }
 }
