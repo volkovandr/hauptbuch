@@ -49,7 +49,10 @@ class StagedTransactionResolverTest {
 
   private StagedTransactionResolver resolver() {
     return new StagedTransactionResolver(
-        currencyLeafService, exchangeRateService, payeeService, tagService);
+        currencyLeafService,
+        new CrossCurrencyBaseAmounts(exchangeRateService),
+        payeeService,
+        tagService);
   }
 
   private StagedTransactionResolver.Maps mapsEur() {
@@ -174,7 +177,7 @@ class StagedTransactionResolverTest {
   }
 
   @Test
-  void crossCurrencySplitWhoseTransferLegIsBaseIsRefused() {
+  void crossCurrencySplitWhoseTransferLegIsBaseAllocatesTheObservedRate() {
     when(currencyLeafService.resolveCurrencyLeaf(FOOD, "CHF"))
         .thenReturn(account(FOOD_EUR_LEAF, "CHF"));
     StagedTransactionResolver.Maps maps =
@@ -185,21 +188,54 @@ class StagedTransactionResolverTest {
             Map.of("Food:Groceries", FOOD),
             Map.of("Food:Groceries", List.of()));
 
-    // Paid from BankCcc (CHF): CHF 80 groceries + a CHF 20 transfer to BankBbb (EUR=base). No
-    // honest
-    // base valuation exists for the base-currency leg, so the whole transaction is refused.
+    // Paid from BankCcc (CHF): CHF 80 groceries + a CHF 20 transfer to BankBbb (EUR=base). The
+    // mirror stamped EUR 18,30 on the transfer leg, so this transaction's own rate is 0,915 EUR/CHF
+    // and the near legs share −18,30 in proportion to their CHF amounts (−100 : +80).
+    TransactionDraft draft =
+        resolver()
+            .resolve(
+                transaction("2016-06-06", null, "unreconciled"),
+                List.of(
+                    fundingLeg("-100.00", "BankCcc"),
+                    categoryLeg("80.00", "Food:Groceries", null, null),
+                    transferLeg("20.00", "BankBbb", "18.30")),
+                maps);
+
+    assertThat(draft.postings())
+        .extracting(PostingDraft::accountId, PostingDraft::amount, PostingDraft::baseAmount)
+        .containsExactly(
+            tuple(BANK_CCC, new BigDecimal("-100.00"), new BigDecimal("-91.50")),
+            tuple(FOOD_EUR_LEAF, new BigDecimal("80.00"), new BigDecimal("73.20")),
+            tuple(BANK_BBB, new BigDecimal("18.30"), new BigDecimal("18.30")));
+    assertThat(
+            draft.postings().stream()
+                .map(PostingDraft::baseAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add))
+        .isEqualByComparingTo("0.00");
+    verifyNoInteractions(exchangeRateService);
+  }
+
+  @Test
+  void resolutionErrorNamesTheDateFundingAccountAndAmount() {
+    StagedTransactionResolver.Maps maps =
+        new StagedTransactionResolver.Maps(
+            "EUR", Map.of("BankAaa", BANK_AAA), Map.of(BANK_AAA, "EUR"), Map.of(), Map.of());
+
+    // "Food:Groceries" is not in the category map.
     assertThatThrownBy(
             () ->
                 resolver()
                     .resolve(
-                        transaction("2016-06-06", null, "unreconciled"),
+                        transaction("2016-06-06", "ShopBbb", "unreconciled"),
                         List.of(
-                            fundingLeg("-100.00", "BankCcc"),
-                            categoryLeg("80.00", "Food:Groceries", null, null),
-                            transferLeg("20.00", "BankBbb", "18.30")),
+                            fundingLeg("-20.00", "BankAaa"),
+                            categoryLeg("20.00", "Food:Groceries", null, null)),
                         maps))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("cross-currency split with a base-currency transfer leg");
+        .hasMessageContaining("06.06.2016")
+        .hasMessageContaining("BankAaa")
+        .hasMessageContaining("-20,00")
+        .hasMessageContaining("ShopBbb");
   }
 
   @Test

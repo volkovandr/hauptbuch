@@ -1,26 +1,24 @@
 package volkovandr.hauptbuch.importer;
 
 import java.math.BigDecimal;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.categories.TagService;
-import volkovandr.hauptbuch.ledger.ExchangeRateService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.PostingDraft;
 import volkovandr.hauptbuch.ledger.TransactionDraft;
 import volkovandr.hauptbuch.operations.CurrencyLeafService;
-import volkovandr.hauptbuch.shared.MoneyFactory;
+import volkovandr.hauptbuch.shared.MoneyFormat;
 
 /**
  * Translates one staged transaction (an {@link ImportTransaction} plus its {@link ImportPosting}
  * legs) into the {@link TransactionDraft} the commit hands to {@code
  * LedgerService.recordTransaction} (import.md §10; plan f2). The maps and the mapped-account
  * currencies are resolved once by {@link ImportCommitService} and passed in — this class shapes one
- * transaction.
+ * transaction; {@link CrossCurrencyBaseAmounts} freezes the base amounts of a cross-currency one.
  *
  * <p>Sign convention: staging already stores every leg in Hauptbuch's convention and the legs of a
  * staged transaction sum to zero (see {@link ImportPosting}), so a single-currency transaction's
@@ -34,41 +32,32 @@ import volkovandr.hauptbuch.shared.MoneyFactory;
  *       CurrencyLeafService}, §5.2);
  *   <li><strong>transfer leg</strong> ({@code moneyAccountName} set, not funding) → the mapped
  *       account (an ordinary account, or a person leaf c2 resolved). If its currency differs from
- *       the near currency the transaction is cross-currency (§6.2): the leg's native amount is its
- *       {@code counter_amount} (the real far amount the mirror supplied), and every leg gets a
- *       frozen {@code base_amount}.
+ *       the near currency the transaction is cross-currency (§6.2) and {@link
+ *       CrossCurrencyBaseAmounts} takes over.
  * </ul>
- *
- * <p><strong>Cross-currency base freezing</strong> (import.md §6.3/§6.5). The book never invents a
- * rate. For the common two-leg transfer where the far side <em>is</em> the base currency the pair
- * itself states the base value exactly ({@code counter_amount}); otherwise every non-transfer leg
- * is valued at the near→base rate ({@code ExchangeRateService.rateAsOf}) and the transfer leg's
- * base balances the rest — and if no rate is on file the whole commit is refused so the owner can
- * enter one (§6.5, "f2's to refuse, not to guess around"). Because the staged near-currency amounts
- * sum to zero, the frozen base amounts sum to zero by construction.
  *
  * <p><strong>Tags</strong> (import.md §8): each non-funding leg carries its category-map tags plus
  * a tag from the {@code /Class} suffix; the funding leg carries the intersection across the
- * non-funding legs, so a tag common to every line shows on the register row (which renders its own
- * posting's tags). A wholly {@code ?}-destroyed class name contributes nothing (§4.4/§8).
+ * non-funding legs ({@link ImportResolvedLeg#sharedTags}), so a tag common to every line shows on
+ * the register row. A wholly {@code ?}-destroyed class name contributes nothing (§4.4/§8).
  */
 @Component
 class StagedTransactionResolver {
 
-  private static final String STAGED_TRANSACTION = "Staged transaction ";
+  private static final DateTimeFormatter GERMAN_DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
   private final CurrencyLeafService currencyLeafService;
-  private final ExchangeRateService exchangeRateService;
+  private final CrossCurrencyBaseAmounts crossCurrencyBaseAmounts;
   private final PayeeService payeeService;
   private final TagService tagService;
 
   StagedTransactionResolver(
       CurrencyLeafService currencyLeafService,
-      ExchangeRateService exchangeRateService,
+      CrossCurrencyBaseAmounts crossCurrencyBaseAmounts,
       PayeeService payeeService,
       TagService tagService) {
     this.currencyLeafService = currencyLeafService;
-    this.exchangeRateService = exchangeRateService;
+    this.crossCurrencyBaseAmounts = crossCurrencyBaseAmounts;
     this.payeeService = payeeService;
     this.tagService = tagService;
   }
@@ -94,30 +83,33 @@ class StagedTransactionResolver {
             .orElseThrow(
                 () ->
                     new IllegalStateException(
-                        STAGED_TRANSACTION
+                        "The staged transaction "
                             + transaction.importTransactionId()
                             + " has no funding leg"));
+    String where = describe(transaction, fundingLeg, legs);
     long fundingAccountId = mappedAccount(maps, fundingLeg.moneyAccountName());
     String nearCurrency = currencyOf(maps, fundingAccountId);
     String reconciliation = transaction.clearedStatus();
 
-    List<ResolvedLeg> nonFunding = new ArrayList<>();
+    List<ImportResolvedLeg> nonFunding = new ArrayList<>();
     for (ImportPosting leg : legs) {
       if (!leg.funding()) {
-        nonFunding.add(resolveLeg(transaction, leg, maps, nearCurrency));
+        nonFunding.add(resolveLeg(leg, maps, nearCurrency, where));
       }
     }
 
-    boolean crossCurrency = nonFunding.stream().anyMatch(ResolvedLeg::crossCurrency);
+    boolean crossCurrency = nonFunding.stream().anyMatch(ImportResolvedLeg::crossCurrency);
     List<PostingDraft> postings =
         crossCurrency
-            ? crossCurrencyPostings(
-                transaction,
+            ? crossCurrencyBaseAmounts.postings(
+                where,
                 fundingAccountId,
                 fundingLeg.amount(),
+                nearCurrency,
                 reconciliation,
                 nonFunding,
-                maps)
+                maps.baseCurrency(),
+                transaction.date())
             : singleCurrencyPostings(
                 fundingAccountId, fundingLeg.amount(), reconciliation, nonFunding);
 
@@ -131,14 +123,17 @@ class StagedTransactionResolver {
   }
 
   /** Resolve one non-funding staged leg to its ledger account, native amount, currency and tags. */
-  private ResolvedLeg resolveLeg(
-      ImportTransaction transaction, ImportPosting leg, Maps maps, String nearCurrency) {
+  private ImportResolvedLeg resolveLeg(
+      ImportPosting leg, Maps maps, String nearCurrency, String where) {
     List<Long> classTag = classTag(leg.className());
     if (leg.moneyCategoryPath() != null) {
       Long categoryId = maps.categoryIdsByPath().get(leg.moneyCategoryPath());
       if (categoryId == null) {
         throw new IllegalStateException(
-            "Money category path \"" + leg.moneyCategoryPath() + "\" is not mapped");
+            "The Money category path \""
+                + leg.moneyCategoryPath()
+                + "\" is not mapped — needed by "
+                + where);
       }
       long leafId = currencyLeafService.resolveCurrencyLeaf(categoryId, nearCurrency).accountId();
       List<Long> tags =
@@ -148,36 +143,40 @@ class StagedTransactionResolver {
           tags.add(tagId);
         }
       }
-      return ResolvedLeg.sameCurrency(leafId, leg.amount(), leg.note(), tags);
+      return ImportResolvedLeg.sameCurrency(leafId, leg.amount(), leg.note(), tags);
     }
 
     long targetId = mappedAccount(maps, leg.moneyAccountName());
     String targetCurrency = currencyOf(maps, targetId);
     if (targetCurrency.equals(nearCurrency)) {
-      return ResolvedLeg.sameCurrency(targetId, leg.amount(), leg.note(), classTag);
+      return ImportResolvedLeg.sameCurrency(targetId, leg.amount(), leg.note(), classTag);
     }
     if (leg.counterAmount() == null) {
       throw new IllegalStateException(
-          STAGED_TRANSACTION
-              + transaction.importTransactionId()
-              + " has an unresolved cross-currency transfer leg to \""
+          where
+              + " has an unresolved cross-currency transfer leg to Money account \""
               + leg.moneyAccountName()
               + "\" — the commit gate should have blocked this");
     }
-    return ResolvedLeg.crossCurrency(
+    return ImportResolvedLeg.crossCurrency(
         targetId, leg.counterAmount(), targetCurrency, leg.note(), classTag);
   }
 
-  private List<PostingDraft> singleCurrencyPostings(
+  private static List<PostingDraft> singleCurrencyPostings(
       long fundingAccountId,
       BigDecimal fundingAmount,
       String reconciliation,
-      List<ResolvedLeg> nonFunding) {
+      List<ImportResolvedLeg> nonFunding) {
     List<PostingDraft> postings = new ArrayList<>();
     postings.add(
         new PostingDraft(
-            fundingAccountId, fundingAmount, null, reconciliation, null, sharedTags(nonFunding)));
-    for (ResolvedLeg leg : nonFunding) {
+            fundingAccountId,
+            fundingAmount,
+            null,
+            reconciliation,
+            null,
+            ImportResolvedLeg.sharedTags(nonFunding)));
+    for (ImportResolvedLeg leg : nonFunding) {
       postings.add(
           new PostingDraft(
               leg.accountId(), leg.nativeAmount(), null, reconciliation, leg.note(), leg.tagIds()));
@@ -185,132 +184,35 @@ class StagedTransactionResolver {
     return postings;
   }
 
-  private List<PostingDraft> crossCurrencyPostings(
-      ImportTransaction transaction,
-      long fundingAccountId,
-      BigDecimal fundingAmount,
-      String reconciliation,
-      List<ResolvedLeg> nonFunding,
-      Maps maps) {
-    String base = maps.baseCurrency();
-    ResolvedLeg crossLeg = onlyCrossLeg(transaction, nonFunding, base);
-
-    // Two-leg transfer whose far side is the base currency: the observed pair states the base value
-    // exactly, no rate lookup — the far leg IS base, the funding leg its negation.
-    if (nonFunding.size() == 1 && base.equals(crossLeg.currencyCode())) {
-      BigDecimal farBase = crossLeg.nativeAmount();
-      return List.of(
-          new PostingDraft(
-              fundingAccountId,
-              fundingAmount,
-              farBase.negate(),
-              reconciliation,
-              null,
-              sharedTags(nonFunding)),
-          new PostingDraft(
-              crossLeg.accountId(),
-              crossLeg.nativeAmount(),
-              farBase,
-              reconciliation,
-              crossLeg.note(),
-              crossLeg.tagIds()));
-    }
-
-    // Otherwise the far leg is never the base currency (the split-with-base-leg shape was refused,
-    // the 2-leg base-leg shape returned above): value the near legs at a single near→base rate and
-    // let the far leg's base balance them. No observed base fact is lost.
-    BigDecimal factor = nearToBaseFactor(base, currencyOf(maps, fundingAccountId), transaction);
-    List<PostingDraft> postings = new ArrayList<>();
-    BigDecimal fundingBase = valued(fundingAmount, factor, base);
-    BigDecimal balancedBaseSum = fundingBase;
-    postings.add(
-        new PostingDraft(
-            fundingAccountId,
-            fundingAmount,
-            fundingBase,
-            reconciliation,
-            null,
-            sharedTags(nonFunding)));
-    for (ResolvedLeg leg : nonFunding) {
-      if (leg.crossCurrency()) {
-        continue;
-      }
-      BigDecimal legBase = valued(leg.nativeAmount(), factor, base);
-      balancedBaseSum = balancedBaseSum.add(legBase);
-      postings.add(
-          new PostingDraft(
-              leg.accountId(),
-              leg.nativeAmount(),
-              legBase,
-              reconciliation,
-              leg.note(),
-              leg.tagIds()));
-    }
-    postings.add(
-        new PostingDraft(
-            crossLeg.accountId(),
-            crossLeg.nativeAmount(),
-            balancedBaseSum.negate(),
-            reconciliation,
-            crossLeg.note(),
-            crossLeg.tagIds()));
-    return postings;
-  }
-
   /**
-   * The transaction's one cross-currency leg — refusing the shapes with no honest base valuation: a
-   * transaction with more than one cross leg, and a cross-currency <em>split</em> whose transfer
-   * leg is itself the base currency (its {@code base_amount} must equal its own amount, but the
-   * near legs can only be rate-valued and the two would not sum to zero). a1 found one
-   * cross-currency split leg in 20 years; the odds of hitting either shape are ~nil — the owner
-   * splits it in Money and re-exports.
+   * A human locator for an error: the staged id, the date, the funding Money account, the amount,
+   * the payee, and any transfer counterparties — so the owner can find and fix the transaction in
+   * Money.
    */
-  private static ResolvedLeg onlyCrossLeg(
-      ImportTransaction transaction, List<ResolvedLeg> nonFunding, String base) {
-    List<ResolvedLeg> crossLegs = nonFunding.stream().filter(ResolvedLeg::crossCurrency).toList();
-    if (crossLegs.size() != 1) {
-      throw new IllegalStateException(
-          STAGED_TRANSACTION
-              + transaction.importTransactionId()
-              + " has "
-              + crossLegs.size()
-              + " cross-currency legs — split it in Money and re-export (import.md §6)");
+  private static String describe(
+      ImportTransaction transaction, ImportPosting fundingLeg, List<ImportPosting> legs) {
+    String locator =
+        "the staged transaction "
+            + transaction.importTransactionId()
+            + " dated "
+            + GERMAN_DATE.format(transaction.date())
+            + " from Money account \""
+            + fundingLeg.moneyAccountName()
+            + "\" for "
+            + MoneyFormat.number(fundingLeg.amount(), 2);
+    if (transaction.payeeText() != null && !transaction.payeeText().isBlank()) {
+      locator += " (payee \"" + transaction.payeeText() + "\")";
     }
-    ResolvedLeg crossLeg = crossLegs.get(0);
-    if (nonFunding.size() > 1 && base.equals(crossLeg.currencyCode())) {
-      throw new IllegalStateException(
-          STAGED_TRANSACTION
-              + transaction.importTransactionId()
-              + " is a cross-currency split with a base-currency transfer leg — split it in Money"
-              + " and re-export (import.md §6.5)");
-    }
-    return crossLeg;
-  }
-
-  /**
-   * The near→base rate for a transaction whose currencies do not include a directly-usable base.
-   */
-  private BigDecimal nearToBaseFactor(
-      String baseCurrency, String nearCurrency, ImportTransaction transaction) {
-    if (nearCurrency.equals(baseCurrency)) {
-      return BigDecimal.ONE;
-    }
-    return exchangeRateService
-        .rateAsOf(nearCurrency, transaction.date())
-        .orElseThrow(
-            () ->
-                new IllegalStateException(
-                    "No exchange rate for "
-                        + nearCurrency
-                        + " on or before "
-                        + transaction.date()
-                        + " to value the cross-currency transfer staged as transaction "
-                        + transaction.importTransactionId()
-                        + " — add a manual rate and retry the commit (import.md §6.5)"));
-  }
-
-  private static BigDecimal valued(BigDecimal amount, BigDecimal factor, String baseCurrency) {
-    return MoneyFactory.of(amount.multiply(factor), baseCurrency).getAmount();
+    String transferTargets =
+        legs.stream()
+            .filter(leg -> !leg.funding() && leg.moneyAccountName() != null)
+            .map(ImportPosting::moneyAccountName)
+            .distinct()
+            .reduce((a, b) -> a + "\", \"" + b)
+            .orElse("");
+    return transferTargets.isEmpty()
+        ? locator
+        : locator + ", transfer to \"" + transferTargets + "\"";
   }
 
   /** The class-name tag, or an empty list when there is no class or it was destroyed (§8). */
@@ -322,22 +224,6 @@ class StagedTransactionResolver {
         .resolveChip(className)
         .map(chip -> new ArrayList<>(List.of(chip.tagId())))
         .orElseGet(ArrayList::new);
-  }
-
-  /**
-   * The tags every non-funding leg carries, first-occurrence order (import.md §8) — mirrors {@code
-   * ReceiptSplitEntries.sharedTags}. The funding leg gets these so a tag common to every line is
-   * visible on the register row.
-   */
-  private static List<Long> sharedTags(List<ResolvedLeg> nonFunding) {
-    if (nonFunding.isEmpty()) {
-      return List.of();
-    }
-    Set<Long> shared = new LinkedHashSet<>(nonFunding.get(0).tagIds());
-    for (ResolvedLeg leg : nonFunding) {
-      shared.retainAll(leg.tagIds());
-    }
-    return List.copyOf(shared);
   }
 
   /** {@code #<ref> <memo>} / {@code #<ref>} / {@code <memo>} / null (import.md §4.2). */
@@ -364,34 +250,5 @@ class StagedTransactionResolver {
       throw new IllegalStateException("No currency known for mapped account " + accountId);
     }
     return code;
-  }
-
-  /**
-   * One resolved non-funding leg: its ledger account, native amount, currency, posting note and
-   * tags. {@code crossCurrency} marks a transfer leg whose account is in a currency other than the
-   * transaction's near currency — its {@code nativeAmount} is then the real far amount ({@code
-   * counter_amount}), not the near-currency figure staging holds.
-   */
-  private record ResolvedLeg(
-      long accountId,
-      BigDecimal nativeAmount,
-      String currencyCode,
-      String note,
-      List<Long> tagIds,
-      boolean crossCurrency) {
-
-    static ResolvedLeg sameCurrency(
-        long accountId, BigDecimal amount, String note, List<Long> tags) {
-      return new ResolvedLeg(accountId, amount, null, note, List.copyOf(tags), false);
-    }
-
-    static ResolvedLeg crossCurrency(
-        long accountId,
-        BigDecimal counterAmount,
-        String currencyCode,
-        String note,
-        List<Long> tags) {
-      return new ResolvedLeg(accountId, counterAmount, currencyCode, note, List.copyOf(tags), true);
-    }
   }
 }
