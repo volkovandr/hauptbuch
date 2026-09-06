@@ -39,6 +39,15 @@ class ImportSessionServiceTest {
   }
 
   @Test
+  void markCommittedThrowsWhenTheSessionIsNoLongerOpen() {
+    when(importSessionRepository.markCommitted(5L)).thenReturn(0);
+
+    assertThatThrownBy(() -> service.markCommitted(5L))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("no longer open");
+  }
+
+  @Test
   void refusesSecondOpenSession() {
     when(importSessionRepository.findOpen()).thenReturn(Optional.of(openSession(3L)));
 

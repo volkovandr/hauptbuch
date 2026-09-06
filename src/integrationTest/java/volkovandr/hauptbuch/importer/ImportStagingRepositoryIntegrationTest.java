@@ -477,6 +477,58 @@ class ImportStagingRepositoryIntegrationTest {
     assertThat(importCategoryTagRepository.tagIdsBySession(sessionId)).containsOnlyKeys(repair);
   }
 
+  @Test
+  void findCommittableBySessionTakesOnlyReadyRowsAndCountExcludesOpeningBalances() {
+    long sessionId = openSession();
+    long fileId = stageFile(sessionId, "export.qif").importFileId();
+    long ready = stageTransaction(fileId, "unreconciled", false);
+    long opening = stageTransaction(fileId, "unreconciled", true);
+    long mirrored = stageTransaction(fileId, "unreconciled", false);
+    jdbcClient
+        .sql("update import_transaction set state = 'mirrored' where import_transaction_id = :id")
+        .param("id", mirrored)
+        .update();
+
+    assertThat(importTransactionRepository.findCommittableBySession(sessionId))
+        .extracting(ImportTransaction::importTransactionId)
+        .containsExactlyInAnyOrder(ready, opening);
+    // countCommittable drops the opening-balance row (it goes through the reconciliation).
+    assertThat(importTransactionRepository.countCommittableBySession(sessionId)).isEqualTo(1);
+  }
+
+  @Test
+  void markCommittedFlipsTheOpenSessionOnce() {
+    long sessionId = openSession();
+
+    assertThat(importSessionRepository.markCommitted(sessionId)).isEqualTo(1);
+    assertThat(importSessionRepository.findById(sessionId))
+        .get()
+        .satisfies(
+            s -> {
+              assertThat(s.state()).isEqualTo("committed");
+              assertThat(s.committedAt()).isNotNull();
+            });
+    assertThat(importSessionRepository.markCommitted(sessionId)).isZero();
+  }
+
+  @Test
+  void deleteBySessionClearsFilesAccountsAndCategories() {
+    long sessionId = openSession();
+    long fileId = stageFile(sessionId, "export.qif").importFileId();
+    stageTransaction(fileId, "unreconciled", false);
+    importAccountRepository.upsertUnmapped(sessionId, "Current Account");
+    importCategoryRepository.upsertUnmapped(sessionId, "Food");
+
+    importCategoryRepository.deleteBySession(sessionId);
+    importAccountRepository.deleteBySession(sessionId);
+    importFileRepository.deleteBySession(sessionId);
+
+    assertThat(importFileRepository.findBySession(sessionId)).isEmpty();
+    assertThat(importAccountRepository.findBySession(sessionId)).isEmpty();
+    assertThat(importCategoryRepository.findBySession(sessionId)).isEmpty();
+    assertThat(count("import_transaction")).isZero();
+  }
+
   private long categoryRowId(long sessionId, String moneyPath) {
     return importCategoryRepository.findBySession(sessionId).stream()
         .filter(row -> row.moneyPath().equals(moneyPath))

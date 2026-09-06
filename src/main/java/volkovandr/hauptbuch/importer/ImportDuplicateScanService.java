@@ -84,6 +84,15 @@ public class ImportDuplicateScanService {
   }
 
   /**
+   * Discard the campaign's scan snapshot (plan f2) — part of the commit's post-success staging
+   * cleanup.
+   */
+  @Transactional
+  public void clearSnapshot(long importSessionId) {
+    repository.clearScan(importSessionId);
+  }
+
+  /**
    * The scan panel for a session (the {@link ImportReviewService} render-model assembler pattern) —
    * {@link ImportDuplicateScan#EMPTY} when the scan has never run.
    */

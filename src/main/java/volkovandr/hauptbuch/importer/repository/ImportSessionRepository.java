@@ -57,4 +57,22 @@ public class ImportSessionRepository {
         .sql("update import_session set state = 'discarded' where state = 'open'")
         .update();
   }
+
+  /**
+   * Mark the session committed (import.md §2, §10; plan f2) — {@code open} → {@code committed},
+   * stamping {@code committed_at}. Written as the <em>last</em> statement of the atomic commit
+   * transaction, so a failure of the post-commit staging cleanup can never leave an {@code open}
+   * session whose history has already been booked (which would re-book on a retry).
+   */
+  public int markCommitted(long importSessionId) {
+    return jdbcClient
+        .sql(
+            """
+            update import_session
+               set state = 'committed', committed_at = now()
+             where import_session_id = :id and state = 'open'
+            """)
+        .param("id", importSessionId)
+        .update();
+  }
 }

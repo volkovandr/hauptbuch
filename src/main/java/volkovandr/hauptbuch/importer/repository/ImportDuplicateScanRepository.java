@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.importer.repository;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.importer.ImportDuplicateMatch;
@@ -218,6 +219,29 @@ public class ImportDuplicateScanRepository {
         .sql("delete from import_duplicate_scan where import_session_id = :sessionId")
         .param(SESSION_ID, importSessionId)
         .update();
+  }
+
+  /**
+   * The staged transactions the owner adjudicated {@code skip} on the campaign's current scan
+   * (import.md §9; plan f2) — the commit does not book these. Empty when the scan has never run.
+   * Plain lookup by the {@code (session → scan → match)} chain; a {@code Set} because the commit
+   * only needs membership.
+   */
+  public Set<Long> skippedImportTransactionIds(long importSessionId) {
+    return Set.copyOf(
+        jdbcClient
+            .sql(
+                """
+                select m.import_transaction_id
+                  from import_duplicate_match m
+                  join import_duplicate_scan s
+                    on s.import_duplicate_scan_id = m.import_duplicate_scan_id
+                 where s.import_session_id = :sessionId
+                   and m.adjudication = 'skip'
+                """)
+            .param(SESSION_ID, importSessionId)
+            .query(Long.class)
+            .list());
   }
 
   /** The scan's matches joined for display, date then id order. */

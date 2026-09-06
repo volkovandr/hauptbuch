@@ -52,6 +52,17 @@ public class ImportCategoryRepository {
         .update();
   }
 
+  /**
+   * Remove the whole category map of a session (its tag junction rows cascade) — the commit's
+   * post-success staging cleanup (import.md §2; plan f2). Rows affected.
+   */
+  public int deleteBySession(long importSessionId) {
+    return jdbcClient
+        .sql("delete from import_category where import_session_id = :sessionId")
+        .param(SESSION_ID, importSessionId)
+        .update();
+  }
+
   /** The category map of a session, by Money path. */
   public List<ImportCategory> findBySession(long importSessionId) {
     return jdbcClient

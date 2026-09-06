@@ -66,6 +66,25 @@ public class ImportReviewService {
   }
 
   /**
+   * Whether the open campaign's whole commit gate is open (import.md §9; plan f2) — every account
+   * and category mapped, no account still awaiting its own file, no cross-currency transfer parked,
+   * and the ledger duplicate scan run with every match adjudicated. {@code ready} is {@code false}
+   * with no open campaign. Cheaper for {@code ImportCommitService} to consult than building the
+   * whole render model just for two booleans.
+   *
+   * @param ready the full gate (all four §9 conditions)
+   * @param scanCleared whether the duplicate-scan condition alone holds — for a specific message
+   */
+  public record CommitReadiness(boolean ready, boolean scanCleared) {}
+
+  /** The open campaign's commit-gate state (see {@link CommitReadiness}). */
+  public CommitReadiness commitReadiness() {
+    return review()
+        .map(r -> new CommitReadiness(r.commitReady(), r.duplicateScan().cleared()))
+        .orElse(new CommitReadiness(false, false));
+  }
+
+  /**
    * Fetches the cross-currency parks once and reuses it for both the panel's rows and the issues
    * list's park count, rather than the panel and {@link ImportIssuesPanel} each re-running {@link
    * ImportCrossCurrencyParkService#parksForSession} against the same session.
