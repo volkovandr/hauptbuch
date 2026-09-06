@@ -55,6 +55,9 @@
         class="muted"
         th:text="'Every gate condition holds and the ledger duplicate scan is current — the campaign is ready to commit.'"
       ></p>
+      <p class="actions" th:if="${review.commitReady()}">
+        <a class="btn" th:href="@{/import/commit}">Commit the campaign →</a>
+      </p>
 
       <ul class="import-uploads" th:if="${!#lists.isEmpty(review.issues().unmappedAccounts())}">
         <li th:each="row : ${review.issues().unmappedAccounts()}">

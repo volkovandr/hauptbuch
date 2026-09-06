@@ -132,6 +132,7 @@
         </p>
         <p class="actions" th:unless="${#lists.isEmpty(files)}">
           <a class="btn" th:href="@{/import/review}">Review the campaign</a>
+          <a class="btn btn--ghost" th:href="@{/import/commit}">Commit</a>
         </p>
         <ul class="import-uploads" th:unless="${#lists.isEmpty(files)}">
           <li th:each="f : ${files}">

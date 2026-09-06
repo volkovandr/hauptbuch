@@ -519,6 +519,29 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.30 (2026-09-06):** **f2b implemented** (owner-confirmation pending) — the worker, the screen
+  and the backup ceremony. `ImportCommitWorker` (`ReceiptBatchAnalyser` pattern: dedicated
+  single-thread executor, in-memory `ImportCommitProgress`, broad outer guard) runs
+  `ImportCommitService.commit` on a background thread; on success it purges staging and takes the
+  closing backup (import.md §2). `ImportCommitController` (`/import/commit`, `/import/commit/backup`,
+  `/import/commit`, `/import/commit/status`) + `ImportCommitScreen` view assembler +
+  `import-commit.html` (server-rendered, htmx `every 2s` poll fragment). **Backup gate:** a manual
+  backup newer than the duplicate scan's `ran_at` — since the scan must be current to commit and any
+  staging/ledger change discards or stales it, that ⟹ a backup newer than the last change, no
+  migration. New `importer → backup` edge (`BackupService`; `import.md` §12 corrected).
+  `CommitResult` gains `importSessionId` (the worker's handle once the session is `committed`).
+  Tests: `ImportCommitWorkerTest` (unit), `ImportCommitScreenIntegrationTest` (MockMvc, worker +
+  `BackupService` mocked). **Code-review fixes folded in** (f2a + f2b pass): a cross-currency
+  *split* whose transfer leg is the base currency is now refused (no honest base valuation, vs. a
+  wrong frozen `base_amount`); the worker's post-commit staging purge + closing backup run inside
+  the outer guard, so a cleanup failure ends in done-with-a-warning instead of stuck-`running`;
+  `ImportStagingPurge.purge` is `public` so its `@Transactional` actually applies; the backup gate
+  compares wall-clock times (DST-safe within the minutes between backup and commit); progress is
+  scoped to the session it ran for (no stale panel on the next campaign); the worker routes staging
+  cleanup through `ImportCommitService.clearStaging` (no longer dead code). `./gradlew check` green.
+  **f2 stays unchecked** until the owner confirms;
+  on confirmation the sub-plan is deleted with a summary folded into `implementation-plan.md` §3
+  (the stage-7/9 pattern).
 - **v0.29 (2026-09-06):** **f2a implemented** (owner-confirmation pending) — the commit engine, no
   screen yet. **Q-IMP-2 settled** (owner): imported transactions book `confirmed`. New
   `ImportCommitService` (`@Transactional` — re-runs the duplicate scan and refuses a dirty one,

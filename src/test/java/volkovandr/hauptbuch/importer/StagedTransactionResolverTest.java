@@ -174,6 +174,35 @@ class StagedTransactionResolverTest {
   }
 
   @Test
+  void crossCurrencySplitWhoseTransferLegIsBaseIsRefused() {
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD, "CHF"))
+        .thenReturn(account(FOOD_EUR_LEAF, "CHF"));
+    StagedTransactionResolver.Maps maps =
+        new StagedTransactionResolver.Maps(
+            "EUR",
+            Map.of("BankCcc", BANK_CCC, "BankBbb", BANK_BBB),
+            Map.of(BANK_CCC, "CHF", BANK_BBB, "EUR"),
+            Map.of("Food:Groceries", FOOD),
+            Map.of("Food:Groceries", List.of()));
+
+    // Paid from BankCcc (CHF): CHF 80 groceries + a CHF 20 transfer to BankBbb (EUR=base). No
+    // honest
+    // base valuation exists for the base-currency leg, so the whole transaction is refused.
+    assertThatThrownBy(
+            () ->
+                resolver()
+                    .resolve(
+                        transaction("2016-06-06", null, "unreconciled"),
+                        List.of(
+                            fundingLeg("-100.00", "BankCcc"),
+                            categoryLeg("80.00", "Food:Groceries", null, null),
+                            transferLeg("20.00", "BankBbb", "18.30")),
+                        maps))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("cross-currency split with a base-currency transfer leg");
+  }
+
+  @Test
   void crossCurrencyTransferNeitherSideIsBaseValuesViaTheRate() {
     StagedTransactionResolver.Maps maps =
         new StagedTransactionResolver.Maps(
