@@ -1,6 +1,6 @@
 # A campaign already open when issue-03 landed keeps expect_file=true on accounts whose file is staged
 
-Status: needs-triage
+Status: wontfix
 Category: bug
 Severity: minor (pre-release; only bites a campaign open across the upgrade)
 
@@ -35,3 +35,10 @@ Filed 2026-09-05 from the first `/code-review high` pass during plan f1 (review 
 committed issue-03 / e4 range). Pre-release caveat: the import feature is still being built on
 `import/qif-plan` and there is at most one open campaign at a time, so this only matters if the
 owner happens to have a campaign open across the upgrade — cheap insurance either way.
+
+### 2026-09-06 — wontfix (owner)
+
+The owner ran the reconciliation statement by hand against the test DB, and no import has ever
+run in production. There is no open campaign carrying stale `expect_file = true` rows across the
+upgrade, so a `V25` migration would only touch the row set the owner has already fixed. Marking
+`wontfix`; reopen only if a real affected open campaign turns up.
