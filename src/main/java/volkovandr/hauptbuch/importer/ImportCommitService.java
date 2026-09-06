@@ -73,11 +73,14 @@ public class ImportCommitService {
   /**
    * The outcome of a commit.
    *
+   * @param importSessionId the committed session — the worker's handle for the post-success staging
+   *     purge and the closing backup (the session is {@code committed}, so it can no longer be
+   *     looked up by "the open one")
    * @param booked ordinary staged transactions written to the ledger
    * @param skipped staged transactions the owner adjudicated {@code skip} on the duplicate scan
    * @param openingBalances opening balances brought in or overridden from Money (import.md §5.1)
    */
-  public record CommitResult(int booked, int skipped, int openingBalances) {}
+  public record CommitResult(long importSessionId, int booked, int skipped, int openingBalances) {}
 
   /**
    * The number of staged transactions the commit loop will process (book or skip as a duplicate) —
@@ -145,7 +148,7 @@ public class ImportCommitService {
         booked,
         skipped,
         openingBalances);
-    return new CommitResult(booked, skipped, openingBalances);
+    return new CommitResult(sessionId, booked, skipped, openingBalances);
   }
 
   /**

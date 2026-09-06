@@ -19,7 +19,7 @@ import volkovandr.hauptbuch.importer.repository.ImportFileRepository;
  * never re-commits).
  */
 @Component
-class ImportStagingPurge {
+public class ImportStagingPurge {
 
   private static final Logger LOG = LoggerFactory.getLogger(ImportStagingPurge.class);
 
@@ -39,8 +39,13 @@ class ImportStagingPurge {
     this.importDuplicateScanService = importDuplicateScanService;
   }
 
+  /**
+   * Delete the campaign's staging in one transaction: the duplicate-scan snapshot, then the
+   * category map (tag junctions cascade), the account map, and the files (transactions and postings
+   * cascade). Public so Spring's default (publicMethodsOnly) transaction advice applies.
+   */
   @Transactional
-  void purge(long importSessionId) {
+  public void purge(long importSessionId) {
     importDuplicateScanService.clearSnapshot(importSessionId);
     importCategoryRepository.deleteBySession(importSessionId);
     importAccountRepository.deleteBySession(importSessionId);
