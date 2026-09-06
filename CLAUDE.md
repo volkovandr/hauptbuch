@@ -204,6 +204,13 @@ Full detail in `docs/data-model.md`. The traps:
   exception is the app's own name, "Hauptbuch", in the brand mark. Do not introduce German words
   into templates (an earlier draft leaked a few, e.g. "Lebenslauf" for a section heading — fixed to
   "Lifecycle").
+- **No real personal data anywhere in the repo — code, tests, fixtures, docs, comments, migrations,
+  scratch issues.** Replace real bank, payee, employer, and person names with neutral placeholders
+  *on the way in*, even when the owner uses the real name in a prompt, an issue, or a pasted example:
+  banks `BankAaa` / `BankBbb` / `BankCcc` (accounts `BankAaa-EUR`), shops `ShopAaa` / `ShopBbb`,
+  generic person names (`Debt-Doe`, `Loan to Max`). Widely-circulated currency codes (`EUR`, `USD`,
+  `GBP`, `CHF`, …) are fine; a rare currency that would identify the owner gets a placeholder
+  (`Cash-XXX`, then `YYY`). `EUR` is the real base currency and stays.
 - **Tests are the living spec.** When you return to a module, the tests state what it does — write
   them that way.
 - **Logging:** SLF4J + Logback via Spring Boot's defaults — no structured/JSON output, no
@@ -312,6 +319,8 @@ The docs are a navigation aid, not a worklog. Resist the urge to add prose.
 - Auto-apply image transforms or AI-suggested crops — image pre-processing is manual, client-side.
 - Recompute a non-null `base_amount`, or materialize running balances, without an explicit decision.
 - Hardcode or commit secrets.
+- Commit real bank, payee, employer, or person names, or an identifying rare currency — placeholder
+  them on the way in (§5).
 
 ---
 
