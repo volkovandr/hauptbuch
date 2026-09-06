@@ -58,4 +58,23 @@ public class ImportPostingRepository {
         .query(ImportPosting.class)
         .list();
   }
+
+  /**
+   * Every staged leg of a session, in transaction then id order — the commit (plan f2) reads all
+   * legs once and groups them in Java rather than firing a query per transaction across ~40k rows.
+   */
+  public List<ImportPosting> findBySession(long importSessionId) {
+    return jdbcClient
+        .sql(
+            """
+            select p.* from import_posting p
+            join import_transaction t on t.import_transaction_id = p.import_transaction_id
+            join import_file f on f.import_file_id = t.import_file_id
+            where f.import_session_id = :sessionId
+            order by p.import_transaction_id, p.import_posting_id
+            """)
+        .param("sessionId", importSessionId)
+        .query(ImportPosting.class)
+        .list();
+  }
 }

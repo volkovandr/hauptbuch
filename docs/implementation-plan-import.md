@@ -519,6 +519,27 @@ the committed accounts match the e′ statistics.
 
 ## Changelog
 
+- **v0.29 (2026-09-06):** **f2a implemented** (owner-confirmation pending) — the commit engine, no
+  screen yet. **Q-IMP-2 settled** (owner): imported transactions book `confirmed`. New
+  `ImportCommitService` (`@Transactional` — re-runs the duplicate scan and refuses a dirty one,
+  books every `ready` non-opening-balance row the owner did not `skip` through
+  `LedgerService.recordTransaction`, applies the opening-balance reconciliation, marks the session
+  `committed` last), `StagedTransactionResolver` (staged legs → `TransactionDraft`: currency-leaf
+  routing, same/cross-currency transfers with the §6.5 base-freezing factor, `/Class` + map tags
+  with the funding-leg intersection, pure transfers carry no payee), `CommitMapsLoader` /
+  `StagedCommitData` (batched loads), `OpeningBalanceCommit`, `ImportStagingPurge`
+  (post-success cleanup). New repo methods: `findCommittableBySession` /
+  `countCommittableBySession`, `ImportPostingRepository.findBySession`,
+  `ImportSessionRepository.markCommitted`, `deleteBySession` (file/account/category),
+  `ImportDuplicateScanRepository.skippedImportTransactionIds`; `OpeningBalanceView` gains
+  `transactionId` (to void a superseded opening balance). No migration. **Code-review fixes folded
+  in:** `commit()` now checks the <em>whole</em> §9 gate via `ImportReviewService.commitReadiness()`
+  — not just the duplicate scan — so a still-parked transfer (`state='parked'`, silently excluded by
+  `findCommittableBySession`) or an account still `expect-file` can no longer be committed and lost;
+  the progress callback counts booked + skipped so it reaches `committableCount()`;
+  `OpeningBalanceCommit` does one `openingBalanceOf` lookup per account, not two-to-three;
+  `markCommitted` moved onto `ImportSessionService`. f2b (worker + screen + backup ceremony) next;
+  f2 stays unchecked until owner-confirmed.
 - **v0.28 (2026-09-06):** **f1 marked complete** (owner-confirmed 2026-09-06). One correctness fix
   from the owner-review pass (`.scratch/import/issues/10`): the detection compared a staged
   non-funding leg's `import_posting.amount` against the ledger's native `posting.amount`, so a

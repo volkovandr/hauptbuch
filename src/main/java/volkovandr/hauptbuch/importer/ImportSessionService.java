@@ -61,4 +61,19 @@ public class ImportSessionService {
       LOG.info("Import session discarded");
     }
   }
+
+  /**
+   * Mark the session {@code committed} (import.md §2, §10; plan f2) — the last statement of the
+   * atomic commit transaction, so a failed post-commit cleanup can never leave an {@code open}
+   * session whose history has already been booked (which would re-book on a retry).
+   *
+   * @throws IllegalStateException if the session is no longer {@code open}
+   */
+  @Transactional
+  public void markCommitted(long importSessionId) {
+    if (importSessionRepository.markCommitted(importSessionId) == 0) {
+      throw new IllegalStateException("Import session " + importSessionId + " is no longer open");
+    }
+    LOG.info("Import session {} committed", importSessionId);
+  }
 }

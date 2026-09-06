@@ -66,7 +66,8 @@ class ImportOpeningBalancePanelTest {
         .thenReturn(List.of(staged("Current Account", "2004-01-01", "1234.56")));
     when(ledgerService.openingBalanceOf(42L))
         .thenReturn(
-            Optional.of(new OpeningBalanceView(LocalDate.of(2005, 6, 1), new BigDecimal("0.00"))));
+            Optional.of(
+                new OpeningBalanceView(701L, LocalDate.of(2005, 6, 1), new BigDecimal("0.00"))));
 
     ImportOpeningBalanceCells cells = panel().forSession(SESSION_ID).get(10L);
 
@@ -114,7 +115,8 @@ class ImportOpeningBalancePanelTest {
         .thenReturn(List.of(staged("Current Account", "2004-01-01", "0.00")));
     when(ledgerService.openingBalanceOf(42L))
         .thenReturn(
-            Optional.of(new OpeningBalanceView(LocalDate.of(2005, 6, 1), new BigDecimal("50.00"))));
+            Optional.of(
+                new OpeningBalanceView(702L, LocalDate.of(2005, 6, 1), new BigDecimal("50.00"))));
 
     ImportOpeningBalanceCells cells = panel().forSession(SESSION_ID).get(10L);
 

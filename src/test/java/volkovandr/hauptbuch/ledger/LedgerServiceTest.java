@@ -447,7 +447,7 @@ class LedgerServiceTest {
     when(transactionRepository.findOpeningBalance(CASH_EUR, 77L))
         .thenReturn(
             Optional.of(
-                new OpeningBalanceView(LocalDate.of(2004, 1, 1), new BigDecimal("100.00"))));
+                new OpeningBalanceView(9001L, LocalDate.of(2004, 1, 1), new BigDecimal("100.00"))));
 
     assertThat(ledgerService.openingBalanceOf(CASH_EUR))
         .hasValueSatisfying(view -> assertThat(view.amount()).isEqualByComparingTo("100.00"));

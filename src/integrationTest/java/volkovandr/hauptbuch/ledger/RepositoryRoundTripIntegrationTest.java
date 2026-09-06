@@ -333,6 +333,7 @@ class RepositoryRoundTripIntegrationTest {
     assertThat(transactionRepository.findOpeningBalance(cash, openingLeaf.accountId()))
         .hasValueSatisfying(
             view -> {
+              assertThat(view.transactionId()).isEqualTo(opening);
               assertThat(view.date()).isEqualTo(LocalDate.of(2004, 7, 1));
               assertThat(view.amount()).isEqualByComparingTo("1234.56");
             });

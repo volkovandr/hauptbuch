@@ -150,6 +150,17 @@ public class ImportAccountRepository {
         .update();
   }
 
+  /**
+   * Remove the whole account map of a session — the commit's post-success staging cleanup
+   * (import.md §2; plan f2). Rows affected.
+   */
+  public int deleteBySession(long importSessionId) {
+    return jdbcClient
+        .sql("delete from import_account where import_session_id = :sessionId")
+        .param(SESSION_ID, importSessionId)
+        .update();
+  }
+
   /** The account map of a session, by Money account name. */
   public List<ImportAccount> findBySession(long importSessionId) {
     return jdbcClient

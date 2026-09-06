@@ -487,6 +487,13 @@ bypasses the domain service (CLAUDE.md §1.7), and every invariant added to `Led
 would have to be remembered here too. **If it proves too slow, optimise *inside* `LedgerService`
 (JDBC batching), where every caller benefits — never by routing around it.**
 
+Imported transactions book `confirmed` (Q-IMP-2). A resolved cross-currency transfer freezes each
+leg's `base_amount` at commit from the near-currency amounts and a single near→base factor: `1` when
+the near side is base; the observed pair (`counter_amount / near amount`) for the two-leg transfer
+whose far side is base; otherwise `ExchangeRateService.rateAsOf` — and the commit is **refused** (§6.5)
+if no rate is on file, so the owner can enter one and retry. The near amounts sum to zero, so the
+frozen base amounts do too.
+
 ---
 
 ## 11. Staging schema sketch (provisional)
@@ -552,7 +559,7 @@ before building two map UIs on top of the parser is worth the small reordering.
 | # | Question |
 |---|---|
 | **Q-IMP-1** | ~~`L` on a split transaction, and how Money exports a split containing a transfer-type leg.~~ **Settled (§7)** against a real sample: `L` repeats the first `S` line; a split leg may be `[Account]` and resolves exactly like the header target. |
-| **Q-IMP-2** | **`transaction.lifecycle` for imported transactions.** Assumed `confirmed` throughout; deliberately deferred for a separate discussion. |
+| **Q-IMP-2** | ~~**`transaction.lifecycle` for imported transactions.**~~ **Settled (owner, 2026-09-06; plan f2a):** every imported transaction books `confirmed` — it is reconciled 20-year history, not something to re-review. |
 | **Q-IMP-3** | ~~Money classes (`Category/Class`).~~ **Settled (§8)** against a real sample: classes are used; a class name is a second tag source, handled through the same `?`-destruction rule as payees. |
 | **Q-IMP-4** | **Cross-currency transfers**: how to handle transfers when neigher of the currencies is the base currency. The importer cannot invent a rate; the owner must supply it. To be settled against a real sample at slice e. |
 | **Q-IMP-5** | ~~**Ledger duplicate scan**: when to refresh the review surface, and how to handle a new ledger entry while the scan is running.~~ **Settled (§9, plan f1):** a re-runnable snapshot with its own `ran_at`, re-run from a button, **no ledger lock**; an importer-side change discards the snapshot, a ledger-side change makes it stale by time, and a re-run re-raises any decision made against a since-changed ledger transaction. |

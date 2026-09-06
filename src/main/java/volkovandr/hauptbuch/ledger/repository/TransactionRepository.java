@@ -231,7 +231,7 @@ public class TransactionRepository {
     return jdbcClient
         .sql(
             """
-            select t.date as date, own.amount as amount
+            select t.transaction_id as transaction_id, t.date as date, own.amount as amount
             from transaction t
             join posting own
               on own.transaction_id = t.transaction_id and own.account_id = :accountId

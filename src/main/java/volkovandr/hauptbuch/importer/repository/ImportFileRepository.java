@@ -125,6 +125,17 @@ public class ImportFileRepository {
   }
 
   /**
+   * Remove every staged file of a session (its transactions and postings cascade) — the commit's
+   * post-success staging cleanup (import.md §2; plan f2). Rows affected.
+   */
+  public int deleteBySession(long importSessionId) {
+    return jdbcClient
+        .sql("delete from import_file where import_session_id = :sessionId")
+        .param(SESSION_ID, importSessionId)
+        .update();
+  }
+
+  /**
    * Remove every staged file of the given name in a session — the "replace" half of the §2 clash
    * resolution. Rows affected.
    */
