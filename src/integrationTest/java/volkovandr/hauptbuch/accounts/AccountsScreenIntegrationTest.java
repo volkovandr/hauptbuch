@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -299,6 +300,131 @@ class AccountsScreenIntegrationTest {
             .param("id", accountId)
             .query(Boolean.class)
             .single());
+  }
+
+  private void openAsset(String name) throws Exception {
+    mockMvc
+        .perform(
+            post(ACCOUNTS_PATH)
+                .param(NAME, name)
+                .param(TYPE, ASSET)
+                .param(CURRENCY_CODE, EUR)
+                .param(OPENED_AT, OPENED_DAY))
+        .andExpect(status().is3xxRedirection());
+  }
+
+  private Long parentIdOf(long accountId) {
+    return jdbcClient
+        .sql("select parent_id from account where account_id = :id")
+        .param("id", accountId)
+        .query(Long.class)
+        .optional()
+        .orElse(null);
+  }
+
+  @Test
+  void editorOffersParentControlWithTheOtherSameTypeAccounts() throws Exception {
+    openAsset(GIRO);
+    openAsset("Sparbuch");
+
+    mockMvc
+        .perform(get(ACCOUNT_PATH_PREFIX + accountIdNamed(GIRO)))
+        .andExpect(content().string(containsString("<h2>Parent</h2>")))
+        .andExpect(content().string(containsString("none (top level)")))
+        .andExpect(content().string(containsString("Sparbuch")));
+
+    // After a move, the editor pre-selects the current parent.
+    long giro = accountIdNamed(GIRO);
+    long sparbuch = accountIdNamed("Sparbuch");
+    mockMvc.perform(
+        post(ACCOUNT_PATH_PREFIX + giro + "/parent").param("parentId", String.valueOf(sparbuch)));
+    String editor =
+        mockMvc
+            .perform(get(ACCOUNT_PATH_PREFIX + giro))
+            .andReturn()
+            .getResponse()
+            .getContentAsString()
+            .replaceAll("\\s+", " ");
+    assertThat(editor).contains("value=\"" + sparbuch + "\" selected=\"selected\"");
+  }
+
+  @Test
+  void editorHidesTheParentControlForPersonDebtLeaf() throws Exception {
+    long personLeaf =
+        jdbcClient
+            .sql(
+                "insert into account (name, type, currency_code, person_leaf) "
+                    + "values ('personal.EUR', 'asset', :cur, true) returning account_id")
+            .param("cur", EUR)
+            .query(Long.class)
+            .single();
+
+    mockMvc
+        .perform(get(ACCOUNT_PATH_PREFIX + personLeaf))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("<h2>Parent</h2>"))));
+
+    // A refused move still shows its reason even though the Parent section is hidden here — the
+    // warning is page-level.
+    mockMvc
+        .perform(
+            post(ACCOUNT_PATH_PREFIX + personLeaf + "/parent")
+                .param("parentId", String.valueOf(personLeaf)))
+        .andExpect(redirectedUrl(ACCOUNT_PATH_PREFIX + personLeaf))
+        .andExpect(flash().attribute("error", containsString("auto-managed debt leaf")));
+    mockMvc
+        .perform(get(ACCOUNT_PATH_PREFIX + personLeaf).flashAttr("error", "auto-managed debt leaf"))
+        .andExpect(content().string(containsString("auto-managed debt leaf")));
+  }
+
+  @Test
+  void movingAccountUnderNewParentThenBackToTopLevel() throws Exception {
+    openAsset("Cash");
+    openAsset("Wallet");
+    long cash = accountIdNamed("Cash");
+    long wallet = accountIdNamed("Wallet");
+
+    mockMvc
+        .perform(
+            post(ACCOUNT_PATH_PREFIX + cash + "/parent").param("parentId", String.valueOf(wallet)))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl(ACCOUNTS_PATH));
+    assertThat(parentIdOf(cash)).isEqualTo(wallet);
+
+    // A blank parentId moves it back to the top level.
+    mockMvc
+        .perform(post(ACCOUNT_PATH_PREFIX + cash + "/parent").param("parentId", ""))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl(ACCOUNTS_PATH));
+    assertThat(parentIdOf(cash)).isNull();
+  }
+
+  @Test
+  void rejectedMoveShowsReasonAndLeavesParentUnchanged() throws Exception {
+    openAsset("Cash");
+    mockMvc
+        .perform(
+            post(ACCOUNTS_PATH)
+                .param(NAME, "Card")
+                .param(TYPE, "liability")
+                .param(CURRENCY_CODE, EUR)
+                .param(OPENED_AT, OPENED_DAY))
+        .andExpect(status().is3xxRedirection());
+    long cash = accountIdNamed("Cash");
+    long card = accountIdNamed("Card");
+
+    mockMvc
+        .perform(
+            post(ACCOUNT_PATH_PREFIX + cash + "/parent").param("parentId", String.valueOf(card)))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl(ACCOUNT_PATH_PREFIX + cash))
+        .andExpect(flash().attribute("error", containsString("liability")));
+    assertThat(parentIdOf(cash)).isNull();
+
+    // The editor renders a carried-over reason in the Parent section.
+    mockMvc
+        .perform(get(ACCOUNT_PATH_PREFIX + cash).flashAttr("error", "that move was refused"))
+        .andExpect(content().string(containsString("that move was refused")));
   }
 
   @Test

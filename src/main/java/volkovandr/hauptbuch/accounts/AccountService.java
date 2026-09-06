@@ -44,8 +44,12 @@ public class AccountService {
    */
   static final List<Integer> HUE_PALETTE = List.of(210, 30, 140, 275, 0, 180, 330, 60, 250, 100);
 
-  /** The account types the accounts screen manages (data-model §3.2 — the "Accounts" list). */
-  private static final List<String> MANAGEABLE_TYPES = List.of("asset", "liability");
+  /**
+   * The account types the accounts screen manages (data-model §3.2 — the "Accounts" list).
+   * Package-private so {@code AccountsController} can decide whether an account being edited is one
+   * the screen may re-parent.
+   */
+  static final List<String> MANAGEABLE_TYPES = List.of("asset", "liability");
 
   private final AccountRepository accountRepository;
 
@@ -268,7 +272,9 @@ public class AccountService {
   /**
    * Re-parent an account — used only by the currency-leaf-aware subdivision operation to move a
    * category's existing per-currency leaves under its new catch-all sibling when the category
-   * itself gains a real child (data-model §6.5). Not a user-facing edit.
+   * itself gains a real child (data-model §6.5). The mechanical stamp, no validation: the
+   * subdivision operation owns its own. The <em>user-facing</em> move is {@link
+   * AccountReparenter#changeParent}.
    */
   @Transactional
   public void reparent(long accountId, long newParentId) {
@@ -549,8 +555,11 @@ public class AccountService {
     }
   }
 
-  /** The account, if it is live and of a type the accounts screen manages. */
-  private Account requireManageable(long accountId) {
+  /**
+   * The account, if it is live and of a type the accounts screen manages. Package-private so the
+   * sibling {@link AccountReparenter} gates its move on the same rule.
+   */
+  Account requireManageable(long accountId) {
     return accountRepository
         .findById(accountId)
         .filter(a -> a.deletedAt() == null)
@@ -565,10 +574,12 @@ public class AccountService {
 
   /**
    * A parent must be a live, same-type account that has never been posted to: leaves-only
-   * (data-model §5) means an account with postings can only become a parent through the stage-6b
-   * subdivision operation, which reassigns its postings first.
+   * (data-model §5) means an account with postings can only become a parent by first reassigning
+   * those postings (the {@code categories} subdivision operation). Returns the resolved parent so
+   * callers can name it in a further check. Package-private: the sibling {@link AccountReparenter}
+   * reuses it rather than restating the parent rules for a move.
    */
-  private void requireUsableParent(long parentId, String childType) {
+  Account requireUsableParent(long parentId, String childType) {
     Account parent =
         accountRepository
             .findById(parentId)
@@ -583,9 +594,9 @@ public class AccountService {
       throw new IllegalArgumentException(
           "'"
               + parent.name()
-              + "' has postings and cannot become a parent (leaves-only, data-model §5); "
-              + "subdividing a posted-to leaf arrives with stage 6b");
+              + "' has postings and cannot become a parent (leaves-only, data-model §5)");
     }
+    return parent;
   }
 
   /** The least-used palette hue among the managed accounts; first of the palette on a tie. */

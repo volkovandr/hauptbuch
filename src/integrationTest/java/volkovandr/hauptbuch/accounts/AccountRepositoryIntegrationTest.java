@@ -318,6 +318,32 @@ class AccountRepositoryIntegrationTest {
   }
 
   @Test
+  void updateParentToNullMovesAccountToTopLevel() {
+    long parent = accountRepository.insert(draft("Cards", "liability", null));
+    long child = accountRepository.insert(childDraft("Visa", "liability", parent));
+
+    assertThat(accountRepository.updateParent(child, null)).isEqualTo(1);
+
+    assertThat(accountRepository.findById(child).orElseThrow().parentId()).isNull();
+    assertThat(accountRepository.findChildrenOf(parent)).isEmpty();
+  }
+
+  @Test
+  void updateParentMovesWholeSubtreeAsUnit() {
+    long root = accountRepository.insert(draft("Bank", ASSET, null));
+    long branch = accountRepository.insert(childDraft("Checking", ASSET, root));
+    long leaf = accountRepository.insert(childDraft("Everyday", ASSET, branch));
+    long newHome = accountRepository.insert(draft("Savings", ASSET, null));
+
+    assertThat(accountRepository.updateParent(root, newHome)).isEqualTo(1);
+
+    // Only the moved account's own parent changed; the descendants kept their relative structure.
+    assertThat(accountRepository.findById(root).orElseThrow().parentId()).isEqualTo(newHome);
+    assertThat(accountRepository.findById(branch).orElseThrow().parentId()).isEqualTo(root);
+    assertThat(accountRepository.findById(leaf).orElseThrow().parentId()).isEqualTo(branch);
+  }
+
+  @Test
   void currencyOptionsProjectTheSeededCurrencies() {
     List<CurrencyOption> options = currencyOptionRepository.findAll();
     assertThat(options).extracting(CurrencyOption::code).contains(EUR, "CHF", "JPY").isSorted();
