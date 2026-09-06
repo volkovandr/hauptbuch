@@ -152,20 +152,22 @@ class ImportCommitScreenIntegrationTest {
 
   @Test
   void statusFragmentReflectsTheWorkerState() throws Exception {
-    mockMvc.perform(post("/import/session")); // an open session, so /status is session-scoped
-    when(importCommitWorker.progressFor(anyLong()))
+    when(importCommitWorker.progress())
         .thenReturn(new ImportCommitProgress("running", 1L, 40, 12, null));
     assertThat(fragment()).contains("12 / 40").contains("import-commit-poll");
 
-    when(importCommitWorker.progressFor(anyLong()))
+    when(importCommitWorker.progress())
         .thenReturn(ImportCommitProgress.ofDone(1L, "Committed 40 transaction(s), skipped 0."));
-    assertThat(fragment())
-        .contains("Committed 40 transaction(s)")
-        .doesNotContain("import-commit-poll");
+    String done = fragment();
+    assertThat(done).contains("Committed 40 transaction(s)").doesNotContain("import-commit-poll");
+    // The out-of-band swap that removes the stale backup/commit buttons.
+    assertThat(done).contains("id=\"import-commit-ceremony\"").contains("hx-swap-oob");
 
-    when(importCommitWorker.progressFor(anyLong()))
+    when(importCommitWorker.progress())
         .thenReturn(ImportCommitProgress.ofFailed(1L, "no rate for CHF"));
-    assertThat(fragment()).contains("The commit failed").contains("no rate for CHF");
+    String failed = fragment();
+    assertThat(failed).contains("The commit failed").contains("no rate for CHF");
+    assertThat(failed).doesNotContain("hx-swap-oob"); // buttons stay so the owner can retry
   }
 
   // ── helpers ─────────────────────────────────────────────────────────────
