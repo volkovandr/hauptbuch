@@ -36,40 +36,87 @@
 <!--    </div>-->
 
     <form class="register-filter" method="get" th:action="@{/register}">
-      <fieldset class="register-filter__accounts">
-        <legend class="eyebrow">Accounts</legend>
-        <label class="check" th:each="a : ${register.accounts()}">
-          <input
-            type="checkbox"
-            name="accountId"
-            th:value="${a.accountId()}"
-            th:checked="${a.selected()}"
-          />
-          <span
-            class="swatch"
-            th:style="${a.hue() != null} ? |background: hsl(${a.hue()} 55% 78%); border-color: hsl(${a.hue()} 55% 45%)|"
-          ></span>
-          <span th:text="${a.name()}">Cash</span>
-          <span class="muted num" th:text="${a.currencyCode()}">EUR</span>
-        </label>
-        <!-- People (register §2.6, plan stage 8c): each per-person debt leaf as a filter option,
-             labelled `Name (CUR)`, selectable alongside the real accounts. The value is the leaf's
-             own account id, so a ticked person filters to their debt thread exactly as an account
-             does. (The block grows bulky with many people — collapsing it is a later UX pass.) -->
-        <label class="check" th:each="p : ${register.people()}">
-          <input
-            type="checkbox"
-            name="accountId"
-            th:value="${p.accountId()}"
-            th:checked="${p.selected()}"
-          />
-          <span
-            class="swatch"
-            th:style="${p.hue() != null} ? |background: hsl(${p.hue()} 55% 78%); border-color: hsl(${p.hue()} 55% 45%)|"
-          ></span>
-          <span th:text="${p.entryValue()}">Max (EUR)</span>
-        </label>
-      </fieldset>
+      <!-- The account filter (register §2.3, issue transaction-register-ui/22): a one-line tab strip
+           of five pickers over a collapsible panel. Clicking a tab htmx-swaps THIS control only
+           (`filterControl`) — no register query runs; only Apply re-renders the rows. The panel
+           degrades to plain `name="accountId"` checkboxes that still submit with Apply when JS is
+           off. Group toggles (parent accounts, person names) are driven by the `filter-groups.js`
+           leaf via the data-attributes below. -->
+      <div id="register-filter-control" th:fragment="filterControl">
+        <nav class="register-filter__tabs" aria-label="Account filter">
+          <button
+            th:each="tab : ${filterView.tabs()}"
+            type="submit"
+            name="picker"
+            th:value="${tab.param()}"
+            class="register-filter__tab"
+            th:classappend="${tab.active()} ? 'register-filter__tab--active'"
+            th:attr="hx-get=@{/register/filter-panel(picker=${tab.param()})},
+                     aria-current=${tab.active()} ? 'true' : null"
+            hx-target="#register-filter-control"
+            hx-swap="outerHTML"
+            hx-include="[name='fromDate'], [name='toDate']"
+          >
+            <span th:text="${tab.label()}">Last used</span>
+            <span
+              class="register-filter__count"
+              th:if="${tab.tickedCount() != null}"
+              th:text="'(' + ${tab.tickedCount()} + ')'"
+              >(19)</span
+            >
+          </button>
+        </nav>
+
+        <details
+          class="register-filter__panel"
+          data-filter-groups
+          th:attr="open=${filterView.panel().expanded()} ? 'open' : null"
+        >
+          <summary class="register-filter__panel-toggle">Choose accounts</summary>
+          <p class="register-filter__bulk">
+            <button type="button" class="link" data-filter-all>All</button>
+            <span aria-hidden="true">·</span>
+            <button type="button" class="link" data-filter-none>None</button>
+          </p>
+          <ul class="register-filter__list">
+            <li
+              th:each="row : ${filterView.panel().rows()}"
+              class="register-filter__item"
+              th:style="'--depth: ' + ${row.depth()}"
+            >
+              <label class="check">
+                <input
+                  th:if="${row.group()}"
+                  type="checkbox"
+                  class="register-filter__group"
+                  th:attr="data-filter-group=${row.groupKey()}, data-filter-member=${row.memberOf()}"
+                />
+                <input
+                  th:unless="${row.group()}"
+                  type="checkbox"
+                  name="accountId"
+                  th:value="${row.accountId()}"
+                  th:checked="${row.ticked()}"
+                  th:attr="data-filter-member=${row.memberOf()}"
+                />
+                <span
+                  class="swatch"
+                  th:if="${row.hue() != null}"
+                  th:style="|background: hsl(${row.hue()} 55% 78%); border-color: hsl(${row.hue()} 55% 45%)|"
+                ></span>
+                <span th:text="${row.label()}">Cash</span>
+                <span
+                  class="muted num"
+                  th:if="${row.currencyCode() != null}"
+                  th:text="${row.currencyCode()}"
+                  >EUR</span
+                >
+              </label>
+            </li>
+          </ul>
+        </details>
+      </div>
+
       <div class="register-filter__row">
         <div class="field">
           <label class="field__label" for="fromDate">From</label>
@@ -106,7 +153,16 @@
           </select>
         </div>
         <p class="actions">
-          <button type="submit" class="btn">Apply</button>
+          <!-- Carries the active picker so a plain Apply (no tab clicked) keeps the current tab;
+               a tab button carries its own picker value and wins when it is the activator. -->
+          <button
+            type="submit"
+            class="btn"
+            name="picker"
+            th:value="${filterView.panel().pickerParam()}"
+          >
+            Apply
+          </button>
         </p>
       </div>
     </form>
@@ -235,7 +291,7 @@
                 class="register__edit"
                 title="Edit transaction"
                 th:attr="hx-get=@{/register/edit/{id}(id=${r.transactionId()})}"
-                hx-include="[name='viewAccountId'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
+                hx-include="[name='viewAccountId'], [name='viewPicker'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
                 hx-target="#entry-dock"
                 hx-swap="outerHTML"
               >
@@ -284,7 +340,7 @@
       th:if="${selectedTransactionId != null}"
       th:attr="hx-get=@{/register/edit/{id}(id=${selectedTransactionId})}"
       hx-trigger="load"
-      hx-include="[name='viewAccountId'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
+      hx-include="[name='viewAccountId'], [name='viewPicker'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
       hx-target="#entry-dock"
       hx-swap="outerHTML"
     ></span>

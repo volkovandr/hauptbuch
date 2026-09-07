@@ -1,8 +1,6 @@
 package volkovandr.hauptbuch.ledger;
 
-import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
@@ -50,6 +48,7 @@ public class RegisterService {
   private final RegisterRowRenderer rowRenderer;
   private final TagReadRepository tagReadRepository;
   private final PersonService personService;
+  private final RegisterPickerService registerPickerService;
 
   RegisterService(
       RegisterRepository registerRepository,
@@ -58,7 +57,8 @@ public class RegisterService {
       SettingsService settingsService,
       RegisterRowRenderer rowRenderer,
       TagReadRepository tagReadRepository,
-      PersonService personService) {
+      PersonService personService,
+      RegisterPickerService registerPickerService) {
     this.registerRepository = registerRepository;
     this.payeeRepository = payeeRepository;
     this.accountService = accountService;
@@ -66,27 +66,26 @@ public class RegisterService {
     this.rowRenderer = rowRenderer;
     this.tagReadRepository = tagReadRepository;
     this.personService = personService;
+    this.registerPickerService = registerPickerService;
   }
 
   /**
-   * Build the register screen for the given filter. An empty account selection is resolved to the
-   * default set — every open own account (register §2.3). Until the book's base currency is set
-   * (data-model §3.8) the register is empty by construction (there are no accounts and no rows), so
-   * a fresh book renders a clean, empty screen rather than failing.
+   * Build the register screen for the given filter. An empty tick selection is resolved to the
+   * active picker's whole membership ({@link RegisterPickerService}, register §2.3). Until the
+   * book's base currency is set (data-model §3.8) the register is empty by construction (there are
+   * no accounts and no rows), so a fresh book renders a clean, empty screen rather than failing.
    *
-   * @param filter the applied filter; a null or empty {@code accountIds} means "the default set"
+   * @param filter the applied filter; a null or empty {@code accountIds} means "the whole picker"
    */
   public RegisterView view(RegisterFilter filter) {
     Optional<String> baseCurrency = settingsService.baseCurrency();
-    List<Account> ownAccounts = openOwnAccounts();
+    List<Account> pickable = pickable(openOwnAccounts());
 
-    List<Long> viewed = resolveViewedAccounts(filter, ownAccounts);
+    List<Long> viewed = resolveViewedAccounts(filter);
     List<RegisterRowView> rows =
         baseCurrency.map(base -> renderRows(viewed, filter, base)).orElseGet(List::of);
 
-    List<Account> pickable = pickable(ownAccounts);
-    List<RegisterAccountOption> accountOptions = accountOptions(pickable, viewed);
-    List<RegisterAccountOption> peopleOptions = peopleOptions(ownAccounts, viewed);
+    List<RegisterAccountOption> accountOptions = accountOptions(pickable);
     List<RegisterPayeeOption> payeeOptions = payeeOptions(filter.payeeId());
     List<RegisterCategoryOption> categoryOptions = categoryOptions();
     List<String> transferTargets = transferTargets(pickable);
@@ -95,41 +94,12 @@ public class RegisterService {
     return new RegisterView(
         rows,
         accountOptions,
-        peopleOptions,
         payeeOptions,
         categoryOptions,
         transferTargets,
         personTargets,
         tagOptions,
         filter);
-  }
-
-  /**
-   * The per-person debt leaves offered in the register's account filter (register §2.6, plan stage
-   * 8c): every person leaf in the viewed set, resolved to its owner's name and listed as {@code
-   * Name (CUR)}, so a person is individually selectable and combinable with the real accounts. They
-   * are kept out of {@link #accountOptions} — hence out of the dock's Account datalist — because a
-   * person is reached in <em>entry</em> only by the {@code for}/{@code by} sigils, never by picking
-   * their leaf's cosmetic name (plan stage 8b.1). Names resolve in one lookup; a leaf whose person
-   * cannot be resolved (never expected) falls back to its stored name.
-   */
-  private List<RegisterAccountOption> peopleOptions(List<Account> ownAccounts, List<Long> viewed) {
-    List<Account> leaves = ownAccounts.stream().filter(Account::personLeaf).toList();
-    Map<Long, String> names =
-        personService.personNamesForAccounts(leaves.stream().map(Account::accountId).toList());
-    return leaves.stream()
-        .map(
-            a ->
-                new RegisterAccountOption(
-                    a.accountId(),
-                    names.getOrDefault(a.accountId(), a.name()),
-                    a.hue(),
-                    a.currencyCode(),
-                    viewed.contains(a.accountId())))
-        .sorted(
-            Comparator.comparing(RegisterAccountOption::name, String.CASE_INSENSITIVE_ORDER)
-                .thenComparing(RegisterAccountOption::currencyCode))
-        .toList();
   }
 
   /**
@@ -166,16 +136,7 @@ public class RegisterService {
   }
 
   /**
-   * The open own accounts (asset/liability, not closed) — the default viewed set (register §2.3).
-   * Per-person debt leaves are {@code asset} accounts (data-model §7) and belong here: Q-UI-1 is
-   * resolved <em>surfaced</em>, so a person-funded transaction appears in the register with the
-   * person on the Account side, its running balance a real balance like a credit card's.
-   *
-   * <p>They are excluded from the <em>pickers</em> instead — see {@link #pickable} — because a
-   * person is reached by the {@code for}/{@code by} sigils, never by their leaf's cosmetic name.
-   * Until stage 8c teaches {@link RegisterRowRenderer} to resolve a person's name, such a row
-   * displays that cosmetic {@code personal.<CUR>} name; visible-but-cosmetically-named beats
-   * invisible, since an invisible row reads as a transaction that failed to book.
+   * The live own accounts (asset/liability), from which {@link #pickable} takes the post-to set.
    */
   private List<Account> openOwnAccounts() {
     return accountService.findLiveByTypes(OWN_ACCOUNT_TYPES).stream()
@@ -184,19 +145,28 @@ public class RegisterService {
   }
 
   /**
-   * The subset of {@link #openOwnAccounts()} the dock's Account picker, the register's account
-   * filter, and the transfer targets offer (plan stage 8b.1): everything except per-person debt
-   * leaves. Stage 8c gives people their own place in the filter, listed as {@code Max (EUR)}.
+   * The <em>post-to set</em>: the accounts the dock's Account datalist, the transfer targets, and
+   * the fresh-dock default may name (plan stage 8b.1, issue transaction-register-ui/22) — open real
+   * accounts only. Per-person debt leaves are excluded (a person is reached by the {@code
+   * for}/{@code by} sigils, never by the leaf's cosmetic name); closed accounts are excluded
+   * ({@link #openOwnAccounts} already dropped them) since a closed account is viewable but not
+   * bookable. The <em>read</em> set — which does include both — is {@link RegisterPickerService}'s.
    */
   private static List<Account> pickable(List<Account> ownAccounts) {
     return ownAccounts.stream().filter(a -> !a.personLeaf()).toList();
   }
 
-  private List<Long> resolveViewedAccounts(RegisterFilter filter, List<Account> ownAccounts) {
+  /**
+   * The accounts the register rows are read for: the explicit tick selection when there is one,
+   * else every member of the active picker resolved against the applied date range (register §2.3,
+   * issue transaction-register-ui/22). An empty selection means "the whole picker" — the same
+   * contract the entry dock relies on to avoid freezing a defaulted filter.
+   */
+  private List<Long> resolveViewedAccounts(RegisterFilter filter) {
     if (!filter.accountIds().isEmpty()) {
       return filter.accountIds();
     }
-    return ownAccounts.stream().map(Account::accountId).toList();
+    return registerPickerService.membership(filter.picker(), filter.fromDate(), filter.toDate());
   }
 
   private List<RegisterRowView> renderRows(
@@ -207,16 +177,9 @@ public class RegisterService {
     return rowRenderer.render(rows);
   }
 
-  private List<RegisterAccountOption> accountOptions(List<Account> ownAccounts, List<Long> viewed) {
+  private List<RegisterAccountOption> accountOptions(List<Account> ownAccounts) {
     return ownAccounts.stream()
-        .map(
-            a ->
-                new RegisterAccountOption(
-                    a.accountId(),
-                    a.name(),
-                    a.hue(),
-                    a.currencyCode(),
-                    viewed.contains(a.accountId())))
+        .map(a -> new RegisterAccountOption(a.accountId(), a.name(), a.hue(), a.currencyCode()))
         .toList();
   }
 

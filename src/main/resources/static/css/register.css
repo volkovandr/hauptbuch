@@ -16,18 +16,72 @@
   background: var(--paper-edge);
 }
 
-.register-filter__accounts {
-  border: none;
-  margin: 0 0 0.5rem;
-  padding: 0;
+/* The account picker (issue transaction-register-ui/22): a one-line tab strip over a collapsible
+   panel. The strip stays a summary of what is on screen; Apply is the only thing that re-renders
+   the register. */
+.register-filter__tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 1.1rem;
+  gap: 0.15rem;
+  margin-bottom: 0.4rem;
 }
 
-.register-filter__accounts legend {
+.register-filter__tab {
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  padding: 0.15rem 0.6rem;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--ink-soft, inherit);
+  cursor: pointer;
+}
+
+.register-filter__tab--active {
+  font-weight: 700;
+  background: var(--paper-edge);
+  color: inherit;
+}
+
+.register-filter__count {
+  margin-left: 0.3rem;
+  font-weight: 400;
+  color: var(--ink-muted, inherit);
+}
+
+.register-filter__panel {
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.register-filter__panel-toggle {
+  cursor: pointer;
+  color: var(--ink-muted, inherit);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.register-filter__bulk {
+  margin: 0.4rem 0 0.2rem;
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+
+.register-filter__list {
+  list-style: none;
+  margin: 0;
   padding: 0;
-  margin-bottom: 0.35rem;
+  columns: 16rem auto;
+}
+
+.register-filter__item {
+  padding-left: calc(var(--depth, 0) * 1.1rem);
+  break-inside: avoid;
+}
+
+.register-filter__group + * {
+  font-weight: 600;
 }
 
 .check {

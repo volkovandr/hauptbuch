@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.util.MultiValueMap;
 import volkovandr.hauptbuch.ledger.RegisterFilter;
+import volkovandr.hauptbuch.ledger.RegisterPicker;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 
 /**
@@ -77,6 +78,7 @@ final class SplitFormBinder {
         longValues(p.get("tagId")),
         lineTagsOf(p, lineCount),
         longValues(p.get("viewAccountId")),
+        p.getFirst("viewPicker"),
         parseDate(p.getFirst("viewFromDate")),
         parseDate(p.getFirst("viewToDate")),
         parseLong(p.getFirst("viewPayeeId")));
@@ -137,6 +139,7 @@ final class SplitFormBinder {
         form.tagId(),
         form.lineTagIds(),
         form.viewAccountId(),
+        form.viewPicker(),
         form.viewFromDate(),
         form.viewToDate(),
         form.viewPayeeId());
@@ -204,6 +207,7 @@ final class SplitFormBinder {
   static RegisterFilter filterFrom(SplitForm form) {
     return new RegisterFilter(
         form.viewAccountId() == null ? List.of() : form.viewAccountId(),
+        RegisterPicker.fromParam(form.viewPicker()),
         form.viewFromDate(),
         form.viewToDate(),
         form.viewPayeeId());

@@ -61,31 +61,15 @@
 
       <!-- The active filter, so the commit re-renders exactly the current view (§2.2).
 
-           Only an EXPLICIT account filter is carried. On the default view every option reads as
-           selected, so serialising those would freeze the resolved default set into a real filter —
-           and any account not in the picker (a person's debt leaf, plan stage 8b.1) would silently
-           drop out of the view on the next commit. An empty selection means "the default set", and
-           must stay empty for the server to re-resolve it. -->
-      <th:block th:if="${!register.filter().accountIds().isEmpty()}">
-        <th:block th:each="a : ${register.accounts()}">
-          <input
-            th:if="${a.selected()}"
-            type="hidden"
-            name="viewAccountId"
-            th:value="${a.accountId()}"
-          />
-        </th:block>
-        <!-- A selected person filter (plan stage 8c) is carried the same way — its leaf id is a
-             real account id, and omitting it would drop the person from the view on commit. -->
-        <th:block th:each="p : ${register.people()}">
-          <input
-            th:if="${p.selected()}"
-            type="hidden"
-            name="viewAccountId"
-            th:value="${p.accountId()}"
-          />
-        </th:block>
+           Only an EXPLICIT tick selection is carried. An empty selection means "the whole active
+           picker" and must stay empty for the server to re-resolve it against the date range —
+           serialising the resolved set would freeze it and drop any account outside the picker
+           (issue transaction-register-ui/22). The picker token IS always carried, so a commit
+           re-renders under the same tab. -->
+      <th:block th:each="id : ${register.filter().accountIds()}">
+        <input type="hidden" name="viewAccountId" th:value="${id}" />
       </th:block>
+      <input type="hidden" name="viewPicker" th:value="${register.filter().picker().param()}" />
       <input type="hidden" name="viewFromDate" th:value="${register.filter().fromDate()}" />
       <input type="hidden" name="viewToDate" th:value="${register.filter().toDate()}" />
       <input type="hidden" name="viewPayeeId" th:value="${register.filter().payeeId()}" />
@@ -363,7 +347,7 @@
             type="button"
             class="btn btn--ghost"
             hx-get="/register/dock"
-            hx-include="[name='viewAccountId'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
+            hx-include="[name='viewAccountId'], [name='viewPicker'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
             hx-target="#entry-dock"
             hx-swap="outerHTML"
           >

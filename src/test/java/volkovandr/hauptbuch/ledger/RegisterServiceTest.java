@@ -13,12 +13,10 @@ import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
@@ -33,9 +31,9 @@ import volkovandr.hauptbuch.ledger.repository.TagReadRepository;
 
 /**
  * Unit tier (plan §1.5): {@link RegisterService}'s orchestration with its collaborators mocked —
- * default-account resolution (register §2.3), the base-currency gate, and the account/payee filter
- * options. The row rendering it delegates to {@link RegisterRowRenderer} is covered in that class's
- * own test; the SQL is covered in {@link RegisterSqlLogicTest}.
+ * the picker → viewed-accounts hand-off (register §2.3), the base-currency gate, and the dock's
+ * datalist / transfer / person targets. Picker membership and the tab-strip model are {@link
+ * RegisterPickerService}'s own tests; the SQL is covered in {@link RegisterSqlLogicTest}.
  */
 @ExtendWith(MockitoExtension.class)
 class RegisterServiceTest {
@@ -52,6 +50,7 @@ class RegisterServiceTest {
   @Mock private RegisterRowRenderer rowRenderer;
   @Mock private TagReadRepository tagReadRepository;
   @Mock private PersonService personService;
+  @Mock private RegisterPickerService registerPickerService;
 
   private RegisterService registerService;
 
@@ -65,12 +64,14 @@ class RegisterServiceTest {
             settingsService,
             rowRenderer,
             tagReadRepository,
-            personService);
+            personService,
+            registerPickerService);
     lenient().when(tagReadRepository.liveTagLabels()).thenReturn(List.of());
     lenient().when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
     lenient().when(payeeRepository.findFilterOptions()).thenReturn(List.of());
     lenient().when(personService.findAllLive()).thenReturn(List.of());
-    lenient().when(personService.personNamesForAccounts(any())).thenReturn(Map.of());
+    lenient().when(accountService.findLiveByTypes(anyList())).thenReturn(List.of());
+    lenient().when(registerPickerService.membership(any(), any(), any())).thenReturn(List.of());
     lenient()
         .when(registerRepository.findRows(anyList(), any(), any(), any(), anyString()))
         .thenReturn(List.of());
@@ -82,52 +83,23 @@ class RegisterServiceTest {
         id, name, ASSET, null, EUR, 210, LocalDate.now(), null, null, false, false, false);
   }
 
-  private static Account closed(long id, String name) {
-    return new Account(
-        id,
-        name,
-        ASSET,
-        null,
-        EUR,
-        30,
-        LocalDate.now().minusYears(1),
-        LocalDate.now(),
-        null,
-        false,
-        false,
-        false);
-  }
-
-  private static Account personLeaf(long id, String name) {
-    return new Account(
-        id, name, ASSET, null, EUR, null, LocalDate.now(), null, null, false, true, false);
-  }
-
   private RegisterFilter defaultFilter() {
-    return new RegisterFilter(List.of(), null, null, null);
+    return new RegisterFilter(List.of(), null, null, null, null);
   }
 
   @Test
-  void emptyAccountFilterResolvesToOpenOwnAccountsOnly() {
-    when(accountService.findLiveByTypes(anyList()))
-        .thenReturn(List.of(ownAccount(CASH, "Cash"), closed(GIRO, "Old Giro")));
+  void emptyAccountSelectionIsResolvedToThePickersMembership() {
+    when(registerPickerService.membership(RegisterPicker.LAST_USED, null, null))
+        .thenReturn(List.of(CASH, GIRO));
 
-    RegisterView view = registerService.view(defaultFilter());
+    registerService.view(defaultFilter());
 
-    // The default viewed set is the open own accounts; the closed one is neither viewed nor
-    // offered.
-    verify(registerRepository).findRows(eq(List.of(CASH)), any(), any(), any(), anyString());
-    assertThat(view.accounts())
-        .extracting(RegisterAccountOption::accountId, RegisterAccountOption::selected)
-        .containsExactly(tuple(CASH, true));
+    verify(registerRepository).findRows(eq(List.of(CASH, GIRO)), any(), any(), any(), anyString());
   }
 
   @Test
-  void explicitAccountFilterIsUsedVerbatim() {
-    when(accountService.findLiveByTypes(anyList()))
-        .thenReturn(List.of(ownAccount(CASH, "Cash"), ownAccount(GIRO, "Giro")));
-
-    registerService.view(new RegisterFilter(List.of(GIRO), null, null, null));
+  void anExplicitTickSelectionIsUsedVerbatim() {
+    registerService.view(new RegisterFilter(List.of(GIRO), RegisterPicker.OPEN, null, null, null));
 
     verify(registerRepository).findRows(eq(List.of(GIRO)), any(), any(), any(), anyString());
   }
@@ -135,7 +107,6 @@ class RegisterServiceTest {
   @Test
   void freshBookWithoutBaseCurrencyRendersNoRowsAndTouchesNoQuery() {
     when(settingsService.baseCurrency()).thenReturn(Optional.empty());
-    when(accountService.findLiveByTypes(anyList())).thenReturn(List.of(ownAccount(CASH, "Cash")));
 
     RegisterView view = registerService.view(defaultFilter());
 
@@ -144,11 +115,31 @@ class RegisterServiceTest {
   }
 
   @Test
-  void categoryOptionsAreComposedLeafPathsSortedByPath() {
-    // The posting-leaf paths come composed from AccountService (leaves-only, currency leaves and
-    // real parents already excluded there); the register maps them to options and sorts by path.
+  void theAccountDatalistOffersOpenNonPersonOwnAccountsOnly() {
+    Account personLeaf =
+        new Account(
+            9L,
+            "personal.EUR",
+            ASSET,
+            null,
+            EUR,
+            null,
+            LocalDate.now(),
+            null,
+            null,
+            false,
+            true,
+            false);
     when(accountService.findLiveByTypes(List.of("asset", "liability")))
-        .thenReturn(List.of(ownAccount(CASH, "Cash")));
+        .thenReturn(List.of(ownAccount(CASH, "Cash"), personLeaf));
+
+    RegisterView view = registerService.view(defaultFilter());
+
+    assertThat(view.accounts()).extracting(RegisterAccountOption::name).containsExactly("Cash");
+  }
+
+  @Test
+  void categoryOptionsAreComposedLeafPathsSortedByPath() {
     when(accountService.findPostableLeafPaths(List.of("income", "expense"), " - "))
         .thenReturn(List.of(new AccountPath(3L, "Transport"), new AccountPath(2L, "Food - Milk")));
 
@@ -168,71 +159,17 @@ class RegisterServiceTest {
 
     RegisterView view = registerService.view(defaultFilter());
 
-    // Each open own account contributes a To → and a From ← target (register §3.5, plan stage
-    // 7d.3).
     assertThat(view.transferTargets())
         .containsExactly("To → Cash", "From ← Cash", "To → Giro", "From ← Giro");
   }
 
   @Test
   void offersForAndByPersonTargetsForEveryLivePerson() {
-    when(accountService.findLiveByTypes(List.of("asset", "liability"))).thenReturn(List.of());
     when(personService.findAllLive())
         .thenReturn(List.of(new Person(1L, "Max", null), new Person(2L, "Alice", null)));
 
     RegisterView view = registerService.view(defaultFilter());
 
-    // Each live person contributes a for and a by target (register §3.5, plan stage 8b).
     assertThat(view.personTargets()).containsExactly("for Max", "by Max", "for Alice", "by Alice");
-  }
-
-  @Test
-  void keepsPersonLeavesOutOfTheAccountPickerAndTransferTargets() {
-    // A person's debt leaf is an open asset, so it would otherwise fall into the own-account set
-    // that feeds both the dock's Account picker and the To →/From ← targets (plan stage 8b.1). A
-    // person is reached by for/by only, never by the leaf's cosmetic name.
-    when(accountService.findLiveByTypes(List.of("asset", "liability")))
-        .thenReturn(List.of(ownAccount(CASH, "Cash"), personLeaf(9L, "personal.EUR")));
-
-    RegisterView view = registerService.view(defaultFilter());
-
-    assertThat(view.accounts())
-        .extracting(RegisterView.RegisterAccountOption::name)
-        .containsExactly("Cash");
-    assertThat(view.transferTargets()).containsExactly("To → Cash", "From ← Cash");
-  }
-
-  @Test
-  void listsPersonLeavesInTheFilterAsNameCurrency() {
-    // A person's debt leaf is kept out of the Account picker but IS offered in the filter, labelled
-    // `Name (CUR)` and resolved to the owner's real name (register §2.6, plan stage 8c).
-    when(accountService.findLiveByTypes(List.of("asset", "liability")))
-        .thenReturn(List.of(ownAccount(CASH, "Cash"), personLeaf(9L, "personal.EUR")));
-    when(personService.personNamesForAccounts(List.of(9L))).thenReturn(Map.of(9L, "Max"));
-
-    RegisterView view = registerService.view(defaultFilter());
-
-    assertThat(view.accounts()).extracting(RegisterAccountOption::name).containsExactly("Cash");
-    assertThat(view.people())
-        .extracting(RegisterAccountOption::accountId, RegisterAccountOption::name)
-        .containsExactly(tuple(9L, "Max"));
-    // The label the template prints is `Max (EUR)`.
-    assertThat(view.people().get(0).entryValue()).isEqualTo("Max (EUR)");
-  }
-
-  @Test
-  void keepsPersonLeavesInTheDefaultViewedSet() {
-    // Q-UI-1 is resolved *surfaced*: a person's debt leaf is an ordinary asset, so a person-funded
-    // transaction must appear in the register with the person on the Account side. Excluding it
-    // from the pickers must not exclude it from the view — an invisible row reads as a transaction
-    // that failed to book (owner testing, plan stage 8b.1).
-    when(accountService.findLiveByTypes(List.of("asset", "liability")))
-        .thenReturn(List.of(ownAccount(CASH, "Cash"), personLeaf(9L, "personal.EUR")));
-
-    registerService.view(defaultFilter());
-
-    ArgumentCaptor<List<Long>> viewed = ArgumentCaptor.captor();
-    verify(registerRepository).findRows(viewed.capture(), any(), any(), any(), anyString());
-    assertThat(viewed.getValue()).containsExactly(CASH, 9L);
   }
 }

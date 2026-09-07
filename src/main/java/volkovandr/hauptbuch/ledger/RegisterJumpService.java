@@ -39,9 +39,12 @@ public class RegisterJumpService {
     if (legs.isEmpty()) {
       return Optional.empty();
     }
-    // The query orders by descending magnitude, so the first leg is the funding one.
+    // The query orders by descending magnitude, so the first leg is the funding one. The jump
+    // carries one explicit account id, so it lands on the All tab (issue transaction-register-ui/22
+    // — an inbound link with explicit accounts and no picker opens on All).
     RegisterOwnLeg funding = legs.get(0);
     return Optional.of(
-        new RegisterFilter(List.of(funding.accountId()), funding.date(), null, null));
+        new RegisterFilter(
+            List.of(funding.accountId()), RegisterPicker.ALL, funding.date(), null, null));
   }
 }

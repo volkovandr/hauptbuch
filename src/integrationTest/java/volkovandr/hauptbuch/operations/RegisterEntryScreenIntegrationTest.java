@@ -138,6 +138,25 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
+  void committingRepaintsUnderTheSameActivePicker() throws Exception {
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food");
+
+    // The dock carried viewPicker=open (issue transaction-register-ui/22); the reset dock keeps it.
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-01")
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(food))
+                .param("viewAccountId", String.valueOf(cash))
+                .param("viewPicker", "open"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"viewPicker\" value=\"open\"")));
+  }
+
+  @Test
   void resolveTagReturnsPillCarryingTheHiddenTagId() throws Exception {
     long car = insertTag("Car", null);
     long passat = insertTag("Passat", car);

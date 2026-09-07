@@ -577,7 +577,7 @@ class ReceiptProcessingController {
     model.addAttribute(RECEIPT, receipt);
     model.addAttribute("editor", receiptEditorService.panel(form));
     model.addAttribute(
-        "register", registerService.view(new RegisterFilter(List.of(), null, null, null)));
+        "register", registerService.view(new RegisterFilter(List.of(), null, null, null, null)));
     // The header currency-picker (a shared fragment) renders its <select> from `currencies`,
     // exactly
     // as the register and settings screens supply it — without it the picker is an empty, unusable

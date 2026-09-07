@@ -224,6 +224,7 @@ final class SplitLineArrays {
           form.tagId(),
           lineTagIds,
           form.viewAccountId(),
+          form.viewPicker(),
           form.viewFromDate(),
           form.viewToDate(),
           form.viewPayeeId());

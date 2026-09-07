@@ -342,6 +342,81 @@ class RegisterScreenIntegrationTest {
         .andExpect(content().string(not(containsString("787,00"))));
   }
 
+  // ── The account picker (issue transaction-register-ui/22) ─────────────────
+
+  @Test
+  void filterRendersAsFiveTabStripWithOnlyTheActiveTabCounted() throws Exception {
+    openAccount(CASH, EUR, "500");
+
+    mockMvc
+        .perform(get(REGISTER_PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("register-filter__tabs")))
+        .andExpect(content().string(containsString(">Last used<")))
+        .andExpect(content().string(containsString(">Persons<")))
+        .andExpect(content().string(containsString(">Closed<")))
+        // Last used is the default, emphasised and counted; an inactive tab carries no count span.
+        .andExpect(
+            content().string(matchesRegex("(?s).*register-filter__tab--active.*Last used.*")))
+        .andExpect(content().string(containsString("register-filter__count")));
+  }
+
+  @Test
+  void theFilterPanelFragmentSwapsThePanelOnlyAndRunsNoRegisterQuery() throws Exception {
+    openAccount(CASH, EUR, "500");
+
+    mockMvc
+        .perform(get(REGISTER_PATH + "/filter-panel").param("picker", "open"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("register-filter__panel")))
+        .andExpect(content().string(containsString(CASH)))
+        // No register rows, no scroll hook, no dock — the tab click renders the control alone.
+        .andExpect(content().string(not(containsString("data-scroll-bottom"))))
+        .andExpect(content().string(not(containsString("register__row"))))
+        .andExpect(content().string(not(containsString("entry-dock"))));
+  }
+
+  @Test
+  void withoutJavaScriptTheAccountCheckboxesAndApplyStillFilter() throws Exception {
+    long cash = openAccount(CASH, EUR, "500");
+    long giro = openAccount(GIRO, EUR, "0");
+    long food = insertCategory(FOOD, EUR);
+    spend("2026-02-01", cash, food, "20");
+    spend("2026-02-02", giro, food, "5");
+
+    // A plain GET with one explicit accountId (as a JS-off Apply would submit) filters to it.
+    mockMvc
+        .perform(
+            get(REGISTER_PATH).param("picker", "open").param("accountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"accountId\"")))
+        .andExpect(content().string(containsString("-20,00")))
+        .andExpect(content().string(not(containsString("-5,00"))));
+  }
+
+  @Test
+  void closedAccountCanBeViewedButIsNotOfferedToBookTo() throws Exception {
+    openAccount(CASH, EUR, "500");
+    long giro = openAccount(GIRO, EUR, "0");
+    long food = insertCategory(FOOD, EUR);
+    spend("2026-02-02", giro, food, "5");
+    accountService.closeAccount(giro, LocalDate.parse("2026-03-01"));
+
+    // The Closed tab views the closed account's thread…
+    mockMvc
+        .perform(get(REGISTER_PATH).param("picker", "closed"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString(GIRO)))
+        .andExpect(content().string(containsString("-5,00")));
+
+    // …but the dock's Account datalist still offers only the open account.
+    mockMvc
+        .perform(get(REGISTER_PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("value=\"" + CASH + " (" + EUR + ")\"")))
+        .andExpect(content().string(not(containsString("value=\"" + GIRO + " (" + EUR + ")\""))));
+  }
+
   /** A committed receipt backing {@code txnId}; returns its id (the paperclip's target). */
   private long linkReceipt(long txnId) {
     return jdbcClient

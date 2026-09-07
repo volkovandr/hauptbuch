@@ -41,7 +41,8 @@ import java.util.List;
  *     no soft-deleted-only match to decide on
  * @param tagId the resolved tag ids of the committed chips (register §3.6, plan stage 7e) — one
  *     hidden input per pill, bound here as a list; empty when the transaction carries no tags
- * @param viewAccountId the active filter's viewed accounts; empty for the default set
+ * @param viewAccountId the active filter's ticked accounts; empty for "the whole active picker"
+ * @param viewPicker the active filter's picker token ({@code last-used}/{@code open}/…); nullable
  * @param viewFromDate the active filter's lower date bound; nullable
  * @param viewToDate the active filter's upper date bound; nullable
  * @param viewPayeeId the active filter's payee; nullable
@@ -66,6 +67,7 @@ public record DockEntryForm(
     String personRevive,
     List<Long> tagId,
     List<Long> viewAccountId,
+    String viewPicker,
     LocalDate viewFromDate,
     LocalDate viewToDate,
     Long viewPayeeId) {

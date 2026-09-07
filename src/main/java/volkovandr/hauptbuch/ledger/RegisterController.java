@@ -28,14 +28,20 @@ class RegisterController {
 
   private final RegisterService registerService;
   private final RegisterJumpService registerJumpService;
+  private final RegisterPickerService registerPickerService;
+  private final RegisterFilterViewAssembler registerFilterViewAssembler;
   private final CurrencyService currencyService;
 
   RegisterController(
       RegisterService registerService,
       RegisterJumpService registerJumpService,
+      RegisterPickerService registerPickerService,
+      RegisterFilterViewAssembler registerFilterViewAssembler,
       CurrencyService currencyService) {
     this.registerService = registerService;
     this.registerJumpService = registerJumpService;
+    this.registerPickerService = registerPickerService;
+    this.registerFilterViewAssembler = registerFilterViewAssembler;
     this.currencyService = currencyService;
   }
 
@@ -44,7 +50,11 @@ class RegisterController {
    * (every open own account), and the date range defaults to the last 12 months (register §2.3)
    * when neither bound is given.
    *
-   * @param accountId the viewed accounts (repeatable); empty for the default set
+   * @param accountId the ticked accounts within the picker (repeatable); empty for "the whole
+   *     picker" — an all-ticked selection that is submitted in full is collapsed back to this
+   * @param picker the active tab-strip picker token; when absent, explicit {@code accountId}s open
+   *     the {@code All} tab and no accounts open {@code Last used} (issue
+   *     transaction-register-ui/22)
    * @param fromDate inclusive lower date bound; defaults to 12 months ago when both bounds are
    *     blank
    * @param toDate inclusive upper date bound
@@ -57,6 +67,7 @@ class RegisterController {
   @GetMapping(BASE_PATH)
   String register(
       @RequestParam(name = "accountId", required = false) List<Long> accountId,
+      @RequestParam(name = "picker", required = false) String picker,
       @RequestParam(required = false) LocalDate fromDate,
       @RequestParam(required = false) LocalDate toDate,
       @RequestParam(required = false) Long payeeId,
@@ -64,16 +75,14 @@ class RegisterController {
       Model model) {
     Optional<RegisterFilter> jump = jumpFilter(selected);
     RegisterFilter filter =
-        jump.orElseGet(
-            () ->
-                new RegisterFilter(
-                    accountId == null ? List.of() : accountId,
-                    defaultFrom(fromDate, toDate),
-                    toDate,
-                    payeeId));
+        jump.orElseGet(() -> filterFrom(accountId, picker, fromDate, toDate, payeeId));
     RegisterView register = registerService.view(filter);
 
     model.addAttribute("register", register);
+    // The filter control (tab strip + panel) is a named fragment reused by /register/filter-panel;
+    // both renders read `filterView` as a top-level attribute. It is a controller concern like the
+    // nav — assembled here, not threaded through RegisterView (issue transaction-register-ui/22).
+    model.addAttribute("filterView", registerFilterViewAssembler.filterView(filter, false));
     // Only a jump that actually resolved marks and docks a row. A voided or unknown id falls back
     // to the default view — and must not then dock a transaction the register cannot show.
     model.addAttribute("selectedTransactionId", jump.isPresent() ? selected : null);
@@ -82,6 +91,52 @@ class RegisterController {
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", "Register · Hauptbuch");
     return VIEW;
+  }
+
+  /**
+   * The htmx fragment for one picker's panel (issue transaction-register-ui/22): the tab strip
+   * re-rendered with {@code picker} active plus its panel, expanded and all-ticked. It runs no
+   * ledger row query — clicking a tab must never re-render the register or touch the balance
+   * threads; only {@code Apply} does that.
+   *
+   * @param picker the tab that was clicked
+   * @param fromDate the date bounds currently in the filter form, so a {@code Last used} panel
+   *     tracks them
+   */
+  @GetMapping(BASE_PATH + "/filter-panel")
+  String filterPanel(
+      @RequestParam String picker,
+      @RequestParam(required = false) LocalDate fromDate,
+      @RequestParam(required = false) LocalDate toDate,
+      Model model) {
+    RegisterFilter filter =
+        new RegisterFilter(
+            List.of(),
+            RegisterPicker.fromParam(picker),
+            defaultFrom(fromDate, toDate),
+            toDate,
+            null);
+    model.addAttribute("filterView", registerFilterViewAssembler.filterView(filter, true));
+    return VIEW + " :: filterControl";
+  }
+
+  /**
+   * The register filter from the query params, applying the inbound-link rule: an explicit {@code
+   * accountId} set with no {@code picker} opens the {@code All} tab (the landing page's
+   * pinned-account link, the People per-person link); nothing at all opens {@code Last used}. The
+   * submitted tick selection is intersected with the picker's membership and collapsed back to "the
+   * whole picker" when every member is ticked.
+   */
+  private RegisterFilter filterFrom(
+      List<Long> accountId, String picker, LocalDate fromDate, LocalDate toDate, Long payeeId) {
+    List<Long> submitted = accountId == null ? List.of() : accountId;
+    RegisterPicker active =
+        picker != null
+            ? RegisterPicker.fromParam(picker)
+            : (submitted.isEmpty() ? RegisterPicker.DEFAULT : RegisterPicker.ALL);
+    LocalDate from = defaultFrom(fromDate, toDate);
+    List<Long> selection = registerPickerService.resolveSelection(active, submitted, from, toDate);
+    return new RegisterFilter(selection, active, from, toDate, payeeId);
   }
 
   /** The transaction-derived filter for a {@code selected=} jump; empty when there is no jump. */
