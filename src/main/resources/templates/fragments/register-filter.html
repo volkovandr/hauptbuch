@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<!--
+  One row of the register's account-filter panel (issue transaction-register-ui/22), shared by the
+  panel's two columns (real accounts | people). A `row.group()` row is a tri-state toggle whose
+  <input> carries NO name, so it is never submitted as an accountId; a leaf row is a real
+  name="accountId" checkbox. The data-filter-* attributes drive the isolated filter-groups.js leaf.
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <li
+      th:fragment="row(row)"
+      class="register-filter__item"
+      th:style="'--depth: ' + ${row.depth()}"
+    >
+      <label class="check">
+        <input
+          th:if="${row.group()}"
+          type="checkbox"
+          class="register-filter__group"
+          th:attr="data-filter-group=${row.groupKey()}, data-filter-member=${row.memberOf()}"
+        />
+        <input
+          th:unless="${row.group()}"
+          type="checkbox"
+          name="accountId"
+          th:value="${row.accountId()}"
+          th:checked="${row.ticked()}"
+          th:attr="data-filter-member=${row.memberOf()}"
+        />
+        <span
+          class="swatch"
+          th:if="${row.hue() != null}"
+          th:style="|background: hsl(${row.hue()} 55% 78%); border-color: hsl(${row.hue()} 55% 45%)|"
+        ></span>
+        <span th:text="${row.label()}">Cash</span>
+        <span
+          class="muted num"
+          th:if="${row.currencyCode() != null}"
+          th:text="${row.currencyCode()}"
+          >EUR</span
+        >
+        <span class="muted register-filter__closed" th:if="${row.closed()}">closed</span>
+      </label>
+    </li>
+  </body>
+</html>

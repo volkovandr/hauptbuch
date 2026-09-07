@@ -24,7 +24,7 @@ import volkovandr.hauptbuch.ledger.RegisterFilterView.Tab;
  * question belongs to {@link RegisterPickerService}; this class only turns a resolved membership
  * into the flat list of rows the template iterates.
  *
- * <p>The panel is one flat {@link Row} list so an arbitrarily deep account hierarchy and the
+ * <p>Each column is a flat {@link Row} list so an arbitrarily deep account hierarchy and the
  * per-person groups render through a single loop. A parent account renders as a tri-state group
  * toggle keyed {@code g<id>}; a person renders as one keyed {@code p<id>}; every member row carries
  * the space-separated keys of the groups it belongs to, which is all the {@code filter-groups.js}
@@ -76,18 +76,17 @@ class RegisterFilterViewAssembler {
       boolean isActive = picker == active;
       tabs.add(new Tab(picker.param(), label(picker), isActive, isActive ? ticked.size() : null));
     }
-    return new RegisterFilterView(
-        tabs, new Panel(active, active.param(), panelExpanded, panelRows(active, members, ticked)));
-  }
 
-  private List<Row> panelRows(RegisterPicker picker, Set<Long> members, Set<Long> ticked) {
     List<AccountNode> nodes = accountService.findLiveByTypesWithDepth(OWN_ACCOUNT_TYPES);
-    return switch (picker) {
-      case OPEN, CLOSED -> accountTreeRows(nodes, members, ticked);
-      case ALL, LAST_USED ->
-          concat(accountTreeRows(nodes, members, ticked), personRows(nodes, members, ticked));
-      case PERSONS -> personRows(nodes, members, ticked);
-    };
+    boolean showAccounts = active != RegisterPicker.PERSONS;
+    boolean showPeople =
+        active == RegisterPicker.ALL
+            || active == RegisterPicker.LAST_USED
+            || active == RegisterPicker.PERSONS;
+    List<Row> accountRows = showAccounts ? accountTreeRows(nodes, members, ticked) : List.of();
+    List<Row> personRows = showPeople ? personRows(nodes, members, ticked) : List.of();
+    return new RegisterFilterView(
+        tabs, new Panel(active, active.param(), panelExpanded, accountRows, personRows));
   }
 
   /**
@@ -237,11 +236,5 @@ class RegisterFilterViewAssembler {
       case CLOSED -> "Closed";
       case ALL -> "All";
     };
-  }
-
-  private static <T> List<T> concat(List<T> first, List<T> second) {
-    List<T> both = new ArrayList<>(first);
-    both.addAll(second);
-    return both;
   }
 }

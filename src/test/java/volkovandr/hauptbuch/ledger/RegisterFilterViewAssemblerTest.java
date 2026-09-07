@@ -6,6 +6,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -92,6 +93,16 @@ class RegisterFilterViewAssemblerTest {
     return new RegisterFilter(List.of(ticked), picker, null, null, null);
   }
 
+  /**
+   * The panel's two columns concatenated (account rows, then person rows) for a full-list check.
+   */
+  private List<Row> panelRows(RegisterPicker picker, Long... ticked) {
+    RegisterFilterView.Panel panel = assembler.filterView(filter(picker, ticked), false).panel();
+    List<Row> all = new ArrayList<>(panel.accountRows());
+    all.addAll(panel.personRows());
+    return all;
+  }
+
   @Test
   void openPanelRendersEachMemberLeafAsCheckedCheckbox() {
     when(accountService.findLiveByTypesWithDepth(OWN_TYPES))
@@ -99,7 +110,7 @@ class RegisterFilterViewAssemblerTest {
             List.of(node(account(10, "Cash", null), 0), node(account(11, "Giro", null), 0)));
     when(pickerService.membership(RegisterPicker.OPEN, null, null)).thenReturn(List.of(10L, 11L));
 
-    List<Row> rows = assembler.filterView(filter(RegisterPicker.OPEN), false).panel().rows();
+    List<Row> rows = panelRows(RegisterPicker.OPEN);
 
     assertThat(rows)
         .extracting(Row::accountId, Row::label, Row::group, Row::ticked)
@@ -113,7 +124,7 @@ class RegisterFilterViewAssemblerTest {
             List.of(node(account(10, "Cash", null), 0), node(closedAccount(11, "Old Giro"), 0)));
     when(pickerService.membership(RegisterPicker.ALL, null, null)).thenReturn(List.of(10L, 11L));
 
-    List<Row> rows = assembler.filterView(filter(RegisterPicker.ALL), false).panel().rows();
+    List<Row> rows = panelRows(RegisterPicker.ALL);
 
     assertThat(rows)
         .extracting(Row::accountId, Row::closed)
@@ -130,7 +141,7 @@ class RegisterFilterViewAssemblerTest {
                 node(account(22, "Savings", 20L), 1)));
     when(pickerService.membership(RegisterPicker.OPEN, null, null)).thenReturn(List.of(21L, 22L));
 
-    List<Row> rows = assembler.filterView(filter(RegisterPicker.OPEN), false).panel().rows();
+    List<Row> rows = panelRows(RegisterPicker.OPEN);
 
     assertThat(rows)
         .extracting(Row::label, Row::group, Row::groupKey, Row::memberOf)
@@ -157,7 +168,7 @@ class RegisterFilterViewAssemblerTest {
                 new PersonBalanceSummary(1L, "Alice", List.of(), List.of(101L)),
                 new PersonBalanceSummary(2L, "Bob", List.of(), List.of(201L, 202L))));
 
-    List<Row> rows = assembler.filterView(filter(RegisterPicker.PERSONS), false).panel().rows();
+    List<Row> rows = panelRows(RegisterPicker.PERSONS);
 
     // Umbrella (0) → person toggle (1) → currency leaves (2, sorted CHF before USD).
     assertThat(rows)
@@ -180,7 +191,7 @@ class RegisterFilterViewAssemblerTest {
     when(pickerService.livePeople())
         .thenReturn(List.of(new PersonBalanceSummary(3L, "Max", List.of(), List.of(101L))));
 
-    List<Row> rows = assembler.filterView(filter(RegisterPicker.LAST_USED), false).panel().rows();
+    List<Row> rows = panelRows(RegisterPicker.LAST_USED);
 
     assertThat(rows)
         .extracting(Row::label, Row::group, Row::groupKey, Row::memberOf)
@@ -212,7 +223,7 @@ class RegisterFilterViewAssemblerTest {
 
     RegisterFilterView view = assembler.filterView(filter(RegisterPicker.OPEN, 11L), false);
 
-    assertThat(view.panel().rows())
+    assertThat(panelRows(RegisterPicker.OPEN, 11L))
         .extracting(Row::accountId, Row::ticked)
         .containsExactly(tuple(10L, false), tuple(11L, true));
     assertThat(view.tabs()).filteredOn(Tab::active).extracting(Tab::tickedCount).containsExactly(1);
