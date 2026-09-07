@@ -122,13 +122,18 @@ re-renders the register, and it re-collapses the panel.
 |-----|---------|
 | **Last used** | Open real accounts *and* person debt leaves with a posting inside the applied date range (tracks the range). This is the default. |
 | **Open** | Open real accounts; person leaves excluded. |
-| **Persons** | Live people's per-currency debt leaves, unsettled people before fully settled. |
+| **Persons** | Live people's per-currency debt leaves, alphabetical by name. |
 | **Closed** | Closed accounts — **viewable, never bookable** (§2.3a). |
 | **All** | Every live own account leaf: open, closed, and person leaves. |
 
 Wherever person leaves appear (Last used, Persons, All) they render **three levels deep**: a
-single `Persons` umbrella toggle → one toggle per person → that person's currency leaves as
-checkboxes labelled by the bare currency code. Every group toggle is tri-state.
+single `Persons` umbrella toggle → one toggle per person (alphabetical) → that person's currency
+leaves as checkboxes labelled by the bare currency code (alphabetical). Every group toggle is
+tri-state.
+
+The whole list is one merged alphabetical order — asset and liability accounts interleave (a
+`Credit Card` sits between `Commerzbank` and `Deposit`, not in a trailing block), and a closed
+account carries a muted "closed" marker.
 
 Switching tab renders that picker fresh with **all members ticked**; ticks made in a
 previously-open tab are discarded. A parent account (and each person toggle) is a **tri-state group

@@ -1,11 +1,13 @@
 package volkovandr.hauptbuch.ledger;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.accounts.Account;
@@ -155,13 +157,13 @@ class RegisterFilterViewAssembler {
   /**
    * The per-person portion of a panel, three levels deep (issue transaction-register-ui/22, owner
    * feedback): a single {@code Persons} umbrella toggle, then one toggle per live person that has a
-   * member leaf (unsettled people first), then that person's currency leaves as checkboxes labelled
-   * by the bare currency code. Empty when no person leaf is a member — so {@link
-   * RegisterPicker#OPEN} and {@link RegisterPicker#CLOSED} show nothing here.
+   * member leaf (alphabetical by name), then that person's currency leaves as checkboxes labelled
+   * by the bare currency code (alphabetical by code). Empty when no person leaf is a member — so
+   * {@link RegisterPicker#OPEN} and {@link RegisterPicker#CLOSED} show nothing here.
    */
   private List<Row> personRows(List<AccountNode> nodes, Set<Long> members, Set<Long> ticked) {
     Map<Long, Account> byId = byId(nodes);
-    List<PersonBalanceSummary> people = pickerService.livePeopleUnsettledFirst();
+    List<PersonBalanceSummary> people = pickerService.livePeople();
     boolean anyMemberLeaf =
         people.stream().flatMap(p -> p.accountIds().stream()).anyMatch(members::contains);
     if (!anyMemberLeaf) {
@@ -170,29 +172,32 @@ class RegisterFilterViewAssembler {
     List<Row> rows = new ArrayList<>();
     rows.add(groupToggleRow("Persons", PERSONS_UMBRELLA_KEY, null, 0));
     for (PersonBalanceSummary person : people) {
-      List<Long> leaves = person.accountIds().stream().filter(members::contains).toList();
+      List<Account> leaves =
+          person.accountIds().stream()
+              .filter(members::contains)
+              .map(byId::get)
+              .filter(Objects::nonNull)
+              .sorted(Comparator.comparing(Account::currencyCode))
+              .toList();
       if (leaves.isEmpty()) {
         continue;
       }
       String personKey = "p" + person.personId();
       rows.add(groupToggleRow(person.name(), personKey, PERSONS_UMBRELLA_KEY, 1));
       String memberOf = PERSONS_UMBRELLA_KEY + " " + personKey;
-      for (Long leafId : leaves) {
-        Account leaf = byId.get(leafId);
-        if (leaf != null) {
-          rows.add(
-              new Row(
-                  leaf.accountId(),
-                  leaf.currencyCode(),
-                  null,
-                  leaf.hue(),
-                  2,
-                  false,
-                  null,
-                  memberOf,
-                  ticked.contains(leaf.accountId()),
-                  false));
-        }
+      for (Account leaf : leaves) {
+        rows.add(
+            new Row(
+                leaf.accountId(),
+                leaf.currencyCode(),
+                null,
+                leaf.hue(),
+                2,
+                false,
+                null,
+                memberOf,
+                ticked.contains(leaf.accountId()),
+                false));
       }
     }
     return rows;

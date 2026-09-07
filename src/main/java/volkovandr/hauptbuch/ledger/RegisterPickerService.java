@@ -52,10 +52,10 @@ public class RegisterPickerService {
   }
 
   /**
-   * The member account ids of {@code picker}, in display order (alphabetical depth-first for the
-   * account pickers; unsettled people before settled for {@link RegisterPicker#PERSONS}). {@link
-   * RegisterPicker#LAST_USED} is resolved against the given date range, so widening the range while
-   * all-ticked admits newly-qualifying accounts.
+   * The member account ids of {@code picker}, in display order — alphabetical throughout
+   * (depth-first for the account pickers, by person name for {@link RegisterPicker#PERSONS}; owner
+   * feedback 2026-09-07). {@link RegisterPicker#LAST_USED} is resolved against the given date
+   * range, so widening the range while all-ticked admits newly-qualifying accounts.
    *
    * @param fromDate the applied filter's inclusive lower bound; null for unbounded
    * @param toDate the applied filter's inclusive upper bound; null for unbounded
@@ -68,9 +68,7 @@ public class RegisterPickerService {
       case CLOSED -> realLeaves(leaves).filter(a -> !isOpen(a)).map(Account::accountId).toList();
       case ALL -> leaves.stream().map(Account::accountId).toList();
       case PERSONS ->
-          livePeopleUnsettledFirst().stream()
-              .flatMap(summary -> summary.accountIds().stream())
-              .toList();
+          livePeople().stream().flatMap(summary -> summary.accountIds().stream()).toList();
       case LAST_USED -> lastUsed(leaves, fromDate, toDate);
     };
   }
@@ -97,17 +95,13 @@ public class RegisterPickerService {
   }
 
   /**
-   * The live-people roster with an unsettled leaf before fully settled people (a fully settled
-   * person has an empty {@link PersonBalanceSummary#balances()}), alphabetical by name within each
-   * group. Reuses {@link PersonService#balanceSummaries()} — the same roster the People screen
-   * builds — rather than a new settled/unsettled query.
+   * The live-people roster the register filter lists, alphabetical by name (owner feedback
+   * 2026-09-07 — was unsettled-first). Delegates to {@link PersonService#balanceSummaries()}, which
+   * is already name-ordered; the summary's {@code balances} still tells the assembler nothing it
+   * needs, but it is the one roster call the People screen already makes.
    */
-  public List<PersonBalanceSummary> livePeopleUnsettledFirst() {
-    List<PersonBalanceSummary> summaries = personService.balanceSummaries();
-    return Stream.concat(
-            summaries.stream().filter(s -> !s.balances().isEmpty()),
-            summaries.stream().filter(s -> s.balances().isEmpty()))
-        .toList();
+  public List<PersonBalanceSummary> livePeople() {
+    return personService.balanceSummaries();
   }
 
   /**

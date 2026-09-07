@@ -71,11 +71,14 @@ public class AccountRepository {
    * The recursive walk of the live account forest for the given types: every parentless account of
    * a requested type, then every live descendant reached through {@code parent_id} to arbitrary
    * depth (data-model §5's hierarchy is not limited to two levels). Each row carries its {@code
-   * depth} (0 = top level) and a {@code sort_path} of ancestor names, so {@code order by type,
-   * sort_path} lists every node immediately followed by all of its descendants, alphabetical among
-   * siblings at each level. A soft-deleted account cuts the walk — its descendants are not reached.
-   * Shared by {@link #findLiveByTypes} and {@link #findLiveByTypesWithDepth} so the two cannot
-   * drift (issue account-management/04).
+   * depth} (0 = top level) and a {@code sort_path} of ancestor names, so {@code order by sort_path}
+   * lists every node immediately followed by all of its descendants, alphabetical among siblings at
+   * each level — <em>one merged list regardless of type</em>, so the register's account filter
+   * shows a liability ({@code Credit Card}) in its alphabetical place among the assets (issue
+   * account-management/04, owner feedback 2026-09-07). Screens that want a per-type section
+   * (accounts, categories) re-filter by {@code type} themselves. A soft-deleted account cuts the
+   * walk — its descendants are not reached. Shared by {@link #findLiveByTypes} and {@link
+   * #findLiveByTypesWithDepth} so the two cannot drift.
    */
   private static final String LIVE_TREE_CTE =
       """
@@ -201,20 +204,15 @@ public class AccountRepository {
   }
 
   /**
-   * The live (not soft-deleted) accounts of the given types, parents before their children and
-   * alphabetical among siblings at each level — the accounts screen's and the register filter's
-   * list order. Shares the {@link #LIVE_TREE_CTE} recursive walk with {@link
+   * The live (not soft-deleted) accounts of the given types, one merged list — parents before their
+   * children, alphabetical among siblings at each level, types interleaved (issue
+   * account-management/04). Shares the {@link #LIVE_TREE_CTE} recursive walk with {@link
    * #findLiveByTypesWithDepth}, so the two cannot drift on which accounts they return or in what
-   * order (issue account-management/04): the only difference is that this one drops the {@code
-   * depth} annotation.
+   * order: the only difference is that this one drops the {@code depth} annotation.
    */
   public List<Account> findLiveByTypes(List<String> types) {
     return jdbcClient
-        .sql(
-            LIVE_TREE_CTE
-                + "select "
-                + TREE_ACCOUNT_COLUMNS
-                + " from tree order by type, sort_path")
+        .sql(LIVE_TREE_CTE + "select " + TREE_ACCOUNT_COLUMNS + " from tree order by sort_path")
         .param(TYPES, types)
         .query(Account.class)
         .list();
@@ -231,7 +229,7 @@ public class AccountRepository {
             LIVE_TREE_CTE
                 + "select "
                 + TREE_ACCOUNT_COLUMNS
-                + ", depth from tree order by type, sort_path")
+                + ", depth from tree order by sort_path")
         .param(TYPES, types)
         .query(
             (rs, rowNum) ->
