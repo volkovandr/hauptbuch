@@ -3,9 +3,10 @@
   Accounts screen (plan stage 6a): the asset and liability accounts the register threads through,
   and the open-account form.
 
-    • The list groups assets and liabilities; children indent under their parent (leaves-only
-      hierarchy, data-model §5). Each account shows its stored register hue (register §2.8) as a
-      swatch and links to its edit page. Closed accounts stay listed, tagged, history intact.
+    • The list groups assets and liabilities; each row indents by its true hierarchy depth
+      (leaves-only hierarchy, data-model §5) — grandchildren and deeper nest further than children.
+      Each account shows its stored register hue (register §2.8) as a swatch and links to its edit
+      page. Closed accounts stay listed, tagged, history intact.
     • Opening an account takes any seeded currency (multi-currency is live, plan §1.2) and an
       optional opening balance — German-formatted, booked through the engine as a real balanced
       transaction against the per-currency Opening Balances leaf (data-model T-DM-4).
@@ -24,9 +25,11 @@
       <p class="muted" th:if="${#lists.isEmpty(assets)}">No asset accounts yet.</p>
       <ul class="acct-list" th:unless="${#lists.isEmpty(assets)}">
         <li
-          th:each="a : ${assets}"
+          th:each="n : ${assets}"
+          th:with="a=${n.account()}"
           class="acct"
-          th:classappend="${a.parentId() != null} ? 'acct--child'"
+          th:classappend="${n.depth() > 0} ? 'acct--child'"
+          th:style="${n.depth() > 0} ? |--depth: ${n.depth()}|"
         >
           <span
             class="swatch"
@@ -44,9 +47,11 @@
       <p class="muted" th:if="${#lists.isEmpty(liabilities)}">No liability accounts yet.</p>
       <ul class="acct-list" th:unless="${#lists.isEmpty(liabilities)}">
         <li
-          th:each="a : ${liabilities}"
+          th:each="n : ${liabilities}"
+          th:with="a=${n.account()}"
           class="acct"
-          th:classappend="${a.parentId() != null} ? 'acct--child'"
+          th:classappend="${n.depth() > 0} ? 'acct--child'"
+          th:style="${n.depth() > 0} ? |--depth: ${n.depth()}|"
         >
           <span
             class="swatch"

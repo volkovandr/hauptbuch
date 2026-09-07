@@ -314,6 +314,20 @@ public class AccountService {
         .toList();
   }
 
+  /**
+   * The same live asset and liability accounts as {@link #manageableAccounts()}, but each annotated
+   * with its true hierarchy depth and listed depth-first — what the accounts screen needs to indent
+   * a multi-level tree correctly (data-model §5's hierarchy is not limited to two levels),
+   * mirroring {@code CategoryService.manageableCategories()}. Per-person debt leaves are excluded
+   * exactly as in {@link #manageableAccounts()}; they are always top-level leaves, so dropping them
+   * cannot orphan a descendant or shift another account's depth.
+   */
+  public List<AccountNode> manageableAccountsWithDepth() {
+    return accountRepository.findLiveByTypesWithDepth(MANAGEABLE_TYPES).stream()
+        .filter(n -> !n.account().personLeaf())
+        .toList();
+  }
+
   /** The live accounts of the given types — the read other modules' screens list against. */
   public List<Account> findLiveByTypes(List<String> types) {
     return accountRepository.findLiveByTypes(types);

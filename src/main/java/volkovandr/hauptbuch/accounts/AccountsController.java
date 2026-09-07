@@ -64,10 +64,12 @@ class AccountsController {
   /** The accounts list plus the open-account form. */
   @GetMapping(BASE_PATH)
   String accounts(Model model) {
-    List<Account> accounts = accountService.manageableAccounts();
-    model.addAttribute("assets", accounts.stream().filter(a -> "asset".equals(a.type())).toList());
+    List<AccountNode> accounts = accountService.manageableAccountsWithDepth();
     model.addAttribute(
-        "liabilities", accounts.stream().filter(a -> "liability".equals(a.type())).toList());
+        "assets", accounts.stream().filter(n -> "asset".equals(n.account().type())).toList());
+    model.addAttribute(
+        "liabilities",
+        accounts.stream().filter(n -> "liability".equals(n.account().type())).toList());
     model.addAttribute("parentOptions", accountService.parentOptions());
     model.addAttribute("currencies", currencyOptionRepository.findAll());
     model.addAttribute("today", LocalDate.now());

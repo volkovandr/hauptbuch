@@ -427,6 +427,33 @@ class AccountsScreenIntegrationTest {
         .andExpect(content().string(containsString("that move was refused")));
   }
 
+  private long insertChildAsset(String name, long parentId) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code, parent_id) "
+                + "values (:n, 'asset', :c, :p) returning account_id")
+        .param("n", name)
+        .param("c", EUR)
+        .param("p", parentId)
+        .query(Long.class)
+        .single();
+  }
+
+  @Test
+  void grandchildAccountIndentsFurtherThanItsParent() throws Exception {
+    openAsset("Wallet");
+    long wallet = accountIdNamed("Wallet");
+    long pocket = insertChildAsset("Pocket", wallet);
+    insertChildAsset("Coins", pocket);
+
+    // Pocket (depth 1) and Coins (depth 2) must carry different indentation, not the same one —
+    // mirrors the categories screen's grandchild-indent assertion.
+    mockMvc
+        .perform(get(ACCOUNTS_PATH))
+        .andExpect(content().string(containsString("--depth: 1")))
+        .andExpect(content().string(containsString("--depth: 2")));
+  }
+
   @Test
   void closedAccountStaysListedTaggedClosed() throws Exception {
     mockMvc
