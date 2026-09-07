@@ -169,6 +169,34 @@ public class RegisterRepository {
   }
 
   /**
+   * The distinct own-account ids (asset/liability) that carry at least one live posting whose
+   * transaction date falls in {@code [fromDate, toDate]} — the "Last used" picker's membership
+   * (issue transaction-register-ui/22). Person debt leaves are {@code asset} accounts and are
+   * included: a person-funded transaction's only own leg can be the debt leaf, and excluding it
+   * would drop such a transaction from the default view (plan stage 8b.1). A null bound is
+   * unbounded on that side; a voided transaction and a soft-deleted account contribute nothing.
+   */
+  public List<Long> findAccountIdsWithActivity(LocalDate fromDate, LocalDate toDate) {
+    return jdbcClient
+        .sql(
+            """
+            select distinct p.account_id
+            from posting p
+            join transaction t on p.transaction_id = t.transaction_id
+            join account a on p.account_id = a.account_id
+            where t.deleted_at is null
+              and a.deleted_at is null
+              and a.type in ('asset', 'liability')
+              and (cast(:fromDate as date) is null or t.date >= :fromDate)
+              and (cast(:toDate as date) is null or t.date <= :toDate)
+            """)
+        .param(FROM_DATE, fromDate)
+        .param(TO_DATE, toDate)
+        .query(Long.class)
+        .list();
+  }
+
+  /**
    * A live transaction's legs into your own accounts, with its date — what the {@code selected=}
    * jump (register §7, plan stage 9g) derives its filter from. Biggest magnitude first, so the
    * account that actually funded the transaction leads. Empty for a voided or unknown transaction,
