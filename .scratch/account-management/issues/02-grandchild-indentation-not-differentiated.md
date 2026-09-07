@@ -1,6 +1,6 @@
 # Account list only shows one level of indentation — grandchildren look like children
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: minor
 Area: Account management (account list screen, hierarchy rendering)
@@ -111,3 +111,22 @@ identical in mechanism to how the categories screen already renders its hierarch
 - Any change to the CSS indent step size or the hierarchy data model.
 - Collapsing/expanding tree nodes or any interactive tree behaviour — this is static indentation
   only.
+
+## Comments
+
+### Resolved 2026-09-07 — owner confirmed
+
+Branch `account-management/reparent`, commit `b332c76`.
+
+- New `AccountService.manageableAccountsWithDepth()` — the depth-annotated, depth-first equivalent
+  of `manageableAccounts()`, same person-debt-leaf exclusion. Mirrors
+  `CategoryService.manageableCategories()`.
+- `AccountsController` feeds the screen `AccountNode`s (split assets/liabilities by
+  `account().type()`); `accounts.html` applies `acct--child` and sets `--depth` inline when
+  `depth > 0`, identical to `categories.html`. No CSS change.
+- Tests: `AccountServiceTest` (person-leaf exclusion + depth passthrough), `AccountsScreenIntegrationTest`
+  (Wallet → Pocket → Coins asserts `--depth: 1` and `--depth: 2`). `./gradlew check` green.
+- Reviewed via `/code-review` — no findings against this change.
+- Incidental: the screen now reads the recursive depth query, so it also gained that query's
+  alphabetical depth-first ordering — the accounts-screen half of issue 04. The register's account
+  filter still runs on the flat read and stays with 04 / transaction-register-ui/22.

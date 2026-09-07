@@ -41,3 +41,13 @@ This file exists to record the defect and its cause, and is marked `resolved` wh
 **Expected behavior:** accounts are ordered alphabetically, parents before their children, and
 alphabetical among siblings at each depth — on the accounts screen and in the register's account
 filter alike.
+
+---
+
+### Update 2026-09-07 — accounts-screen half incidentally fixed
+
+`account-management/02` (commit `b332c76`) moved the accounts screen onto the recursive
+depth-annotated read (`findLiveByTypesWithDepth`, ordered `type, sort_path`), so that screen is now
+alphabetical, depth-first. The **register's account filter** is still on the flat `findLiveByTypes`
+and remains creation-ordered — this issue stays open for that half, shipping with
+transaction-register-ui/22.
