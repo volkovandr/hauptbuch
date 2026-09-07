@@ -198,6 +198,49 @@ class AccountTreeSqlLogicTest {
     assertThat(accountRepository.findLiveByTypesWithDepth(List.of("liability"))).isEmpty();
   }
 
+  // ── findLiveByTypes (same walk, without the depth annotation) ──────────────
+
+  @Test
+  void findLiveByTypesOrdersTopLevelAccountsAlphabeticallyNotByCreation() {
+    // Inserted out of alphabetical order: the old query sorted top-level accounts by
+    // coalesce(parent_id, account_id) — i.e. creation order (issue account-management/04).
+    long zebra = insertRoot("Zebra", ASSET);
+    long apple = insertRoot("Apple", ASSET);
+    long mango = insertRoot("Mango", ASSET);
+
+    assertThat(accountRepository.findLiveByTypes(List.of(ASSET)))
+        .extracting(Account::accountId)
+        .containsExactly(apple, mango, zebra);
+  }
+
+  @Test
+  void findLiveByTypesPlacesEachChildImmediatelyAfterItsParentDepthFirst() {
+    long food = insertRoot(FOOD, EXPENSE);
+    long sweets = insertChild(SWEETS, EXPENSE, food);
+    long mms = insertChild(MMS, EXPENSE, sweets);
+    long milk = insertChild(MILK, EXPENSE, food);
+    long drinks = insertRoot("Drinks", EXPENSE);
+
+    // order by (type, sort_path): "Drinks" < "Food"; within Food, "Milk" < "Sweets"; M&Ms sits
+    // under Sweets. Every parent immediately precedes its own descendants.
+    assertThat(accountRepository.findLiveByTypes(List.of(EXPENSE)))
+        .extracting(Account::accountId)
+        .containsExactly(drinks, food, milk, sweets, mms);
+  }
+
+  @Test
+  void findLiveByTypesPrunesSoftDeletedParentsWholeBranch() {
+    long food = insertRoot(FOOD, EXPENSE);
+    long sweets = insertChild(SWEETS, EXPENSE, food);
+    long mms = insertChild(MMS, EXPENSE, sweets);
+    softDelete(sweets);
+
+    assertThat(accountRepository.findLiveByTypes(List.of(EXPENSE)))
+        .extracting(Account::accountId)
+        .contains(food)
+        .doesNotContain(sweets, mms);
+  }
+
   // ── findSubtreeAccountIds ─────────────────────────────────────────────────
 
   @Test
