@@ -1,6 +1,6 @@
 # An account's parent cannot be changed after creation
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: medium
 Area: Account management (account editor, `AccountService`/`AccountsController`)
@@ -95,9 +95,9 @@ moved account's `parentId` changes.
 
 ## Comments
 
-### Implemented 2026-09-06 — awaiting owner confirmation
+### Resolved 2026-09-07 — owner confirmed the implementation works
 
-Branch `account-management/reparent`.
+Branch `account-management/reparent`, commit `ee7e41b` (merge/push pending, owner's).
 
 - New `AccountReparenter` (`accounts` module) owns the validated move: reuses the create path's
   `requireManageable` / `requireUsableParent` (widened to package-private), adds the move-only rules
