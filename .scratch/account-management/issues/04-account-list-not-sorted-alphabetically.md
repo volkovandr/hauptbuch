@@ -1,6 +1,6 @@
 # Account list is in creation order, not alphabetical
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: minor
 Area: Account management (account list ordering) — also affects the register's account filter
@@ -51,3 +51,13 @@ depth-annotated read (`findLiveByTypesWithDepth`, ordered `type, sort_path`), so
 alphabetical, depth-first. The **register's account filter** is still on the flat `findLiveByTypes`
 and remains creation-ordered — this issue stays open for that half, shipping with
 transaction-register-ui/22.
+
+---
+
+### Update 2026-09-07 — resolved with transaction-register-ui/22
+
+`AccountRepository.findLiveByTypes` now selects from the shared `LIVE_TREE_CTE` (the same recursive
+walk `findLiveByTypesWithDepth` uses), ordered `type, sort_path` — parents before children,
+alphabetical among siblings at each depth. The register's account filter reads this and is
+alphabetical; the accounts screen was already on the depth query. Ordering cases in
+`AccountTreeSqlLogicTest`. Owner-confirmed as part of #22 (branch `feat/register-filter-picker`).
