@@ -67,6 +67,47 @@ public class AccountRepository {
       )
       """;
 
+  /**
+   * The recursive walk of the live account forest for the given types: every parentless account of
+   * a requested type, then every live descendant reached through {@code parent_id} to arbitrary
+   * depth (data-model §5's hierarchy is not limited to two levels). Each row carries its {@code
+   * depth} (0 = top level) and a {@code sort_path} of ancestor names, so {@code order by type,
+   * sort_path} lists every node immediately followed by all of its descendants, alphabetical among
+   * siblings at each level. A soft-deleted account cuts the walk — its descendants are not reached.
+   * Shared by {@link #findLiveByTypes} and {@link #findLiveByTypesWithDepth} so the two cannot
+   * drift (issue account-management/04).
+   */
+  private static final String LIVE_TREE_CTE =
+      """
+      with recursive tree as (
+        select account_id, name, type, parent_id, currency_code, hue,
+               opened_at, closed_at, deleted_at, currency_leaf, person_leaf,
+               show_on_main_page,
+               0 as depth,
+               array[name] as sort_path
+        from account
+        where type in (:types)
+          and deleted_at is null
+          and parent_id is null
+        union all
+        select a.account_id, a.name, a.type, a.parent_id, a.currency_code, a.hue,
+               a.opened_at, a.closed_at, a.deleted_at, a.currency_leaf, a.person_leaf,
+               a.show_on_main_page,
+               tree.depth + 1,
+               tree.sort_path || a.name
+        from account a
+        join tree on a.parent_id = tree.account_id
+        where a.deleted_at is null
+      )
+      """;
+
+  /** The {@link Account} columns to select from {@link #LIVE_TREE_CTE}'s {@code tree}. */
+  private static final String TREE_ACCOUNT_COLUMNS =
+      """
+      account_id, name, type, parent_id, currency_code, hue,
+      opened_at, closed_at, deleted_at, currency_leaf, person_leaf, show_on_main_page
+      """;
+
   private final JdbcClient jdbcClient;
 
   AccountRepository(JdbcClient jdbcClient) {
@@ -161,18 +202,19 @@ public class AccountRepository {
 
   /**
    * The live (not soft-deleted) accounts of the given types, parents before their children and
-   * alphabetical within a level — the accounts screen's list order.
+   * alphabetical among siblings at each level — the accounts screen's and the register filter's
+   * list order. Shares the {@link #LIVE_TREE_CTE} recursive walk with {@link
+   * #findLiveByTypesWithDepth}, so the two cannot drift on which accounts they return or in what
+   * order (issue account-management/04): the only difference is that this one drops the {@code
+   * depth} annotation.
    */
   public List<Account> findLiveByTypes(List<String> types) {
     return jdbcClient
         .sql(
-            SELECT_ACCOUNT_COLUMNS
-                + """
-                from account
-                where type in (:types)
-                  and deleted_at is null
-                order by type, coalesce(parent_id, account_id), parent_id is not null, name
-                """)
+            LIVE_TREE_CTE
+                + "select "
+                + TREE_ACCOUNT_COLUMNS
+                + " from tree order by type, sort_path")
         .param(TYPES, types)
         .query(Account.class)
         .list();
@@ -181,40 +223,15 @@ public class AccountRepository {
   /**
    * The live accounts of the given types, each annotated with its true depth in the parent-chain (0
    * = top level, 1 = child, 2 = grandchild, …) and listed depth-first — every node immediately
-   * followed by all of its descendants, alphabetical among siblings at each level. A recursive CTE
-   * walks {@code parent_id} to arbitrary depth (data-model §5's hierarchy is not limited to two
-   * levels; a flat "has a parent or not" check under-counts grandchildren and deeper).
+   * followed by all of its descendants, alphabetical among siblings at each level.
    */
   public List<AccountNode> findLiveByTypesWithDepth(List<String> types) {
     return jdbcClient
         .sql(
-            """
-            with recursive tree as (
-              select account_id, name, type, parent_id, currency_code, hue,
-                     opened_at, closed_at, deleted_at, currency_leaf, person_leaf,
-                     show_on_main_page,
-                     0 as depth,
-                     array[name] as sort_path
-              from account
-              where type in (:types)
-                and deleted_at is null
-                and parent_id is null
-              union all
-              select a.account_id, a.name, a.type, a.parent_id, a.currency_code, a.hue,
-                     a.opened_at, a.closed_at, a.deleted_at, a.currency_leaf, a.person_leaf,
-                     a.show_on_main_page,
-                     tree.depth + 1,
-                     tree.sort_path || a.name
-              from account a
-              join tree on a.parent_id = tree.account_id
-              where a.deleted_at is null
-            )
-            select account_id, name, type, parent_id, currency_code, hue,
-                   opened_at, closed_at, deleted_at, currency_leaf, person_leaf,
-                   show_on_main_page, depth
-            from tree
-            order by type, sort_path
-            """)
+            LIVE_TREE_CTE
+                + "select "
+                + TREE_ACCOUNT_COLUMNS
+                + ", depth from tree order by type, sort_path")
         .param(TYPES, types)
         .query(
             (rs, rowNum) ->
