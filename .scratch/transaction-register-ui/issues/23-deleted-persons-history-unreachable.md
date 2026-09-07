@@ -1,6 +1,6 @@
 # A soft-deleted person's transactions can't be reached in the register
 
-Status: ready
+Status: resolved
 Category: bug
 Severity: medium
 Area: Transaction register — account filter (`RegisterPickerService`, `RegisterFilterViewAssembler`);
@@ -90,4 +90,7 @@ three-level shape) in the **Closed** and **All** panels, with the person toggle 
 ## Comments
 
 Filed 2026-09-07 from the owner during testing of transaction-register-ui/22.
-Design grilled and resolved with the owner the same day; ready to implement.
+Design grilled and resolved with the owner the same day.
+Implemented 2026-09-07 on `feat/register-filter-picker` (commit 6013479); `./gradlew check` green,
+code-review clean (one perf note on `deletedPeople()` being fetched twice per Closed render,
+deliberately not cached per CLAUDE.md §"cache only when measured slow"). Awaiting owner testing.
