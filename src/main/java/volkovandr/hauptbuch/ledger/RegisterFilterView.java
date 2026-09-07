@@ -70,6 +70,8 @@ public record RegisterFilterView(List<Tab> tabs, Panel panel) {
    * @param memberOf space-separated {@code data-group} keys of every group this row belongs to (for
    *     a member row, and for a nested group toggle); null when it belongs to no group
    * @param ticked whether the checkbox renders checked
+   * @param closed whether this is a closed account — shown with a muted "closed" marker (§2.3a);
+   *     always {@code false} for group rows and person currency leaves
    */
   public record Row(
       long accountId,
@@ -80,5 +82,6 @@ public record RegisterFilterView(List<Tab> tabs, Panel panel) {
       boolean group,
       String groupKey,
       String memberOf,
-      boolean ticked) {}
+      boolean ticked,
+      boolean closed) {}
 }

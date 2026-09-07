@@ -92,6 +92,12 @@
   font-weight: 600;
 }
 
+.register-filter__closed {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .check {
   display: inline-flex;
   align-items: center;

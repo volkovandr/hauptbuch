@@ -114,11 +114,21 @@ class RegisterFilterViewAssembler {
                 true,
                 "g" + account.accountId(),
                 memberOf,
+                false,
                 false));
       } else if (members.contains(account.accountId())) {
         rows.add(
-            memberRow(
-                account, account.name(), account.currencyCode(), node.depth(), memberOf, ticked));
+            new Row(
+                account.accountId(),
+                account.name(),
+                account.currencyCode(),
+                account.hue(),
+                node.depth(),
+                false,
+                null,
+                memberOf,
+                ticked.contains(account.accountId()),
+                account.closedAt() != null));
       }
     }
     return rows;
@@ -180,7 +190,8 @@ class RegisterFilterViewAssembler {
                   false,
                   null,
                   memberOf,
-                  ticked.contains(leaf.accountId())));
+                  ticked.contains(leaf.accountId()),
+                  false));
         }
       }
     }
@@ -188,26 +199,7 @@ class RegisterFilterViewAssembler {
   }
 
   private static Row groupToggleRow(String label, String key, String memberOf, int depth) {
-    return new Row(0L, label, null, null, depth, true, key, memberOf, false);
-  }
-
-  private static Row memberRow(
-      Account account,
-      String label,
-      String currencyCode,
-      int depth,
-      String memberOf,
-      Set<Long> ticked) {
-    return new Row(
-        account.accountId(),
-        label,
-        currencyCode,
-        account.hue(),
-        depth,
-        false,
-        null,
-        memberOf,
-        ticked.contains(account.accountId()));
+    return new Row(0L, label, null, null, depth, true, key, memberOf, false, false);
   }
 
   /** Every ancestor account id of any id in {@code members}, walked up {@code parent_id}. */
