@@ -6,6 +6,26 @@ issues, tests, and discussions don't drift into synonyms.
 
 ## Language
 
+### Accounts
+
+**Open / closed**:
+Whether an account is currently in use — `account.closed_at` is null (open) or set (closed).
+Closing is reversible. A closed account is still **live**; the two axes are orthogonal.
+_Avoid_: active/inactive, archived, retired
+
+**Live / soft-deleted**:
+Whether an account row still counts at all — `account.deleted_at` is null (live) or set. Integrity
+checks and every default read scope to live rows. Distinct from open/closed: a closed account is
+live.
+_Avoid_: deleted (for the row that is merely closed)
+
+**Read set / post-to set** (register account filter, issue transaction-register-ui/22):
+The **read set** is every live own account the register may *view* — open, closed, and per-person
+debt leaves. The **post-to set** is the subset that may be *booked to* — open real accounts only
+(no closed, no person leaves). The dock's Account picker and transfer targets use the post-to set;
+the Closed and All filter tabs reach the whole read set.
+_Avoid_: viewable/bookable as nouns, filter set
+
 ### Receipts
 
 **Receipt**:

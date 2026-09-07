@@ -109,9 +109,36 @@ layout's "→ top" slice.
 | Aspect | Default | Notes |
 |--------|---------|-------|
 | Date range | **Last 12 months** | The natural bounded view; keeps render + worst-case re-fetch to hundreds of rows. |
-| Accounts | **Current bank accounts + cash** | Multi-account by default (Money showed one at a time — rejected, see §2.5). |
+| Accounts | **Last used** picker, all ticked | A one-line tab strip of five pickers (below); multi-account by default (Money showed one at a time — rejected, see §2.5). |
 | Payees | none (all) | Free filter. |
 | Order | **Date, ascending** | Changeable; non-date sorts change balance behaviour (§2.7). |
+
+**The account picker** (issue transaction-register-ui/22). The filter is a one-line **tab strip**
+over a collapsed panel; the active tab is bold and shows a count of ticked accounts, and clicking a
+tab htmx-swaps **only** the panel — it runs no ledger query. **Apply** is the only action that
+re-renders the register, and it re-collapses the panel.
+
+| Tab | Members |
+|-----|---------|
+| **Last used** | Open real accounts *and* person debt leaves with a posting inside the applied date range (tracks the range). Person leaves sit under one "Persons" group toggle. This is the default. |
+| **Open** | Open real accounts; person leaves excluded. |
+| **Persons** | Live people's per-currency debt leaves, unsettled people before fully settled. |
+| **Closed** | Closed accounts — **viewable, never bookable** (§2.3a). |
+| **All** | Every live own account leaf: open, closed, and person leaves. |
+
+Switching tab renders that picker fresh with **all members ticked**; ticks made in a
+previously-open tab are discarded. A parent account is a **tri-state group toggle**, never a filter
+target (posting is leaves-only), and its id is never submitted. When every member of the active
+picker is ticked the form submits **no** `accountId` at all, so the server re-resolves the picker
+against the submitted date range (widening the range while all-ticked admits newly-qualifying
+accounts; a partial selection is left alone). An inbound link carrying explicit `accountId`s and no
+picker opens on **All** (the landing-page pinned-account link, the People per-person link). With
+JavaScript disabled the panel degrades to plain per-account checkboxes that still Apply.
+
+**2.3a — closed accounts.** The register splits its notion of own accounts into a **read set** (all
+live own accounts, closed included) and a **post-to set** (open real accounts only). The Closed and
+All tabs view the read set; the entry dock's Account picker and the transfer targets keep offering
+the post-to set, so a closed account can be filtered to and read but never booked to.
 
 ### 2.4 What a row is
 
