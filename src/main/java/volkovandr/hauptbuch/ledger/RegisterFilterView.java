@@ -53,11 +53,15 @@ public record RegisterFilterView(List<Tab> tabs, Panel panel) {
   }
 
   /**
-   * One panel row — either a group toggle or a selectable account.
+   * One panel row — a group toggle (a parent account, the {@code Persons} umbrella, or a per-person
+   * sub-group) or a selectable leaf checkbox.
    *
-   * @param accountId the account's id; submitted as {@code accountId} only for a member row
-   * @param label the display name (a person's real name for a debt leaf, register §2.6)
-   * @param currencyCode the account's currency, shown muted after the name; null on a group row
+   * @param accountId the account's id; submitted as {@code accountId} only for a member row, {@code
+   *     0} on a group toggle that is not backed by an account (the person groups)
+   * @param label a real account's name, or — under a person — the bare currency code; a group
+   *     toggle's heading text
+   * @param currencyCode a real account's currency, shown muted after the name; null on group rows
+   *     and on person currency leaves (the code is already the label)
    * @param hue the account's register hue for the swatch; nullable
    * @param depth indentation level (0 = top)
    * @param group true → an unnamed tri-state toggle; false → a real {@code name="accountId"}

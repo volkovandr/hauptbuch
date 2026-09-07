@@ -43,15 +43,16 @@
            off. Group toggles (parent accounts, person names) are driven by the `filter-groups.js`
            leaf via the data-attributes below. -->
       <div id="register-filter-control" th:fragment="filterControl">
+        <!-- Tabs are <a>, not submit buttons: a submit button would fire a native form GET
+             alongside the htmx swap. The picker is a PATH segment because htmx drops the query
+             string from a hx-get URL. The href is the JS-off fallback (a full reload). -->
         <nav class="register-filter__tabs" aria-label="Account filter">
-          <button
+          <a
             th:each="tab : ${filterView.tabs()}"
-            type="submit"
-            name="picker"
-            th:value="${tab.param()}"
             class="register-filter__tab"
             th:classappend="${tab.active()} ? 'register-filter__tab--active'"
-            th:attr="hx-get=@{/register/filter-panel(picker=${tab.param()})},
+            th:href="@{/register(picker=${tab.param()})}"
+            th:attr="hx-get=@{/register/filter-panel/{p}(p=${tab.param()})},
                      aria-current=${tab.active()} ? 'true' : null"
             hx-target="#register-filter-control"
             hx-swap="outerHTML"
@@ -64,7 +65,7 @@
               th:text="'(' + ${tab.tickedCount()} + ')'"
               >(19)</span
             >
-          </button>
+          </a>
         </nav>
 
         <details

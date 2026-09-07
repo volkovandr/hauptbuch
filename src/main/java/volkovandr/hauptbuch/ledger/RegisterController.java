@@ -6,6 +6,7 @@ import java.util.Optional;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import volkovandr.hauptbuch.web.NavItem;
 
@@ -99,13 +100,17 @@ class RegisterController {
    * ledger row query — clicking a tab must never re-render the register or touch the balance
    * threads; only {@code Apply} does that.
    *
+   * <p>The picker is a <em>path</em> variable, not a query param: htmx strips the query string from
+   * a {@code hx-get} URL and rebuilds it from the element's inputs, which would drop a {@code
+   * ?picker=}.
+   *
    * @param picker the tab that was clicked
    * @param fromDate the date bounds currently in the filter form, so a {@code Last used} panel
    *     tracks them
    */
-  @GetMapping(BASE_PATH + "/filter-panel")
+  @GetMapping(BASE_PATH + "/filter-panel/{picker}")
   String filterPanel(
-      @RequestParam String picker,
+      @PathVariable String picker,
       @RequestParam(required = false) LocalDate fromDate,
       @RequestParam(required = false) LocalDate toDate,
       Model model) {
