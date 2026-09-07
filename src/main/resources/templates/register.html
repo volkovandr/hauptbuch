@@ -87,9 +87,10 @@
             <button type="button" class="link" data-filter-none>None</button>
           </p>
           <!-- Two columns: real accounts on the left, people on the right. One column is empty for
-               Open/Closed (no people) and Persons (no accounts); All / Last used show both side by
-               side (owner feedback). Both <ul>s live inside [data-filter-groups], so filter-groups.js
-               sees every checkbox regardless of column. -->
+               Open (no people) and Persons (no accounts); All / Last used show both, and Closed
+               grows a people column once a soft-deleted person still owns a live leaf (issue
+               transaction-register-ui/23). Both <ul>s live inside [data-filter-groups], so
+               filter-groups.js sees every checkbox regardless of column. -->
           <div
             class="register-filter__cols"
             th:classappend="${!filterView.panel().accountRows().isEmpty()

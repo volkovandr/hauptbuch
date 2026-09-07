@@ -13,10 +13,11 @@ import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
 import volkovandr.hauptbuch.accounts.AccountService;
-import volkovandr.hauptbuch.debts.PersonBalanceSummary;
+import volkovandr.hauptbuch.ledger.RegisterFilterView.Marker;
 import volkovandr.hauptbuch.ledger.RegisterFilterView.Panel;
 import volkovandr.hauptbuch.ledger.RegisterFilterView.Row;
 import volkovandr.hauptbuch.ledger.RegisterFilterView.Tab;
+import volkovandr.hauptbuch.ledger.RegisterPickerService.PersonGroup;
 
 /**
  * Builds the register's account-filter control (issue transaction-register-ui/22): the five-tab
@@ -82,9 +83,10 @@ class RegisterFilterViewAssembler {
     boolean showPeople =
         active == RegisterPicker.ALL
             || active == RegisterPicker.LAST_USED
-            || active == RegisterPicker.PERSONS;
+            || active == RegisterPicker.PERSONS
+            || active == RegisterPicker.CLOSED;
     List<Row> accountRows = showAccounts ? accountTreeRows(nodes, members, ticked) : List.of();
-    List<Row> personRows = showPeople ? personRows(nodes, members, ticked) : List.of();
+    List<Row> personRows = showPeople ? personRows(active, nodes, members, ticked) : List.of();
     return new RegisterFilterView(
         tabs, new Panel(active, active.param(), panelExpanded, accountRows, personRows));
   }
@@ -116,7 +118,7 @@ class RegisterFilterViewAssembler {
                 "g" + account.accountId(),
                 memberOf,
                 false,
-                false));
+                Marker.NONE));
       } else if (members.contains(account.accountId())) {
         rows.add(
             new Row(
@@ -129,7 +131,7 @@ class RegisterFilterViewAssembler {
                 null,
                 memberOf,
                 ticked.contains(account.accountId()),
-                account.closedAt() != null));
+                account.closedAt() != null ? Marker.CLOSED : Marker.NONE));
       }
     }
     return rows;
@@ -155,24 +157,28 @@ class RegisterFilterViewAssembler {
 
   /**
    * The per-person portion of a panel, three levels deep (issue transaction-register-ui/22, owner
-   * feedback): a single {@code Persons} umbrella toggle, then one toggle per live person that has a
-   * member leaf (alphabetical by name), then that person's currency leaves as checkboxes labelled
-   * by the bare currency code (alphabetical by code). Empty when no person leaf is a member — so
-   * {@link RegisterPicker#OPEN} and {@link RegisterPicker#CLOSED} show nothing here.
+   * feedback): a single {@code Persons} umbrella toggle, then one toggle per person that has a
+   * member leaf (alphabetical by name, from {@link RegisterPickerService#personGroups}), then that
+   * person's currency leaves as checkboxes labelled by the bare currency code (alphabetical by
+   * code). A soft-deleted person's toggle carries {@link Marker#DELETED} (issue
+   * transaction-register-ui/23). Empty when no person leaf is a member — so {@link
+   * RegisterPicker#OPEN} shows nothing here, and so does {@link RegisterPicker#CLOSED} until a
+   * person is soft-deleted while still owning a live leaf.
    */
-  private List<Row> personRows(List<AccountNode> nodes, Set<Long> members, Set<Long> ticked) {
+  private List<Row> personRows(
+      RegisterPicker picker, List<AccountNode> nodes, Set<Long> members, Set<Long> ticked) {
     Map<Long, Account> byId = byId(nodes);
-    List<PersonBalanceSummary> people = pickerService.livePeople();
+    List<PersonGroup> groups = pickerService.personGroups(picker);
     boolean anyMemberLeaf =
-        people.stream().flatMap(p -> p.accountIds().stream()).anyMatch(members::contains);
+        groups.stream().flatMap(g -> g.leafAccountIds().stream()).anyMatch(members::contains);
     if (!anyMemberLeaf) {
       return List.of();
     }
     List<Row> rows = new ArrayList<>();
-    rows.add(groupToggleRow("Persons", PERSONS_UMBRELLA_KEY, null, 0));
-    for (PersonBalanceSummary person : people) {
+    rows.add(groupToggleRow("Persons", PERSONS_UMBRELLA_KEY, null, 0, Marker.NONE));
+    for (PersonGroup group : groups) {
       List<Account> leaves =
-          person.accountIds().stream()
+          group.leafAccountIds().stream()
               .filter(members::contains)
               .map(byId::get)
               .filter(Objects::nonNull)
@@ -181,8 +187,14 @@ class RegisterFilterViewAssembler {
       if (leaves.isEmpty()) {
         continue;
       }
-      String personKey = "p" + person.personId();
-      rows.add(groupToggleRow(person.name(), personKey, PERSONS_UMBRELLA_KEY, 1));
+      String personKey = "p" + group.personId();
+      rows.add(
+          groupToggleRow(
+              group.name(),
+              personKey,
+              PERSONS_UMBRELLA_KEY,
+              1,
+              group.deleted() ? Marker.DELETED : Marker.NONE));
       String memberOf = PERSONS_UMBRELLA_KEY + " " + personKey;
       for (Account leaf : leaves) {
         rows.add(
@@ -196,14 +208,15 @@ class RegisterFilterViewAssembler {
                 null,
                 memberOf,
                 ticked.contains(leaf.accountId()),
-                false));
+                Marker.NONE));
       }
     }
     return rows;
   }
 
-  private static Row groupToggleRow(String label, String key, String memberOf, int depth) {
-    return new Row(0L, label, null, null, depth, true, key, memberOf, false, false);
+  private static Row groupToggleRow(
+      String label, String key, String memberOf, int depth, Marker marker) {
+    return new Row(0L, label, null, null, depth, true, key, memberOf, false, marker);
   }
 
   /** Every ancestor account id of any id in {@code members}, walked up {@code parent_id}. */

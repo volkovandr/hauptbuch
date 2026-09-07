@@ -78,6 +78,42 @@ public class AccountOwnerRepository {
   public record AccountPersonName(long accountId, String name) {}
 
   /**
+   * Every per-person debt leaf whose owning person is <em>soft-deleted</em> and whose own account
+   * row is still live (issue transaction-register-ui/23) — the raw material for {@link
+   * volkovandr.hauptbuch.debts.PersonService#deletedPeople()}, which the register's Closed and All
+   * filter panels render as person groups carrying a muted "deleted" marker so a since-deleted
+   * person's settled transactions stay reachable. A merged-away person does not appear: the merge
+   * soft-deletes their now-empty leaves. Ordered by person name then currency so the caller renders
+   * groups alphabetically without re-sorting. A three-table join filtered on two liveness flags, so
+   * a round-trip (CLAUDE.md §6).
+   */
+  public List<DeletedPersonLeaf> findSoftDeletedPersonLeaves() {
+    return jdbcClient
+        .sql(
+            """
+            select p.person_id, p.name, a.account_id
+            from account_owner ao
+            join person p on ao.person_id = p.person_id
+            join account a on ao.account_id = a.account_id
+            where p.deleted_at is not null
+              and a.deleted_at is null
+            order by p.name, a.currency_code
+            """)
+        .query(DeletedPersonLeaf.class)
+        .list();
+  }
+
+  /**
+   * One live debt leaf owned by a soft-deleted person (issue transaction-register-ui/23) — the row
+   * shape of {@link #findSoftDeletedPersonLeaves}, grouped by person into a filter group upstream.
+   *
+   * @param personId the soft-deleted owning person
+   * @param name that person's current display name
+   * @param accountId the still-live per-currency debt leaf
+   */
+  public record DeletedPersonLeaf(long personId, String name, long accountId) {}
+
+  /**
    * The person's live per-currency debt leaf in {@code currencyCode}, if any (plan stage 8e) — the
    * settle-up launcher's counterpart leg. A person holds at most one leaf per currency (data-model
    * §7), so this is a lookup, not a list. A soft-deleted leaf is excluded (a closed position is not
@@ -132,10 +168,13 @@ public class AccountOwnerRepository {
   }
 
   /**
-   * Every account_owner link whose person is live (plan stage 8d) — the People-balances screen
-   * needs each live person's full set of leaf ids, including any that net to zero, to build a
-   * register link scoped to everything that is theirs. Soft-deleted persons are excluded (they are
-   * off the People page). A plain two-table join, so a round-trip.
+   * Every account_owner link whose person <em>and</em> leaf account are both live (plan stage 8d) —
+   * the People-balances screen needs each live person's full set of leaf ids, including any that
+   * net to zero, to build a register link scoped to everything that is theirs. Soft-deleted persons
+   * are excluded (they are off the People page); a soft-deleted leaf is excluded too — a merge
+   * retires the source's emptied leaves (issue transaction-register-ui/23), and reviving that
+   * person must not resurrect a stale leaf id that no longer has a register row. A plain
+   * three-table join, so a round-trip.
    */
   public List<AccountOwner> findLiveAccountLinks() {
     return jdbcClient
@@ -144,7 +183,9 @@ public class AccountOwnerRepository {
             select ao.*
             from account_owner ao
             join person p on ao.person_id = p.person_id
+            join account a on ao.account_id = a.account_id
             where p.deleted_at is null
+              and a.deleted_at is null
             order by ao.person_id, ao.account_id
             """)
         .query(AccountOwner.class)

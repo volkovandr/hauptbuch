@@ -64,6 +64,21 @@ public record RegisterFilterView(List<Tab> tabs, Panel panel) {
   }
 
   /**
+   * The muted marker a panel row carries after its label (issue transaction-register-ui/22, /23).
+   * The two are mutually exclusive by position — {@link #CLOSED} only ever sits on a closed
+   * real-account leaf, {@link #DELETED} only ever on a soft-deleted person's toggle — so one enum,
+   * not two booleans.
+   */
+  public enum Marker {
+    /** No marker. */
+    NONE,
+    /** A closed account — viewable, never bookable (§2.3a). */
+    CLOSED,
+    /** A soft-deleted person whose debt leaf is still live (issue transaction-register-ui/23). */
+    DELETED
+  }
+
+  /**
    * One panel row — a group toggle (a parent account, the {@code Persons} umbrella, or a per-person
    * sub-group) or a selectable leaf checkbox.
    *
@@ -81,8 +96,8 @@ public record RegisterFilterView(List<Tab> tabs, Panel panel) {
    * @param memberOf space-separated {@code data-group} keys of every group this row belongs to (for
    *     a member row, and for a nested group toggle); null when it belongs to no group
    * @param ticked whether the checkbox renders checked
-   * @param closed whether this is a closed account — shown with a muted "closed" marker (§2.3a);
-   *     always {@code false} for group rows and person currency leaves
+   * @param marker the muted marker after the label — {@link Marker#CLOSED} on a closed real-account
+   *     leaf, {@link Marker#DELETED} on a soft-deleted person's toggle, else {@link Marker#NONE}
    */
   public record Row(
       long accountId,
@@ -94,5 +109,16 @@ public record RegisterFilterView(List<Tab> tabs, Panel panel) {
       String groupKey,
       String memberOf,
       boolean ticked,
-      boolean closed) {}
+      Marker marker) {
+
+    /** Whether this row is a closed account — drives the muted "closed" label in the template. */
+    public boolean closed() {
+      return marker == Marker.CLOSED;
+    }
+
+    /** Whether this row is a soft-deleted person — drives the muted "deleted" label. */
+    public boolean deleted() {
+      return marker == Marker.DELETED;
+    }
+  }
 }

@@ -7,6 +7,7 @@ import org.joda.money.Money;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.debts.CurrencyBalance;
 import volkovandr.hauptbuch.debts.Person;
 import volkovandr.hauptbuch.debts.PersonLeaf;
@@ -44,16 +45,19 @@ class PersonMergeService {
   private final PersonProvisioningService personProvisioningService;
   private final PostingReassignmentRepository postingReassignmentRepository;
   private final SettingsService settingsService;
+  private final AccountService accountService;
 
   PersonMergeService(
       PersonService personService,
       PersonProvisioningService personProvisioningService,
       PostingReassignmentRepository postingReassignmentRepository,
-      SettingsService settingsService) {
+      SettingsService settingsService,
+      AccountService accountService) {
     this.personService = personService;
     this.personProvisioningService = personProvisioningService;
     this.postingReassignmentRepository = postingReassignmentRepository;
     this.settingsService = settingsService;
+    this.accountService = accountService;
   }
 
   /**
@@ -77,8 +81,13 @@ class PersonMergeService {
 
   /**
    * Merge the source person into the target: reassign every source leaf's postings onto the
-   * target's leaf in the same currency (provisioning that leaf if the target has none yet), then
-   * soft-delete the source. Atomic — the whole fold is one transaction.
+   * target's leaf in the same currency (provisioning that leaf if the target has none yet),
+   * soft-delete the now-empty source leaves, then soft-delete the source person. Atomic — the whole
+   * fold is one transaction.
+   *
+   * <p>The source leaves are retired, not left live-but-empty: a soft-deleted person's live leaves
+   * surface in the register's Closed and All filter panels (issue transaction-register-ui/23), and
+   * a merged-away person has no history of their own left to reach — it moved to the target.
    *
    * @throws IllegalArgumentException if source and target are the same person, or either is not a
    *     live person
@@ -91,11 +100,14 @@ class PersonMergeService {
     requireLive(sourcePersonId, "source");
     requireLive(targetPersonId, "target");
 
+    List<Long> sourceLeafIds = new ArrayList<>();
     for (PersonLeaf leaf : personService.leavesOf(sourcePersonId)) {
       Account targetLeaf =
           personProvisioningService.ensureLeaf(targetPersonId, leaf.currencyCode());
       postingReassignmentRepository.reassignPostings(leaf.accountId(), targetLeaf.accountId());
+      sourceLeafIds.add(leaf.accountId());
     }
+    accountService.softDelete(sourceLeafIds);
 
     // Every source leaf is now empty, so this succeeds; it also asserts the fold left nothing
     // behind.

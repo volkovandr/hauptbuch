@@ -26,6 +26,15 @@ debt leaves. The **post-to set** is the subset that may be *booked to* — open 
 the Closed and All filter tabs reach the whole read set.
 _Avoid_: viewable/bookable as nouns, filter set
 
+**Deleted person** (register account filter, issue transaction-register-ui/23):
+A soft-deleted `person` row whose per-currency debt leaves are still live — a third state beside
+open/closed (an account axis) and live/soft-deleted (a row axis): the *person* is soft-deleted, the
+*leaf account* is not. Kept live so an old transaction's person leg still resolves. Surfaces in the
+register's Closed and All filter tabs as a person group with a muted "deleted" marker on the toggle
+(derived from `person.deleted_at` at render time, never stored); absent from Persons and Last used.
+A merged-away person is not one of these — the merge soft-deletes its emptied leaves.
+_Avoid_: closed person, archived person, retired person
+
 ### Receipts
 
 **Receipt**:

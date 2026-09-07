@@ -39,7 +39,8 @@
           th:text="${row.currencyCode()}"
           >EUR</span
         >
-        <span class="muted register-filter__closed" th:if="${row.closed()}">closed</span>
+        <span class="muted register-filter__marker" th:if="${row.closed()}">closed</span>
+        <span class="muted register-filter__marker" th:if="${row.deleted()}">deleted</span>
       </label>
     </li>
   </body>

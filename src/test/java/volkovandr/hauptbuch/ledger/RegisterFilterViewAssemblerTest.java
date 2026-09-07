@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.ledger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
@@ -16,9 +17,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
 import volkovandr.hauptbuch.accounts.AccountService;
-import volkovandr.hauptbuch.debts.PersonBalanceSummary;
+import volkovandr.hauptbuch.ledger.RegisterFilterView.Marker;
 import volkovandr.hauptbuch.ledger.RegisterFilterView.Row;
 import volkovandr.hauptbuch.ledger.RegisterFilterView.Tab;
+import volkovandr.hauptbuch.ledger.RegisterPickerService.PersonGroup;
 
 /**
  * Unit tier (plan §1.5): {@link RegisterFilterViewAssembler} turning a resolved picker membership
@@ -40,7 +42,7 @@ class RegisterFilterViewAssemblerTest {
   @BeforeEach
   void setUp() {
     assembler = new RegisterFilterViewAssembler(pickerService, accountService);
-    lenient().when(pickerService.livePeople()).thenReturn(List.of());
+    lenient().when(pickerService.personGroups(any())).thenReturn(List.of());
     lenient().when(accountService.findLiveByTypesWithDepth(OWN_TYPES)).thenReturn(List.of());
   }
 
@@ -127,8 +129,8 @@ class RegisterFilterViewAssemblerTest {
     List<Row> rows = panelRows(RegisterPicker.ALL);
 
     assertThat(rows)
-        .extracting(Row::accountId, Row::closed)
-        .containsExactly(tuple(10L, false), tuple(11L, true));
+        .extracting(Row::accountId, Row::marker)
+        .containsExactly(tuple(10L, Marker.NONE), tuple(11L, Marker.CLOSED));
   }
 
   @Test
@@ -161,12 +163,12 @@ class RegisterFilterViewAssemblerTest {
                 node(personLeaf(202, "CHF"), 0)));
     when(pickerService.membership(RegisterPicker.PERSONS, null, null))
         .thenReturn(List.of(101L, 201L, 202L));
-    // livePeople() is already name-ordered (Alice, Bob); Bob's leaves are USD(201) then CHF(202).
-    when(pickerService.livePeople())
+    // personGroups() is already name-ordered (Alice, Bob); Bob's leaves are USD(201) then CHF(202).
+    when(pickerService.personGroups(RegisterPicker.PERSONS))
         .thenReturn(
             List.of(
-                new PersonBalanceSummary(1L, "Alice", List.of(), List.of(101L)),
-                new PersonBalanceSummary(2L, "Bob", List.of(), List.of(201L, 202L))));
+                new PersonGroup(1L, "Alice", false, List.of(101L)),
+                new PersonGroup(2L, "Bob", false, List.of(201L, 202L))));
 
     List<Row> rows = panelRows(RegisterPicker.PERSONS);
 
@@ -188,8 +190,8 @@ class RegisterFilterViewAssemblerTest {
         .thenReturn(List.of(node(account(10, "Cash", null), 0), node(personLeaf(101), 0)));
     when(pickerService.membership(RegisterPicker.LAST_USED, null, null))
         .thenReturn(List.of(10L, 101L));
-    when(pickerService.livePeople())
-        .thenReturn(List.of(new PersonBalanceSummary(3L, "Max", List.of(), List.of(101L))));
+    when(pickerService.personGroups(RegisterPicker.LAST_USED))
+        .thenReturn(List.of(new PersonGroup(3L, "Max", false, List.of(101L))));
 
     List<Row> rows = panelRows(RegisterPicker.LAST_USED);
 
@@ -200,6 +202,29 @@ class RegisterFilterViewAssemblerTest {
             tuple("Persons", true, "persons", null),
             tuple("Max", true, "p3", "persons"),
             tuple(EUR, false, null, "persons p3"));
+  }
+
+  @Test
+  void closedPanelRendersSoftDeletedPersonWithDeletedMarker() {
+    when(accountService.findLiveByTypesWithDepth(OWN_TYPES))
+        .thenReturn(List.of(node(closedAccount(11, "Old Giro"), 0), node(personLeaf(101), 0)));
+    when(pickerService.membership(RegisterPicker.CLOSED, null, null))
+        .thenReturn(List.of(11L, 101L));
+    when(pickerService.personGroups(RegisterPicker.CLOSED))
+        .thenReturn(List.of(new PersonGroup(7L, "Sam", true, List.of(101L))));
+
+    RegisterFilterView.Panel panel =
+        assembler.filterView(filter(RegisterPicker.CLOSED), false).panel();
+
+    assertThat(panel.accountRows())
+        .extracting(Row::accountId, Row::marker)
+        .containsExactly(tuple(11L, Marker.CLOSED));
+    assertThat(panel.personRows())
+        .extracting(Row::label, Row::group, Row::groupKey, Row::marker)
+        .containsExactly(
+            tuple("Persons", true, "persons", Marker.NONE),
+            tuple("Sam", true, "p7", Marker.DELETED),
+            tuple(EUR, false, null, Marker.NONE));
   }
 
   @Test

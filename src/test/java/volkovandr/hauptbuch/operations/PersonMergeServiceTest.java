@@ -17,6 +17,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.debts.CurrencyBalance;
 import volkovandr.hauptbuch.debts.Person;
 import volkovandr.hauptbuch.debts.PersonLeaf;
@@ -46,6 +47,7 @@ class PersonMergeServiceTest {
   @Mock private PersonProvisioningService personProvisioningService;
   @Mock private PostingReassignmentRepository postingReassignmentRepository;
   @Mock private SettingsService settingsService;
+  @Mock private AccountService accountService;
 
   private PersonMergeService service;
 
@@ -56,7 +58,8 @@ class PersonMergeServiceTest {
             personService,
             personProvisioningService,
             postingReassignmentRepository,
-            settingsService);
+            settingsService,
+            accountService);
   }
 
   private static Account leaf(long id, String currency) {
@@ -93,10 +96,12 @@ class PersonMergeServiceTest {
 
     verify(postingReassignmentRepository).reassignPostings(10L, 20L);
     verify(postingReassignmentRepository).reassignPostings(11L, 21L);
-    // The source is retired only after the fold — the zero-balance guard is a genuine
-    // post-condition.
-    InOrder inOrder = inOrder(postingReassignmentRepository, personService);
+    // The now-empty source leaves are retired (issue transaction-register-ui/23), then the source
+    // person — the zero-balance guard on the person is a genuine post-condition.
+    verify(accountService).softDelete(List.of(10L, 11L));
+    InOrder inOrder = inOrder(postingReassignmentRepository, accountService, personService);
     inOrder.verify(postingReassignmentRepository).reassignPostings(11L, 21L);
+    inOrder.verify(accountService).softDelete(List.of(10L, 11L));
     inOrder.verify(personService).softDeleteIfZeroBalance(SOURCE);
   }
 

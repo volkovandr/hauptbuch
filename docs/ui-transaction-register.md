@@ -120,20 +120,23 @@ re-renders the register, and it re-collapses the panel.
 
 | Tab | Members |
 |-----|---------|
-| **Last used** | Open real accounts *and* person debt leaves with a posting inside the applied date range (tracks the range). This is the default. |
+| **Last used** | Open real accounts *and* **live** people's debt leaves with a posting inside the applied date range (tracks the range). This is the default. |
 | **Open** | Open real accounts; person leaves excluded. |
 | **Persons** | Live people's per-currency debt leaves, alphabetical by name. |
-| **Closed** | Closed accounts — **viewable, never bookable** (§2.3a). |
-| **All** | Every live own account leaf: open, closed, and person leaves. |
+| **Closed** | Closed accounts — **viewable, never bookable** (§2.3a) — *and* the still-live debt leaves of **soft-deleted people** (issue transaction-register-ui/23). |
+| **All** | Every live own account leaf: open, closed, live people's leaves, and soft-deleted people's still-live leaves. |
 
-Wherever person leaves appear (Last used, Persons, All) they render **three levels deep**: a
+Wherever person leaves appear (Last used, Persons, Closed, All) they render **three levels deep**: a
 single `Persons` umbrella toggle → one toggle per person (alphabetical) → that person's currency
 leaves as checkboxes labelled by the bare currency code (alphabetical). Every group toggle is
-tri-state.
+tri-state. In **Closed** and **All** a soft-deleted person's toggle carries a muted "deleted"
+marker; **Persons** and **Last used** stay live-only — a just-settled-then-deleted person has
+recent activity but no row on those tabs.
 
 The whole list is one merged alphabetical order — asset and liability accounts interleave (a
-`Credit Card` sits between `Commerzbank` and `Deposit`, not in a trailing block), and a closed
-account carries a muted "closed" marker.
+`Credit Card` sits between `Commerzbank` and `Deposit`, not in a trailing block), live and
+soft-deleted people interleave by name, a closed account carries a muted "closed" marker and a
+soft-deleted person a muted "deleted" one.
 
 Switching tab renders that picker fresh with **all members ticked**; ticks made in a
 previously-open tab are discarded. A parent account (and each person toggle) is a **tri-state group
@@ -150,6 +153,12 @@ JavaScript disabled the panel degrades to plain per-account checkboxes that stil
 live own accounts, closed included) and a **post-to set** (open real accounts only). The Closed and
 All tabs view the read set; the entry dock's Account picker and the transfer targets keep offering
 the post-to set, so a closed account can be filtered to and read but never booked to.
+
+A **soft-deleted person's** per-currency leaves stay live (an old transaction's person leg must
+still resolve), so they are part of the read set too, reached through the Closed and All tabs and
+marked "deleted" on the person toggle. This is distinct from an account being *closed* — the person
+row is soft-deleted while the leaf account is not. A person merge folds the source away and
+soft-deletes its now-empty leaves, so a merged-away person never appears here.
 
 ### 2.4 What a row is
 
