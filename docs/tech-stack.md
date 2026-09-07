@@ -242,6 +242,12 @@ command palette) are the one part htmx cannot do cleanly. Implement as a **small
 vanilla-JS or Alpine.js module** — a few hundred lines, well-isolated, reviewed carefully because
 it is the UI's main maintainability risk. It is a *leaf*, not a framework threading through the app.
 
+**The sanctioned bespoke-JS leaves are three** (CLAUDE.md §1.6): this keyboard layer
+(`keyboard.js`), the Cropper.js image editor (`receipt-editor.js`, §5.1), and the register
+account-filter's group-toggle layer (`filter-groups.js`) — added by transaction-register-ui/22 for
+the five-tab picker's tri-state parent/person toggles and its all-ticked URL tidy-up. Each degrades
+to a working plain-HTML form. A fourth leaf needs the owner's agreement.
+
 ### 4.4 UI testing
 
 Server-side rendering means much of what would be "UI logic" in an SPA is **backend** logic already
@@ -259,7 +265,7 @@ camera rather than by typing (`.scratch/landing-page/issues/03-phone-qr-code.md`
 exists for raster output through `ImageIO`/AWT, which would mean a second endpoint, an image format,
 and cache questions, for a code that scales better as vector markup anyway.
 
-Rejected: a client-side JS QR library (bespoke JS is confined to the two sanctioned leaves — §4.3 and
+Rejected: a client-side JS QR library (bespoke JS is confined to the three sanctioned leaves — §4.3 and
 §5.1 — and this is neither), and hand-rolling the encoder (Reed-Solomon, masking and version
 selection is a few hundred lines of fiddly bit-twiddling to own forever for one code on one page).
 
@@ -356,7 +362,7 @@ Both stay in Java — no Python anywhere.
 | Long lists | Bounded views + htmx chunks | Virtualization | Unneeded; view is naturally bounded |
 | Image edit | Client-side canvas (Cropper.js) | Server-side processing | Keeps Pi clean; no Python; isolated leaf |
 | Image edit | Manual only, client-side | AI-assisted / auto-applied transforms | Auto image fixes are unreliable; validating an AI crop takes longer than just cropping |
-| QR codes | ZXing `core`, inline SVG | Client-side JS QR library | Bespoke JS is confined to the two sanctioned leaves |
+| QR codes | ZXing `core`, inline SVG | Client-side JS QR library | Bespoke JS is confined to the three sanctioned leaves |
 | QR codes | ZXing `core`, inline SVG | Hand-rolled encoder | Hundreds of lines of Reed-Solomon/masking to own forever for one code |
 
 ---

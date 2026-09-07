@@ -89,8 +89,9 @@ class RegisterFilterViewAssembler {
     List<AccountNode> nodes = accountService.findLiveByTypesWithDepth(OWN_ACCOUNT_TYPES);
     return switch (picker) {
       case OPEN, CLOSED -> accountTreeRows(nodes, members, ticked);
-      case ALL -> concat(accountTreeRows(nodes, members, ticked), perPersonRows(members, ticked));
-      case PERSONS -> perPersonRows(members, ticked);
+      case ALL ->
+          concat(accountTreeRows(nodes, members, ticked), perPersonRows(nodes, members, ticked));
+      case PERSONS -> perPersonRows(nodes, members, ticked);
       case LAST_USED ->
           concat(
               accountTreeRows(nodes, members, ticked), personsUmbrellaRows(nodes, members, ticked));
@@ -152,8 +153,8 @@ class RegisterFilterViewAssembler {
   }
 
   /** One tri-state group per live person over their member debt leaves, unsettled people first. */
-  private List<Row> perPersonRows(Set<Long> members, Set<Long> ticked) {
-    Map<Long, Account> byId = byId(accountService.findLiveByTypesWithDepth(OWN_ACCOUNT_TYPES));
+  private List<Row> perPersonRows(List<AccountNode> nodes, Set<Long> members, Set<Long> ticked) {
+    Map<Long, Account> byId = byId(nodes);
     Map<Long, String> names = personService.personNamesForAccounts(members);
     List<Row> rows = new ArrayList<>();
     for (PersonBalanceSummary person : pickerService.livePeopleUnsettledFirst()) {

@@ -362,6 +362,32 @@ class RegisterScreenIntegrationTest {
   }
 
   @Test
+  void anInboundLinkWithExplicitAccountsAndNoPickerOpensOnTheAllTab() throws Exception {
+    // The landing-page pinned-account link and the People per-person link both arrive as
+    // ?accountId=<id> with no picker — they must land on All with exactly those ids ticked.
+    long cash = openAccount(CASH, EUR, "500");
+    openAccount(GIRO, EUR, "0");
+
+    mockMvc
+        .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        // The All tab is active (its <button> carries name="picker" value="all" and the active
+        // class) and it shows a ticked count of 1 — the one explicit account.
+        .andExpect(
+            content()
+                .string(
+                    matchesRegex(
+                        "(?s).*name=\"picker\"\\s+value=\"all\"\\s+class=\"register-filter__tab"
+                            + " register-filter__tab--active\".*")))
+        .andExpect(content().string(matchesRegex("(?s).*register-filter__count\"[^>]*>\\(1\\).*")))
+        .andExpect(
+            content()
+                .string(
+                    matchesRegex(
+                        "(?s).*name=\"accountId\"\\s+value=\"" + cash + "\"\\s+checked.*")));
+  }
+
+  @Test
   void theFilterPanelFragmentSwapsThePanelOnlyAndRunsNoRegisterQuery() throws Exception {
     openAccount(CASH, EUR, "500");
 
