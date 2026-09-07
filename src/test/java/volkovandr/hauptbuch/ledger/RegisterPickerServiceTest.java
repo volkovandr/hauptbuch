@@ -6,7 +6,6 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,7 +16,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
 import volkovandr.hauptbuch.accounts.AccountService;
-import volkovandr.hauptbuch.debts.CurrencyBalance;
 import volkovandr.hauptbuch.debts.PersonBalanceSummary;
 import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
@@ -111,20 +109,17 @@ class RegisterPickerServiceTest {
   }
 
   @Test
-  void personsListsLivePeoplesLeavesUnsettledPeopleFirst() {
+  void personsListsEveryLivePersonsLeavesInRosterOrder() {
+    // balanceSummaries() is already name-ordered (Alice, Bob); membership flattens it as-is —
+    // alphabetical, no unsettled-first re-sort (owner feedback 2026-09-07).
     when(personService.balanceSummaries())
         .thenReturn(
             List.of(
                 new PersonBalanceSummary(1L, "Alice", List.of(), List.of(101L)),
-                new PersonBalanceSummary(
-                    2L,
-                    "Bob",
-                    List.of(new CurrencyBalance(EUR, new BigDecimal("5.00"))),
-                    List.of(201L, 202L))));
+                new PersonBalanceSummary(2L, "Bob", List.of(), List.of(201L, 202L))));
 
-    // Bob is unsettled (non-empty balances) so his leaves come first, then settled Alice's.
     assertThat(pickerService.membership(RegisterPicker.PERSONS, null, null))
-        .containsExactly(201L, 202L, 101L);
+        .containsExactly(101L, 201L, 202L);
   }
 
   @Test

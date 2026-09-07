@@ -172,7 +172,7 @@ class AccountTreeSqlLogicTest {
   }
 
   @Test
-  void depthWalkKeepsSeparateTypeRootsGrouped() {
+  void depthWalkMergesTypesIntoOneAlphabeticalListEachSubtreeContiguous() {
     long food = insertRoot(FOOD, EXPENSE);
     long foodChild = insertChild(MILK, EXPENSE, food);
     long cash = insertRoot("Cash", ASSET);
@@ -184,12 +184,26 @@ class AccountTreeSqlLogicTest {
         .containsExactly(food, foodChild)
         .doesNotContain(cash, cashChild);
 
-    // Asking for both types walks each tree; the query orders by type first, so a tree's nodes
-    // stay contiguous rather than interleaving across types.
+    // Both types → one list ordered by name, NOT grouped by type: "Cash" (asset) sorts before
+    // "Food" (expense), each parent still immediately followed by its own descendants (issue
+    // account-management/04, owner feedback — a liability must sit in its alphabetical place).
     List<AccountNode> both = accountRepository.findLiveByTypesWithDepth(List.of(EXPENSE, ASSET));
     assertThat(both)
         .extracting(n -> n.account().accountId())
-        .contains(food, foodChild, cash, cashChild);
+        .containsExactly(cash, cashChild, food, foodChild);
+  }
+
+  @Test
+  void findLiveByTypesInterleavesTypesAlphabetically() {
+    // The register's account filter reads this with asset+liability: a "Credit Card" liability
+    // belongs between the "Cash" and "Deposit" assets, not in a trailing liabilities block.
+    long cash = insertRoot("Cash", ASSET);
+    long creditCard = insertRoot("Credit Card", "liability");
+    long deposit = insertRoot("Deposit", ASSET);
+
+    assertThat(accountRepository.findLiveByTypes(List.of(ASSET, "liability")))
+        .extracting(Account::accountId)
+        .containsExactly(cash, creditCard, deposit);
   }
 
   @Test

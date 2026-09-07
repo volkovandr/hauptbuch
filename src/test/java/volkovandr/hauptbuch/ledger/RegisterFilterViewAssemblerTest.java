@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,7 +15,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
 import volkovandr.hauptbuch.accounts.AccountService;
-import volkovandr.hauptbuch.debts.CurrencyBalance;
 import volkovandr.hauptbuch.debts.PersonBalanceSummary;
 import volkovandr.hauptbuch.ledger.RegisterFilterView.Row;
 import volkovandr.hauptbuch.ledger.RegisterFilterView.Tab;
@@ -41,7 +39,7 @@ class RegisterFilterViewAssemblerTest {
   @BeforeEach
   void setUp() {
     assembler = new RegisterFilterViewAssembler(pickerService, accountService);
-    lenient().when(pickerService.livePeopleUnsettledFirst()).thenReturn(List.of());
+    lenient().when(pickerService.livePeople()).thenReturn(List.of());
     lenient().when(accountService.findLiveByTypesWithDepth(OWN_TYPES)).thenReturn(List.of());
   }
 
@@ -67,12 +65,16 @@ class RegisterFilterViewAssemblerTest {
   }
 
   private static Account personLeaf(long id) {
+    return personLeaf(id, EUR);
+  }
+
+  private static Account personLeaf(long id, String currency) {
     return new Account(
         id,
-        "personal.EUR",
+        "personal." + currency,
         ASSET,
         null,
-        EUR,
+        currency,
         null,
         LocalDate.now(),
         null,
@@ -139,35 +141,34 @@ class RegisterFilterViewAssemblerTest {
   }
 
   @Test
-  void personsPanelIsThreeDeepUmbrellaThenPersonThenCurrencyUnsettledFirst() {
+  void personsPanelIsThreeDeepAlphabeticalWithCurrencyLeavesSortedByCode() {
     when(accountService.findLiveByTypesWithDepth(OWN_TYPES))
         .thenReturn(
-            List.of(node(personLeaf(101), 0), node(personLeaf(201), 0), node(personLeaf(202), 0)));
+            List.of(
+                node(personLeaf(101), 0),
+                node(personLeaf(201, "USD"), 0),
+                node(personLeaf(202, "CHF"), 0)));
     when(pickerService.membership(RegisterPicker.PERSONS, null, null))
-        .thenReturn(List.of(201L, 202L, 101L));
-    when(pickerService.livePeopleUnsettledFirst())
+        .thenReturn(List.of(101L, 201L, 202L));
+    // livePeople() is already name-ordered (Alice, Bob); Bob's leaves are USD(201) then CHF(202).
+    when(pickerService.livePeople())
         .thenReturn(
             List.of(
-                new PersonBalanceSummary(
-                    2L,
-                    "Bob",
-                    List.of(new CurrencyBalance(EUR, new BigDecimal("5"))),
-                    List.of(201L, 202L)),
-                new PersonBalanceSummary(1L, "Alice", List.of(), List.of(101L))));
+                new PersonBalanceSummary(1L, "Alice", List.of(), List.of(101L)),
+                new PersonBalanceSummary(2L, "Bob", List.of(), List.of(201L, 202L))));
 
     List<Row> rows = assembler.filterView(filter(RegisterPicker.PERSONS), false).panel().rows();
 
-    // Umbrella (depth 0) → person toggle (depth 1, under 'persons') → currency leaves (depth 2),
-    // each labelled by the bare currency code.
+    // Umbrella (0) → person toggle (1) → currency leaves (2, sorted CHF before USD).
     assertThat(rows)
         .extracting(Row::label, Row::group, Row::groupKey, Row::memberOf, Row::depth)
         .containsExactly(
             tuple("Persons", true, "persons", null, 0),
-            tuple("Bob", true, "p2", "persons", 1),
-            tuple(EUR, false, null, "persons p2", 2),
-            tuple(EUR, false, null, "persons p2", 2),
             tuple("Alice", true, "p1", "persons", 1),
-            tuple(EUR, false, null, "persons p1", 2));
+            tuple(EUR, false, null, "persons p1", 2),
+            tuple("Bob", true, "p2", "persons", 1),
+            tuple("CHF", false, null, "persons p2", 2),
+            tuple("USD", false, null, "persons p2", 2));
   }
 
   @Test
@@ -176,7 +177,7 @@ class RegisterFilterViewAssemblerTest {
         .thenReturn(List.of(node(account(10, "Cash", null), 0), node(personLeaf(101), 0)));
     when(pickerService.membership(RegisterPicker.LAST_USED, null, null))
         .thenReturn(List.of(10L, 101L));
-    when(pickerService.livePeopleUnsettledFirst())
+    when(pickerService.livePeople())
         .thenReturn(List.of(new PersonBalanceSummary(3L, "Max", List.of(), List.of(101L))));
 
     List<Row> rows = assembler.filterView(filter(RegisterPicker.LAST_USED), false).panel().rows();
