@@ -9,11 +9,9 @@ import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.accounts.Account;
-import volkovandr.hauptbuch.accounts.AccountEntryLabel;
 import volkovandr.hauptbuch.accounts.AccountNode;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.debts.PersonBalanceSummary;
-import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.RegisterFilterView.Panel;
 import volkovandr.hauptbuch.ledger.RegisterFilterView.Row;
 import volkovandr.hauptbuch.ledger.RegisterFilterView.Tab;
@@ -38,20 +36,15 @@ class RegisterFilterViewAssembler {
    */
   private static final List<String> OWN_ACCOUNT_TYPES = List.of("asset", "liability");
 
-  /** The umbrella group over the person leaves in the {@link RegisterPicker#LAST_USED} panel. */
+  /** The tri-state umbrella group over every person's per-person sub-group. */
   private static final String PERSONS_UMBRELLA_KEY = "persons";
 
   private final RegisterPickerService pickerService;
   private final AccountService accountService;
-  private final PersonService personService;
 
-  RegisterFilterViewAssembler(
-      RegisterPickerService pickerService,
-      AccountService accountService,
-      PersonService personService) {
+  RegisterFilterViewAssembler(RegisterPickerService pickerService, AccountService accountService) {
     this.pickerService = pickerService;
     this.accountService = accountService;
-    this.personService = personService;
   }
 
   /**
@@ -89,12 +82,9 @@ class RegisterFilterViewAssembler {
     List<AccountNode> nodes = accountService.findLiveByTypesWithDepth(OWN_ACCOUNT_TYPES);
     return switch (picker) {
       case OPEN, CLOSED -> accountTreeRows(nodes, members, ticked);
-      case ALL ->
-          concat(accountTreeRows(nodes, members, ticked), perPersonRows(nodes, members, ticked));
-      case PERSONS -> perPersonRows(nodes, members, ticked);
-      case LAST_USED ->
-          concat(
-              accountTreeRows(nodes, members, ticked), personsUmbrellaRows(nodes, members, ticked));
+      case ALL, LAST_USED ->
+          concat(accountTreeRows(nodes, members, ticked), personRows(nodes, members, ticked));
+      case PERSONS -> personRows(nodes, members, ticked);
     };
   }
 
@@ -152,58 +142,53 @@ class RegisterFilterViewAssembler {
     return keys.isEmpty() ? null : String.join(" ", keys);
   }
 
-  /** One tri-state group per live person over their member debt leaves, unsettled people first. */
-  private List<Row> perPersonRows(List<AccountNode> nodes, Set<Long> members, Set<Long> ticked) {
+  /**
+   * The per-person portion of a panel, three levels deep (issue transaction-register-ui/22, owner
+   * feedback): a single {@code Persons} umbrella toggle, then one toggle per live person that has a
+   * member leaf (unsettled people first), then that person's currency leaves as checkboxes labelled
+   * by the bare currency code. Empty when no person leaf is a member — so {@link
+   * RegisterPicker#OPEN} and {@link RegisterPicker#CLOSED} show nothing here.
+   */
+  private List<Row> personRows(List<AccountNode> nodes, Set<Long> members, Set<Long> ticked) {
     Map<Long, Account> byId = byId(nodes);
-    Map<Long, String> names = personService.personNamesForAccounts(members);
+    List<PersonBalanceSummary> people = pickerService.livePeopleUnsettledFirst();
+    boolean anyMemberLeaf =
+        people.stream().flatMap(p -> p.accountIds().stream()).anyMatch(members::contains);
+    if (!anyMemberLeaf) {
+      return List.of();
+    }
     List<Row> rows = new ArrayList<>();
-    for (PersonBalanceSummary person : pickerService.livePeopleUnsettledFirst()) {
+    rows.add(groupToggleRow("Persons", PERSONS_UMBRELLA_KEY, null, 0));
+    for (PersonBalanceSummary person : people) {
       List<Long> leaves = person.accountIds().stream().filter(members::contains).toList();
       if (leaves.isEmpty()) {
         continue;
       }
-      String key = "p" + person.personId();
-      rows.add(groupToggleRow(person.name(), key));
+      String personKey = "p" + person.personId();
+      rows.add(groupToggleRow(person.name(), personKey, PERSONS_UMBRELLA_KEY, 1));
+      String memberOf = PERSONS_UMBRELLA_KEY + " " + personKey;
       for (Long leafId : leaves) {
         Account leaf = byId.get(leafId);
         if (leaf != null) {
-          rows.add(personLeafRow(leaf, names.getOrDefault(leafId, person.name()), key, ticked));
+          rows.add(
+              new Row(
+                  leaf.accountId(),
+                  leaf.currencyCode(),
+                  null,
+                  leaf.hue(),
+                  2,
+                  false,
+                  null,
+                  memberOf,
+                  ticked.contains(leaf.accountId())));
         }
       }
     }
     return rows;
   }
 
-  /** The single "Persons" umbrella group the {@link RegisterPicker#LAST_USED} panel shows. */
-  private List<Row> personsUmbrellaRows(
-      List<AccountNode> nodes, Set<Long> members, Set<Long> ticked) {
-    List<Account> personLeaves =
-        nodes.stream()
-            .map(AccountNode::account)
-            .filter(Account::personLeaf)
-            .filter(a -> members.contains(a.accountId()))
-            .toList();
-    if (personLeaves.isEmpty()) {
-      return List.of();
-    }
-    Map<Long, String> names =
-        personService.personNamesForAccounts(
-            personLeaves.stream().map(Account::accountId).toList());
-    List<Row> rows = new ArrayList<>();
-    rows.add(groupToggleRow("Persons", PERSONS_UMBRELLA_KEY));
-    for (Account leaf : personLeaves) {
-      rows.add(
-          personLeafRow(
-              leaf,
-              names.getOrDefault(leaf.accountId(), leaf.name()),
-              PERSONS_UMBRELLA_KEY,
-              ticked));
-    }
-    return rows;
-  }
-
-  private static Row groupToggleRow(String label, String key) {
-    return new Row(0L, label, null, null, 0, true, key, null, false);
+  private static Row groupToggleRow(String label, String key, String memberOf, int depth) {
+    return new Row(0L, label, null, null, depth, true, key, memberOf, false);
   }
 
   private static Row memberRow(
@@ -223,13 +208,6 @@ class RegisterFilterViewAssembler {
         null,
         memberOf,
         ticked.contains(account.accountId()));
-  }
-
-  /** A person's debt-leaf row, labelled {@code Name (CUR)} (register §2.6) — one combined label. */
-  private static Row personLeafRow(
-      Account leaf, String personName, String memberOf, Set<Long> ticked) {
-    return memberRow(
-        leaf, AccountEntryLabel.format(personName, leaf.currencyCode()), null, 1, memberOf, ticked);
   }
 
   /** Every ancestor account id of any id in {@code members}, walked up {@code parent_id}. */

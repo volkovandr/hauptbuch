@@ -236,8 +236,14 @@ class RegisterScreenIntegrationTest {
         .andExpect(content().string(not(containsString("personal.EUR"))))
         // The counterpart is the ordinary expense category.
         .andExpect(content().string(containsString(FOOD)))
-        // And the person is offered in the account filter as `Max (EUR)` (plan stage 8c).
-        .andExpect(content().string(containsString("Max (EUR)")));
+        // And the person is offered in the account filter: a "Persons" umbrella, a per-person
+        // toggle, and the currency leaf as a checkbox (issue transaction-register-ui/22).
+        .andExpect(content().string(containsString("data-filter-group=\"persons\"")))
+        .andExpect(content().string(matchesRegex("(?s).*data-filter-group=\"p\\d+\".*")))
+        .andExpect(content().string(containsString(">Max</span>")))
+        .andExpect(content().string(matchesRegex("(?s).*data-filter-member=\"persons p\\d+\".*")))
+        .andExpect(
+            content().string(matchesRegex("(?s).*name=\"accountId\"\\s+value=\"" + max + "\".*")));
   }
 
   // ── The receipt link, both ways (register §7, plan stage 9g) ───────────────
@@ -371,14 +377,14 @@ class RegisterScreenIntegrationTest {
     mockMvc
         .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
         .andExpect(status().isOk())
-        // The All tab is active (its <button> carries name="picker" value="all" and the active
-        // class) and it shows a ticked count of 1 — the one explicit account.
+        // The All tab is active (its <a> carries the active class and points its hx-get at
+        // /filter-panel/all) and shows a ticked count of 1 — the one explicit account.
         .andExpect(
             content()
                 .string(
                     matchesRegex(
-                        "(?s).*name=\"picker\"\\s+value=\"all\"\\s+class=\"register-filter__tab"
-                            + " register-filter__tab--active\".*")))
+                        "(?s).*class=\"register-filter__tab register-filter__tab--active\"[^>]*"
+                            + "hx-get=\"[^\"]*/register/filter-panel/all\".*")))
         .andExpect(content().string(matchesRegex("(?s).*register-filter__count\"[^>]*>\\(1\\).*")))
         .andExpect(
             content()
@@ -392,7 +398,7 @@ class RegisterScreenIntegrationTest {
     openAccount(CASH, EUR, "500");
 
     mockMvc
-        .perform(get(REGISTER_PATH + "/filter-panel").param("picker", "open"))
+        .perform(get(REGISTER_PATH + "/filter-panel/open"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("register-filter__panel")))
         .andExpect(content().string(containsString(CASH)))

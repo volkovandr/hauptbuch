@@ -120,15 +120,21 @@ re-renders the register, and it re-collapses the panel.
 
 | Tab | Members |
 |-----|---------|
-| **Last used** | Open real accounts *and* person debt leaves with a posting inside the applied date range (tracks the range). Person leaves sit under one "Persons" group toggle. This is the default. |
+| **Last used** | Open real accounts *and* person debt leaves with a posting inside the applied date range (tracks the range). This is the default. |
 | **Open** | Open real accounts; person leaves excluded. |
 | **Persons** | Live people's per-currency debt leaves, unsettled people before fully settled. |
 | **Closed** | Closed accounts — **viewable, never bookable** (§2.3a). |
 | **All** | Every live own account leaf: open, closed, and person leaves. |
 
+Wherever person leaves appear (Last used, Persons, All) they render **three levels deep**: a
+single `Persons` umbrella toggle → one toggle per person → that person's currency leaves as
+checkboxes labelled by the bare currency code. Every group toggle is tri-state.
+
 Switching tab renders that picker fresh with **all members ticked**; ticks made in a
-previously-open tab are discarded. A parent account is a **tri-state group toggle**, never a filter
-target (posting is leaves-only), and its id is never submitted. When every member of the active
+previously-open tab are discarded. A parent account (and each person toggle) is a **tri-state group
+toggle**, never a filter target (posting is leaves-only), and its id is never submitted. The tab
+strip is `<a>` links (`hx-get` to `/register/filter-panel/<picker>`, with an `?picker=` href as the
+JS-off fallback), never submit buttons — a submit button double-fires against the htmx swap. When every member of the active
 picker is ticked the form submits **no** `accountId` at all, so the server re-resolves the picker
 against the submitted date range (widening the range while all-ticked admits newly-qualifying
 accounts; a partial selection is left alone). An inbound link carrying explicit `accountId`s and no
