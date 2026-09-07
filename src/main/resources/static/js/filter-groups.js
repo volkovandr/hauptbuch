@@ -1,6 +1,7 @@
 /*
- * Filter group toggles — the second isolated bespoke-JS leaf, after keyboard.js and the two
- * Cropper leaves (tech-stack §4.3, CLAUDE.md §1.6).
+ * Filter group toggles — the third isolated bespoke-JS leaf, after the keyboard layer (keyboard.js)
+ * and the Cropper image component (receipt-editor.js). Sanctioned by issue
+ * transaction-register-ui/22; CLAUDE.md §1.6 and tech-stack §4.3 note it.
  *
  * DESIGN CONTRACT (read before touching): this is an ISOLATED LEAF, not a framework. Dependency-free
  * vanilla JS, driven entirely by data-attributes, that the rest of the htmx UI never imports. Remove

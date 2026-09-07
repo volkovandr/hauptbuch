@@ -203,7 +203,11 @@ final class SplitFormBinder {
     return perLine.get(index);
   }
 
-  /** The active-filter view the panel carries, so a commit repaints the current register view. */
+  /**
+   * The active-filter view the panel carries, so a commit repaints the current register view. The
+   * panel always carries an explicit {@code viewPicker}, so — like the dock and unlike {@code
+   * RegisterController.filterFrom} — no inbound-link picker rule applies.
+   */
   static RegisterFilter filterFrom(SplitForm form) {
     return new RegisterFilter(
         form.viewAccountId() == null ? List.of() : form.viewAccountId(),

@@ -346,7 +346,13 @@ class RegisterEntryController {
     model.addAttribute(AMOUNT_FIELDS, fields);
   }
 
-  /** The active filter carried by the dock's {@code view*} fields (register §2.2). */
+  /**
+   * The active filter carried by the dock's {@code view*} fields (register §2.2). The dock always
+   * carries an explicit {@code viewPicker} hidden field, so — unlike {@code
+   * RegisterController.filterFrom} — there is no "explicit ids but no picker ⇒ All" rule to apply
+   * here; {@code fromParam} on a null falls back to the default picker, which only happens on a
+   * fresh dock with no filter yet.
+   */
   private static RegisterFilter filterFrom(DockEntryForm form) {
     return new RegisterFilter(
         form.viewAccountId() == null ? List.of() : form.viewAccountId(),

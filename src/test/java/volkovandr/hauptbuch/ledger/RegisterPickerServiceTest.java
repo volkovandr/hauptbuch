@@ -128,6 +128,18 @@ class RegisterPickerServiceTest {
   }
 
   @Test
+  void lastUsedExcludesClosedRealAccountsEvenWithRecentActivity() {
+    Account cash = account(10, "Cash", null, null);
+    Account oldGiro = account(11, "Old Giro", null, LocalDate.now().minusYears(1));
+    ownAccounts(node(cash, 0), node(oldGiro, 0));
+    when(registerRepository.findAccountIdsWithActivity(any(), any())).thenReturn(List.of(10L, 11L));
+
+    assertThat(pickerService.membership(RegisterPicker.LAST_USED, null, null))
+        .containsExactly(10L)
+        .doesNotContain(11L);
+  }
+
+  @Test
   void lastUsedIsOwnLeavesIntersectedWithActivityAndKeepsPersonLeaves() {
     Account cash = account(10, "Cash", null, null);
     Account giro = account(11, "Giro", null, null);

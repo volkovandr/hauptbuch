@@ -139,9 +139,19 @@ public class RegisterPickerService {
     return account.closedAt() == null;
   }
 
+  /**
+   * "Last used": <em>open</em> real-account leaves and person leaves with a posting in the applied
+   * date range (issue transaction-register-ui/22, spec table). A closed account is excluded even
+   * with recent activity — the {@link RegisterPicker#CLOSED} and {@link RegisterPicker#ALL} pickers
+   * are the way to reach one.
+   */
   private List<Long> lastUsed(List<Account> leaves, LocalDate fromDate, LocalDate toDate) {
     Set<Long> active =
         new HashSet<>(registerRepository.findAccountIdsWithActivity(fromDate, toDate));
-    return leaves.stream().map(Account::accountId).filter(active::contains).toList();
+    return leaves.stream()
+        .filter(a -> a.personLeaf() || isOpen(a))
+        .map(Account::accountId)
+        .filter(active::contains)
+        .toList();
   }
 }
