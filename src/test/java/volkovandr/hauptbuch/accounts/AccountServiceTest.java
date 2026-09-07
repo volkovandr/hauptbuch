@@ -369,6 +369,25 @@ class AccountServiceTest {
   }
 
   @Test
+  void manageableAccountsWithDepthExcludesPersonLeavesAndCarriesDepth() {
+    // The depth-annotated read the accounts screen indents against: person leaves are dropped just
+    // as in the flat read, and each remaining node keeps the depth the repository walked.
+    Account wallet = account(1L, "Wallet", ASSET, 210);
+    Account cash =
+        new Account(2L, "Cash", ASSET, 1L, EUR, 30, OPENED, null, null, false, false, false);
+    when(accountRepository.findLiveByTypesWithDepth(any()))
+        .thenReturn(
+            List.of(
+                new AccountNode(wallet, 0),
+                new AccountNode(cash, 1),
+                new AccountNode(personLeaf(3L, "personal.EUR"), 0)));
+
+    assertThat(accountService.manageableAccountsWithDepth())
+        .extracting(n -> n.account().name(), AccountNode::depth)
+        .containsExactly(tuple("Wallet", 0), tuple("Cash", 1));
+  }
+
+  @Test
   void doesNotResolvePersonLeafAsTransferTarget() {
     // "to personal.EUR" must not reach a person — the for/by sigils are the only way in (§3.5).
     when(accountRepository.findLiveByTypes(any()))
