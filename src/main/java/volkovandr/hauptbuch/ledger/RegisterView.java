@@ -9,12 +9,9 @@ import volkovandr.hauptbuch.accounts.AccountEntryLabel;
  * controller stays thin and the template does no computation beyond iteration and formatting.
  *
  * @param rows the register rows, oldest-first (newest at the bottom — register §2.1)
- * @param accounts every real account offered in the account multi-select, in list order
- * @param people the per-person debt leaves offered in the same multi-select, listed as {@code Name
- *     (CUR)} (register §2.6, plan stage 8c) — individually selectable and combinable with the real
- *     accounts. Kept a separate list from {@link #accounts} because a person is reached in the
- *     <em>entry</em> dock only by the {@code for}/{@code by} sigils, never by picking their leaf —
- *     so people belong in the filter but must stay out of the dock's Account datalist
+ * @param accounts the open own accounts the dock's Account datalist offers and pre-fills from — the
+ *     post-to set (register §3.3): person leaves and closed accounts are excluded, since a person
+ *     is reached by the {@code for}/{@code by} sigils and a closed account cannot be booked to
  * @param payees every payee offered in the payee filter, alphabetical
  * @param transferTargets the {@code To → <account>} / {@code From ← <account>} values the Category
  *     datalist also offers, routing the counter-leg to a real account (register §3.5, plan stage
@@ -29,7 +26,6 @@ import volkovandr.hauptbuch.accounts.AccountEntryLabel;
 public record RegisterView(
     List<RegisterRowView> rows,
     List<RegisterAccountOption> accounts,
-    List<RegisterAccountOption> people,
     List<RegisterPayeeOption> payees,
     List<RegisterCategoryOption> categories,
     List<String> transferTargets,
@@ -41,7 +37,6 @@ public record RegisterView(
   public RegisterView {
     rows = List.copyOf(rows);
     accounts = List.copyOf(accounts);
-    people = List.copyOf(people);
     payees = List.copyOf(payees);
     categories = List.copyOf(categories);
     transferTargets = List.copyOf(transferTargets);
@@ -68,17 +63,17 @@ public record RegisterView(
   }
 
   /**
-   * One account offered in the register's account multi-select (register §2.3), carrying whether it
-   * is currently selected so the form redisplays the active choice.
+   * One open own account offered in the dock's Account datalist and used for the fresh-dock default
+   * (register §3.3) — the post-to set. The register's account <em>filter</em> has its own model,
+   * {@link RegisterFilterView}.
    *
    * @param accountId the account
    * @param name display name
-   * @param hue stored register hue (for the swatch); null on accounts with no thread colour
+   * @param hue stored register hue; null on accounts with no thread colour
    * @param currencyCode the account's currency
-   * @param selected whether this account is in the applied filter
    */
   public record RegisterAccountOption(
-      long accountId, String name, Integer hue, String currencyCode, boolean selected) {
+      long accountId, String name, Integer hue, String currencyCode) {
 
     /**
      * The {@code Name (CUR)} value the dock's Account datalist offers and its resolver round-trips

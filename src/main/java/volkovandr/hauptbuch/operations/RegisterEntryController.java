@@ -15,6 +15,7 @@ import volkovandr.hauptbuch.ledger.CrossCurrencyFields;
 import volkovandr.hauptbuch.ledger.Payee;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.RegisterFilter;
+import volkovandr.hauptbuch.ledger.RegisterPicker;
 import volkovandr.hauptbuch.ledger.RegisterService;
 import volkovandr.hauptbuch.ledger.RegisterView;
 import volkovandr.hauptbuch.ledger.UnbalancedTransactionException;
@@ -349,6 +350,7 @@ class RegisterEntryController {
   private static RegisterFilter filterFrom(DockEntryForm form) {
     return new RegisterFilter(
         form.viewAccountId() == null ? List.of() : form.viewAccountId(),
+        RegisterPicker.fromParam(form.viewPicker()),
         form.viewFromDate(),
         form.viewToDate(),
         form.viewPayeeId());

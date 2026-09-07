@@ -73,6 +73,7 @@ class DockAmountFieldsServiceTest {
         List.of(),
         null,
         null,
+        null,
         null);
   }
 

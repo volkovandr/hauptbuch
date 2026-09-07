@@ -128,6 +128,7 @@ class RegisterSplitController {
             headerTags,
             List.of(headerTags),
             form.viewAccountId(),
+            form.viewPicker(),
             form.viewFromDate(),
             form.viewToDate(),
             form.viewPayeeId());

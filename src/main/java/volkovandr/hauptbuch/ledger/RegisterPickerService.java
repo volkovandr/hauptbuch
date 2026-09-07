@@ -15,12 +15,12 @@ import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
 
 /**
  * Resolves each {@link RegisterPicker} to its member account ids (issue transaction-register-ui/22)
- * — the accounts an all-ticked picker views, and the membership the controller intersects a partial
- * tick selection against.
+ * — the accounts an all-ticked picker views, and the membership a partial tick selection is
+ * intersected with. The rendering of the strip and panel is {@link RegisterFilterViewAssembler}'s.
  *
  * <p>Membership is always <em>leaves</em>: posting is leaves-only (data-model §5), so a parent
- * account has no postings and no register rows — it is a group toggle in the panel, never a filter
- * target, and never counted for the all-ticked encoding. The read set is every live own account
+ * account has no register rows — it is a group toggle in the panel, never a filter target, and
+ * never counted for the all-ticked encoding. The read set is every live own account
  * (asset/liability), <em>including closed accounts</em> — a closed account is viewable though not
  * bookable — and including per-person debt leaves, which are {@code asset} accounts (data-model
  * §7).
@@ -67,9 +67,47 @@ public class RegisterPickerService {
           realLeaves(leaves).filter(RegisterPickerService::isOpen).map(Account::accountId).toList();
       case CLOSED -> realLeaves(leaves).filter(a -> !isOpen(a)).map(Account::accountId).toList();
       case ALL -> leaves.stream().map(Account::accountId).toList();
-      case PERSONS -> personLeavesUnsettledFirst();
+      case PERSONS ->
+          livePeopleUnsettledFirst().stream()
+              .flatMap(summary -> summary.accountIds().stream())
+              .toList();
       case LAST_USED -> lastUsed(leaves, fromDate, toDate);
     };
+  }
+
+  /**
+   * The account ids to view for a submitted picker + tick selection (issue
+   * transaction-register-ui/22): an empty {@code submitted} means "every member", and a selection
+   * that ticks <em>every</em> member collapses back to empty — so the server re-resolves it against
+   * the submitted date range and the entry dock's "don't serialise a defaulted filter" rule fires
+   * untouched. A partial selection is intersected with the picker's membership and kept verbatim.
+   */
+  public List<Long> resolveSelection(
+      RegisterPicker picker, List<Long> submitted, LocalDate fromDate, LocalDate toDate) {
+    if (submitted == null || submitted.isEmpty()) {
+      return List.of();
+    }
+    List<Long> membership = membership(picker, fromDate, toDate);
+    Set<Long> members = new HashSet<>(membership);
+    List<Long> ticked = submitted.stream().distinct().filter(members::contains).toList();
+    if (!membership.isEmpty() && ticked.size() == membership.size()) {
+      return List.of();
+    }
+    return ticked;
+  }
+
+  /**
+   * The live-people roster with an unsettled leaf before fully settled people (a fully settled
+   * person has an empty {@link PersonBalanceSummary#balances()}), alphabetical by name within each
+   * group. Reuses {@link PersonService#balanceSummaries()} — the same roster the People screen
+   * builds — rather than a new settled/unsettled query.
+   */
+  public List<PersonBalanceSummary> livePeopleUnsettledFirst() {
+    List<PersonBalanceSummary> summaries = personService.balanceSummaries();
+    return Stream.concat(
+            summaries.stream().filter(s -> !s.balances().isEmpty()),
+            summaries.stream().filter(s -> s.balances().isEmpty()))
+        .toList();
   }
 
   /**
@@ -93,7 +131,6 @@ public class RegisterPickerService {
         .toList();
   }
 
-  /** The real-account leaves (person leaves excluded — they have their own pickers). */
   private static Stream<Account> realLeaves(List<Account> leaves) {
     return leaves.stream().filter(a -> !a.personLeaf());
   }
@@ -102,31 +139,9 @@ public class RegisterPickerService {
     return account.closedAt() == null;
   }
 
-  /**
-   * "Last used": the open real-account leaves <em>and</em> person leaves that carry a posting
-   * inside the applied date range. Person leaves are included — a person-funded transaction's only
-   * own leg can be the debt leaf, and dropping it would leave that transaction with no register row
-   * at all (plan stage 8b.1, reverted after owner testing 2026-07-20). Ordering follows {@link
-   * #ownLeaves()}.
-   */
   private List<Long> lastUsed(List<Account> leaves, LocalDate fromDate, LocalDate toDate) {
     Set<Long> active =
         new HashSet<>(registerRepository.findAccountIdsWithActivity(fromDate, toDate));
     return leaves.stream().map(Account::accountId).filter(active::contains).toList();
-  }
-
-  /**
-   * Every live person's per-currency debt leaves, people with an unsettled leaf before fully
-   * settled people (a fully settled person has an empty {@link PersonBalanceSummary#balances()}),
-   * alphabetical by name within each group. Reuses {@link PersonService#balanceSummaries()} — the
-   * same roster the People screen builds — rather than a new settled/unsettled query.
-   */
-  private List<Long> personLeavesUnsettledFirst() {
-    List<PersonBalanceSummary> summaries = personService.balanceSummaries();
-    return Stream.concat(
-            summaries.stream().filter(s -> !s.balances().isEmpty()),
-            summaries.stream().filter(s -> s.balances().isEmpty()))
-        .flatMap(s -> s.accountIds().stream())
-        .toList();
   }
 }

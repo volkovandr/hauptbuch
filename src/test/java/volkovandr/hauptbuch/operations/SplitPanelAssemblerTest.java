@@ -105,6 +105,7 @@ class SplitPanelAssemblerTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -136,6 +137,7 @@ class SplitPanelAssemblerTest {
         blanks,
         headerTags,
         lineTags,
+        null,
         null,
         null,
         null,
@@ -294,6 +296,7 @@ class SplitPanelAssemblerTest {
         blanks,
         amounts,
         blanks,
+        null,
         null,
         null,
         null,
