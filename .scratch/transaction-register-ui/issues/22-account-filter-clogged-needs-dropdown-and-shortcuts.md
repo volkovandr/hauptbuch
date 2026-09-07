@@ -1,6 +1,6 @@
 # The register account filter is a wall of checkboxes — replace with a compact control plus shortcuts
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: medium
 Blocked by: account-management/03 (re-parenting), which must ship first — see the Agent Brief
@@ -252,3 +252,26 @@ implement 04 separately — it ships in this change.
 - **Column re-sorting** of the register, which remains deferred (plan §14).
 - **Retiring the 36 dormant accounts.** That is the owner's data hygiene, deliberately not a
   precondition: the design must stay comfortable with a messy account table.
+
+---
+
+## Resolution (2026-09-07, owner-confirmed)
+
+Shipped on branch `feat/register-filter-picker` (8 commits). The flat checkbox wall is now a
+five-tab strip — `Last used · Open · Persons · Closed · All` — over a collapsed `<details>` panel:
+
+- Tabs are `<a>` links that htmx-swap only the control (`GET /register/filter-panel/<picker>`),
+  no ledger query; **Apply** is the only thing that re-renders the register.
+- `RegisterPicker` on `RegisterFilter`; empty `accountIds` = "the whole picker", re-resolved
+  server-side; an all-ticked selection collapses back to empty on the wire.
+- Parent accounts and a three-level `Persons → person → currency` hierarchy are tri-state group
+  toggles, driven by `filter-groups.js` (the sanctioned third JS leaf — CLAUDE.md §1.6 updated).
+- Closed accounts: viewable via the Closed/All tabs (a "closed" marker on the row), never
+  bookable — `RegisterService` split into a read set and a post-to set.
+- account-management/04 (alphabetical depth-first ordering) rode along via the shared
+  `LIVE_TREE_CTE`.
+- Docs: `ui-transaction-register.md` §2.3 rewritten; `CONTEXT.md` gained an Accounts section.
+
+Three rounds of owner testing fixed: tab clicks not switching (submit-button double-fire +
+htmx query-string strip → `<a>` + path segment), person hierarchy too flat (→ 3 levels), Apply
+ignoring the active tab (picker moved to a hidden field inside the swapped fragment).
