@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.ledger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
@@ -43,6 +44,7 @@ class RegisterPickerServiceTest {
   void setUp() {
     pickerService = new RegisterPickerService(accountService, personService, registerRepository);
     lenient().when(personService.balanceSummaries()).thenReturn(List.of());
+    lenient().when(personService.deletedPeople()).thenReturn(List.of());
     lenient()
         .when(registerRepository.findAccountIdsWithActivity(any(), any()))
         .thenReturn(List.of());
@@ -76,12 +78,26 @@ class RegisterPickerServiceTest {
   }
 
   @Test
-  void closedListsOnlyClosedRealLeaves() {
+  void closedListsOnlyClosedRealLeavesWhenNoPersonIsSoftDeleted() {
     Account cash = account(10, "Cash", null, null);
     Account oldGiro = account(11, "Old Giro", null, LocalDate.now().minusYears(1));
     ownAccounts(node(cash, 0), node(oldGiro, 0));
 
     assertThat(pickerService.membership(RegisterPicker.CLOSED, null, null)).containsExactly(11L);
+  }
+
+  @Test
+  void closedAlsoListsTheLiveLeavesOfSoftDeletedPeople() {
+    // A settled-then-deleted person keeps their live leaf (9); it is not a closed real account, so
+    // it belongs to no other picker but CLOSED and ALL (issue transaction-register-ui/23).
+    Account oldGiro = account(11, "Old Giro", null, LocalDate.now().minusYears(1));
+    Account samLeaf = personLeaf(9, "personal.EUR");
+    ownAccounts(node(oldGiro, 0), node(samLeaf, 0));
+    when(personService.deletedPeople())
+        .thenReturn(List.of(new PersonBalanceSummary(7L, "Sam", List.of(), List.of(9L))));
+
+    assertThat(pickerService.membership(RegisterPicker.CLOSED, null, null))
+        .containsExactly(11L, 9L); // closed real leaves first, then the deleted-person leaves
   }
 
   @Test
@@ -145,6 +161,48 @@ class RegisterPickerServiceTest {
 
     assertThat(pickerService.membership(RegisterPicker.LAST_USED, null, null))
         .containsExactly(10L, 9L); // ownLeaves order preserved: Cash, then the person leaf
+  }
+
+  @Test
+  void lastUsedExcludesSoftDeletedPeoplesLeavesEvenWithRecentActivity() {
+    // Sam was settled then deleted; the settling transactions are recent, so the leaf shows
+    // activity — but Last used stays live-only (issue transaction-register-ui/23).
+    Account cash = account(10, "Cash", null, null);
+    Account samLeaf = personLeaf(9, "personal.EUR");
+    ownAccounts(node(cash, 0), node(samLeaf, 0));
+    when(registerRepository.findAccountIdsWithActivity(any(), any())).thenReturn(List.of(9L, 10L));
+    when(personService.deletedPeople())
+        .thenReturn(List.of(new PersonBalanceSummary(7L, "Sam", List.of(), List.of(9L))));
+
+    assertThat(pickerService.membership(RegisterPicker.LAST_USED, null, null))
+        .containsExactly(10L)
+        .doesNotContain(9L);
+  }
+
+  @Test
+  void personGroupsForAllMergesLiveAndDeletedPeopleAlphabeticallyByName() {
+    when(personService.balanceSummaries())
+        .thenReturn(
+            List.of(
+                new PersonBalanceSummary(1L, "Ana", List.of(), List.of(101L)),
+                new PersonBalanceSummary(2L, "Cody", List.of(), List.of(102L))));
+    when(personService.deletedPeople())
+        .thenReturn(List.of(new PersonBalanceSummary(3L, "Bea", List.of(), List.of(103L))));
+
+    assertThat(pickerService.personGroups(RegisterPicker.ALL))
+        .extracting(
+            RegisterPickerService.PersonGroup::name, RegisterPickerService.PersonGroup::deleted)
+        .containsExactly(tuple("Ana", false), tuple("Bea", true), tuple("Cody", false));
+  }
+
+  @Test
+  void personGroupsForClosedIsSoftDeletedPeopleOnly() {
+    when(personService.deletedPeople())
+        .thenReturn(List.of(new PersonBalanceSummary(3L, "Bea", List.of(), List.of(103L))));
+
+    assertThat(pickerService.personGroups(RegisterPicker.CLOSED))
+        .extracting(RegisterPickerService.PersonGroup::name)
+        .containsExactly("Bea");
   }
 
   @Test

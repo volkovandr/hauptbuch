@@ -84,6 +84,16 @@ class PersonMergeScreenIntegrationTest {
     return "/people/" + personId(name) + "/merge";
   }
 
+  /** Whether the account row is still live (its {@code deleted_at} is unset). */
+  private boolean leafIsLive(long accountId) {
+    return Boolean.TRUE.equals(
+        jdbcClient
+            .sql("select deleted_at is null from account where account_id = :id")
+            .param("id", accountId)
+            .query(Boolean.class)
+            .single());
+  }
+
   /** The person's summed native balance in one currency, or zero when they hold no such leaf. */
   private BigDecimal balanceOf(long personId, String currency) {
     return personService
@@ -108,7 +118,8 @@ class PersonMergeScreenIntegrationTest {
 
   @Test
   void mergeFoldsTheSourcesPostingsOntoTheTargetAndRemovesTheSource() throws Exception {
-    seedPosting(provisionLeaf("Max", EUR), "10.00"); // Max owes you 10 EUR
+    long maxLeaf = provisionLeaf("Max", EUR);
+    seedPosting(maxLeaf, "10.00"); // Max owes you 10 EUR
     provisionLeaf("Alex", EUR);
     long maxId = personId("Max");
     long alexId = personId("Alex");
@@ -121,6 +132,8 @@ class PersonMergeScreenIntegrationTest {
     // Max is retired; Alex now carries the folded 10 EUR position.
     assertThat(personService.findById(maxId)).isEmpty();
     assertThat(balanceOf(alexId, EUR)).isEqualByComparingTo("10.00");
+    // Max's now-empty leaf is retired too, not left live (issue transaction-register-ui/23).
+    assertThat(leafIsLive(maxLeaf)).isFalse();
   }
 
   @Test

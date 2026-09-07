@@ -68,7 +68,7 @@ public class PersonService {
         accountOwnerRepository.findPersonCurrencyBalances(personId);
 
     for (AccountOwnerRepository.PersonCurrencyBalance balance : balances) {
-      if (balance.getSignedBalance().compareTo(BigDecimal.ZERO) != 0) {
+      if (balance.getSignedBalance().signum() != 0) {
         throw new IllegalStateException(
             "Cannot soft-delete person '"
                 + person.name()
@@ -157,6 +157,33 @@ public class PersonService {
                     p.name(),
                     balancesByPerson.getOrDefault(p.personId(), List.of()),
                     accountsByPerson.getOrDefault(p.personId(), List.of())))
+        .toList();
+  }
+
+  /**
+   * Every soft-deleted person who still owns a live debt leaf, name-ordered (issue
+   * transaction-register-ui/23) — the soft-deleted counterpart of {@link #balanceSummaries()}, for
+   * the register's Closed and All filter panels, which render these as person groups with a muted
+   * "deleted" marker so a since-deleted person's settled transactions stay reachable. {@code
+   * balances} is always empty (a soft-deleted person is zero everywhere by the delete guard);
+   * {@code accountIds} is their still-live leaves, currency-ordered. A merged-away person is absent
+   * — the merge soft-deletes their now-empty leaves.
+   */
+  public List<PersonBalanceSummary> deletedPeople() {
+    return accountOwnerRepository.findSoftDeletedPersonLeaves().stream()
+        .collect(Collectors.groupingBy(AccountOwnerRepository.DeletedPersonLeaf::personId))
+        .values()
+        .stream()
+        .map(
+            rows ->
+                new PersonBalanceSummary(
+                    rows.get(0).personId(),
+                    rows.get(0).name(),
+                    List.of(),
+                    rows.stream()
+                        .map(AccountOwnerRepository.DeletedPersonLeaf::accountId)
+                        .toList()))
+        .sorted(Comparator.comparing(PersonBalanceSummary::name))
         .toList();
   }
 

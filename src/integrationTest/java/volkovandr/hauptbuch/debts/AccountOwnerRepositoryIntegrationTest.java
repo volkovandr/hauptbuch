@@ -8,16 +8,19 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.debts.repository.AccountOwnerRepository;
 import volkovandr.hauptbuch.debts.repository.AccountOwnerRepository.AccountPersonName;
+import volkovandr.hauptbuch.debts.repository.AccountOwnerRepository.DeletedPersonLeaf;
 
 /**
  * Integration tier (plan §1.5): repository row-mapping round-trips for {@link
- * AccountOwnerRepository}'s person-name lookup (register §2.6, plan stage 8c). Person leaves are
- * provisioned through {@link PersonProvisioningService} so the {@code account_owner} link the query
- * joins is real. Each test is rolled back.
+ * AccountOwnerRepository}'s person-name lookup (register §2.6, plan stage 8c) and the soft-deleted
+ * owner lookup (issue transaction-register-ui/23). Person leaves are provisioned through {@link
+ * PersonProvisioningService} so the {@code account_owner} link the query joins is real. Each test
+ * is rolled back.
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
@@ -29,10 +32,16 @@ class AccountOwnerRepositoryIntegrationTest {
   @Autowired AccountOwnerRepository accountOwnerRepository;
   @Autowired PersonProvisioningService personProvisioningService;
   @Autowired PersonService personService;
+  @Autowired JdbcClient jdbcClient;
 
   /** Provision a person's per-currency debt leaf and return its account id. */
   private long provisionLeaf(String name, String currency) {
     return personProvisioningService.ensureLeaf(name, currency, false).accountId();
+  }
+
+  /** The person id of the sole live person with this exact name. */
+  private long personId(String name) {
+    return ((PersonMatch.Live) personService.matchExact(name)).person().personId();
   }
 
   @Test
@@ -91,6 +100,54 @@ class AccountOwnerRepositoryIntegrationTest {
     assertThat(accountOwnerRepository.findLiveAccountLinks())
         .extracting(AccountOwner::accountId)
         .doesNotContain(aliceEur);
+  }
+
+  @Test
+  void findLiveAccountLinksExcludesLiveOwnersSoftDeletedLeaf() {
+    // A merge retires a source person's emptied leaves; if that person is later revived, the stale
+    // leaf id must not come back through here (issue transaction-register-ui/23).
+    long maxEur = provisionLeaf("Max", EUR);
+    long maxChf = provisionLeaf("Max", "CHF");
+    long maxId = personId("Max");
+    jdbcClient
+        .sql("update account set deleted_at = now() where account_id = :id")
+        .param("id", maxEur)
+        .update();
+
+    assertThat(accountOwnerRepository.findLiveAccountLinks())
+        .filteredOn(link -> link.personId() == maxId)
+        .extracting(AccountOwner::accountId)
+        .containsExactly(maxChf);
+  }
+
+  @Test
+  void findSoftDeletedPersonLeavesReturnsEachDeletedOwnersLiveLeavesNameThenCurrencyOrdered() {
+    long bobChf = provisionLeaf("Bob", "CHF");
+    long bobEur = provisionLeaf("Bob", EUR);
+    provisionLeaf("Alice", EUR); // Alice stays live — excluded.
+    long bobId = personId("Bob");
+    personService.softDeleteIfZeroBalance(bobId);
+
+    assertThat(accountOwnerRepository.findSoftDeletedPersonLeaves())
+        .extracting(
+            DeletedPersonLeaf::personId, DeletedPersonLeaf::name, DeletedPersonLeaf::accountId)
+        .containsExactly(
+            tuple(bobId, "Bob", bobChf), tuple(bobId, "Bob", bobEur)); // currency-ordered
+  }
+
+  @Test
+  void findSoftDeletedPersonLeavesExcludesLeavesWhoseOwnAccountRowIsSoftDeleted() {
+    long carolEur = provisionLeaf("Carol", EUR);
+    provisionLeaf("Carol", "CHF");
+    personService.softDeleteIfZeroBalance(personId("Carol"));
+    jdbcClient
+        .sql("update account set deleted_at = now() where account_id = :id")
+        .param("id", carolEur)
+        .update();
+
+    assertThat(accountOwnerRepository.findSoftDeletedPersonLeaves())
+        .extracting(DeletedPersonLeaf::accountId)
+        .doesNotContain(carolEur);
   }
 
   @Test

@@ -23,7 +23,9 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountDraft;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonMatch;
 import volkovandr.hauptbuch.debts.PersonProvisioningService;
+import volkovandr.hauptbuch.debts.PersonService;
 
 /**
  * Integration tier (plan §1.5): the stage-7a register screen rendered through the controller
@@ -55,6 +57,7 @@ class RegisterScreenIntegrationTest {
   @Autowired LedgerService ledgerService;
   @Autowired SettingsService settingsService;
   @Autowired PersonProvisioningService personProvisioningService;
+  @Autowired PersonService personService;
   @Autowired JdbcClient jdbcClient;
 
   @BeforeEach
@@ -463,7 +466,7 @@ class RegisterScreenIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString(GIRO)))
         .andExpect(content().string(containsString("-5,00")))
-        .andExpect(content().string(containsString("register-filter__closed")));
+        .andExpect(content().string(containsString("register-filter__marker\">closed")));
 
     // …but the dock's Account datalist still offers only the open account.
     mockMvc
@@ -471,6 +474,36 @@ class RegisterScreenIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("value=\"" + CASH + " (" + EUR + ")\"")))
         .andExpect(content().string(not(containsString("value=\"" + GIRO + " (" + EUR + ")\""))));
+  }
+
+  @Test
+  void closedTabShowsSettledThenDeletedPersonWithDeletedMarker() throws Exception {
+    long cash = openAccount(CASH, EUR, "500");
+    long max = provisionPersonLeaf("Max", EUR);
+    // You front 10 for Max, then Max settles up — the leaf nets to zero, so Max can be deleted.
+    twoLeg("2026-04-01", max, cash, "10");
+    twoLeg("2026-04-20", cash, max, "10");
+    long maxId = ((PersonMatch.Live) personService.matchExact("Max")).person().personId();
+    personService.softDeleteIfZeroBalance(maxId);
+
+    mockMvc
+        .perform(get(REGISTER_PATH).param("picker", "closed"))
+        .andExpect(status().isOk())
+        // Max renders as a person group under the Persons umbrella, flagged "deleted"…
+        .andExpect(content().string(containsString("data-filter-group=\"persons\"")))
+        .andExpect(content().string(containsString(">Max</span>")))
+        .andExpect(content().string(containsString("register-filter__marker\">deleted")))
+        // …their EUR leaf is a real, ticked checkbox…
+        .andExpect(
+            content().string(matchesRegex("(?s).*name=\"accountId\"\\s+value=\"" + max + "\".*")))
+        // …and the Closed tab's count reflects it (the leaf is the only member here).
+        .andExpect(content().string(matchesRegex("(?s).*register-filter__count\"[^>]*>\\(1\\).*")));
+
+    // The Persons tab, by contrast, stays live-only — deleted Max is not offered there.
+    mockMvc
+        .perform(get(REGISTER_PATH).param("picker", "persons"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString(">Max</span>"))));
   }
 
   /** A committed receipt backing {@code txnId}; returns its id (the paperclip's target). */

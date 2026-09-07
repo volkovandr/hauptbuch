@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.debts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -381,6 +382,33 @@ class PersonServiceTest {
     assertThat(bob.name()).isEqualTo("Bob");
     assertThat(bob.balances()).isEmpty();
     assertThat(bob.accountIds()).containsExactly(102L);
+  }
+
+  @Test
+  void deletedPeopleGroupsLeavesByPersonAndSortsByName() {
+    // Repository rows arrive per-person, currency-ordered, but not necessarily name-ordered.
+    when(accountOwnerRepository.findSoftDeletedPersonLeaves())
+        .thenReturn(
+            List.of(
+                new AccountOwnerRepository.DeletedPersonLeaf(2L, "Zack", 200L),
+                new AccountOwnerRepository.DeletedPersonLeaf(1L, "Anna", 100L),
+                new AccountOwnerRepository.DeletedPersonLeaf(1L, "Anna", 101L)));
+
+    List<PersonBalanceSummary> result = service.deletedPeople();
+
+    assertThat(result)
+        .extracting(PersonBalanceSummary::personId, PersonBalanceSummary::name)
+        .containsExactly(tuple(1L, "Anna"), tuple(2L, "Zack"));
+    assertThat(result.get(0).balances()).isEmpty();
+    assertThat(result.get(0).accountIds()).containsExactly(100L, 101L);
+    assertThat(result.get(1).accountIds()).containsExactly(200L);
+  }
+
+  @Test
+  void deletedPeopleIsEmptyWhenNoOwnerIsSoftDeleted() {
+    when(accountOwnerRepository.findSoftDeletedPersonLeaves()).thenReturn(List.of());
+
+    assertThat(service.deletedPeople()).isEmpty();
   }
 
   @Test
