@@ -43,6 +43,13 @@
            off. Group toggles (parent accounts, person names) are driven by the `filter-groups.js`
            leaf via the data-attributes below. -->
       <div id="register-filter-control" th:fragment="filterControl">
+        <!-- The active picker, carried so Apply submits it. It lives INSIDE this fragment so a tab
+             switch (which htmx-swaps the whole fragment) keeps it in step with the visible tab. -->
+        <input
+          type="hidden"
+          name="picker"
+          th:value="${filterView.panel().pickerParam()}"
+        />
         <!-- Tabs are <a>, not submit buttons: a submit button would fire a native form GET
              alongside the htmx swap. The picker is a PATH segment because htmx drops the query
              string from a hx-get URL. The href is the JS-off fallback (a full reload). -->
@@ -112,6 +119,7 @@
                   th:text="${row.currencyCode()}"
                   >EUR</span
                 >
+                <span class="muted register-filter__closed" th:if="${row.closed()}">closed</span>
               </label>
             </li>
           </ul>
@@ -154,16 +162,9 @@
           </select>
         </div>
         <p class="actions">
-          <!-- Carries the active picker so a plain Apply (no tab clicked) keeps the current tab;
-               a tab button carries its own picker value and wins when it is the activator. -->
-          <button
-            type="submit"
-            class="btn"
-            name="picker"
-            th:value="${filterView.panel().pickerParam()}"
-          >
-            Apply
-          </button>
+          <!-- Applies the picker carried by the hidden field inside #register-filter-control,
+               which a tab switch keeps current. -->
+          <button type="submit" class="btn">Apply</button>
         </p>
       </div>
     </form>

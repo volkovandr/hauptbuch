@@ -402,10 +402,33 @@ class RegisterScreenIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("register-filter__panel")))
         .andExpect(content().string(containsString(CASH)))
+        // The swapped fragment carries the hidden picker field, so a later Apply submits "open".
+        .andExpect(
+            content()
+                .string(
+                    matchesRegex("(?s).*<input[^>]*name=\"picker\"\\s+value=\"open\"[^>]*/>.*")))
         // No register rows, no scroll hook, no dock — the tab click renders the control alone.
         .andExpect(content().string(not(containsString("data-scroll-bottom"))))
         .andExpect(content().string(not(containsString("register__row"))))
         .andExpect(content().string(not(containsString("entry-dock"))));
+  }
+
+  @Test
+  void applyKeepsWhicheverPickerTabIsActive() throws Exception {
+    long cash = openAccount(CASH, EUR, "500");
+    openAccount(GIRO, EUR, "0");
+
+    // Apply from the Open tab submits picker=open (the hidden field) + the panel's ticked ids.
+    mockMvc
+        .perform(
+            get(REGISTER_PATH).param("picker", "open").param("accountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    matchesRegex(
+                        "(?s).*class=\"register-filter__tab register-filter__tab--active\"[^>]*"
+                            + "hx-get=\"[^\"]*/register/filter-panel/open\".*")));
   }
 
   @Test
@@ -434,12 +457,13 @@ class RegisterScreenIntegrationTest {
     spend("2026-02-02", giro, food, "5");
     accountService.closeAccount(giro, LocalDate.parse("2026-03-01"));
 
-    // The Closed tab views the closed account's thread…
+    // The Closed tab views the closed account's thread, and its panel row is flagged "closed".
     mockMvc
         .perform(get(REGISTER_PATH).param("picker", "closed"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString(GIRO)))
-        .andExpect(content().string(containsString("-5,00")));
+        .andExpect(content().string(containsString("-5,00")))
+        .andExpect(content().string(containsString("register-filter__closed")));
 
     // …but the dock's Account datalist still offers only the open account.
     mockMvc

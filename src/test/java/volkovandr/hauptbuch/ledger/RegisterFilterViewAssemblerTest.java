@@ -50,6 +50,22 @@ class RegisterFilterViewAssemblerTest {
         id, name, ASSET, parentId, EUR, 200, LocalDate.now(), null, null, false, false, false);
   }
 
+  private static Account closedAccount(long id, String name) {
+    return new Account(
+        id,
+        name,
+        ASSET,
+        null,
+        EUR,
+        200,
+        LocalDate.now().minusYears(2),
+        LocalDate.now().minusYears(1),
+        null,
+        false,
+        false,
+        false);
+  }
+
   private static Account personLeaf(long id) {
     return new Account(
         id,
@@ -86,6 +102,20 @@ class RegisterFilterViewAssemblerTest {
     assertThat(rows)
         .extracting(Row::accountId, Row::label, Row::group, Row::ticked)
         .containsExactly(tuple(10L, "Cash", false, true), tuple(11L, "Giro", false, true));
+  }
+
+  @Test
+  void closedAccountRowsAreFlaggedClosed() {
+    when(accountService.findLiveByTypesWithDepth(OWN_TYPES))
+        .thenReturn(
+            List.of(node(account(10, "Cash", null), 0), node(closedAccount(11, "Old Giro"), 0)));
+    when(pickerService.membership(RegisterPicker.ALL, null, null)).thenReturn(List.of(10L, 11L));
+
+    List<Row> rows = assembler.filterView(filter(RegisterPicker.ALL), false).panel().rows();
+
+    assertThat(rows)
+        .extracting(Row::accountId, Row::closed)
+        .containsExactly(tuple(10L, false), tuple(11L, true));
   }
 
   @Test
