@@ -37,18 +37,29 @@ public record RegisterFilterView(List<Tab> tabs, Panel panel) {
   public record Tab(String param, String label, boolean active, Integer tickedCount) {}
 
   /**
-   * The active picker's panel: its rows, and whether it should render expanded (a tab switch opens
-   * it so the user can pick; a full page render and the post-Apply render leave it collapsed).
+   * The active picker's panel, split into two columns so a long real-account list and a long person
+   * list sit side by side rather than stacked (owner feedback 2026-09-07). The template renders one
+   * column when the other is empty (Open/Closed have no people; Persons has no accounts) and both
+   * side by side for {@code All} / {@code Last used}.
    *
    * @param picker the picker this panel belongs to
    * @param pickerParam its {@code ?picker=} token (the hidden field the form submits)
-   * @param expanded whether the {@code <details>} renders open
-   * @param rows the group-toggle and member rows, in display order
+   * @param expanded whether the {@code <details>} renders open (a tab switch opens it; a full page
+   *     render and the post-Apply render leave it collapsed)
+   * @param accountRows the real-account column (parent group toggles + leaf checkboxes)
+   * @param personRows the person column (the {@code Persons} umbrella, per-person toggles, currency
+   *     leaves)
    */
-  public record Panel(RegisterPicker picker, String pickerParam, boolean expanded, List<Row> rows) {
-    /** Defensively copy the row list to an immutable list. */
+  public record Panel(
+      RegisterPicker picker,
+      String pickerParam,
+      boolean expanded,
+      List<Row> accountRows,
+      List<Row> personRows) {
+    /** Defensively copy the row lists to immutable lists. */
     public Panel {
-      rows = List.copyOf(rows);
+      accountRows = List.copyOf(accountRows);
+      personRows = List.copyOf(personRows);
     }
   }
 

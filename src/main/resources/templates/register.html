@@ -86,43 +86,32 @@
             <span aria-hidden="true">·</span>
             <button type="button" class="link" data-filter-none>None</button>
           </p>
-          <ul class="register-filter__list">
-            <li
-              th:each="row : ${filterView.panel().rows()}"
-              class="register-filter__item"
-              th:style="'--depth: ' + ${row.depth()}"
+          <!-- Two columns: real accounts on the left, people on the right. One column is empty for
+               Open/Closed (no people) and Persons (no accounts); All / Last used show both side by
+               side (owner feedback). Both <ul>s live inside [data-filter-groups], so filter-groups.js
+               sees every checkbox regardless of column. -->
+          <div
+            class="register-filter__cols"
+            th:classappend="${!filterView.panel().accountRows().isEmpty()
+              and !filterView.panel().personRows().isEmpty()} ? 'register-filter__cols--split'"
+          >
+            <ul
+              class="register-filter__list"
+              th:if="${!filterView.panel().accountRows().isEmpty()}"
             >
-              <label class="check">
-                <input
-                  th:if="${row.group()}"
-                  type="checkbox"
-                  class="register-filter__group"
-                  th:attr="data-filter-group=${row.groupKey()}, data-filter-member=${row.memberOf()}"
-                />
-                <input
-                  th:unless="${row.group()}"
-                  type="checkbox"
-                  name="accountId"
-                  th:value="${row.accountId()}"
-                  th:checked="${row.ticked()}"
-                  th:attr="data-filter-member=${row.memberOf()}"
-                />
-                <span
-                  class="swatch"
-                  th:if="${row.hue() != null}"
-                  th:style="|background: hsl(${row.hue()} 55% 78%); border-color: hsl(${row.hue()} 55% 45%)|"
-                ></span>
-                <span th:text="${row.label()}">Cash</span>
-                <span
-                  class="muted num"
-                  th:if="${row.currencyCode() != null}"
-                  th:text="${row.currencyCode()}"
-                  >EUR</span
-                >
-                <span class="muted register-filter__closed" th:if="${row.closed()}">closed</span>
-              </label>
-            </li>
-          </ul>
+              <th:block th:each="row : ${filterView.panel().accountRows()}">
+                <li th:replace="~{fragments/register-filter :: row(${row})}"></li>
+              </th:block>
+            </ul>
+            <ul
+              class="register-filter__list"
+              th:if="${!filterView.panel().personRows().isEmpty()}"
+            >
+              <th:block th:each="row : ${filterView.panel().personRows()}">
+                <li th:replace="~{fragments/register-filter :: row(${row})}"></li>
+              </th:block>
+            </ul>
+          </div>
         </details>
       </div>
 
