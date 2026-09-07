@@ -141,6 +141,34 @@ class RegisterPickerServiceTest {
   }
 
   @Test
+  void resolveSelectionKeepsPartialTicksIntersectedWithMembership() {
+    Account cash = account(10, "Cash", null, null);
+    Account giro = account(11, "Giro", null, null);
+    ownAccounts(node(cash, 0), node(giro, 0));
+
+    // Submitted 10 and a stale 99: 99 is not in OPEN's membership and is dropped.
+    assertThat(pickerService.resolveSelection(RegisterPicker.OPEN, List.of(10L, 99L), null, null))
+        .containsExactly(10L);
+  }
+
+  @Test
+  void resolveSelectionCollapsesEveryMemberTickedBackToTheWholePicker() {
+    Account cash = account(10, "Cash", null, null);
+    Account giro = account(11, "Giro", null, null);
+    ownAccounts(node(cash, 0), node(giro, 0));
+
+    // Every member ticked → empty, so the server re-resolves and the dock won't serialise it.
+    assertThat(pickerService.resolveSelection(RegisterPicker.OPEN, List.of(10L, 11L), null, null))
+        .isEmpty();
+  }
+
+  @Test
+  void resolveSelectionOfNothingIsEmpty() {
+    assertThat(pickerService.resolveSelection(RegisterPicker.OPEN, List.of(), null, null))
+        .isEmpty();
+  }
+
+  @Test
   void lastUsedResolvesAgainstTheAppliedDateRange() {
     ownAccounts(node(account(10, "Cash", null, null), 0));
     LocalDate from = LocalDate.of(2026, 1, 1);
