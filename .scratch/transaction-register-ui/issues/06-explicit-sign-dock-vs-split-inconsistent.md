@@ -1,6 +1,6 @@
 # An explicit +/- on the amount means opposite things in the dock and in the split panel
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: high
 Area: Transaction register — entry (§3.8 sign resolution)
@@ -255,9 +255,10 @@ its "checked assertion" paragraph gains the net-sign clarification.
 
 ---
 
-## Implementation note (2026-09-09) — finished, awaiting owner confirmation
+## Implementation note (2026-09-09) — owner-confirmed, resolved
 
-Branch `doc/triage-sign-model-and-zero-receipt` (not yet merged). `./gradlew check` green.
+Branch `doc/triage-sign-model-and-zero-receipt`, commit `10a6eca` (not yet merged). `./gradlew
+check` green. Owner confirmed 2026-09-09.
 
 - **FLIP everywhere.** `DockCommitService.signedAmount` now negates the counterpart's default only
   on a leading `−`; `+`/bare are identical. `DockEditService.amountText` moved in the same commit
