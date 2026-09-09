@@ -56,6 +56,12 @@ import java.util.List;
  *     2026-07-14); each category line's own tags live on {@link SplitLineDraft#tagIds()}. Never
  *     null; defaults empty
  * @param lines the split lines; each becomes one category leg, its amount in the spending currency
+ * @param lifecycle the lifecycle to record a <em>new</em> transaction under — {@code confirmed} for
+ *     a hand-typed split, {@code pending_review} when a receipt Confirm books an all-zero
+ *     placeholder (issue receipts/26). Null defaults to {@code confirmed}. Ignored when
+ *     re-threading an existing transaction: {@code editTransaction} derives the lifecycle from the
+ *     edit itself
+ * @see volkovandr.hauptbuch.ledger.TransactionDraft#pendingReview
  */
 public record SplitEntry(
     Long transactionId,
@@ -71,11 +77,13 @@ public record SplitEntry(
     String fundingTotal,
     String baseTotal,
     List<Long> tagIds,
-    List<SplitLineDraft> lines) {
+    List<SplitLineDraft> lines,
+    String lifecycle) {
 
-  /** Defensively copy the tag ids and lines so the entry cannot be mutated after the fact. */
+  /** Defensively copy the tag ids and lines, and default the lifecycle to {@code confirmed}. */
   public SplitEntry {
     tagIds = tagIds == null ? List.of() : List.copyOf(tagIds);
     lines = lines == null ? List.of() : List.copyOf(lines);
+    lifecycle = lifecycle == null ? "confirmed" : lifecycle;
   }
 }

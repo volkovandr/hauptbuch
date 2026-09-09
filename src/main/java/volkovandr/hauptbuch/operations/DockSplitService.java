@@ -106,8 +106,14 @@ public class DockSplitService {
             : sameCurrencyLegs(entry, fundingAccount);
 
     Long payeeId = payeeService.resolvePayee(entry.payeeId(), entry.payeeText());
+    // A receipt Confirm books an all-zero placeholder as pending_review (issue receipts/26); every
+    // other split is confirmed. Confirm always records a new transaction (ReceiptSplitEntries pins
+    // transactionId = null) — on the register's own edit path below the lifecycle is the engine's
+    // to derive, so the draft's value is read only by recordTransaction.
     TransactionDraft draft =
-        TransactionDraft.confirmed(entry.date(), payeeId, blankToNull(entry.note()), legs);
+        "pending_review".equals(entry.lifecycle())
+            ? TransactionDraft.pendingReview(entry.date(), payeeId, blankToNull(entry.note()), legs)
+            : TransactionDraft.confirmed(entry.date(), payeeId, blankToNull(entry.note()), legs);
     if (entry.transactionId() == null) {
       return ledgerService.recordTransaction(draft);
     }

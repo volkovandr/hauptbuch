@@ -118,9 +118,20 @@ class DockSplitServiceTest {
   /** A same-currency split entry (the 7c.2 shape) — the 7d.2 header currency fields left blank. */
   private static SplitEntry entry(
       Long txnId, LocalDate date, long accountId, String note, List<SplitLineDraft> lines) {
+    return entry(txnId, date, accountId, note, lines, "confirmed");
+  }
+
+  /** A same-currency split entry booking under an explicit lifecycle (issue receipts/26). */
+  private static SplitEntry entry(
+      Long txnId,
+      LocalDate date,
+      long accountId,
+      String note,
+      List<SplitLineDraft> lines,
+      String lifecycle) {
     return new SplitEntry(
         txnId, date, accountId, null, null, null, null, null, note, null, null, null, List.of(),
-        lines);
+        lines, lifecycle);
   }
 
   /** A same-currency split entry carrying transaction-level (funding-leg) tags. */
@@ -140,7 +151,8 @@ class DockSplitServiceTest {
         null,
         null,
         tagIds,
-        lines);
+        lines,
+        "confirmed");
   }
 
   /**
@@ -165,7 +177,8 @@ class DockSplitServiceTest {
         null,
         null,
         List.of(),
-        lines);
+        lines,
+        "confirmed");
   }
 
   // The signed-contribution / transfer-contribution sign math lives in SplitLineAmounts (extracted
@@ -327,6 +340,47 @@ class DockSplitServiceTest {
     assertThat(txnId).isEqualTo(55L);
     verify(ledgerService).editTransaction(eq(55L), any());
     verify(ledgerService, never()).recordTransaction(any());
+  }
+
+  @Test
+  void recordsUnderTheConfirmedLifecycleByDefault() {
+    cashFunds();
+    foodLeaf();
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(1L);
+
+    dockSplitService.commit(
+        entry(null, LocalDate.of(2026, 2, 1), CASH_ID, null, List.of(line(FOOD_ID, "20"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    assertThat(draft.getValue().lifecycle()).isEqualTo("confirmed");
+  }
+
+  @Test
+  void recordsAllZeroPlaceholderUnderThePendingReviewLifecycle() {
+    // A receipt Confirm carrying an all-zero entry (issue receipts/26): Cash 0,00 / Food 0,00,
+    // parked as pending_review for later reconciliation.
+    cashFunds();
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, EUR))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(1L);
+
+    dockSplitService.commit(
+        entry(
+            null,
+            LocalDate.of(2026, 2, 1),
+            CASH_ID,
+            null,
+            List.of(line(FOOD_ID, "0,00")),
+            "pending_review"));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    assertThat(draft.getValue().lifecycle()).isEqualTo("pending_review");
+    assertThat(draft.getValue().postings())
+        .allSatisfy(l -> assertThat(l.amount()).isEqualByComparingTo("0"));
   }
 
   @Test
@@ -834,7 +888,8 @@ class DockSplitServiceTest {
         fundingTotal,
         baseTotal,
         List.of(),
-        lines);
+        lines,
+        "confirmed");
   }
 
   @Test

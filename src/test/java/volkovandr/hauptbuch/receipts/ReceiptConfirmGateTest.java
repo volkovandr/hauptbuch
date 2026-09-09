@@ -117,6 +117,14 @@ class ReceiptConfirmGateTest {
     assertThat(problems(form(DATE, CASH, EUR, "10,00", personLine("10,00", "Max")))).isEmpty();
   }
 
+  @Test
+  void allowsAnAllZeroSameCurrencyReceiptToBeParked() {
+    // issue receipts/26: Total 0,00 with a single 0,00 line is balanced, so the gate lets Confirm
+    // through — the commit path books it as a pending_review placeholder. This is the exact path
+    // that used to slip past the gate and then throw in DockSplitService.
+    assertThat(problems(form(DATE, CASH, EUR, "0,00", categoryLine("0,00", FUEL)))).isEmpty();
+  }
+
   // ── cross-currency (issue receipts/23, decision 8) ───────────────────────────
 
   @Test
@@ -126,8 +134,14 @@ class ReceiptConfirmGateTest {
 
   @Test
   void blocksCrossCurrencyWithoutTheFundingTotal() {
+    // The message names parking explicitly (issue receipts/26): a same-currency all-zero receipt
+    // parks, a foreign-currency one does not, and the wording makes that asymmetry deliberate.
     assertThat(crossProblems(USD, "", "38,00", categoryLine("42,14", FUEL)))
-        .anyMatch(p -> p.contains("came off the account") && p.contains(CHF));
+        .anyMatch(
+            p ->
+                p.contains("cannot be parked without an amount")
+                    && p.contains("came off the account")
+                    && p.contains(CHF));
   }
 
   @Test

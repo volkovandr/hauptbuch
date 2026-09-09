@@ -82,6 +82,12 @@ class ReceiptConfirmGate {
    * currency to balance in, and the header totals that freeze the conversion. A total left blank
    * because no stored rate could propose one reads as zero here, which is the same block: the
    * operator has to supply the number rather than the app inventing it.
+   *
+   * <p>This is also where a foreign-currency receipt is refused as a zero-amount <em>park</em>
+   * (issue receipts/26): a same-currency all-zero receipt books as a {@code pending_review}
+   * placeholder, but a cross-currency one records nothing (its conversion rate is unknown and the
+   * engine refuses an all-zero-base transaction), so the message says parking is not available here
+   * — the asymmetry is deliberate, not a bug.
    */
   private void checkCurrency(ReceiptEditorForm form, SplitCurrency header, List<String> problems) {
     String currency = ReceiptEditorText.blankToNull(form.currencyCode());
@@ -103,11 +109,14 @@ class ReceiptConfirmGate {
     }
     if (isZero(header.fundingTotal())) {
       problems.add(
-          "Enter what actually came off the account, in "
-              + header.fundingCurrencyCode()
-              + ", before confirming — this receipt is billed in "
+          "This receipt is billed in "
               + currency
-              + ".");
+              + " but the account is in "
+              + header.fundingCurrencyCode()
+              + ", and a foreign-currency receipt cannot be parked without an amount — enter what"
+              + " actually came off the account, in "
+              + header.fundingCurrencyCode()
+              + ", before confirming.");
     }
     if (header.neitherIsBase() && isZero(header.baseTotal())) {
       problems.add(

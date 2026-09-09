@@ -1,6 +1,6 @@
 # Confirming a zero-amount receipt fails with "Something went wrong"
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: medium
 Area: Receipts — Confirm / commit path (`ReceiptSplitEntries` → `DockSplitService`)
@@ -130,20 +130,41 @@ Two facts that shaped the decision:
 
 **Acceptance criteria:**
 
-- [ ] Confirming a same-currency receipt whose lines all net to zero books a two-leg transaction
+- [x] Confirming a same-currency receipt whose lines all net to zero books a two-leg transaction
       with both amounts `0,00` and lifecycle `pending_review`; the receipt becomes `committed`.
-- [ ] That row renders in the register muted, dashed, with no running balance, carrying its date,
+- [x] That row renders in the register muted, dashed, with no running balance, carrying its date,
       payee and receipt paperclip.
-- [ ] Editing that transaction to a non-zero amount and saving promotes it to `confirmed`.
-- [ ] Editing it while it is still zero leaves it `pending_review`.
-- [ ] A `confirmed` transaction edited down to zero stays `confirmed`.
-- [ ] A receipt with a storno pair netting to zero in one category group, alongside other lines,
+- [x] Editing that transaction to a non-zero amount and saving promotes it to `confirmed`.
+- [x] Editing it while it is still zero leaves it `pending_review`.
+- [x] A `confirmed` transaction edited down to zero stays `confirmed`.
+- [x] A receipt with a storno pair netting to zero in one category group, alongside other lines,
       still drops that group and books `confirmed` (issue 15 unchanged).
-- [ ] A cross-currency receipt with no amount is still refused, with the reworded message.
-- [ ] No lifecycle UI is added anywhere.
-- [ ] `./gradlew check` green. Tiers per §6: the zero-drop suppression, the lifecycle choice and the
+- [x] A cross-currency receipt with no amount is still refused, with the reworded message.
+- [x] No lifecycle UI is added anywhere.
+- [x] `./gradlew check` green. Tiers per §6: the zero-drop suppression, the lifecycle choice and the
       promotion rule are decision logic → **unit**; the confirm→register round trip and the muted
       row rendering → **integrationTest**.
+
+---
+
+## Resolution (2026-09-09)
+
+- `TransactionDraft.pendingReview(...)` factory beside `confirmed(...)`.
+- `SplitEntry` carries a `lifecycle` (defaults `confirmed`); `RegisterSplitController` passes
+  `confirmed`, `ReceiptSplitEntries` computes it — `pending_review` iff every booked line is zero.
+- `ReceiptSplitEntries.mergedLines` keeps the merged lines when the zero-drop would empty the entry
+  (issue 15's drop is preserved whenever a real line remains); `lineOf` reads a blank line amount
+  as `0,00` (the single normalisation point). A receipt whose *only* content is a storno pair
+  netting to zero now books a zero `pending_review` placeholder rather than being dropped — point 1
+  sanctions this ("only when it would empty the entry").
+- `DockSplitService.commit` builds a `pendingReview` draft when the entry says so.
+- `LedgerService.editTransaction` derives the re-threaded lifecycle: a `pending_review` placeholder
+  promotes to `confirmed` on the first non-zero edit and stays parked while still zero; a
+  `confirmed` transaction is never auto-demoted. The submitted draft's lifecycle is honoured by
+  `recordTransaction` only.
+- `ReceiptConfirmGate.checkCurrency` reworded so the cross-currency zero-total refusal reads as a
+  deliberate "no parking for a foreign-currency receipt".
+- No UI change. `RegisterRowRenderer` unchanged (already renders `pending_review` muted/dashed).
 
 **Out of scope:**
 

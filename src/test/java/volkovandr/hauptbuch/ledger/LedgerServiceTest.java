@@ -17,6 +17,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
@@ -383,6 +384,84 @@ class LedgerServiceTest {
     verify(transactionRepository).updateHeader(any());
     verify(transactionRepository).deletePostings(80L);
     verify(transactionRepository, times(2)).insertPosting(any());
+  }
+
+  // ── lifecycle promotion on edit (issue receipts/26) ─────────────────────────
+
+  @Test
+  void editingPendingReviewPlaceholderToNonZeroAmountPromotesToConfirmed() {
+    stubEditOf(90L, "pending_review");
+
+    ledgerService.editTransaction(
+        90L,
+        TransactionDraft.confirmed(
+            LocalDate.of(2026, 6, 2),
+            null,
+            null,
+            List.of(
+                PostingDraft.of(CASH_EUR, new BigDecimal("-9.00")),
+                PostingDraft.of(FOOD_EUR, new BigDecimal("9.00")))));
+
+    assertThat(capturedHeader().lifecycle()).isEqualTo("confirmed");
+  }
+
+  @Test
+  void editingPendingReviewPlaceholderThatIsStillZeroLeavesItPendingReview() {
+    stubEditOf(91L, "pending_review");
+
+    ledgerService.editTransaction(
+        91L,
+        TransactionDraft.confirmed(
+            LocalDate.of(2026, 6, 2),
+            null,
+            "payee fixed, amount still unknown",
+            List.of(
+                PostingDraft.of(CASH_EUR, new BigDecimal("0.00")),
+                PostingDraft.of(FOOD_EUR, new BigDecimal("0.00")))));
+
+    assertThat(capturedHeader().lifecycle()).isEqualTo("pending_review");
+  }
+
+  @Test
+  void editingConfirmedTransactionDownToZeroDoesNotDemoteIt() {
+    stubEditOf(92L, "confirmed");
+
+    ledgerService.editTransaction(
+        92L,
+        TransactionDraft.confirmed(
+            LocalDate.of(2026, 6, 2),
+            null,
+            null,
+            List.of(
+                PostingDraft.of(CASH_EUR, new BigDecimal("0.00")),
+                PostingDraft.of(FOOD_EUR, new BigDecimal("0.00")))));
+
+    assertThat(capturedHeader().lifecycle()).isEqualTo("confirmed");
+  }
+
+  private void stubEditOf(long transactionId, String lifecycle) {
+    stubBaseCurrency(EUR);
+    stubAccount(CASH_EUR, EUR);
+    stubAccount(FOOD_EUR, EUR);
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+    when(transactionRepository.findById(transactionId))
+        .thenReturn(
+            Optional.of(
+                new Transaction(
+                    transactionId,
+                    LocalDate.of(2026, 6, 1),
+                    null,
+                    null,
+                    lifecycle,
+                    null,
+                    null,
+                    null)));
+  }
+
+  private Transaction capturedHeader() {
+    ArgumentCaptor<Transaction> header = ArgumentCaptor.forClass(Transaction.class);
+    verify(transactionRepository).updateHeader(header.capture());
+    return header.getValue();
   }
 
   @Test
