@@ -71,7 +71,22 @@ final class ReceiptSplitEntries {
         cross ? currency.fundingTotal() : null,
         cross && currency.neitherIsBase() ? currency.baseTotal() : null,
         sharedTags(booked),
-        booked);
+        booked,
+        lifecycleFor(booked));
+  }
+
+  /**
+   * The lifecycle Confirm books this receipt under (issue receipts/26): {@code pending_review} when
+   * every booked line is zero — a placeholder parked for later reconciliation (a parking ticket
+   * with no price) — and {@code confirmed} otherwise. This also settles re-entry with no extra
+   * rule: Confirm on a reopened receipt that now carries real amounts books {@code confirmed}.
+   * Cross-currency parking is refused upstream ({@code ReceiptConfirmGate.checkCurrency}), so a
+   * {@code pending_review} receipt is always single-currency.
+   */
+  private static String lifecycleFor(List<SplitLineDraft> booked) {
+    return booked.stream().anyMatch(ReceiptSplitEntries::isNonZero)
+        ? "confirmed"
+        : "pending_review";
   }
 
   /**
@@ -115,10 +130,16 @@ final class ReceiptSplitEntries {
     for (SplitLineDraft line : lines) {
       merged.merge(MergeKey.of(line), line, ReceiptSplitEntries::combine);
     }
-    return merged.values().stream().filter(ReceiptSplitEntries::isNonZero).toList();
+    List<SplitLineDraft> nonZero =
+        merged.values().stream().filter(ReceiptSplitEntries::isNonZero).toList();
+    // Drop zero-netting groups (issue 15) — but not when that would leave nothing to book. An
+    // all-zero receipt (a parking ticket with no price, issue receipts/26) is still recorded, as a
+    // normal two-leg transaction (Cash 0,00 / Parking 0,00) that a later edit corrects.
+    return nonZero.isEmpty() ? List.copyOf(merged.values()) : nonZero;
   }
 
   private static boolean isNonZero(SplitLineDraft line) {
+    // Safe on every draft here: lineOf has already normalised a blank amount to "0,00".
     return SplitLineAmounts.parseSignedAmount(line.amount()).signum() != 0;
   }
 
@@ -168,7 +189,9 @@ final class ReceiptSplitEntries {
   private static SplitLineDraft lineOf(WorkingLine line) {
     return new SplitLineDraft(
         ReceiptEditorText.parseId(line.categoryId()),
-        line.amount(),
+        // A categorised line with no amount typed reads as zero (issue receipts/26) — the operator
+        // is parking a placeholder, not leaving the line incomplete (that is a gate finding).
+        line.amount() == null || line.amount().isBlank() ? "0,00" : line.amount(),
         ReceiptEditorText.blankToNull(line.note()),
         ReceiptEditorText.blankToNull(line.transferDirection()),
         ReceiptEditorText.blankToNull(line.personName()),

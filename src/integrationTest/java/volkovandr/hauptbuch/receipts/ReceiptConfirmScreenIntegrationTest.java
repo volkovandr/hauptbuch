@@ -355,6 +355,69 @@ class ReceiptConfirmScreenIntegrationTest {
     assertThat(header(id, "state", String.class)).isEqualTo("processed");
   }
 
+  // ── The zero-amount placeholder (issue receipts/26) ─────────────────────────
+
+  @Test
+  void confirmingAllZeroReceiptBooksPendingReviewPlaceholderThatRendersMutedInTheRegister()
+      throws Exception {
+    // A parking ticket with no price: booked now as a 0,00 placeholder, reconciled to the real
+    // charge when it shows on the bank statement.
+    long cash = openAccount("Cash", EUR);
+    long parking = category("Parking", "expense");
+    long id = processedReceipt(cash, "0.00", EUR);
+
+    mockMvc
+        .perform(confirm(id, cash, "0,00", parking, "0,00").param("payeeText", "ShopAaa"))
+        .andExpect(status().isOk());
+
+    long transactionId = header(id, "transaction_id", Long.class);
+    assertThat(header(id, "state", String.class)).isEqualTo("committed");
+    assertThat(lifecycleOf(transactionId)).isEqualTo("pending_review");
+    assertThat(legsOf(transactionId)).containsExactlyInAnyOrder(leg(cash, "0"), leg(parking, "0"));
+
+    // The register row is muted and dashed, carries no running balance, and keeps its paperclip
+    // back to the receipt (register §2.10).
+    mockMvc
+        .perform(get("/register").param("accountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("register__row--pending")))
+        .andExpect(content().string(containsString("Pending review")))
+        // No running balance: the sole row's balance cell is the em-dash, not a formatted number.
+        .andExpect(content().string(containsString("—")))
+        .andExpect(content().string(containsString("/receipts/" + id)));
+  }
+
+  @Test
+  void reconcilingThePlaceholderToRealAmountPromotesItAndClearsTheMutedRow() throws Exception {
+    // The end-to-end reconciliation: the charge lands on the statement, the operator opens the
+    // register row and types the amount, and the row stops being a placeholder. The promotion
+    // rule's three cases are pinned in LedgerServiceTest; this proves the round trip.
+    long cash = openAccount("Cash", EUR);
+    long parking = category("Parking", "expense");
+    long id = processedReceipt(cash, "0.00", EUR);
+    mockMvc.perform(confirm(id, cash, "0,00", parking, "0,00")).andExpect(status().isOk());
+    long transactionId = header(id, "transaction_id", Long.class);
+
+    mockMvc
+        .perform(
+            post("/register/entry")
+                .param("transactionId", String.valueOf(transactionId))
+                .param("date", DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("amount", "5,00")
+                .param("categoryId", String.valueOf(parking))
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk());
+
+    assertThat(lifecycleOf(transactionId)).isEqualTo("confirmed");
+    assertThat(legsOf(transactionId)).containsExactlyInAnyOrder(leg(cash, "-5"), leg(parking, "5"));
+
+    mockMvc
+        .perform(get("/register").param("accountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("register__row--pending"))));
+  }
+
   // ── Confirm's post-commit navigation (issue 05) ─────────────────────────────
 
   @Test
@@ -910,6 +973,14 @@ class ReceiptConfirmScreenIntegrationTest {
         .sql("select deleted_at is not null from transaction where transaction_id = :id")
         .param("id", transactionId)
         .query(Boolean.class)
+        .single();
+  }
+
+  private String lifecycleOf(long transactionId) {
+    return jdbcClient
+        .sql("select lifecycle from transaction where transaction_id = :id")
+        .param("id", transactionId)
+        .query(String.class)
         .single();
   }
 

@@ -234,13 +234,28 @@ public class LedgerService {
             draft.date(),
             draft.payeeId(),
             draft.note(),
-            draft.lifecycle(),
+            reThreadedLifecycle(existing.lifecycle(), balanced.legs()),
             existing.createdAt(),
             null,
             null));
     transactionRepository.deletePostings(transactionId);
     insertLegs(transactionId, balanced.legs());
     LOG.debug("Transaction edited: id={}, total={}", transactionId, balanced.debitTotal());
+  }
+
+  /**
+   * The lifecycle a re-threaded transaction lands on (issue receipts/26). Promotion is implicit and
+   * one-way: a parked {@code pending_review} placeholder (a zero-amount receipt booked for later
+   * reconciliation) becomes {@code confirmed} as soon as an edit gives it a real, non-zero amount,
+   * and stays {@code pending_review} while every leg is still zero (fixing the payee or date while
+   * the amount is unknown). A {@code confirmed} transaction is never auto-demoted — editing it down
+   * to zero leaves it {@code confirmed}. The submitted draft's lifecycle is honoured only by {@link
+   * #recordTransaction}; an edit derives it here rather than trusting the caller, since every edit
+   * path builds a {@code confirmed} draft.
+   */
+  private static String reThreadedLifecycle(String existingLifecycle, List<PostingDraft> legs) {
+    boolean allZero = legs.stream().allMatch(leg -> leg.amount().signum() == 0);
+    return "pending_review".equals(existingLifecycle) && allZero ? "pending_review" : "confirmed";
   }
 
   private String requireBaseCurrency() {

@@ -248,7 +248,8 @@ class RegisterSplitController {
               form.fundingTotal(),
               form.baseTotal(),
               form.tagId() == null ? List.of() : form.tagId(),
-              SplitFormBinder.linesOf(form)));
+              SplitFormBinder.linesOf(form),
+              "confirmed"));
     } catch (IllegalArgumentException | IllegalStateException | UnbalancedTransactionException e) {
       // UnbalancedTransactionException is the engine's balance-invariant signal (e.g. a phantom
       // all-zero-base cross-currency split); IllegalStateException is a person-funded entry with no

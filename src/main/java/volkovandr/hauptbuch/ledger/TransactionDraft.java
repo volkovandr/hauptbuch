@@ -29,4 +29,17 @@ public record TransactionDraft(
       LocalDate date, Long payeeId, String note, List<PostingDraft> postings) {
     return new TransactionDraft(date, payeeId, note, "confirmed", postings);
   }
+
+  /**
+   * A {@code pending_review} transaction — a parked placeholder booked before its amount is known
+   * (issue receipts/26): a receipt that carries only a payee and a date (a parking ticket with no
+   * price) is confirmed now as an all-zero two-leg transaction and reconciled to the real amount
+   * later. It renders muted in the register with no running balance (register §2.10) and promotes
+   * to {@code confirmed} the moment an edit gives it a non-zero amount (see {@link
+   * LedgerService#editTransaction}).
+   */
+  public static TransactionDraft pendingReview(
+      LocalDate date, Long payeeId, String note, List<PostingDraft> postings) {
+    return new TransactionDraft(date, payeeId, note, "pending_review", postings);
+  }
 }

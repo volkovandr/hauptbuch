@@ -253,6 +253,49 @@ class ReceiptSplitEntriesTest {
     assertThat(entry.lines().get(0).amount()).isEqualTo("15,00");
   }
 
+  // ── the zero-amount placeholder (issue receipts/26) ─────────────────────────
+
+  @Test
+  void receiptWithRealAmountsBooksConfirmed() {
+    assertThat(entry(categoryLine("42,14", FUEL)).lifecycle()).isEqualTo("confirmed");
+  }
+
+  @Test
+  void allZeroReceiptBooksPendingReviewKeepingBothZeroLines() {
+    // A parking ticket with no price: Total 0,00, one line at 0,00. It still books — as a two-leg
+    // placeholder (funding leg + one category leg) parked for later reconciliation.
+    SplitEntry entry = entry(categoryLine("0,00", FUEL));
+
+    assertThat(entry.lifecycle()).isEqualTo("pending_review");
+    assertThat(entry.lines()).hasSize(1);
+    assertThat(entry.lines().get(0).categoryId()).isEqualTo(FUEL);
+    assertThat(entry.lines().get(0).amount()).isEqualTo("0,00");
+  }
+
+  @Test
+  void blankLineAmountOnAnAllZeroReceiptIsTreatedAsZero() {
+    SplitEntry entry = entry(categoryLine("", FUEL));
+
+    assertThat(entry.lifecycle()).isEqualTo("pending_review");
+    assertThat(entry.lines()).hasSize(1);
+    assertThat(entry.lines().get(0).amount()).isEqualTo("0,00");
+  }
+
+  @Test
+  void stornoPairNettingToZeroAlongsideRealLinesStillDropsThatGroupAndBooksConfirmed() {
+    // Issue 15 is unchanged: the cancelled pair is dropped, and because a real line remains the
+    // receipt is confirmed, not parked.
+    SplitEntry entry =
+        entry(
+            categoryLine("10,00", FUEL),
+            categoryLine("-10,00", FUEL),
+            categoryLine("3,00", SAVINGS));
+
+    assertThat(entry.lines()).hasSize(1);
+    assertThat(entry.lines().get(0).categoryId()).isEqualTo(SAVINGS);
+    assertThat(entry.lifecycle()).isEqualTo("confirmed");
+  }
+
   // ── funding-leg tags: what every booked line shares (issue 20) ──────────────
 
   /**
