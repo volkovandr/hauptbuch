@@ -75,8 +75,10 @@ class DockEditServiceTest {
   }
 
   @Test
-  void expenseRefundInflowCarriesAnExplicitPlus() {
-    assertThat(DockEditService.amountText(new BigDecimal("20"), EXPENSE)).isEqualTo("+20,00");
+  void expenseRefundInflowCarriesAnExplicitMinus() {
+    // The flip model (issue transaction-register-ui/06): an inflow against an expense is the
+    // non-default direction, reconstructed as a leading − (never +, which is now redundant).
+    assertThat(DockEditService.amountText(new BigDecimal("20"), EXPENSE)).isEqualTo("-20,00");
   }
 
   @Test
@@ -179,7 +181,7 @@ class DockEditServiceTest {
   @Test
   void loadsExpenseRefundIntoTheDock() {
     // A refund inflows the own account (Cash +20, Food -20) — the same shape as income, but the
-    // non-default direction for an expense, so the amount keeps its explicit + (register §3.8).
+    // non-default direction for an expense, so the amount carries a leading − (register §3.8).
     when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
     when(ledgerService.findPostings(TXN_ID))
         .thenReturn(List.of(posting(CASH_ID, "20"), posting(FOOD_ID, "-20")));
@@ -192,7 +194,7 @@ class DockEditServiceTest {
 
     assertThat(model.accountId()).isEqualTo(CASH_ID);
     assertThat(model.categoryId()).isEqualTo(FOOD_ID);
-    assertThat(model.amount()).isEqualTo("+20,00");
+    assertThat(model.amount()).isEqualTo("-20,00");
   }
 
   @Test

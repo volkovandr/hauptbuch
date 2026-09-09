@@ -120,21 +120,35 @@ class DockCommitServiceTest {
   }
 
   @Test
-  void explicitPlusOverridesAnExpenseIntoRefundInflow() {
-    // A refund is an inflow to an expense category — the override the sign-free scheme can't
-    // express
-    // without it (register §3.8).
-    assertThat(DockCommitService.signedFundingAmount("+10", EXPENSE)).isEqualByComparingTo("10");
+  void explicitPlusOnAnExpenseIsRedundantWithBareEntry() {
+    // The flip model (issue transaction-register-ui/06): a leading + does not override, it is a
+    // no-op — the counterpart still decides, so +10 on an expense is an outflow, same as bare 10.
+    assertThat(DockCommitService.signedFundingAmount("+10", EXPENSE)).isEqualByComparingTo("-10");
   }
 
   @Test
-  void explicitMinusOverridesAnIncomeIntoAnOutflow() {
+  void leadingMinusFlipsAnExpenseToRefundInflow() {
+    // A refund is an inflow to an expense category — the leading − flips the counterpart's default
+    // outflow (register §3.8).
+    assertThat(DockCommitService.signedFundingAmount("−10", EXPENSE)).isEqualByComparingTo("10");
+  }
+
+  @Test
+  void leadingMinusFlipsAnIncomeToReversalOutflow() {
     assertThat(DockCommitService.signedFundingAmount("-10", INCOME)).isEqualByComparingTo("-10");
   }
 
   @Test
-  void acceptsTheUnicodeMinusAsAnOverride() {
-    assertThat(DockCommitService.signedFundingAmount("−10", EXPENSE)).isEqualByComparingTo("-10");
+  void bareAndExplicitPlusAgreeWithTheSplitPanelForEveryCounterpartDefault() {
+    // The core of the issue: 20, +20, −20 must book identically in the dock and the split panel.
+    // Against an outflow default (expense / To → / for): outflow, outflow, inflow.
+    assertThat(DockCommitService.signedAmount("20", true)).isEqualByComparingTo("-20");
+    assertThat(DockCommitService.signedAmount("+20", true)).isEqualByComparingTo("-20");
+    assertThat(DockCommitService.signedAmount("−20", true)).isEqualByComparingTo("20");
+    // Against an inflow default (income / From ← / by): inflow, inflow, outflow.
+    assertThat(DockCommitService.signedAmount("20", false)).isEqualByComparingTo("20");
+    assertThat(DockCommitService.signedAmount("+20", false)).isEqualByComparingTo("20");
+    assertThat(DockCommitService.signedAmount("−20", false)).isEqualByComparingTo("-20");
   }
 
   @Test
@@ -884,6 +898,95 @@ class DockCommitServiceTest {
     dockCommitService.commit(entry);
 
     verify(personProvisioningService).ensureLeaf("Max", EUR, true);
+  }
+
+  @Test
+  void fundingSigilContradictingTheCounterpartIsRefused() {
+    // `for Max` funds a plain expense with no sign: the expense's default outflow makes Max's leg a
+    // credit, but `for` asserts a debit — refuse rather than silently book the credit (§3.5).
+    Account maxLeaf = account(LEAF_ID, "asset", EUR);
+    Account foodLeaf = account(CATEGORY_ID + 100, EXPENSE, EUR);
+    when(transactionCurrencyResolver.forFundingPerson("Max", null)).thenReturn(EUR);
+    when(personProvisioningService.ensureLeaf("Max", EUR, false)).thenReturn(maxLeaf);
+    when(currencyLeafService.resolveCurrencyLeaf(CATEGORY_ID, EUR)).thenReturn(foodLeaf);
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> dockCommitService.commit(fundingPersonEntry("FOR", null, "20")))
+        .withMessageContaining("by");
+    verify(ledgerService, never()).recordTransaction(any());
+  }
+
+  @Test
+  void fundingSigilCheckedAgainstThePersonCounterpartNet() {
+    // Acceptance criterion (issue 06): `for Max` funding + `by Anna` counterpart commits (Anna's
+    // credit default makes Max's funding leg a debit, which `for` asserts); `for Max` + `for Anna`
+    // is refused (both would be debits, which two legs summing to zero cannot satisfy).
+    Account maxLeaf = account(LEAF_ID, "asset", EUR);
+    Account annaLeaf = account(LEAF_ID + 1, "asset", EUR);
+    when(transactionCurrencyResolver.forFundingPerson("Max", null)).thenReturn(EUR);
+    when(personProvisioningService.ensureLeaf("Max", EUR, false)).thenReturn(maxLeaf);
+    when(personProvisioningService.ensureLeaf("Anna", EUR, false)).thenReturn(annaLeaf);
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(1L);
+
+    dockCommitService.commit(fundingPersonAndPersonCounterpart("FOR", "Anna", "BY", "20"));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    assertThat(leg(draft.getValue().postings(), LEAF_ID)).isEqualByComparingTo("20"); // Max debit
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(
+            () ->
+                dockCommitService.commit(
+                    fundingPersonAndPersonCounterpart("FOR", "Anna", "FOR", "20")))
+        .withMessageContaining("by");
+  }
+
+  private static DockEntry fundingPersonAndPersonCounterpart(
+      String fundingDirection, String personName, String personDirection, String amount) {
+    return new DockEntry(
+        null,
+        DATE,
+        null,
+        "Max",
+        fundingDirection,
+        null,
+        null,
+        null,
+        0L,
+        null,
+        amount,
+        null,
+        null,
+        null,
+        null,
+        personName,
+        personDirection,
+        null,
+        List.of());
+  }
+
+  @Test
+  void fundingSigilAgreeingWithFlippedAmountCommits() {
+    // `for Max` funds an expense with a leading − (a refund): the − flips the outflow to a debit on
+    // Max's leg, which `for` asserts — so it commits.
+    Account maxLeaf = account(LEAF_ID, "asset", EUR);
+    Account foodLeaf = account(CATEGORY_ID + 100, EXPENSE, EUR);
+    when(transactionCurrencyResolver.forFundingPerson("Max", null)).thenReturn(EUR);
+    when(personProvisioningService.ensureLeaf("Max", EUR, false)).thenReturn(maxLeaf);
+    when(currencyLeafService.resolveCurrencyLeaf(CATEGORY_ID, EUR)).thenReturn(foodLeaf);
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(1L);
+
+    dockCommitService.commit(fundingPersonEntry("FOR", null, "−20"));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(leg(legs, LEAF_ID)).isEqualByComparingTo("20"); // Max debit — they owe you
+    assertThat(leg(legs, CATEGORY_ID + 100)).isEqualByComparingTo("-20");
   }
 
   @Test

@@ -20,6 +20,11 @@
 > pinning them now would be premature.
 
 **Changelog**
+- **v0.6 (2026-09-09):** Settled the leading-sign disagreement between the two entry surfaces
+  (issue transaction-register-ui/06): **flip wins everywhere** — a leading `−` inverts the
+  counterpart's direction, `+` is redundant — and the left-side `for`/`by` sigil becomes a **checked
+  assertion against the funding leg's net sign** (was: presence-only, so contradictions committed
+  silently). Full rules and matrix in §3.8; the sigil check in §3.5.
 - **v0.5 (2026-07-21):** Reworked the **direction-arrow rendering** in §2.6. An arrow now always sits
   on its label's **inner edge — the side facing the Payee** (right of the **Account** label, left of
   the **Category** label), and the **glyph** (`←`/`→`) alone carries the flow direction — **one
@@ -410,13 +415,18 @@ text** (no gazetteer). The pre-filled mini-form is the safety net for any mis-cl
   spending currency. Max buys you €10 of groceries against an agreed $11 debt and the book records
   `Food-USD +11`; the €10 never exists. The expense leg answers *"where did this debt come from"*, not
   *"what did this cost"* — the deliberate reading, not an approximation.
-- **The sigil is a checked assertion, not a second direction source.** Against a **category**
-  counterpart, direction is already fixed by §3.8 — the category type sets the funding leg's sign, a
-  negative amount flips it — and the sigil is verified against that result. Agreement commits; a
-  contradiction is **blocked with an explanation**, surfaced at category-resolve time (before Add is
-  ever pressed) and re-checked at commit. It is never silently corrected: flipping the sign of money on
-  the user's behalf is how books go quietly wrong. Against a **person or account** counterpart there is
-  no category type, so the sigils/keywords are themselves the direction source, as with a transfer.
+- **The sigil is a checked assertion, not a second direction source.** Direction is already fixed by
+  §3.8 — the counterpart sets it, a leading `−` flips it — and the left-side `for`/`by` sigil is
+  **verified against the result**. The check is on the funding leg's **net** signed amount, summed
+  across every line (a split's net is not known until the last line): `for` claims the person ends up
+  a **debit** (they owe you more), `by` a **credit** (you owe them more). Agreement commits; a genuine
+  disagreement is **blocked with an explanation** at commit; a net of exactly **zero** is unverifiable
+  and commits either way. It is never silently corrected — flipping the sign of money on the user's
+  behalf is how books go quietly wrong.
+
+  This one net-sign comparison reproduces the six-row table below exactly and extends it to any number
+  of split lines: `for X` funding + `for Y` counterpart is refused (the net disagrees), while a
+  `by Anna` funding leg against `Sweets 150` + `by Bob 50` (net −100, a credit) agrees and commits.
 
   One rule, six cases — `by` + expense and `for` + income are ordinary; their opposites are legal only
   with a negative amount (a storno or a reversal):
@@ -483,20 +493,54 @@ The sign **resolves the moment the counterpart is known**. Thanks to the payee�
 suggestion (§3.9), that is usually immediate — you often see the resolved sign before finishing the
 amount.
 
-**Explicit sign overrides — required, not polish.** A leading `+`/`−` typed before the magnitude
-forces the funding-account direction, overriding the counterpart default: `−` = funds leave the
-account, `+` = funds enter it. This exists because **refunds and reversals are inversions the
-counterpart type can't express** — a refund is an *inflow to an expense category* (return the food,
-get cash back), and without an override a sign-free scheme simply cannot represent a negative-expense.
+**The leading sign flips, it does not override (issue transaction-register-ui/06).** The
+counterpart on the right side — the category type, the transfer direction, or the person sigil —
+**determines the direction**. A bare amount or a leading `+` books *that* direction; a leading `−`
+books the **opposite** (a storno / refund / reversal). The `for`/`by` prefix on the *left* (Account)
+side never sets direction — it is a **checked assertion** (§3.5), not a direction source.
 
 ```
 Normal expense :  Food  +  "10"   →  Cash −10, Food +10
-Refund         :  Food  +  "+10"  →  Cash +10, Food −10   (override: funds enter Cash)
+Refund         :  Food  +  "−10"  →  Cash +10, Food −10   (the − flips the expense's outflow)
 ```
 
-**Rationale.** The counterpart account's type already determines which leg is debit vs credit, so
-re-typing a sign is redundant data the user could get wrong. Sign-free entry removes a whole class of
-sign errors and keeps entry fast and keyboard-light; the rare inversion opts in with one character.
+This is the split panel's model, now applied to the simple dock too — the two entry surfaces used
+to disagree on what a leading sign meant against an expense / `To →` / `for` counterpart (the dock
+read it as an absolute direction, the panel as a flip). They now agree everywhere.
+
+**Rationale.** The counterpart already fixes which leg is debit vs credit, so re-typing a sign is
+redundant data the user could get wrong. Sign-free entry removes a whole class of sign errors and
+keeps entry fast and keyboard-light; the rare inversion opts in with one character — the same
+character (`−`) in both surfaces.
+
+**The full matrix.** `A` is the left (Account) side, `B` the right (Category / account / person)
+side. With **no sign or a leading `+`**, direction follows `B`:
+
+| A (left) | B (right) | Result | Meaning |
+|---|---|---|---|
+| regular (Cash) | expense (Sweets) | credit A, debit B | bought Sweets, paid with Cash |
+| regular (Cash) | income (Salary) | debit A, credit B | received Salary in Cash |
+| regular (Cash) | `To →` (Savings) | credit A, debit B | moved Cash to Savings |
+| regular (Cash) | `From ←` (Savings) | debit A, credit B | withdrew Cash from Savings |
+| regular (Cash) | `for` (Anna) | credit A, debit B | gave money to Anna |
+| regular (Cash) | `by` (Anna) | debit A, credit B | Anna gave me money |
+| `by`/`for` (Anna) | expense (Sweets) | credit A, debit B | Anna bought Sweets for me |
+| `by`/`for` (Anna) | income (Salary) | debit A, credit B | Anna received my Salary |
+| `by`/`for` (Anna) | `To →` (Cash) | credit A, debit B | Anna gives me money |
+| `by`/`for` (Anna) | `From ←` (Cash) | debit A, credit B | Anna receives money from me |
+| `by`/`for` (Anna) | `for` (Bob) | credit A, debit B | Anna paid for Bob — Anna owes me less, Bob more |
+| `by`/`for` (Anna) | `by` (Bob) | debit A, credit B | Bob paid Anna — Anna owes me more, Bob less |
+
+With a **leading `−`**, every Result row above inverts (`credit A, debit B` ↔ `debit A, credit B`) —
+the storno of the same event.
+
+`To →` / `From ←` are not accepted on the left side. A left-side `by`/`for` combined with a
+right-side `To →`/`From ←` is *possible* but discouraged — putting the direction on the right side
+with no sign is clearer.
+
+Where the left side carries a `by`/`for` sigil, the derived A leg's sign is **checked against it**
+(§3.5): agreement commits, a genuine disagreement is refused, a net of exactly zero commits either
+way.
 
 > **Display note (Q-UI-6).** The register still *shows* the resolved sign (§2.5). Whether to also
 > suppress the leading minus on expense rows in the *display* (since the category already conveys

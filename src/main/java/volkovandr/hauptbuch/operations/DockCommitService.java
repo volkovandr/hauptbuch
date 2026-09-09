@@ -30,14 +30,15 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
  * this service always receives an existing category id (see the dock controller).
  *
  * <p>The sign resolution (register §3.8) is the load-bearing single-currency logic: the amount is a
- * bare magnitude whose direction the counterpart's type fixes, unless an explicit leading {@code
- * +}/{@code −} overrides it (the refund/reversal case). When the category-currency selector
- * overrides the leaf's currency away from the funding account's (register §3.5), the transaction is
- * cross-currency (§3.8a): the category leg gets its own native magnitude, and every leg's {@code
- * baseAmount} is derived so the pair always balances in base by construction — either directly from
- * whichever leg is already the book's base currency, or, when neither is, from the confirmed
- * base-amount field (data-model §6.4). The engine still re-validates the sum (data-model §6.3);
- * this derivation just means that check can never actually fail for a two-leg entry.
+ * bare magnitude whose direction the counterpart fixes; a leading {@code −} flips it (the
+ * refund/reversal case) and a leading {@code +} is redundant with the bare default. When the
+ * category-currency selector overrides the leaf's currency away from the funding account's
+ * (register §3.5), the transaction is cross-currency (§3.8a): the category leg gets its own native
+ * magnitude, and every leg's {@code baseAmount} is derived so the pair always balances in base by
+ * construction — either directly from whichever leg is already the book's base currency, or, when
+ * neither is, from the confirmed base-amount field (data-model §6.4). The engine still re-validates
+ * the sum (data-model §6.3); this derivation just means that check can never actually fail for a
+ * two-leg entry.
  */
 @Service
 public class DockCommitService {
@@ -89,6 +90,7 @@ public class DockCommitService {
 
     Counterpart counterpart = resolveCounterpart(entry, fundingAccount);
     BigDecimal fundingAmount = signedAmount(entry.amount(), counterpart.defaultOutflow());
+    FundingSigilCheck.verify(entry.fundingPersonDirection(), fundingAmount);
     Account other = counterpart.account();
     List<PostingDraft> legs =
         fundingAccount.currencyCode().equals(other.currencyCode())
@@ -168,7 +170,7 @@ public class DockCommitService {
    * (auto-provisioned here, at commit — data-model §7); otherwise the picked category's
    * per-currency leaf (routed to the overridden currency, or the funding account's by default —
    * §6.5). The returned {@link Counterpart} carries the account plus the funding leg's default
-   * direction (which an explicit {@code +}/{@code −} on the amount can still override, §3.8).
+   * direction (which a leading {@code −} on the amount flips, §3.8).
    */
   private Counterpart resolveCounterpart(DockEntry entry, Account fundingAccount) {
     String direction = blankToNull(entry.transferDirection());
@@ -327,10 +329,11 @@ public class DockCommitService {
   }
 
   /**
-   * The signed amount on the <em>funding</em> leg (register §3.8). The magnitude is entered bare;
-   * its sign is the counterpart's type — {@code expense} is an outflow ({@code −}), {@code income}
-   * an inflow ({@code +}) — unless an explicit leading {@code +}/{@code −} overrides it (a refund
-   * is an inflow to an expense category, which the type alone cannot express).
+   * The signed amount on the <em>funding</em> leg (register §3.8). The magnitude is entered bare
+   * and its direction is the counterpart's — {@code expense} is an outflow ({@code −}), {@code
+   * income} an inflow ({@code +}) — with a leading {@code −} flipping it (the refund/reversal case
+   * a sign-free scheme cannot otherwise express) and a leading {@code +} redundant with the
+   * default.
    *
    * @param amountText the typed amount, German-formatted, with an optional leading sign
    * @param counterpartType the resolved leaf's type ({@code income}/{@code expense})
@@ -341,10 +344,12 @@ public class DockCommitService {
   }
 
   /**
-   * The signed funding-leg amount (register §3.8): a bare magnitude signed by {@code
-   * defaultOutflow} — the counterpart's default direction (an expense category, or a {@code TO}
-   * transfer) — unless a leading {@code +}/{@code −} overrides it ({@code +} = funds enter, {@code
-   * −} = funds leave), the refund/reversal case a sign-free scheme cannot otherwise express.
+   * The signed funding-leg amount (register §3.8, issue transaction-register-ui/06): a bare
+   * magnitude whose direction is {@code defaultOutflow} — the counterpart's direction (an expense
+   * category, a {@code TO} transfer, a {@code for} person) — which a leading {@code −} flips (the
+   * refund/reversal case) and a leading {@code +} leaves alone (redundant with bare entry). The
+   * split panel's {@link SplitLineAmounts} already works this way; this brings the simple dock into
+   * line with it.
    *
    * @param amountText the typed amount, German-formatted, with an optional leading sign
    * @param defaultOutflow whether the counterpart makes the funding leg an outflow by default
@@ -362,14 +367,8 @@ public class DockCommitService {
 
     BigDecimal magnitude = MoneyFormat.parse(magnitudeText).abs();
 
-    boolean outflow;
-    if (explicitPlus) {
-      outflow = false; // funds enter the account
-    } else if (explicitMinus) {
-      outflow = true; // funds leave the account
-    } else {
-      outflow = defaultOutflow;
-    }
+    // The counterpart fixes the direction; a leading − flips it, a + is a no-op.
+    boolean outflow = explicitMinus != defaultOutflow;
     return outflow ? magnitude.negate() : magnitude;
   }
 }

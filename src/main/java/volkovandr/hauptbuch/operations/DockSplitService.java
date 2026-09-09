@@ -181,6 +181,7 @@ public class DockSplitService {
                   resolved.leaf().accountId(), resolved.contribution().negate(), resolved.note()),
               resolved.tagIds()));
     }
+    FundingSigilCheck.verify(entry.fundingPersonDirection(), fundingAmount);
 
     List<PostingDraft> legs = new ArrayList<>();
     legs.add(tagged(PostingDraft.of(fundingAccount.accountId(), fundingAmount), entry.tagIds()));
@@ -305,6 +306,8 @@ public class DockSplitService {
       spendingMagnitude = spendingMagnitude.add(resolvedLine.contribution().abs());
       resolved.add(resolvedLine);
     }
+    // netSpending carries the funding leg's sign (fundingNative is signed(magnitude, its sign)).
+    FundingSigilCheck.verify(entry.fundingPersonDirection(), netSpending);
 
     // The funding side (register §3.8, mixed-split convention): outflow when the lines net to a
     // debit of the categories, else inflow; an exactly-zero net books on the debit side.

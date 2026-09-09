@@ -1204,6 +1204,33 @@ class RegisterSplitScreenIntegrationTest {
   }
 
   @Test
+  void personFundedSplitWhoseNetContradictsTheSigilReRendersThePanelWithAnError() throws Exception {
+    // Issue transaction-register-ui/06: `for Max` funds a lone expense line — the net is a credit
+    // on Max's leg, but `for` asserts a debit. Blocked at commit, panel re-renders inline with the
+    // message and the register survives.
+    long spend = insertCategory("Groceries", "expense");
+
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("fundingPersonName", "Max")
+                .param("fundingPersonDirection", "FOR")
+                .param("spendingCurrencyCode", EUR)
+                .param("lineCategoryId", String.valueOf(spend))
+                .param("lineCategoryType", "expense")
+                .param("lineAmount", "20")
+                .param("viewAccountId", ""))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(containsString("net to a credit")))
+        .andExpect(header().string("HX-Reswap", "none"))
+        .andExpect(content().string(not(containsString("id=\"register-rows\""))));
+
+    assertThat(spendTransactionCount()).isZero();
+  }
+
+  @Test
   void personFundedSplitReloadsAsTheSigilAndReSaves() throws Exception {
     // The reload must show `by Max`, never the cosmetic personal.CHF leaf name — and re-saving it
     // untouched must reproduce the same legs (the same round-trip the per-line person sigil gets).
