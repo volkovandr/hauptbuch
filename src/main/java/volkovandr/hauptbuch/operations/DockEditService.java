@@ -336,20 +336,19 @@ public class DockEditService {
   }
 
   /**
-   * The magnitude the user would type for a funding leg of the given signed amount (register §3.8):
-   * bare when its direction is the counterpart type's default (expense → outflow, income → inflow,
-   * transfer → TO direction outflow), carrying an explicit {@code +}/{@code −} only for the
-   * overriding (refund/reversal) direction so a re-save reproduces the same leg.
+   * The magnitude the user would type for a funding leg of the given signed amount (register §3.8,
+   * issue transaction-register-ui/06): bare when its direction is the counterpart's default
+   * (expense → outflow, income → inflow, transfer → {@code TO} outflow), carrying a leading {@code
+   * −} for the flipped (refund/reversal) direction so a re-save reproduces the same leg. A {@code
+   * +} is never emitted — under the flip model it is redundant with bare entry, so a bare re-save
+   * is enough.
    */
   static String amountText(BigDecimal fundingAmount, String counterpartType) {
     String magnitude = MoneyFormat.number(fundingAmount.abs(), AMOUNT_FRACTION_DIGITS);
     boolean outflow = fundingAmount.signum() < 0;
     // For transfers, TO is the default outflow direction
     boolean defaultOutflow = EXPENSE.equals(counterpartType);
-    if (outflow == defaultOutflow) {
-      return magnitude;
-    }
-    return (outflow ? "-" : "+") + magnitude;
+    return outflow == defaultOutflow ? magnitude : "-" + magnitude;
   }
 
   private Account requireAccount(Long accountId) {

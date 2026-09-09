@@ -961,6 +961,28 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
+  void fundingSigilContradictingTheCounterpartReRendersTheDockWithAnError() throws Exception {
+    // `for Max` funds a plain expense with no sign (issue transaction-register-ui/06): the expense
+    // makes Max's leg a credit, but `for` asserts a debit — blocked at commit, dock re-renders
+    // carrying the message, rows untouched.
+    long food = insertCategory("Food");
+
+    mockMvc
+        .perform(
+            post(ENTRY_PATH)
+                .param("date", "2026-02-02")
+                .param("fundingPersonName", "Max")
+                .param("fundingPersonDirection", "FOR")
+                .param("amount", "20")
+                .param("categoryId", String.valueOf(food)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"entry-dock\"")))
+        .andExpect(content().string(containsString("entry-dock__error")))
+        .andExpect(header().string("HX-Reswap", "none"))
+        .andExpect(content().string(not(containsString("id=\"register-rows\""))));
+  }
+
+  @Test
   void brandNewPersonInTheAccountFieldIsProvisionedInTheBaseCurrency() throws Exception {
     // The case the old "or person" sub-field could not do at all (plan stage 8b.1): a person with
     // no leaf yet has no currency to inherit, so the transaction currency supplies one — base,

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -559,7 +560,8 @@ class DockSplitServiceTest {
     when(payeeService.resolvePayee(null, null)).thenReturn(null);
     when(ledgerService.recordTransaction(any())).thenReturn(21L);
 
-    dockSplitService.commit(personFundedEntry("Anna", "FOR", USD, List.of(line(FOOD_ID, "20"))));
+    // `by Anna` funds a single expense line: the net is a credit, which the sigil asserts (§3.5).
+    dockSplitService.commit(personFundedEntry("Anna", "BY", USD, List.of(line(FOOD_ID, "20"))));
 
     verify(personProvisioningService).ensureLeaf("Anna", USD, false);
   }
@@ -588,6 +590,103 @@ class DockSplitServiceTest {
     assertThatExceptionOfType(IllegalStateException.class)
         .isThrownBy(() -> dockSplitService.commit(entry))
         .withMessageContaining("Base currency is not set");
+  }
+
+  // ── the funding-leg sigil as a checked assertion (issue transaction-register-ui/06) ───────────
+
+  @Test
+  void personFundedSplitWhoseNetContradictsTheSigilIsRefused() {
+    // `for Max` funds a single plain expense line: the net is a credit on Max's leg, but `for`
+    // asserts a debit — refuse rather than book the credit silently (§3.5).
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, EUR))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, EUR));
+    when(personProvisioningService.ensureLeaf("Max", EUR, false))
+        .thenReturn(account(MAX_LEAF_ID, "asset", EUR));
+
+    SplitEntry entry = personFundedEntry("Max", "FOR", EUR, List.of(line(FOOD_ID, "20")));
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> dockSplitService.commit(entry))
+        .withMessageContaining("by");
+    verify(ledgerService, never()).recordTransaction(any());
+  }
+
+  @Test
+  void personFundedSplitWhoseFundingLegNetsToZeroCommitsUnderEitherSigil() {
+    // Return five bottles (income 5) and take one Cola (expense 5), all on Max's tab: the funding
+    // leg is exactly zero, which no sigil can contradict.
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, EUR))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, EUR));
+    when(currencyLeafService.resolveCurrencyLeaf(DEPOSIT_ID, EUR))
+        .thenReturn(account(DEPOSIT_LEAF_ID, INCOME, EUR));
+    when(personProvisioningService.ensureLeaf("Max", EUR, false))
+        .thenReturn(account(MAX_LEAF_ID, "asset", EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(30L);
+
+    dockSplitService.commit(
+        personFundedEntry("Max", "FOR", EUR, List.of(line(FOOD_ID, "5"), line(DEPOSIT_ID, "5"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    assertThat(leg(draft.getValue().postings(), MAX_LEAF_ID)).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void personFundedSplitAndItsMirrorBookTheIdenticalThreePostings() {
+    // Acceptance criterion (issue 06): `by Anna` funding + (Sweets 150, by Bob 50) and its mirror
+    // `by Bob` funding + (Sweets 150, by Anna 100) both book Anna −100, Bob −50, Sweets +150.
+    long sweetsId = 50L;
+    long sweetsLeafId = 51L;
+    long bobLeafId = 42L;
+    when(currencyLeafService.resolveCurrencyLeaf(sweetsId, EUR))
+        .thenReturn(account(sweetsLeafId, EXPENSE, EUR));
+    when(personProvisioningService.ensureLeaf("Anna", EUR, false))
+        .thenReturn(account(ANNA_LEAF_ID, "asset", EUR));
+    when(personProvisioningService.ensureLeaf("Bob", EUR, false))
+        .thenReturn(account(bobLeafId, "asset", EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(31L);
+
+    dockSplitService.commit(
+        personFundedEntry(
+            "Anna", "BY", EUR, List.of(line(sweetsId, "150"), personLine("Bob", "BY", "50"))));
+
+    ArgumentCaptor<TransactionDraft> first = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(first.capture());
+    List<PostingDraft> legs = first.getValue().postings();
+    assertThat(leg(legs, ANNA_LEAF_ID)).isEqualByComparingTo("-100");
+    assertThat(leg(legs, bobLeafId)).isEqualByComparingTo("-50");
+    assertThat(leg(legs, sweetsLeafId)).isEqualByComparingTo("150");
+    assertThat(sum(legs)).isEqualByComparingTo("0");
+
+    dockSplitService.commit(
+        personFundedEntry(
+            "Bob", "BY", EUR, List.of(line(sweetsId, "150"), personLine("Anna", "BY", "100"))));
+
+    ArgumentCaptor<TransactionDraft> both = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService, times(2)).recordTransaction(both.capture());
+    List<PostingDraft> mirror = both.getAllValues().get(1).postings();
+    assertThat(leg(mirror, ANNA_LEAF_ID)).isEqualByComparingTo("-100");
+    assertThat(leg(mirror, bobLeafId)).isEqualByComparingTo("-50");
+    assertThat(leg(mirror, sweetsLeafId)).isEqualByComparingTo("150");
+  }
+
+  @Test
+  void byFundingIsRefusedWhenOneInflowLineFlipsTheNet() {
+    // `by Anna` funding + a lone `by Bob 50` line: Bob's BY line is an inflow, so the net is a
+    // debit on Anna's leg — `by Anna` asserts a credit, so it is refused (a pairwise check would
+    // wrongly allow by→by).
+    long bobLeafId = 42L;
+    when(personProvisioningService.ensureLeaf("Anna", EUR, false))
+        .thenReturn(account(ANNA_LEAF_ID, "asset", EUR));
+    when(personProvisioningService.ensureLeaf("Bob", EUR, false))
+        .thenReturn(account(bobLeafId, "asset", EUR));
+
+    SplitEntry entry = personFundedEntry("Anna", "BY", EUR, List.of(personLine("Bob", "BY", "50")));
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> dockSplitService.commit(entry))
+        .withMessageContaining("for");
+    verify(ledgerService, never()).recordTransaction(any());
   }
 
   // ── split transfers (register §3.8, plan stage 7d.3) ───────────────────────────

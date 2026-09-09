@@ -252,3 +252,31 @@ its "checked assertion" paragraph gains the net-sign clarification.
 - `transaction-register-ui/25` (picker leaves/hierarchy).
 - Making `+` mean anything other than "redundant, same as bare". Note the silent habit change:
   `+20` on an expense books a refund today and an ordinary outflow afterwards.
+
+---
+
+## Implementation note (2026-09-09) — finished, awaiting owner confirmation
+
+Branch `doc/triage-sign-model-and-zero-receipt` (not yet merged). `./gradlew check` green.
+
+- **FLIP everywhere.** `DockCommitService.signedAmount` now negates the counterpart's default only
+  on a leading `−`; `+`/bare are identical. `DockEditService.amountText` moved in the same commit
+  (bare for the default direction, leading `−` for the flip, never `+`); round-trip guarded by unit
+  tests. `SplitLineAmounts.*` unchanged — it was already the reference.
+- **Funding-leg sigil = checked assertion.** New `FundingSigilCheck.verify(direction, net)`, called
+  by `DockCommitService.commit` and both `DockSplitService` leg builders against the funding leg's
+  net signed amount. `for` ⇒ debit, `by` ⇒ credit; net of exactly zero commits; disagreement throws
+  `IllegalArgumentException`, which both controllers already render as an inline dock/panel error.
+  Replaces the presence-only `fundingPersonDirection` handling.
+- **Docs.** `ui-transaction-register.md` §3.8 rewritten (flip rule + the owner's direction matrix as
+  a 12-row table with the "leading `−` inverts every row" note), §3.5's checked-assertion paragraph
+  gains the net-sign clarification, changelog v0.6. §3.5's six-row table is literal under FLIP,
+  unchanged.
+- **Tests.** `FundingSigilCheckTest` (new); flip-model, refund, person-on-both-sides, mirror,
+  net-zero, and by→by-refused cases across `DockCommitServiceTest` / `DockSplitServiceTest` /
+  `DockEditServiceTest`; htmx-error acceptance in `RegisterEntryScreenIntegrationTest` and
+  `RegisterSplitScreenIntegrationTest`. One pre-existing split test that used a contradictory
+  `for`+expense funding combo switched to `by`.
+- **Not done:** a literal 24-row matrix test — several of the owner's raw p2p rows are refused by
+  the checked assertion (the doc now says so), so a verbatim table test would encode superseded
+  behaviour. Coverage is by representative case instead.
