@@ -257,13 +257,10 @@ its "checked assertion" paragraph gains the net-sign clarification.
 
 ## Implementation note (2026-09-09) — owner-confirmed, resolved
 
-Branch `doc/triage-sign-model-and-zero-receipt`, commit `10a6eca` (not yet merged). `./gradlew
-check` green. Owner confirmed 2026-09-09.
-
 - **FLIP everywhere.** `DockCommitService.signedAmount` now negates the counterpart's default only
-  on a leading `−`; `+`/bare are identical. `DockEditService.amountText` moved in the same commit
-  (bare for the default direction, leading `−` for the flip, never `+`); round-trip guarded by unit
-  tests. `SplitLineAmounts.*` unchanged — it was already the reference.
+  on a leading `−`; `+`/bare are identical. `DockEditService.amountText` moved with it (bare for the
+  default direction, leading `−` for the flip, never `+`); round-trip guarded by unit tests.
+  `SplitLineAmounts.*` unchanged — it was already the reference.
 - **Funding-leg sigil = checked assertion.** New `FundingSigilCheck.verify(direction, net)`, called
   by `DockCommitService.commit` and both `DockSplitService` leg builders against the funding leg's
   net signed amount. `for` ⇒ debit, `by` ⇒ credit; net of exactly zero commits; disagreement throws
