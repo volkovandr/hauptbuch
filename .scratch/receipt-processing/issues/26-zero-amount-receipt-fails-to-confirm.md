@@ -147,7 +147,7 @@ Two facts that shaped the decision:
 
 ---
 
-## Resolution (2026-09-09)
+## Resolution (2026-09-09, owner-confirmed 2026-09-10)
 
 - `TransactionDraft.pendingReview(...)` factory beside `confirmed(...)`.
 - `SplitEntry` carries a `lifecycle` (defaults `confirmed`); `RegisterSplitController` passes
