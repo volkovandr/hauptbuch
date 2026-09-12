@@ -1,0 +1,48 @@
+/* Reporting screens (plan stage a): the Presets list and the table renderer. */
+
+.reports-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reports-list li {
+  margin-bottom: 0.4rem;
+}
+
+.report__scope {
+  margin-top: -0.25rem;
+}
+
+table.report {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+}
+
+table.report thead th {
+  text-align: right;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border-bottom: 2px solid var(--rule);
+  padding: 0.3rem 0.5rem;
+}
+
+table.report thead th:first-child {
+  text-align: left;
+}
+
+table.report tbody td,
+table.report tfoot td {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--feint);
+  vertical-align: middle;
+}
+
+table.report tfoot td {
+  border-bottom: none;
+  border-top: 2px solid var(--rule);
+  font-weight: 600;
+}

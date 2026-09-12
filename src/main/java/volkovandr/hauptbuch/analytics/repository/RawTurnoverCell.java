@@ -1,0 +1,36 @@
+package volkovandr.hauptbuch.analytics.repository;
+
+import java.math.BigDecimal;
+
+/**
+ * One raw group from a turnover query (reporting.md §5.1): a single (dimension value, month bucket,
+ * currency) triple. Dimension-agnostic on purpose — {@link #dimensionKey()} names whichever
+ * hierarchy node or flat value the query grouped by, and {@link ReportQueryRepository} always
+ * returns the month bucket alongside it (§5.2: turnover sums legally across time), so the engine —
+ * not the query — decides which of the two is rendered on rows, on columns, or collapsed away.
+ *
+ * @param dimensionKey the grouped dimension value's stable key (e.g. a top-level account id)
+ * @param dimensionLabel its display label
+ * @param dimensionType the backing account's {@code type}, for the credit-natural display flip
+ *     (data-model §4.1); {@code null} for a dimension with no single natural type
+ * @param monthKey the month bucket, {@code yyyy-MM}
+ * @param currencyCode the native currency of the postings in this group
+ * @param nativeAmount the leg-filtered signed sum in {@code currencyCode}
+ * @param baseAmount the same sum valued posting-by-posting in base (data-model §6.1); {@code null}
+ *     when a contributing posting had no usable rate
+ * @param missingRateCount postings that could not be valued in base — a non-zero count makes the
+ *     base-currency cell {@code —} rather than a silently partial figure
+ * @param postingCount postings contributing to this group
+ * @param transactionCount distinct transactions contributing to this group
+ */
+public record RawTurnoverCell(
+    String dimensionKey,
+    String dimensionLabel,
+    String dimensionType,
+    String monthKey,
+    String currencyCode,
+    BigDecimal nativeAmount,
+    BigDecimal baseAmount,
+    long missingRateCount,
+    long postingCount,
+    long transactionCount) {}

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<!--
+  Reporting page (plan stage a): for now, the Presets list. The Layout (rows x columns of Frames)
+  and the list of saved Reports arrive in stage c/d (reporting.md §11, §14).
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel">
+      <p class="eyebrow">Presets</p>
+      <ul class="reports-list">
+        <li><a th:href="@{/reports/preset/category-month-matrix}">Category × month matrix</a></li>
+        <li><a th:href="@{/reports/preset/balance-sheet}">Balance sheet</a></li>
+      </ul>
+    </section>
+  </main>
+</html>
