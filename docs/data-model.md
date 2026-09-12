@@ -1,11 +1,11 @@
 # Hauptbuch — Core Data Model
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.13
-**Date:** 2026-08-04
+**Status:** Draft v0.14
+**Date:** 2026-09-12
 **Owner:** volkovandr
-**Companion to:** `requirements.md` (v0.6),
-`tech-stack.md` (v0.1)
+**Companion to:** `requirements.md` (v0.8),
+`tech-stack.md` (v0.3), `reporting.md`
 
 > This document records the **core data model** — accounts, transactions, postings, currency,
 > exchange rates, FX handling, per-person debts, payees, and tags — together with the conventions
@@ -773,6 +773,23 @@ minimum they are tests.
 | `base_amount` of a single-currency posting | **NULL / not stored** | Derivable; lets past-rate edits refresh reports. |
 | `base_amount` of a cross-currency posting | **Stored, frozen** | A real event's real rate; must never be recomputed. |
 | Exchange rates | **Stored** (sparse, carry-forward) | Input + held-balance revaluation; manual override. |
+
+### 9.1 The explicit decision: no materialization in v1 *(2026-09-12)*
+
+CLAUDE.md requires materializing running balances to be an **explicit decision** rather than a
+default, and the report engine (`reporting.md`) is the first consumer heavy enough to force the
+question — a net-worth line over several years, with carry-forward rate joins, on a Raspberry Pi.
+
+**Decided: nothing is materialized, and no index is added pre-emptively.** The evidence is that the
+register already renders 1,500+ transactions across 20+ accounts on the Pi with no difficulty, and
+the report engine's Date dimension defaults to **month** granularity (≈60 points for five years, not
+1,800), with day granularity reachable only by expanding a short range.
+
+If it *is* measured slow, the fix is a materialized per-account **monthly** balance rollup — and that
+is its own decision, taken **with a number attached**, not a hedge built in now. Note what
+materialization would have to respect to be correct: a backdated insert invalidates every later
+period, and editing a past `exchange_rate` row invalidates every base-currency figure that derived
+from it (which is precisely why the table above says "computed" three times).
 
 ---
 

@@ -1,8 +1,8 @@
 # Hauptbuch — Requirements Document
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.7
-**Date:** 2026-08-30
+**Status:** Draft v0.8
+**Date:** 2026-09-12
 **Owner:** volkovandr
 **Type:** Self-hosted, single-user, web-based personal finance application
 
@@ -11,6 +11,15 @@
 > Priorities use MoSCoW: **Must**, **Should**, **Could**, **Won't (this version)**.
 
 **Changelog**
+- **v0.8 (2026-09-12):** **§5.9 rewritten — reporting becomes a generic engine.** FR-ANA-07/08/09
+  described two hand-built reports and FR-ANA-08 forbade anything more graphical; after returning to
+  Microsoft Money in daily use the owner overturned that, wanting Money's *reporting breadth* rather
+  than two of its outputs. The matrix and the timeline survive as **Presets** of one engine
+  (dimensions × measures × filters, four renderers). **FR-ANA-08 rewritten** into the rule that
+  replaces its intent (a chart's figures are always one click away in the same frame);
+  **FR-UX-03 amended** for that swap; **FR-ANA-06 (CSV) Could → Should**; new **FR-REP** block. New
+  authoritative doc **`docs/reporting.md`** (the seventh); rationale in
+  **`docs/adr/0001-generic-report-engine.md`** (the repo's first ADR).
 - **v0.6 (2026-08-01):** **NFR-04 amended** (stage-9e grilling): the Anthropic API key becomes
   the one secret stored in the DB (`settings` row, Settings-page managed, write-only masked UI,
   env fallback) — rationale and mitigations in data-model §3.8. All other secrets stay in
@@ -111,7 +120,7 @@ fails in apps like ezBookkeeping.
 |----|-------------|----------|
 | FR-UX-01 | **Inline master-detail editing.** A transaction list where selecting a row reveals an editable detail panel (bottom or side); fields are edited **in place**. No modal dialog for routine entry/edit. | Must |
 | FR-UX-02 | **High information density.** Transactions render as **thin, single-line rows**; maximize how many are visible at once; avoid oversized padding, cards, or 10-row pages that force scrolling. | Must |
-| FR-UX-03 | **Numbers first.** Every analytic shows actual figures as text. Charts are supplementary and are **never the only way to read a value** (no hover-to-reveal-the-number). | Must |
+| FR-UX-03 | **Numbers first.** Every analytic's actual figures are readable as text — either on the page or **one deterministic click away in the same frame** (the chart/table swap, `reporting.md` §10). A value is **never** obtainable only by pointing at a pixel (no hover-to-reveal-the-number). | Must |
 | FR-UX-04 | **Visual restraint.** Clean, spreadsheet-like, information-dense aesthetic over decorative/"cartoonish" visuals. | Should |
 | FR-UX-05 | **Keyboard throughout.** Select, edit, save, move to next, and create — all by keyboard, consistently across list and detail (ties to NFR-01). | Must |
 | FR-UX-06 | **Inline new-transaction entry** directly in the list (append row), no modal. | Should |
@@ -208,7 +217,7 @@ fails in apps like ezBookkeeping.
 | FR-STMT-06 | Manual override of any match; nothing committed without confirmation. | Must |
 | FR-STMT-07 | Mark reconciled transactions; record reconciliation points. | Should |
 
-### 5.9 Analytics & reporting — **numbers-first, Money-style**
+### 5.9 Analytics & reporting — **numbers-first, Money-style, one generic engine**
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
@@ -217,11 +226,31 @@ fails in apps like ezBookkeeping.
 | FR-ANA-03 | Category trends over time. | Must |
 | FR-ANA-04 | Arbitrary slicing by tag (per-car, per-trip). | Must |
 | FR-ANA-05 | Net worth across all accounts and currencies (base currency). | Should |
-| FR-ANA-06 | Export reports (CSV; optionally PDF). | Could |
-| FR-ANA-07 | **Primary report — category × month matrix.** Rows = top-level categories (expandable to subcategories); columns = months; **income block above, expense block below**, balance-sheet/P&L style; **every cell shows the number**. | Must |
-| FR-ANA-08 | **Restrained** in-cell visualization only — optional small sparkline or trend arrow per row; nothing more (no large/cartoonish charts). | Could |
-| FR-ANA-09 | **Consolidated-balance timeline** — total balance across accounts over time as a line, **with an added trend line** (an improvement over Money, which lacked one). This is the one graphical report relied upon. | Must |
-| FR-ANA-10 | **Drill-down** from any matrix cell to its underlying transactions. | Should |
+| FR-ANA-06 | Export any report's grid as CSV — raw values, fully expanded (`reporting.md` §13). PDF is out of scope. | Should |
+| FR-ANA-07 | **The primary Preset — category × month matrix.** Rows = top-level categories (expandable to subcategories); columns = months; **income block above, expense block below**, balance-sheet/P&L style; **every cell shows the number**. A Preset of the engine (FR-REP), not a bespoke screen. | Must |
+| FR-ANA-08 | **Charts never hide the numbers.** Every chart's grid is reachable by one deterministic click in the same frame (the chart/table swap); no report is chart-only and no value is hover-only. Charts are **server-rendered SVG** — restrained, spreadsheet-adjacent, and never decorative. *(Replaces the original prohibition on charts beyond in-cell sparklines, overturned in v0.8; the intent it protected — §5.0's refusal to become an over-graphical, number-hiding app — is now this rule.)* | Must |
+| FR-ANA-09 | **Consolidated-balance timeline** — total balance across accounts over time as a line, **with an added trend line** (an improvement over Money, which lacked one). Ships as the **net worth over time** Preset and is the default report on the main page. | Must |
+| FR-ANA-10 | **Drill-down** from any cell of any report to its underlying transactions, and from there to the register for editing. | Should |
+
+**The engine itself** — authoritative design in **`docs/reporting.md`**; terminology (Report, Preset,
+Layout, Frame, turnover, closing balance, legs) in `CONTEXT.md`.
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-REP-01 | A **Report** is a saved specification — dimensions on **rows / columns / series**, measures, scope, filters, a date range, a renderer — with its own URL. An unsaved spec lives in the query string. | Must |
+| FR-REP-02 | **Dimensions:** category, account, tag, payee, person, currency, account type, date. Hierarchical ones render as expandable trees. Up to **two per axis**, nested (a combination is nesting, not a cartesian product); one dimension on series. | Must |
+| FR-REP-03 | **Measures:** **turnover** and **closing balance**, each in base or account currency, plus counts. Turnover valued posting-by-posting at posting-date rates; closing balance marked to market at the period end — data-model §6.1's two rules, never unified. | Must |
+| FR-REP-04 | **Legs** on a turnover measure: debits only, credits only, or net. Independent of account type; display sign comes from data-model §4.1, never from a report setting. | Must |
+| FR-REP-05 | An explicit **scope** (account types and/or subtrees) states which postings a measure counts — without it every sum is zero by construction. | Must |
+| FR-REP-06 | **Filters** are either *transaction-level* ("transactions touching …") or *posting-level* ("amounts booked to …"), visibly distinguished because they give different numbers. `is one of` on a hierarchy node includes its subtree; payee also supports case-insensitive regex. AND across dimensions. | Must |
+| FR-REP-07 | Soft-deleted rows are **never** in scope; `pending_review` transactions are **out by default** with a toggle that marks the report; closed accounts are in. The resolved scope is printed in the report header. | Must |
+| FR-REP-08 | The engine **refuses to print meaningless numbers** — a closing balance summed along the time axis, an account-currency measure spanning two currencies, and a grand total across overlapping tags all render `—`. Distinct from an empty cell (blank) and a real zero (`0,00`). | Must |
+| FR-REP-09 | The date range is a **start** and an **end**, each a literal date or a *unit × offset × edge* expression, so a saved report stays fresh. Named shortcuts fill the two endpoints. Partial buckets are labelled. | Must |
+| FR-REP-10 | **Renderers:** table, line (with trend line), bar, pie — server-rendered SVG, no charting library. A row dimension on a chart renders as small multiples. A pie refuses a measure that can go negative. | Must |
+| FR-REP-11 | **Presets** are engine reports defined in code, always present and non-deletable: net worth over time, the category×month matrix, this month vs last, the balance sheet. | Must |
+| FR-REP-12 | A **Layout** is a grid of **Frames** (rows × columns), each showing one Report, configured and saved by the operator. The reporting page has one; **the main page is a 1×1 Layout**, defaulting to net worth over time. | Should |
+| FR-REP-13 | Hierarchies expand in place; expansion state is remembered against the saved Report. Initial state is **auto** (one hierarchy node filtered ⇒ expanded; otherwise collapsed), overridable. Parent rows are subtotals or group headers. | Should |
+| FR-REP-14 | The engine's public API is **spec in → grid out**, so the eventual MCP read tool (FR-MCP) is a wrapper, not a refactor. Nothing is exposed over MCP in v1. | Should |
 
 ### 5.10 Forecasting — scheduled + trend
 
@@ -412,7 +441,7 @@ No single self-hosted app covers the full list. Useful references (and what to b
 
 **Differentiators that justify a custom build:** one unified Pi-hosted Postgres system; a dense,
 inline, numbers-first Money-style UX; AI statement reconciliation from historical PDFs; multi-tag
-per-car/per-trip analytics; the category×month matrix + consolidated-balance timeline with trend
-line; budgets on the same taxonomy as expenses; the auto-managed per-person shared-debt ledger;
+per-car/per-trip analytics; a generic report engine whose Presets include the category×month matrix
+and the consolidated-balance timeline with trend line; budgets on the same taxonomy as expenses; the auto-managed per-person shared-debt ledger;
 multi-profile books; mobile + Telegram quick capture; a monthly narrative report; and an MCP
 server letting an AI agent answer questions and perform structural edits by command.

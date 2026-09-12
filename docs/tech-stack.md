@@ -1,10 +1,10 @@
 # Hauptbuch — Tech Stack & Architecture Decisions
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.2
-**Date:** 2026-06-26
+**Status:** Draft v0.3
+**Date:** 2026-09-12
 **Owner:** volkovandr
-**Companion to:** `requirements.md` (v0.4)
+**Companion to:** `requirements.md` (v0.8), `reporting.md`
 
 > This document records *technology* decisions and their rationale. Requirements live in the
 > companion document; this one says **how** they will be built and **why** each choice was made.
@@ -193,9 +193,15 @@ operation regardless of caller.
 
 **Rationale.** This keeps the UI inside the owner's ecosystem — no npm, no bundler, no TypeScript,
 no second runtime to maintain without the agent (which would *double* the §0 risk). Most of the app
-is easily server-rendered: the category×month matrix is a server-rendered `<table>`; master-detail
-panels and drill-downs are fragment swaps; the balance timeline is a single server-generated SVG
-chart. Claude Code handles htmx well.
+is easily server-rendered: report grids are server-rendered `<table>`s; master-detail panels,
+drill-downs and hierarchy expansion are fragment swaps; **every chart is server-generated inline
+SVG** — line, bar and pie, built in Java the way the QR code is (§4.5), with no charting library
+and no fourth JS leaf. Claude Code handles htmx well.
+
+> Generalised 2026-09-12: this previously read "the balance timeline is a single server-generated
+> SVG chart", written when reporting was two fixed screens. Reporting is now a generic engine with
+> four renderers (`reporting.md` §10), and the SVG-in-Java call scaled to all of them unchanged —
+> the only loss is interactivity, which FR-UX-03 rules out anyway (no hover-to-reveal-the-number).
 
 A React/Svelte SPA was **rejected**: more capable for the dense grid, but it is an entire second
 ecosystem the owner does not know and could not maintain agent-free — the exact stated fear.
@@ -364,6 +370,8 @@ Both stay in Java — no Python anywhere.
 | Image edit | Manual only, client-side | AI-assisted / auto-applied transforms | Auto image fixes are unreliable; validating an AI crop takes longer than just cropping |
 | QR codes | ZXing `core`, inline SVG | Client-side JS QR library | Bespoke JS is confined to the three sanctioned leaves |
 | QR codes | ZXing `core`, inline SVG | Hand-rolled encoder | Hundreds of lines of Reed-Solomon/masking to own forever for one code |
+| Charts | Server-rendered inline SVG in Java | Charting library (uPlot / Chart.js / ECharts) | Would be a **fourth** bespoke JS leaf (CLAUDE.md §1.6) and a dependency to own forever; line/bar/pie are a few hundred lines of SVG, and the only thing lost — hover tooltips — FR-UX-03 forbids regardless |
+| Report filters | Reuse the register's `filter-groups.js` leaf, generalised over the three hierarchies | A new reporting-specific JS leaf | Same problem (group toggles over a tree) with a different tree; a fourth leaf needs the owner's agreement and did not earn it. Cost accepted: the leaf now serves two screens, so it carries acceptance coverage on both |
 
 ---
 

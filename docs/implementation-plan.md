@@ -1,12 +1,12 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.47
-**Date:** 2026-09-06
+**Status:** Draft v0.48
+**Date:** 2026-09-12
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
-`ui-transaction-register.md`, `ui-receipt-processing.md`, `import.md`
-(the six authoritative design docs)
+`ui-transaction-register.md`, `ui-receipt-processing.md`, `import.md`, `reporting.md`
+(the seven authoritative design docs)
 
 > This document records the **build sequence** — the order in which the system is implemented, what
 > each stage delivers, and *why that order*, in keeping with the house rule that the *why* must
@@ -28,6 +28,14 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.48 (2026-09-12):** **Reporting re-scoped from two hand-built reports to a generic engine**
+  (owner decision, from a grilling pass). `requirements.md` FR-ANA-07/08/09 are rewritten and
+  **FR-ANA-08's prohibition on charts is overturned**; the matrix and the timeline become **Presets**
+  of one engine. New authoritative doc **`docs/reporting.md`** (the seventh) and the repo's first
+  ADR (`docs/adr/0001-generic-report-engine.md`). Sequenced into the sub-plan
+  `implementation-plan-reporting.md` (slices a–f, the stage-7/9/import pattern); §3's Reporting
+  bullet now points at it. FR-RPT (monthly narrative report) explicitly re-pointed at the budgets
+  work. Still a **§3 item, not a §2 stage** — §2 stays closed.
 - **v0.47 (2026-09-06):** **f2 complete — the whole Money migration (QIF import) complete**
   (owner-confirmed). No scope change (routine). The sub-plan `implementation-plan-import.md` is
   deleted; its summary is folded into §3's first bullet (the stage-7/9 pattern).
@@ -604,10 +612,20 @@ shipped; everything after it is unbuilt.
 
   FR-IMP-05's generic CSV importer (still a §3 backlog item, below) reuses this whole
   staging/mapping/commit apparatus, changing only the parser.
-- **Reporting & analysis:** category×month matrix (FR-ANA-07); consolidated-balance timeline + trend
-  line (FR-ANA-09); drill-down from cells (FR-ANA-10); spend by category/tag/payee, period
-  comparisons, category trends (FR-ANA-01–04); net worth in base incl. **held-balance revaluation**
-  (FR-ANA-05, §1.2); monthly narrative report (FR-RPT, Q12).
+- **Reporting & analysis — one generic report engine.** Not two hand-built reports: a Report is
+  dimensions on rows/columns/series × measures × scope × filters × a date range × a renderer, and the
+  category×month matrix (FR-ANA-07) and consolidated-balance timeline (FR-ANA-09) ship as **Presets**
+  of it — which overturns FR-ANA-08's prohibition on charts and is why
+  **`docs/reporting.md`** is the authoritative doc (the seventh) and why the decision earned the
+  repo's first ADR (`docs/adr/0001-generic-report-engine.md`). Covers FR-ANA-01–10 and FR-REP-01–14:
+  spend by category/tag/payee, period comparisons, category trends, drill-down from any cell, net
+  worth in base incl. **held-balance revaluation** (FR-ANA-05, §1.2), CSV export, and **Layouts** —
+  the main page becoming a 1×1 Layout defaulting to net worth over time. Sequenced in the sub-plan
+  **`implementation-plan-reporting.md`** (slices a–f: engine+table, charts, Layouts, saving,
+  expansion+nesting, drill-down+CSV), ordered so the main-page net-worth chart lands third. Deliberately
+  **not** a §2 stage; §2 stays closed.
+  The **monthly narrative report** (FR-RPT, Q12) is *not* part of it — it stays unbuilt below and is
+  revisited **with budgets**, since "fact against budget" is the half that makes it worth writing.
 - **Register follow-ons:** column re-sorting with the balance-hide rule (register §2.7) — deferred
   from stage 7a until missed.
 - **Bank statement reconciliation:** the `statements` module (§5.8) — PDF-first extraction, matching
@@ -632,7 +650,9 @@ shipped; everything after it is unbuilt.
   this only automates rate lookup/proposal).
 - **Recurring & subscriptions:** recurring templates generating `pending_review` transactions
   (FR-REC); subscriptions manager + renewal overview (FR-SUB).
-- **Planning:** budgets on the category taxonomy (FR-BUD); forecasting — scheduled + trend (FR-FC).
+- **Planning:** budgets on the category taxonomy (FR-BUD) — and with it the **monthly narrative
+  report** (FR-RPT, Q12: comparison against the previous month and a multi-month average, fact
+  against budget, anomalies, prose); forecasting — scheduled + trend (FR-FC).
 - **Data lifecycle:** generic CSV importer (FR-IMP-05) — reuses the whole staging/mapping/commit
   apparatus `docs/import.md` defines, differing only in the parser; **full** data-management
   operations suite —
