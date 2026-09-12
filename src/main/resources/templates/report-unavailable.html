@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<!-- Shown instead of a Preset's table when the book has no base currency yet (data-model §3.8). -->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel">
+      <p class="muted">
+        Set the book's base currency on the
+        <a th:href="@{/settings}">Settings</a> screen before reports can be computed.
+      </p>
+    </section>
+  </main>
+</html>

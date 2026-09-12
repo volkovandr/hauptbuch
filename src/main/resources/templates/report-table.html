@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!--
+  A Preset's rendered table (plan stage a): the grid renderer only — no charts (stage b), no
+  expansion (stage e), no save (stage d). Every cell is already display-formatted text
+  (ReportTableViewAssembler); blank means no postings, "—" means the aggregate is arithmetically
+  meaningless (reporting.md §7).
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel">
+      <p class="eyebrow" th:text="${report.title()}">Report</p>
+      <p class="muted report__scope" th:text="${report.scopeLine()}">Scope</p>
+      <p class="muted">
+        <span th:text="${#temporals.format(report.resolvedStart(), 'dd.MM.yyyy')}">start</span>
+        &ndash;
+        <span th:text="${#temporals.format(report.resolvedEnd(), 'dd.MM.yyyy')}">end</span>
+      </p>
+
+      <table class="report">
+        <thead>
+          <tr>
+            <th></th>
+            <th th:each="col : ${report.columnLabels()}" th:text="${col}">Column</th>
+            <th th:if="${report.showRowTotals()}">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="row : ${report.rows()}">
+            <td th:text="${row.label()}">Row</td>
+            <td class="num" th:each="cell : ${row.cells()}" th:text="${cell}">0,00</td>
+            <td class="num" th:if="${report.showRowTotals()}" th:text="${row.rowTotal()}">0,00</td>
+          </tr>
+        </tbody>
+        <tfoot th:if="${report.showColumnTotals()}">
+          <tr>
+            <td>Total</td>
+            <td class="num" th:each="total : ${report.columnTotals()}" th:text="${total}">0,00</td>
+            <td class="num" th:if="${report.showRowTotals()}" th:text="${report.grandTotal()}">0,00</td>
+          </tr>
+        </tfoot>
+      </table>
+    </section>
+  </main>
+</html>
