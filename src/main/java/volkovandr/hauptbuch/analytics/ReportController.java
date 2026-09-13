@@ -11,11 +11,11 @@ import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.web.NavItem;
 
 /**
- * The reporting screens (reporting.md §14, plan stage b): the reporting-page shell (the Layout and
- * the saved-Report list ship in stage c/d — for now this lists the Presets) and the four Presets'
- * renderers ({@code /reports/preset/{slug}}, code-defined and non-deletable). A chart Preset can
- * swap to its table and back in place ({@code /reports/preset/{slug}/view}), the same
- * hx-get/hx-swap idiom the receipt image toggle uses.
+ * The four Presets' own renderers (reporting.md §14/§16, plan stage b): {@code
+ * /reports/preset/{slug}}, code-defined and non-deletable. A chart Preset can swap to its table and
+ * back in place ({@code /reports/preset/{slug}/view}), the same hx-get/hx-swap idiom the receipt
+ * image toggle uses. The reporting page itself ({@code /reports}) is {@link
+ * ReportsLayoutController}'s job — its own Layout reaches the same Presets via a Frame's picker.
  */
 @Controller
 class ReportController {
@@ -30,14 +30,6 @@ class ReportController {
   ReportController(ReportEngine reportEngine, SettingsService settingsService) {
     this.reportEngine = reportEngine;
     this.settingsService = settingsService;
-  }
-
-  /** The reporting page: for now, a list of the Presets (the Layout ships in stage c). */
-  @GetMapping(BASE_PATH)
-  String reports(Model model) {
-    model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
-    model.addAttribute("title", "Reports · Hauptbuch");
-    return "reports";
   }
 
   /** One Preset, full page — the chosen renderer, or the table if it has none. */
@@ -72,11 +64,14 @@ class ReportController {
         .baseCurrency()
         .map(
             baseCurrency -> {
-              PresetRendering.populate(def, baseCurrency, asTable, reportEngine, model);
+              PresetRendering.Rendered rendered =
+                  PresetRendering.populate(def, baseCurrency, asTable, reportEngine);
               if (asTable) {
+                model.addAttribute("report", rendered.report());
                 model.addAttribute("hasChart", def.renderer() != Renderer.TABLE);
                 return tableViewName;
               }
+              model.addAttribute("chart", rendered.chart());
               return chartViewName;
             })
         .orElse(NO_BASE_CURRENCY_VIEW);

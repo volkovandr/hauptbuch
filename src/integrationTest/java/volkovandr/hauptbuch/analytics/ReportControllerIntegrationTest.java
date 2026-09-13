@@ -20,12 +20,13 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
- * Integration tier (CLAUDE.md §6): the reporting page and the four Presets ({@link
- * ReportController}) rendered against real Postgres — the "Done when" bar of the reporting
- * sub-plan's slices a/b: every Preset renders correctly against real data, and the chart/table swap
- * works. The renderers' own SVG-well-formedness and the pie's negative-measure refusal are {@link
- * ChartSvgWriterTest}/{@link ChartViewAssemblerTest}'s job (CLAUDE.md §6 — no DB dependency, so the
- * unit tier, not here); neither shipped Preset uses the pie renderer (reporting.md §16).
+ * Integration tier (CLAUDE.md §6): the four Presets' own pages ({@link ReportController}) rendered
+ * against real Postgres — the "Done when" bar of the reporting sub-plan's slices a/b: every Preset
+ * renders correctly against real data, and the chart/table swap works. The reporting page itself is
+ * {@link ReportsLayoutControllerIntegrationTest}'s job. The renderers' own SVG-well-formedness and
+ * the pie's negative-measure refusal are {@link ChartSvgWriterTest}/{@link
+ * ChartViewAssemblerTest}'s job (CLAUDE.md §6 — no DB dependency, so the unit tier, not here);
+ * neither shipped Preset uses the pie renderer (reporting.md §16).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -71,17 +72,6 @@ class ReportControllerIntegrationTest {
         .param("a", to)
         .param("amt", new BigDecimal(amount))
         .update();
-  }
-
-  @Test
-  void reportsPageLinksToEveryPreset() throws Exception {
-    mockMvc
-        .perform(get("/reports"))
-        .andExpect(status().isOk())
-        .andExpect(content().string(containsString("/reports/preset/category-month-matrix")))
-        .andExpect(content().string(containsString("/reports/preset/balance-sheet")))
-        .andExpect(content().string(containsString("/reports/preset/net-worth-over-time")))
-        .andExpect(content().string(containsString("/reports/preset/this-month-vs-last")));
   }
 
   @Test

@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <!--
-  Reporting page (plan stage b): for now, the Presets list. The Layout (rows x columns of Frames)
-  and the list of saved Reports arrive in stage c/d (reporting.md §11, §14).
+  Reporting page (plan stage c part 2): New report (a placeholder until stage d's ad-hoc builder
+  exists), the list of saved Reports (empty until stage d), and the page's own configurable Layout
+  (fragments/layout-config.html, reporting.md §11). The stage-b flat Presets list is superseded by
+  the Layout — its Frames reach the same Presets via their own picker.
 -->
 <html
   lang="en"
@@ -10,13 +12,17 @@
 >
   <main class="content" th:fragment="content">
     <section class="panel">
-      <p class="eyebrow">Presets</p>
+      <p class="eyebrow">Reports</p>
+      <p>
+        <button type="button" class="btn" disabled title="Coming once Reports can be saved">
+          New report
+        </button>
+      </p>
       <ul class="reports-list">
-        <li><a th:href="@{/reports/preset/category-month-matrix}">Category × month matrix</a></li>
-        <li><a th:href="@{/reports/preset/balance-sheet}">Balance sheet</a></li>
-        <li><a th:href="@{/reports/preset/net-worth-over-time}">Net worth over time</a></li>
-        <li><a th:href="@{/reports/preset/this-month-vs-last}">This month vs last</a></li>
+        <li class="muted">No saved reports yet.</li>
       </ul>
     </section>
+
+    <div th:replace="~{fragments/layout-config :: config}"></div>
   </main>
 </html>
