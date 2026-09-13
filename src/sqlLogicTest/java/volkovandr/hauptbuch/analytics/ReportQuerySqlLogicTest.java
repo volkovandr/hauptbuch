@@ -243,6 +243,39 @@ class ReportQuerySqlLogicTest {
   }
 
   @Test
+  void groupsPersonDebtLeavesIntoOnePersonalDebtsBucketPerCurrencyNotTheCosmeticLeafName() {
+    long cashEur = insertAccount("Cash", "asset", EUR, null);
+    long cashChf = insertAccount("Cash CHF", "asset", CHF, null);
+    long alice = insertPerson("Alice");
+    long bob = insertPerson("Bob");
+    long carol = insertPerson("Carol");
+    long aliceEur = insertPersonAccount(alice, "personal.EUR", EUR);
+    long bobEur = insertPersonAccount(bob, "personal.EUR", EUR);
+    long carolChf = insertPersonAccount(carol, "personal.CHF", CHF);
+    postSingleCurrency(cashEur, aliceEur, LocalDate.of(2026, 1, 5), "30.00");
+    postSingleCurrency(cashEur, bobEur, LocalDate.of(2026, 1, 6), "20.00");
+    postSingleCurrency(cashChf, carolChf, LocalDate.of(2026, 1, 7), "15.00");
+
+    List<RawTurnoverCell> cells =
+        repository.accountTreeTurnover(
+            ASSET_LIABILITY,
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            NONE);
+
+    assertThat(cells)
+        .extracting(RawTurnoverCell::dimensionLabel)
+        .doesNotContain("personal.EUR", "personal.CHF", "Alice", "Bob", "Carol")
+        .contains("Personal debts (EUR)", "Personal debts (CHF)");
+    amount(byLabelAndMonth(cells, "Personal debts (EUR)", "2026-01").nativeAmount(), "50.00");
+    amount(byLabelAndMonth(cells, "Personal debts (CHF)", "2026-01").nativeAmount(), "15.00");
+  }
+
+  @Test
   void legSelectionSplitsDebitsAndCreditsIndependentlyOfAccountType() {
     long creditCard = insertAccount("Credit Card", "liability", EUR, null);
     long food = insertAccount("Food", "expense", EUR, null);
@@ -586,6 +619,34 @@ class ReportQuerySqlLogicTest {
   }
 
   @Test
+  void closingBalanceGroupsEveryPersonsDebtLeafIntoOnePersonalDebtsBucketPerCurrency() {
+    long cashEur = insertAccount("Cash", "asset", EUR, null);
+    long opening = insertAccount("Opening Balances", "equity", EUR, null);
+    postSingleCurrency(opening, cashEur, LocalDate.of(2025, 1, 1), "1000.00");
+    long alice = insertPerson("Alice");
+    long bob = insertPerson("Bob");
+    long carol = insertPerson("Carol");
+    long aliceEur = insertPersonAccount(alice, "personal.EUR", EUR);
+    long bobEur = insertPersonAccount(bob, "personal.EUR", EUR);
+    long carolChf = insertPersonAccount(carol, "personal.CHF", CHF);
+    postSingleCurrency(cashEur, aliceEur, LocalDate.of(2026, 1, 5), "30.00");
+    postSingleCurrency(cashEur, bobEur, LocalDate.of(2026, 1, 6), "20.00");
+    long cashChf = insertAccount("Cash CHF", "asset", CHF, null);
+    postSingleCurrency(cashChf, carolChf, LocalDate.of(2026, 1, 7), "15.00");
+
+    List<RawBalanceCell> cells =
+        repository.accountTreeClosingBalance(
+            ASSET_LIABILITY, LocalDate.of(2026, 1, 31), true, false, NONE);
+
+    assertThat(cells)
+        .extracting(RawBalanceCell::dimensionLabel)
+        .doesNotContain("personal.EUR", "personal.CHF", "Alice", "Bob", "Carol")
+        .contains("Personal debts (EUR)", "Personal debts (CHF)");
+    amount(byLabel(cells, "Personal debts (EUR)").nativeBalance(), "50.00");
+    amount(byLabel(cells, "Personal debts (CHF)").nativeBalance(), "15.00");
+  }
+
+  @Test
   void totalClosingBalanceCollapsesEveryInScopeAccountIntoOneRowPerCurrency() {
     long cash = insertAccount("Cash", "asset", EUR, null);
     long card = insertAccount("Credit Card", "liability", EUR, null);
@@ -656,6 +717,22 @@ class ReportQuerySqlLogicTest {
     assertThat(repository.topLevelAccounts(List.of("expense"), true))
         .extracting(TopLevelNode::label)
         .containsExactly("Fuel");
+  }
+
+  @Test
+  void topLevelAccountsGroupsPersonDebtLeavesIntoOnePersonalDebtsCandidatePerCurrency() {
+    insertAccount("Cash", "asset", EUR, null);
+    long alice = insertPerson("Alice");
+    long bob = insertPerson("Bob");
+    long carol = insertPerson("Carol");
+    insertPersonAccount(alice, "personal.EUR", EUR);
+    insertPersonAccount(bob, "personal.EUR", EUR);
+    insertPersonAccount(carol, "personal.CHF", CHF);
+
+    assertThat(repository.topLevelAccounts(ASSET_LIABILITY, true))
+        .extracting(TopLevelNode::label)
+        .doesNotContain("personal.EUR", "personal.CHF", "Alice", "Bob", "Carol")
+        .containsExactlyInAnyOrder("Cash", "Personal debts (EUR)", "Personal debts (CHF)");
   }
 
   @Test
