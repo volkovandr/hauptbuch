@@ -59,7 +59,7 @@ illegal aggregate prints `—`, and `./gradlew check` is green.
 
 ---
 
-## b — Charts
+## b — Charts ✅ complete (owner-confirmed 2026-09-13)
 
 The four renderers, server-rendered SVG, no new dependency (`reporting.md` §10).
 
@@ -154,5 +154,6 @@ transaction, a transfer, and a category-to-category correction; the CSV's shape.
 
 ## Changelog
 
+- **v0.3 (2026-09-13):** Slice b marked complete (owner-confirmed). No scope change (routine).
 - **v0.2 (2026-09-13):** Slice a marked complete (owner-confirmed). No scope change (routine).
 - **v0.1 (2026-09-12):** Initial slicing from the grilling pass that produced `reporting.md` v0.1.
