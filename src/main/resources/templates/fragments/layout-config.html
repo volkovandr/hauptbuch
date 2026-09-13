@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!--
-  The reporting page's own Layout (reporting.md §11, plan stage c part 2): a configurable rows x
-  columns grid of Frames, each a picker plus its live rendered Preset — fragments/main-frame.html's
-  card, generalised to N Frames instead of the main page's one. Resizing the grid (hx-post on change,
-  carrying every current field via hx-include) only re-renders this fragment in place; nothing is
-  persisted until "Save layout" posts the same form's current values and writes the whole grid at
-  once (the settle-up account picker's hx-include idiom, reused here for a form that keeps growing).
+  The reporting page's own Layout (reporting.md §11, plan stage c part 2; a Frame's saved-Report
+  reference is stage d's follow-up): a configurable rows x columns grid of Frames, each a picker
+  plus its live rendered Preset or saved Report — fragments/main-frame.html's card, generalised to N
+  Frames instead of the main page's one. Resizing the grid (hx-post on change, carrying every
+  current field via hx-include) only re-renders this fragment in place; nothing is persisted until
+  "Save layout" posts the same form's current values and writes the whole grid at once (the
+  settle-up account picker's hx-include idiom, reused here for a form that keeps growing).
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
   <body>
@@ -74,20 +75,30 @@
               <option th:if="${!frame.configured()}" value="" selected disabled hidden>
                 Choose a report…
               </option>
-              <option
-                th:each="opt : ${presetOptions}"
-                th:value="${opt.slug()}"
-                th:text="${opt.title()}"
-                th:selected="${opt.slug() == frame.selectedSlug()}"
-              >
-                Preset
-              </option>
+              <optgroup label="Presets">
+                <option
+                  th:each="opt : ${presetOptions}"
+                  th:value="${'preset:' + opt.slug()}"
+                  th:text="${opt.title()}"
+                  th:selected="${('preset:' + opt.slug()) == frame.selectedValue()}"
+                >
+                  Preset
+                </option>
+              </optgroup>
+              <optgroup label="My reports" th:unless="${#lists.isEmpty(savedReportOptions)}">
+                <option
+                  th:each="saved : ${savedReportOptions}"
+                  th:value="${'report:' + saved.reportId()}"
+                  th:text="${saved.name()}"
+                  th:selected="${('report:' + saved.reportId()) == frame.selectedValue()}"
+                >
+                  Report
+                </option>
+              </optgroup>
             </select>
 
             <p th:if="${frame.configured()}" class="actions">
-              <a th:href="@{/reports/preset/{slug}(slug=${frame.selectedSlug()})}"
-                >Open full report</a
-              >
+              <a th:href="@{${frame.openFullReportUrl()}}">Open full report</a>
             </p>
             <p th:unless="${frame.configured()}" class="muted">No report configured.</p>
             <div th:if="${frame.configured() and frame.baseCurrencyUnset()}">

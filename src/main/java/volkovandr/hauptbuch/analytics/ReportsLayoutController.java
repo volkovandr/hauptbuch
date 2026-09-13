@@ -16,12 +16,13 @@ import volkovandr.hauptbuch.web.NavItem;
 
 /**
  * The reporting page ({@code /reports}) and its own configurable Layout (reporting.md §11, plan
- * stage c part 2): a rows x columns grid of Frames, each a picker plus its live rendered Preset —
- * the same mechanism {@link MainFrameController} uses for the main page's 1x1 case, generalised to
- * N Frames. Resizing the grid only re-renders the {@code fragments/layout-config} fragment in place
- * (nothing is persisted); {@code Save layout} posts the same form's current field values and
- * persists the whole grid at once (reporting.md §11's "no cap, no drag"). The saved-Report list
- * (plan stage d) lives here too, since it shares this page; each Report's own actions are {@link
+ * stage c part 2; a Frame's saved-Report reference is stage d's follow-up): a rows x columns grid
+ * of Frames, each a picker plus its live rendered Preset or saved Report — the same mechanism
+ * {@link MainFrameController} uses for the main page's 1x1 case, generalised to N Frames. Resizing
+ * the grid only re-renders the {@code fragments/layout-config} fragment in place (nothing is
+ * persisted); {@code Save layout} posts the same form's current field values and persists the whole
+ * grid at once (reporting.md §11's "no cap, no drag"). The saved-Report list (plan stage d) lives
+ * here too, since it shares this page; each Report's own actions are {@link
  * SavedReportController}'s job.
  */
 @Controller
@@ -78,7 +79,7 @@ class ReportsLayoutController {
     return LAYOUT_FRAGMENT;
   }
 
-  /** {@code Save layout}: persists the grid's current shape and every Frame's Preset at once. */
+  /** {@code Save layout}: persists the grid's current shape and every Frame's selection at once. */
   @PostMapping(LAYOUT_PATH)
   String save(
       @RequestParam int rowCount,
@@ -96,40 +97,42 @@ class ReportsLayoutController {
     model.addAttribute("rowCount", rowCount);
     model.addAttribute("columnCount", columnCount);
     model.addAttribute("presetOptions", PresetCatalog.all());
+    model.addAttribute("savedReportOptions", reportService.list());
 
     Optional<String> baseCurrency = settingsService.baseCurrency();
     List<FrameView> views = new ArrayList<>();
     for (int row = 0; row < rowCount; row++) {
       for (int col = 0; col < columnCount; col++) {
-        views.add(frameView(row, col, slugAt(frames, row, col), baseCurrency));
+        views.add(frameView(row, col, selectionAt(frames, row, col), baseCurrency));
       }
     }
     model.addAttribute("frames", views);
   }
 
-  private FrameView frameView(int row, int col, String slug, Optional<String> baseCurrency) {
+  private FrameView frameView(
+      int row, int col, FrameSelection selection, Optional<String> baseCurrency) {
     String fieldName = FRAME_PARAM_PREFIX + row + "-" + col;
     PresetRendering.FrameContent content =
-        PresetRendering.renderFrame(slug, baseCurrency, reportEngine);
+        PresetRendering.renderFrame(selection, baseCurrency, reportEngine, reportService);
+    String openFullReportUrl = content.configured() ? selection.fullReportUrl() : null;
     return new FrameView(
-        row,
-        col,
         fieldName,
-        slug,
+        selection.encoded(),
         content.configured(),
         content.baseCurrencyUnset(),
         content.report(),
-        content.chart());
+        content.chart(),
+        openFullReportUrl);
   }
 
-  private static String slugAt(List<LayoutFrameRow> frames, int row, int col) {
+  private static FrameSelection selectionAt(List<LayoutFrameRow> frames, int row, int col) {
     // findFirst() throws NPE on a null stream element (it wraps via Optional.of, not ofNullable) —
-    // find the LayoutFrameRow itself (never null) first, then extract its (possibly null) slug.
+    // find the LayoutFrameRow itself (never null) first, then extract its (possibly null) fields.
     return frames.stream()
         .filter(f -> f.rowPosition() == row && f.colPosition() == col)
         .findFirst()
-        .map(LayoutFrameRow::presetSlug)
-        .orElse(null);
+        .map(f -> new FrameSelection(f.presetSlug(), f.reportId()))
+        .orElse(FrameSelection.EMPTY);
   }
 
   private static List<LayoutFrameRow> parseFrames(
@@ -137,8 +140,9 @@ class ReportsLayoutController {
     List<LayoutFrameRow> frames = new ArrayList<>();
     for (int row = 0; row < rowCount; row++) {
       for (int col = 0; col < columnCount; col++) {
-        String raw = allParams.get(FRAME_PARAM_PREFIX + row + "-" + col);
-        frames.add(new LayoutFrameRow(row, col, raw == null || raw.isBlank() ? null : raw));
+        FrameSelection selection =
+            FrameSelection.decode(allParams.get(FRAME_PARAM_PREFIX + row + "-" + col));
+        frames.add(new LayoutFrameRow(row, col, selection.presetSlug(), selection.reportId()));
       }
     }
     return frames;

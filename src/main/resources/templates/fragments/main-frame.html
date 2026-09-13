@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <!--
-  The main page's own 1x1 Layout (reporting.md §11, plan stage c): one Frame, defaulting to the net
-  worth over time Preset. Lazy-loaded by landing.html via hx-get on load, the same idiom as the
-  tracking-stats line — only mounted once the base currency is set. The picker re-renders this whole
-  fragment in place on change (the settle-up account picker's hx-post/hx-trigger="change" idiom), so
-  "Save layout" (reporting.md §11) is simply picking a value: there is only ever one Frame here.
+  The main page's own 1x1 Layout (reporting.md §11, plan stage c; a Frame's saved-Report reference
+  is stage d's follow-up): one Frame, defaulting to the net worth over time Preset. Lazy-loaded by
+  landing.html via hx-get on load, the same idiom as the tracking-stats line — only mounted once the
+  base currency is set. The picker re-renders this whole fragment in place on change (the settle-up
+  account picker's hx-post/hx-trigger="change" idiom), so "Save layout" (reporting.md §11) is simply
+  picking a value: there is only ever one Frame here.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
   <body>
@@ -13,30 +14,42 @@
         <label class="field__label" for="main-frame-preset">Overview</label>
         <select
           id="main-frame-preset"
-          name="presetSlug"
+          name="selection"
           class="input"
           th:attr="hx-post=@{/overview/main-frame}"
           hx-trigger="change"
           hx-target="#main-frame"
           hx-swap="outerHTML"
         >
-          <!-- Shown, and selected, only while the Frame names no known Preset (cleared, or a stale
-               reference) — otherwise the browser would default to visually selecting the first real
-               option below, wrongly implying it is the Frame's current choice. -->
+          <!-- Shown, and selected, only while the Frame names no known Preset/Report (cleared, or a
+               stale reference) — otherwise the browser would default to visually selecting the
+               first real option below, wrongly implying it is the Frame's current choice. -->
           <option th:if="${!configured}" value="" selected disabled hidden>Choose a report…</option>
-          <option
-            th:each="opt : ${presetOptions}"
-            th:value="${opt.slug()}"
-            th:text="${opt.title()}"
-            th:selected="${opt.slug() == selectedSlug}"
-          >
-            Preset
-          </option>
+          <optgroup label="Presets">
+            <option
+              th:each="opt : ${presetOptions}"
+              th:value="${'preset:' + opt.slug()}"
+              th:text="${opt.title()}"
+              th:selected="${('preset:' + opt.slug()) == selectedValue}"
+            >
+              Preset
+            </option>
+          </optgroup>
+          <optgroup label="My reports" th:unless="${#lists.isEmpty(savedReportOptions)}">
+            <option
+              th:each="saved : ${savedReportOptions}"
+              th:value="${'report:' + saved.reportId()}"
+              th:text="${saved.name()}"
+              th:selected="${('report:' + saved.reportId()) == selectedValue}"
+            >
+              Report
+            </option>
+          </optgroup>
         </select>
       </div>
 
       <p th:if="${configured}" class="actions">
-        <a th:href="@{/reports/preset/{slug}(slug=${selectedSlug})}">Open full report</a>
+        <a th:href="@{${openFullReportUrl}}">Open full report</a>
       </p>
       <p th:unless="${configured}" class="muted">No report configured.</p>
       <div th:if="${configured and baseCurrencyUnset}">

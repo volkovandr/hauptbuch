@@ -91,33 +91,47 @@ final class PresetRendering {
   }
 
   /**
-   * A Frame's whole rendered state (reporting.md §11), from a raw Preset slug: {@code configured}
-   * false when the slug is {@code null} or names no known Preset (an emptied or stale Frame — §16),
-   * {@code baseCurrencyUnset} true when it names a real Preset but the book has no base currency
-   * yet. {@code report}/{@code chart} are set only when both are true, matching {@link #populate}.
+   * A Frame's whole rendered state (reporting.md §11): {@code configured} false when {@code
+   * selection} is {@link FrameSelection#EMPTY} or names no known Preset/Report (an emptied or stale
+   * Frame — §16), {@code baseCurrencyUnset} true when it names a real one but the book has no base
+   * currency yet. {@code report}/{@code chart} are set only when both are true, matching {@link
+   * #populate}.
    */
   record FrameContent(
       boolean configured, boolean baseCurrencyUnset, ReportTableView report, ChartView chart) {}
 
   /**
-   * Resolves {@code slug} to a Preset and renders it — the shared "what does this Frame show" logic
-   * behind both {@link MainFrameController} (one Frame) and {@link ReportsLayoutController} (N
-   * Frames), so an unconfigured Frame or a missing base currency is handled identically everywhere.
+   * Resolves {@code selection} to a Preset or a saved Report and renders it — the shared "what does
+   * this Frame show" logic behind both {@link MainFrameController} (one Frame) and {@link
+   * ReportsLayoutController} (N Frames), so an unconfigured Frame or a missing base currency is
+   * handled identically everywhere.
    */
   static FrameContent renderFrame(
-      String slug, Optional<String> baseCurrency, ReportEngine reportEngine) {
-    Optional<PresetDef> def = slug == null ? Optional.empty() : PresetCatalog.find(slug);
-    if (def.isEmpty()) {
+      FrameSelection selection,
+      Optional<String> baseCurrency,
+      ReportEngine reportEngine,
+      ReportService reportService) {
+    Optional<Presentation> presentation = resolve(selection, reportService);
+    if (presentation.isEmpty()) {
       return new FrameContent(false, false, null, null);
     }
     if (baseCurrency.isEmpty()) {
       return new FrameContent(true, true, null, null);
     }
-    PresetDef preset = def.get();
-    Presentation presentation = Presentation.of(preset);
+    Presentation shown = presentation.get();
     Rendered rendered =
-        populate(
-            presentation, baseCurrency.get(), preset.renderer() == Renderer.TABLE, reportEngine);
+        populate(shown, baseCurrency.get(), shown.renderer() == Renderer.TABLE, reportEngine);
     return new FrameContent(true, false, rendered.report(), rendered.chart());
+  }
+
+  private static Optional<Presentation> resolve(
+      FrameSelection selection, ReportService reportService) {
+    if (selection.reportId() != null) {
+      return reportService.find(selection.reportId()).map(Presentation::of);
+    }
+    if (selection.presetSlug() != null) {
+      return PresetCatalog.find(selection.presetSlug()).map(Presentation::of);
+    }
+    return Optional.empty();
   }
 }
