@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <!--
-  Reporting page (plan stage c part 2): New report (a placeholder until stage d's ad-hoc builder
-  exists), the list of saved Reports (empty until stage d), and the page's own configurable Layout
-  (fragments/layout-config.html, reporting.md §11). The stage-b flat Presets list is superseded by
-  the Layout — its Frames reach the same Presets via their own picker.
+  Reporting page (plan stage c part 2; the saved-Report list is stage d): the list of saved Reports,
+  and the page's own configurable Layout (fragments/layout-config.html, reporting.md §11). The
+  stage-b flat Presets list is superseded by the Layout — its Frames reach the same Presets via
+  their own picker. A Report is made by opening a Preset and using its "Copy to my reports" action
+  (fragments/report-copy.html) — there is no free-form spec builder yet.
 -->
 <html
   lang="en"
@@ -13,13 +14,13 @@
   <main class="content" th:fragment="content">
     <section class="panel">
       <p class="eyebrow">Reports</p>
-      <p>
-        <button type="button" class="btn" disabled title="Coming once Reports can be saved">
-          New report
-        </button>
+      <p class="muted" th:if="${#lists.isEmpty(savedReports)}">
+        No saved reports yet — open a Preset below and use "Copy to my reports" to start one.
       </p>
-      <ul class="reports-list">
-        <li class="muted">No saved reports yet.</li>
+      <ul class="reports-list" th:unless="${#lists.isEmpty(savedReports)}">
+        <li th:each="saved : ${savedReports}">
+          <a th:href="@{/reports/{id}(id=${saved.reportId()})}" th:text="${saved.name()}">My report</a>
+        </li>
       </ul>
     </section>
 

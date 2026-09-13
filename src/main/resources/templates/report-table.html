@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <!--
-  A Preset's rendered table (plan stage b): the grid renderer — no expansion (stage e), no save
-  (stage d). Every cell is already display-formatted text (ReportTableViewAssembler); blank means
-  no postings, "—" means the aggregate is arithmetically meaningless (reporting.md §7). A chart
-  Preset offers a toggle back to its own renderer (§10's chart/table swap), the same hx-get/hx-swap
-  idiom the receipt image toggle uses.
+  A Report's rendered table (plan stage b; the saved-Report actions are stage d): the grid renderer
+  — no expansion (stage e). Every cell is already display-formatted text (ReportTableViewAssembler);
+  blank means no postings, "—" means the aggregate is arithmetically meaningless (reporting.md §7).
+  A chart Report offers a toggle back to its own renderer (§10's chart/table swap), the same
+  hx-get/hx-swap idiom the receipt image toggle uses. Shared by a Preset's own page (ReportController,
+  {@code slug} set, offering "Copy to my reports") and a saved Report's own page
+  (SavedReportController, {@code savedReport} set, offering rename/duplicate/delete).
 -->
 <html
   lang="en"
@@ -26,12 +28,16 @@
         th:if="${hasChart}"
         hx-target="#report-frame"
         hx-swap="outerHTML"
-        th:attr="hx-get=@{/reports/preset/{slug}/view(slug=${slug}, view='chart')}"
+        th:attr="hx-get=@{${viewBasePath}(view='chart')}"
       >
         Show chart
       </button>
 
       <table th:replace="~{fragments/report-table-body :: body}"></table>
     </section>
+
+    <div th:replace="~{fragments/report-manage :: manage}"></div>
+
+    <div th:if="${slug != null}" th:replace="~{fragments/report-copy :: copy}"></div>
   </main>
 </html>
