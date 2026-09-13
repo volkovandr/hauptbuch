@@ -200,6 +200,9 @@ Full detail in `docs/data-model.md`. The traps:
 - **Migrations:** Flyway, plain versioned `.sql`, forward-only. A migration is "tested" when it
   applies cleanly on a fresh container and the resulting schema/data is asserted.
 - **Row mapping:** Java `record`s, mapped via `JdbcClient`. No entity graphs.
+- **Commit messages never include a Claude session link/URL.** `Co-Authored-By` attribution lines
+  are fine when the session's system instructions call for them; a `claude.ai/code/session_...` link
+  in the commit body/footer is not — it doesn't belong in permanent git history.
 - **Formatting:** German display/parse (`1.234,56`); base currency rendered bare, non-base carries
   symbol/ISO. Lives in the shared UI formatting utility.
 - **UI copy is English-only.** German number formatting (above) is a display convention, not a
