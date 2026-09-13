@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<!--
+  Shown wherever a report cannot be computed because the book has no base currency yet
+  (data-model §3.8). Shared by report-unavailable.html (a Preset's own page) and
+  fragments/main-frame.html (a Preset in the main page's Frame) so the two show the same wording.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <p class="muted" th:fragment="prompt">
+      Set the book's base currency on the <a th:href="@{/settings}">Settings</a> screen before
+      reports can be computed.
+    </p>
+  </body>
+</html>

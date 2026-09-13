@@ -72,45 +72,19 @@ class ReportController {
         .baseCurrency()
         .map(
             baseCurrency -> {
-              ReportGrid grid = reportEngine.render(def.spec());
+              PresetRendering.populate(def, baseCurrency, asTable, reportEngine, model);
               if (asTable) {
-                model.addAttribute(
-                    "report",
-                    ReportTableViewAssembler.assemble(def.title(), def.spec(), grid, baseCurrency));
                 model.addAttribute("hasChart", def.renderer() != Renderer.TABLE);
                 return tableViewName;
               }
-              model.addAttribute(
-                  "chart",
-                  ChartViewAssembler.assemble(
-                      def.title(),
-                      def.spec(),
-                      grid,
-                      baseCurrency,
-                      def.renderer(),
-                      def.trendLine()));
               return chartViewName;
             })
         .orElse(NO_BASE_CURRENCY_VIEW);
   }
 
   private static PresetDef presetFor(String slug) {
-    return switch (slug) {
-      case Presets.CATEGORY_MONTH_MATRIX_SLUG ->
-          new PresetDef(
-              Presets.categoryMonthMatrix(), "Category × month matrix", Renderer.TABLE, false);
-      case Presets.BALANCE_SHEET_SLUG ->
-          new PresetDef(Presets.balanceSheet(), "Balance sheet", Renderer.TABLE, false);
-      case Presets.NET_WORTH_OVER_TIME_SLUG ->
-          new PresetDef(Presets.netWorthOverTime(), "Net worth over time", Renderer.LINE, true);
-      case Presets.THIS_MONTH_VS_LAST_SLUG ->
-          new PresetDef(Presets.thisMonthVsLast(), "This month vs last", Renderer.BAR, false);
-      default -> throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No such preset: " + slug);
-    };
+    return PresetCatalog.find(slug)
+        .orElseThrow(
+            () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No such preset: " + slug));
   }
-
-  /**
-   * A Preset's spec plus the presentation choices the controller — not the spec — carries (§14).
-   */
-  private record PresetDef(ReportSpec spec, String title, Renderer renderer, boolean trendLine) {}
 }

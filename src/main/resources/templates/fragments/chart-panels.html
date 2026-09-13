@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<!--
+  A chart's rendered panels (reporting.md §10): the {@code chart} model attribute
+  (ChartViewAssembler) drawn as small multiples, or the pie's negative-measure refusal (§7.4).
+  Shared by report-chart.html (a Preset's own page) and fragments/main-frame.html (a Preset in the
+  main page's Frame) so the two cannot drift on how a chart renders.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <th:block th:fragment="panels">
+      <p
+        th:if="${chart.refusalMessage() != null}"
+        class="chart-refusal"
+        th:text="${chart.refusalMessage()}"
+      >
+        Refused
+      </p>
+
+      <div th:unless="${chart.refusalMessage() != null}" class="chart-panels">
+        <figure class="chart-panel" th:each="panel : ${chart.panels()}">
+          <figcaption th:if="${panel.label() != ''}" th:text="${panel.label()}">Panel</figcaption>
+          <div th:utext="${panel.svg()}"></div>
+        </figure>
+      </div>
+    </th:block>
+  </body>
+</html>

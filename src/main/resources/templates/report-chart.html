@@ -30,16 +30,7 @@
         Show table
       </button>
 
-      <p th:if="${chart.refusalMessage() != null}" class="chart-refusal" th:text="${chart.refusalMessage()}">
-        Refused
-      </p>
-
-      <div th:unless="${chart.refusalMessage() != null}" class="chart-panels">
-        <figure class="chart-panel" th:each="panel : ${chart.panels()}">
-          <figcaption th:if="${panel.label() != ''}" th:text="${panel.label()}">Panel</figcaption>
-          <div th:utext="${panel.svg()}"></div>
-        </figure>
-      </div>
+      <div th:replace="~{fragments/chart-panels :: panels}"></div>
     </section>
   </main>
 </html>

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<!--
+  A Report's rendered table body (reporting.md §10): the {@code report} model attribute
+  (ReportTableViewAssembler) drawn as a grid, with its row/column totals when shown. Shared by
+  report-table.html (a Preset's own page) and fragments/main-frame.html (a Preset in the main page's
+  Frame) so the two cannot drift on whether totals appear.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <table class="report" th:fragment="body">
+      <thead>
+        <tr>
+          <th></th>
+          <th th:each="col : ${report.columnLabels()}" th:text="${col}">Column</th>
+          <th th:if="${report.showRowTotals()}">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr th:each="row : ${report.rows()}">
+          <td th:text="${row.label()}">Row</td>
+          <td class="num" th:each="cell : ${row.cells()}" th:text="${cell}">0,00</td>
+          <td class="num" th:if="${report.showRowTotals()}" th:text="${row.rowTotal()}">0,00</td>
+        </tr>
+      </tbody>
+      <tfoot th:if="${report.showColumnTotals()}">
+        <tr>
+          <td>Total</td>
+          <td class="num" th:each="total : ${report.columnTotals()}" th:text="${total}">0,00</td>
+          <td class="num" th:if="${report.showRowTotals()}" th:text="${report.grandTotal()}">0,00</td>
+        </tr>
+      </tfoot>
+    </table>
+  </body>
+</html>

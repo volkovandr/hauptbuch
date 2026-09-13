@@ -31,6 +31,18 @@
     </div>
 
     <!--
+      Main-page Frame (reporting.md §11, plan stage c): the main page's own 1x1 Layout, defaulting to
+      the net worth over time Preset — lazy-loaded so a full-page open pays nothing for it, the same
+      idiom the tracking-stats line above uses. Only mounted once the base currency is set; the
+      Balances panel below answers "what do I have", this answers "how has it changed".
+    -->
+    <div
+      th:if="${baseCurrencySet}"
+      th:attr="hx-get=@{/overview/main-frame}"
+      hx-trigger="load"
+    ></div>
+
+    <!--
       Balances panel (CONTEXT.md "Balances panel", issue landing-page/01): the pinned asset/liability
       accounts and their balances, with a base-currency Total when two or more are pinned. The
       `balancesPanel` attribute is present only when the panel should render (base currency set, at
