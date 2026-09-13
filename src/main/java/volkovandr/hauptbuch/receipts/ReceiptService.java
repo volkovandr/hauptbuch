@@ -186,10 +186,13 @@ public class ReceiptService {
         .collect(Collectors.toSet());
   }
 
-  /** The mobile grid: all live receipts captured within the last {@link #MOBILE_WINDOW_DAYS}. */
+  /**
+   * The mobile grid: live working-queue receipts (issue tracker #27 — mobile is not a general
+   * receipt browser) captured within the last {@link #MOBILE_WINDOW_DAYS}.
+   */
   public List<Receipt> forMobile() {
     OffsetDateTime since = OffsetDateTime.now(ZoneOffset.UTC).minusDays(MOBILE_WINDOW_DAYS);
-    return receiptRepository.findForMobile(since);
+    return receiptRepository.findForMobile(ReceiptState.WORK_QUEUE, since);
   }
 
   /** The original scan's bytes, for full-scale display; empty if the receipt is gone. */

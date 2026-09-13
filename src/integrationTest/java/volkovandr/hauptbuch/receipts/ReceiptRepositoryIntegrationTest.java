@@ -236,17 +236,20 @@ class ReceiptRepositoryIntegrationTest {
   }
 
   @Test
-  void mobileListIsCapturedDescendingWithinTheWindowAndIncludesCommitted() {
-    long committed = capturedAt("2026-07-20T10:00:00Z", "committed");
+  void mobileListIsCapturedDescendingWithinTheWindowAndStateFilter() {
+    long queued = capturedAt("2026-07-20T10:00:00Z", "processed");
     long fresh = capturedAt("2026-07-25T10:00:00Z", "new");
     long ancient = capturedAt("2026-01-01T10:00:00Z", "new");
+    long committed = capturedAt("2026-07-22T10:00:00Z", "committed");
 
     OffsetDateTime since = OffsetDateTime.parse("2026-07-01T00:00:00Z");
     List<Long> ids =
-        receiptRepository.findForMobile(since).stream().map(Receipt::receiptId).toList();
+        receiptRepository.findForMobile(ReceiptState.WORK_QUEUE, since).stream()
+            .map(Receipt::receiptId)
+            .toList();
 
-    // Newest first; committed included; the out-of-window one excluded.
-    assertThat(ids).containsSubsequence(fresh, committed).doesNotContain(ancient);
+    // Newest first; the out-of-window and the committed (non-queue) ones excluded.
+    assertThat(ids).containsSubsequence(fresh, queued).doesNotContain(ancient, committed);
   }
 
   @Test

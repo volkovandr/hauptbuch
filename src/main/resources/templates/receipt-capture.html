@@ -3,8 +3,9 @@
   Mobile capture surface (plan stage 9b, receipt doc §4). A deliberately thin standalone page — NOT
   the desktop shell: the phone is a capture device, not a finance console. Camera-first shoot (a
   plain file input with capture="environment"), a thumbnail grid of the last 90 days of the book's
-  own receipts (newest first, a state dot, no financial figures), tap-through to the full-scale
-  original, and instant-delete on `new` tiles only. No bespoke JS (CLAUDE.md §1.6).
+  own working queue (issue tracker #27 — committed receipts don't show here; newest first, a state
+  dot, no financial figures), tap-through to the full-scale original, and instant-delete on `new`
+  tiles only. No bespoke JS (CLAUDE.md §1.6).
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
   <head>
@@ -75,13 +76,13 @@
               loading="lazy"
             />
             <span class="tile__meta">
-              <!-- A committed tile whose transaction was voided from the register (issue tracker
-                   #08) gets the same grey "Void" treatment as the PC badge — the batched
-                   voidedReceiptIds check, never a per-row query. -->
+              <!-- The grid is scoped to the working queue (issue tracker #27) — committed (and so
+                   voided) receipts never reach this page, so the dot only ever needs a plain
+                   per-state class here. -->
               <span
                 class="state-dot"
-                th:classappend="${voidedReceiptIds.contains(r.receiptId()) ? 'state-dot--void' : 'state-dot--' + r.state()}"
-                th:title="${voidedReceiptIds.contains(r.receiptId()) ? 'Void' : r.state()}"
+                th:classappend="${'state-dot--' + r.state()}"
+                th:title="${r.state()}"
                 aria-hidden="true"
               ></span>
               <time

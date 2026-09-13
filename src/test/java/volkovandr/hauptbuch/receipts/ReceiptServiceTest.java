@@ -277,15 +277,24 @@ class ReceiptServiceTest {
 
   @Test
   void mobileListQueriesThe90DayWindow() {
-    when(receiptRepository.findForMobile(any())).thenReturn(List.of());
+    when(receiptRepository.findForMobile(any(), any())).thenReturn(List.of());
 
     service.forMobile();
 
     ArgumentCaptor<OffsetDateTime> since = ArgumentCaptor.forClass(OffsetDateTime.class);
-    verify(receiptRepository).findForMobile(since.capture());
+    verify(receiptRepository).findForMobile(any(), since.capture());
     // ~90 days back from now (allow generous slack for test execution time).
     OffsetDateTime expected = OffsetDateTime.now().minusDays(90);
     assertThat(since.getValue()).isBetween(expected.minusMinutes(5), expected.plusMinutes(5));
+  }
+
+  @Test
+  void mobileListQueriesTheWorkingQueueOnly() {
+    when(receiptRepository.findForMobile(any(), any())).thenReturn(List.of());
+
+    service.forMobile();
+
+    verify(receiptRepository).findForMobile(eq(ReceiptState.WORK_QUEUE), any());
   }
 
   @Test

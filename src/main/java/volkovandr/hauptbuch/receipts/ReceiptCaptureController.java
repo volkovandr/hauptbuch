@@ -1,7 +1,6 @@
 package volkovandr.hauptbuch.receipts;
 
 import jakarta.servlet.http.HttpServletResponse;
-import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -14,7 +13,8 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * The mobile capture surface (§4, extended by §9b): a single standalone page — not the desktop
  * shell — where the phone shoots a photo (camera-first, plain file input), sees a thumbnail grid of
- * all its own receipts (last 90 days, newest first), taps through to the full-scale original, and
+ * its own working queue (last 90 days, newest first — issue tracker #27 narrows this from every
+ * receipt to the not-yet-committed ones), taps through to the full-scale original, and
  * instant-deletes a bad {@code new} shot.
  *
  * <p>Lives in {@code receipts}: the feature module owns its screens (CLAUDE.md §3). The phone is a
@@ -33,12 +33,10 @@ class ReceiptCaptureController {
     this.receiptService = receiptService;
   }
 
-  /** The capture page: the shoot button and the thumbnail grid of recent receipts. */
+  /** The capture page: the shoot button and the thumbnail grid of the working queue. */
   @GetMapping(CAPTURE_PATH)
   String capture(Model model) {
-    List<Receipt> receipts = receiptService.forMobile();
-    model.addAttribute("receipts", receipts);
-    model.addAttribute("voidedReceiptIds", receiptService.voidedReceiptIds(receipts));
+    model.addAttribute("receipts", receiptService.forMobile());
     model.addAttribute("title", "Capture · Hauptbuch");
     return CAPTURE_VIEW;
   }
@@ -55,9 +53,7 @@ class ReceiptCaptureController {
     } catch (ReceiptFormatException e) {
       response.setStatus(HttpStatus.BAD_REQUEST.value());
       model.addAttribute("error", e.getMessage());
-      List<Receipt> receipts = receiptService.forMobile();
-      model.addAttribute("receipts", receipts);
-      model.addAttribute("voidedReceiptIds", receiptService.voidedReceiptIds(receipts));
+      model.addAttribute("receipts", receiptService.forMobile());
       model.addAttribute("title", "Capture · Hauptbuch");
       return CAPTURE_VIEW;
     }
