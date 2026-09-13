@@ -67,6 +67,24 @@ public class ReportQueryRepository {
       """;
 
   /**
+   * A per-person debt leaf (data-model §7) is its own root in {@link #ACCOUNT_ANCESTOR_CTE} —
+   * {@code parent_id is null} like a real top-level account — so without this, the {@code
+   * CATEGORY}/{@code ACCOUNT} dimension would list every person's leaf individually under its
+   * cosmetic, non-owner name ({@code personal.<CUR>}, data-model §7). Collapse every leaf sharing a
+   * currency into one {@code "Personal debts (<CUR>)"} bucket instead; per-person expansion is
+   * deferred (reporting.md Q-REP-1) to the {@code PERSON} dimension, which already labels correctly
+   * via {@link #personCandidates}.
+   */
+  private static final String ACCOUNT_DIMENSION_KEY =
+      "case when a.person_leaf then 'personal:' || a.currency_code else anc.top_id::text end";
+
+  private static final String ACCOUNT_DIMENSION_LABEL =
+      "case when a.person_leaf then 'Personal debts (' || a.currency_code || ')' else top.name end";
+
+  private static final String ACCOUNT_DIMENSION_TYPE =
+      "case when a.person_leaf then a.type else top.type end";
+
+  /**
    * Every tag's top-level ancestor, mirroring {@link #ACCOUNT_ANCESTOR_CTE} for the tag tree
    * (data-model §10.3).
    */
@@ -162,10 +180,14 @@ public class ReportQueryRepository {
     return jdbcClient
         .sql(
             ACCOUNT_ANCESTOR_CTE
+                + "select "
+                + ACCOUNT_DIMENSION_KEY
+                + " as dimension_key,\n       "
+                + ACCOUNT_DIMENSION_LABEL
+                + " as dimension_label,\n       "
+                + ACCOUNT_DIMENSION_TYPE
+                + " as dimension_type,\n"
                 + """
-                select anc.top_id::text as dimension_key,
-                       top.name as dimension_label,
-                       top.type as dimension_type,
                        to_char(date_trunc('month', t.date), 'YYYY-MM') as month_key,
                        a.currency_code as currency_code,
                        """
@@ -185,7 +207,7 @@ public class ReportQueryRepository {
                 + "\n"
                 + extra.sql()
                 + """
-                group by anc.top_id, top.name, top.type, month_key, a.currency_code
+                group by dimension_key, dimension_label, dimension_type, month_key, a.currency_code
                 """)
         .param(TYPES, types)
         .param(START_DATE, startDate)
@@ -214,10 +236,14 @@ public class ReportQueryRepository {
     return jdbcClient
         .sql(
             ACCOUNT_ANCESTOR_CTE
+                + "select "
+                + ACCOUNT_DIMENSION_KEY
+                + " as dimension_key,\n       "
+                + ACCOUNT_DIMENSION_LABEL
+                + " as dimension_label,\n       "
+                + ACCOUNT_DIMENSION_TYPE
+                + " as dimension_type,\n"
                 + """
-                select anc.top_id::text as dimension_key,
-                       top.name as dimension_label,
-                       top.type as dimension_type,
                        a.currency_code as currency_code,
                        sum(p.amount) as native_balance
                 from posting p
@@ -234,7 +260,7 @@ public class ReportQueryRepository {
                 """
                 + extra.sql()
                 + """
-                group by anc.top_id, top.name, top.type, a.currency_code
+                group by dimension_key, dimension_label, dimension_type, a.currency_code
                 """)
         .param(TYPES, types)
         .param(AS_OF, asOf)
@@ -259,9 +285,19 @@ public class ReportQueryRepository {
             where type in (:types)
               and parent_id is null
               and currency_leaf = false
+              and person_leaf = false
               and deleted_at is null
               and (:includeClosedAccounts or closed_at is null)
-            order by name
+            union all
+            select distinct 'personal:' || currency_code as key,
+                   'Personal debts (' || currency_code || ')' as label,
+                   type
+            from account
+            where type in (:types)
+              and person_leaf = true
+              and deleted_at is null
+              and (:includeClosedAccounts or closed_at is null)
+            order by label
             """)
         .param(TYPES, types)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
