@@ -67,6 +67,43 @@ class ReportGridBuilderTest {
         1);
   }
 
+  private static RawTurnoverCell turnoverWithCounts(
+      String key,
+      String label,
+      String type,
+      String month,
+      String currency,
+      String nativeAmount,
+      long postingCount,
+      long transactionCount) {
+    return new RawTurnoverCell(
+        key,
+        label,
+        type,
+        month,
+        currency,
+        new BigDecimal(nativeAmount),
+        new BigDecimal(nativeAmount),
+        0,
+        postingCount,
+        transactionCount);
+  }
+
+  private static ReportSpec countSpec(Measure measure, boolean rowTotals) {
+    return new ReportSpec(
+        List.of(Dimension.CATEGORY),
+        List.of(Dimension.DATE),
+        List.of(measure),
+        Scope.ofTypes("expense"),
+        List.of(),
+        new DateRange(
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+        rowTotals,
+        false,
+        false);
+  }
+
   private static Map<String, TopLevelNode> candidates(TopLevelNode... nodes) {
     Map<String, TopLevelNode> byKey = new LinkedHashMap<>();
     for (TopLevelNode node : nodes) {
@@ -521,5 +558,125 @@ class ReportGridBuilderTest {
     // 1000.00 (base) + 1000.00 (native) must NOT silently sum to 2000.00 — they are two views of
     // the same figure, not additive quantities.
     assertThat(grid.rowTotals()).containsExactly(Cell.ILLEGAL);
+  }
+
+  // ── count measures (§5.5) ───────────────────────────────────────────────
+
+  @Test
+  void countCellIsBlankWhenNoPostingsMatch() {
+    AxisPlan axes =
+        new AxisPlan(Dimension.CATEGORY, Dimension.DATE, Dimension.CATEGORY, false, true);
+    List<AxisNode> rows = List.of(new AxisNode("1", "Food"));
+    List<AxisNode> columns = List.of(new AxisNode("2026-01", "Jan 2026"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    GridData data = new GridData(Map.of(Leg.NET, List.of()), Map.of(), Map.of());
+
+    ReportGrid grid =
+        builder.build(
+            countSpec(Measure.countPostings(), false),
+            axes,
+            rows,
+            columns,
+            byKey,
+            data,
+            "EUR",
+            JANUARY);
+
+    assertThat(grid.cells().get(0).get(0)).isEqualTo(Cell.BLANK);
+  }
+
+  @Test
+  void countPostingsSumsThePostingCountAcrossCurrencyGroups() {
+    AxisPlan axes =
+        new AxisPlan(Dimension.CATEGORY, Dimension.DATE, Dimension.CATEGORY, false, true);
+    List<AxisNode> rows = List.of(new AxisNode("1", "Food"));
+    List<AxisNode> columns = List.of(new AxisNode("2026-01", "Jan 2026"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    GridData data =
+        new GridData(
+            Map.of(
+                Leg.NET,
+                List.of(
+                    turnoverWithCounts("1", "Food", "expense", "2026-01", "EUR", "20.00", 3, 3),
+                    turnoverWithCounts("1", "Food", "expense", "2026-01", "CHF", "10.00", 5, 4))),
+            Map.of(),
+            Map.of());
+
+    ReportGrid grid =
+        builder.build(
+            countSpec(Measure.countPostings(), false),
+            axes,
+            rows,
+            columns,
+            byKey,
+            data,
+            "EUR",
+            JANUARY);
+
+    // Every posting belongs to exactly one currency group, so summing across groups is exact.
+    assertThat(grid.cells().get(0).get(0)).isEqualTo(new Cell.Count(8));
+  }
+
+  @Test
+  void countTransactionsSumsTheTransactionCountAcrossCurrencyGroups() {
+    AxisPlan axes =
+        new AxisPlan(Dimension.CATEGORY, Dimension.DATE, Dimension.CATEGORY, false, true);
+    List<AxisNode> rows = List.of(new AxisNode("1", "Food"));
+    List<AxisNode> columns = List.of(new AxisNode("2026-01", "Jan 2026"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    GridData data =
+        new GridData(
+            Map.of(
+                Leg.NET,
+                List.of(
+                    turnoverWithCounts("1", "Food", "expense", "2026-01", "EUR", "20.00", 3, 3),
+                    turnoverWithCounts("1", "Food", "expense", "2026-01", "CHF", "10.00", 5, 4))),
+            Map.of(),
+            Map.of());
+
+    ReportGrid grid =
+        builder.build(
+            countSpec(Measure.countTransactions(), false),
+            axes,
+            rows,
+            columns,
+            byKey,
+            data,
+            "EUR",
+            JANUARY);
+
+    assertThat(grid.cells().get(0).get(0)).isEqualTo(new Cell.Count(7));
+  }
+
+  @Test
+  void rowTotalOfCountMeasureSumsTheCountsAcrossColumns() {
+    AxisPlan axes =
+        new AxisPlan(Dimension.CATEGORY, Dimension.DATE, Dimension.CATEGORY, false, true);
+    List<AxisNode> rows = List.of(new AxisNode("1", "Food"));
+    List<AxisNode> columns =
+        List.of(new AxisNode("2026-01", "Jan 2026"), new AxisNode("2026-02", "Feb 2026"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    GridData data =
+        new GridData(
+            Map.of(
+                Leg.NET,
+                List.of(
+                    turnoverWithCounts("1", "Food", "expense", "2026-01", "EUR", "20.00", 3, 3),
+                    turnoverWithCounts("1", "Food", "expense", "2026-02", "EUR", "10.00", 2, 2))),
+            Map.of(),
+            Map.of());
+
+    ReportGrid grid =
+        builder.build(
+            countSpec(Measure.countPostings(), true),
+            axes,
+            rows,
+            columns,
+            byKey,
+            data,
+            "EUR",
+            JANUARY);
+
+    assertThat(grid.rowTotals()).containsExactly(new Cell.Count(5));
   }
 }

@@ -13,14 +13,16 @@ import volkovandr.hauptbuch.ledger.SettingsService;
  * {@link ReportGridBuilder} turns it into the {@link ReportGrid} (the two valuation rules,
  * legality, suppression and totals).
  *
- * <p><strong>Wired in this slice:</strong> {@link Dimension#CATEGORY}/{@link Dimension#ACCOUNT}
- * (identical shape, differing only in {@link Scope#accountTypes()}), {@link Dimension#TAG}
- * (turnover only — a tag has no balance), {@link Dimension#DATE} at month granularity, and no
- * dimension at all, on either rows or columns, for {@link MeasureKind#TURNOVER} and {@link
- * MeasureKind#CLOSING_BALANCE}. {@link Dimension#PAYEE}, {@code PERSON}, {@code CURRENCY}, {@code
- * ACCOUNT_TYPE}, the count measures, filters, and {@link Scope#accountSubtreeRoots()} are declared
- * in the vocabulary but rejected here with a clear {@link UnsupportedOperationException} — a
- * follow-up within stage a wires them, rather than this slice silently mis-grouping.
+ * <p>Every dimension in the catalogue (reporting.md §4) is wired, on either rows or columns, for
+ * {@link MeasureKind#TURNOVER} and the count measures; {@link MeasureKind#CLOSING_BALANCE} is wired
+ * for every dimension that names a standing balance ({@link Dimension#CATEGORY}/{@link
+ * Dimension#ACCOUNT}/{@link Dimension#PERSON}/{@link Dimension#CURRENCY}/{@link
+ * Dimension#ACCOUNT_TYPE}, plus no dimension at all) — {@link Dimension#TAG} and {@link
+ * Dimension#PAYEE} have no closing balance (neither is an account) and are rejected for it with a
+ * clear message. Filters (§6.2–§6.3) and {@link Scope#accountSubtreeRoots()} (§6.1) are applied by
+ * {@link volkovandr.hauptbuch.analytics.repository.ReportQueryRepository}. Stage a's own cap
+ * remains: at most one dimension per axis, and at most one of the two axes may carry a non-Date
+ * dimension at all (nesting two different non-Date dimensions across axes is stage e's job).
  */
 @Service
 public class ReportEngine {
@@ -45,8 +47,8 @@ public class ReportEngine {
 
   /** {@link #render(ReportSpec)} with an injectable "today", for deterministic tests. */
   ReportGrid render(ReportSpec spec, LocalDate today) {
-    validateSupported(spec);
     AxisPlan axes = planAxes(spec);
+    validateClosingBalanceHasBalance(spec, axes.nonDateDim());
     String baseCurrency = requireBaseCurrency();
 
     List<String> types = List.copyOf(spec.scope().accountTypes());
@@ -65,32 +67,11 @@ public class ReportEngine {
         spec, axes, rowNodes, columnBucketNodes, candidatesByKey, data, baseCurrency, resolved);
   }
 
-  private void validateSupported(ReportSpec spec) {
-    if (!spec.filters().isEmpty()) {
-      throw new UnsupportedOperationException("Filters ship in a follow-up within stage a.");
-    }
-    if (!spec.scope().accountSubtreeRoots().isEmpty()) {
-      throw new UnsupportedOperationException(
-          "Scope subtree restriction ships in a follow-up within stage a.");
-    }
-    boolean anyCountMeasure =
-        spec.measures().stream()
-            .anyMatch(
-                m ->
-                    m.kind() == MeasureKind.COUNT_POSTINGS
-                        || m.kind() == MeasureKind.COUNT_TRANSACTIONS);
-    if (anyCountMeasure) {
-      throw new UnsupportedOperationException("Count measures ship in a follow-up within stage a.");
-    }
-  }
-
   private AxisPlan planAxes(ReportSpec spec) {
     Dimension rowDim = spec.rows().isEmpty() ? null : spec.rows().get(0);
     Dimension colDim = spec.columns().isEmpty() ? null : spec.columns().get(0);
     validateOneNonDateDimension(rowDim, colDim);
     Dimension nonDateDim = nonDateDimensionOf(rowDim, colDim);
-    validateDimensionIsWired(nonDateDim);
-    validateClosingBalanceHasBalance(spec, nonDateDim);
     return new AxisPlan(
         rowDim, colDim, nonDateDim, rowDim == Dimension.DATE, colDim == Dimension.DATE);
   }
@@ -103,28 +84,24 @@ public class ReportEngine {
     boolean colIsNonDate = colDim != null && colDim != Dimension.DATE;
     if (rowIsNonDate && colIsNonDate) {
       throw new UnsupportedOperationException(
-          "Two different non-Date dimensions on rows and columns ship in a follow-up within"
-              + " stage a.");
+          "Two different non-Date dimensions on rows and columns — nesting — is stage e.");
     }
   }
 
-  private static void validateDimensionIsWired(Dimension nonDateDim) {
-    boolean wired =
-        nonDateDim == null
-            || nonDateDim == Dimension.CATEGORY
-            || nonDateDim == Dimension.ACCOUNT
-            || nonDateDim == Dimension.TAG;
-    if (!wired) {
-      throw new UnsupportedOperationException(nonDateDim + " ships in a follow-up within stage a.");
-    }
-  }
-
+  /**
+   * {@link Dimension#TAG} and {@link Dimension#PAYEE} name no standing balance — a tag is not an
+   * account, and a payee is a transaction attribute, not a thing that is held (reporting.md §4).
+   */
   private static void validateClosingBalanceHasBalance(ReportSpec spec, Dimension nonDateDim) {
     boolean anyClosingBalance =
         spec.measures().stream().anyMatch(m -> m.kind() == MeasureKind.CLOSING_BALANCE);
     if (anyClosingBalance && nonDateDim == Dimension.TAG) {
       throw new UnsupportedOperationException(
           "A tag has no closing balance (it is not an account).");
+    }
+    if (anyClosingBalance && nonDateDim == Dimension.PAYEE) {
+      throw new UnsupportedOperationException(
+          "A payee has no closing balance (it is not an account).");
     }
   }
 

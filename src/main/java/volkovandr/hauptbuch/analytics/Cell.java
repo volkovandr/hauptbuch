@@ -45,4 +45,10 @@ public sealed interface Cell {
    * The aggregate would be arithmetically meaningless — rendered {@code —} (§7.2). Never a number.
    */
   record Illegal() implements Cell {}
+
+  /**
+   * A count measure's value (§5.5) — postings or distinct transactions, never a money amount, so it
+   * carries no currency and is never negated by the credit-natural display flip.
+   */
+  record Count(long count) implements Cell {}
 }
