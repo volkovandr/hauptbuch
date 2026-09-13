@@ -29,7 +29,7 @@ categories × month is the reading you start from anyway.
 
 ---
 
-## a — The engine and the table renderer
+## a — The engine and the table renderer ✅ complete (owner-confirmed 2026-09-13)
 
 The spec record, the grid, and the SQL. **No charts, no saving, no expansion** — a Report's spec
 lives in the query string and the page renders a table.
@@ -154,4 +154,5 @@ transaction, a transfer, and a category-to-category correction; the CSV's shape.
 
 ## Changelog
 
+- **v0.2 (2026-09-13):** Slice a marked complete (owner-confirmed). No scope change (routine).
 - **v0.1 (2026-09-12):** Initial slicing from the grilling pass that produced `reporting.md` v0.1.
