@@ -68,12 +68,24 @@ public class ReportEngine {
   }
 
   private AxisPlan planAxes(ReportSpec spec) {
-    Dimension rowDim = spec.rows().isEmpty() ? null : spec.rows().get(0);
+    Dimension rowDim = rowSlotDimension(spec);
     Dimension colDim = spec.columns().isEmpty() ? null : spec.columns().get(0);
     validateOneNonDateDimension(rowDim, colDim);
     Dimension nonDateDim = nonDateDimensionOf(rowDim, colDim);
     return new AxisPlan(
         rowDim, colDim, nonDateDim, rowDim == Dimension.DATE, colDim == Dimension.DATE);
+  }
+
+  /**
+   * {@code series} (stage b, chart-only) fills the same engine slot {@code rows} would when {@code
+   * rows} is empty — {@link ReportSpec}'s own constructor already refuses a spec carrying both, so
+   * this never has to choose between them.
+   */
+  private static Dimension rowSlotDimension(ReportSpec spec) {
+    if (!spec.rows().isEmpty()) {
+      return spec.rows().get(0);
+    }
+    return spec.series().isEmpty() ? null : spec.series().get(0);
   }
 
   private static void validateOneNonDateDimension(Dimension rowDim, Dimension colDim) {

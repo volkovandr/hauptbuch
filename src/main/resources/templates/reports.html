@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Reporting page (plan stage a): for now, the Presets list. The Layout (rows x columns of Frames)
+  Reporting page (plan stage b): for now, the Presets list. The Layout (rows x columns of Frames)
   and the list of saved Reports arrive in stage c/d (reporting.md §11, §14).
 -->
 <html
@@ -14,6 +14,8 @@
       <ul class="reports-list">
         <li><a th:href="@{/reports/preset/category-month-matrix}">Category × month matrix</a></li>
         <li><a th:href="@{/reports/preset/balance-sheet}">Balance sheet</a></li>
+        <li><a th:href="@{/reports/preset/net-worth-over-time}">Net worth over time</a></li>
+        <li><a th:href="@{/reports/preset/this-month-vs-last}">This month vs last</a></li>
       </ul>
     </section>
   </main>

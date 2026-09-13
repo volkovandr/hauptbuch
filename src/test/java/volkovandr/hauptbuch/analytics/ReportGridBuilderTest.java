@@ -35,6 +35,7 @@ class ReportGridBuilderTest {
     return new ReportSpec(
         List.of(Dimension.CATEGORY),
         List.of(Dimension.DATE),
+        List.of(),
         List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
         Scope.ofTypes("expense"),
         List.of(),
@@ -93,6 +94,7 @@ class ReportGridBuilderTest {
     return new ReportSpec(
         List.of(Dimension.CATEGORY),
         List.of(Dimension.DATE),
+        List.of(),
         List.of(measure),
         Scope.ofTypes("expense"),
         List.of(),
@@ -220,6 +222,7 @@ class ReportGridBuilderTest {
         new ReportSpec(
             List.of(Dimension.CATEGORY),
             List.of(Dimension.DATE),
+            List.of(),
             List.of(Measure.turnover(PresentationCurrency.ACCOUNT, Leg.NET)),
             Scope.ofTypes("expense"),
             List.of(),
@@ -269,6 +272,7 @@ class ReportGridBuilderTest {
         new ReportSpec(
             List.of(Dimension.TAG),
             List.of(),
+            List.of(),
             List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
             Scope.ofTypes("expense"),
             List.of(),
@@ -304,6 +308,7 @@ class ReportGridBuilderTest {
         new ReportSpec(
             List.of(Dimension.CATEGORY),
             List.of(Dimension.DATE),
+            List.of(),
             List.of(Measure.closingBalance(PresentationCurrency.BASE)),
             Scope.ofTypes("asset"),
             List.of(),
@@ -365,6 +370,7 @@ class ReportGridBuilderTest {
         new ReportSpec(
             List.of(Dimension.ACCOUNT),
             List.of(),
+            List.of(),
             List.of(
                 Measure.closingBalance(PresentationCurrency.BASE),
                 Measure.closingBalance(PresentationCurrency.ACCOUNT)),
@@ -409,6 +415,7 @@ class ReportGridBuilderTest {
         new ReportSpec(
             List.of(Dimension.ACCOUNT),
             List.of(),
+            List.of(),
             List.of(Measure.closingBalance(PresentationCurrency.BASE)),
             Scope.ofTypes("asset"),
             List.of(),
@@ -447,6 +454,7 @@ class ReportGridBuilderTest {
         new ReportSpec(
             List.of(Dimension.ACCOUNT),
             List.of(),
+            List.of(),
             List.of(Measure.closingBalance(PresentationCurrency.BASE)),
             Scope.ofTypes("asset"),
             List.of(),
@@ -476,6 +484,7 @@ class ReportGridBuilderTest {
         new ReportSpec(
             List.of(),
             List.of(Dimension.DATE),
+            List.of(),
             List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
             Scope.ofTypes("income"),
             List.of(),
@@ -505,6 +514,7 @@ class ReportGridBuilderTest {
         new ReportSpec(
             List.of(),
             List.of(Dimension.DATE),
+            List.of(),
             List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
             Scope.ofTypes("income", "expense"),
             List.of(),
@@ -540,6 +550,7 @@ class ReportGridBuilderTest {
     ReportSpec spec =
         new ReportSpec(
             List.of(Dimension.ACCOUNT),
+            List.of(),
             List.of(),
             List.of(
                 Measure.closingBalance(PresentationCurrency.BASE),

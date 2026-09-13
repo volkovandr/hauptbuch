@@ -39,6 +39,7 @@ class ReportEngineTest {
     return new ReportSpec(
         rows,
         columns,
+        List.of(),
         List.of(measure),
         scope,
         List.of(),
@@ -70,6 +71,7 @@ class ReportEngineTest {
     baseIsEur();
     ReportSpec s =
         new ReportSpec(
+            List.of(),
             List.of(),
             List.of(),
             List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
@@ -181,6 +183,35 @@ class ReportEngineTest {
   }
 
   // ── orchestration ─────────────────────────────────────────────────────────
+
+  @Test
+  void seriesFillsTheRowSlotWhenRowsIsEmpty() {
+    baseIsEur();
+    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any())).thenReturn(Map.of());
+    when(gridBuilder.axisNodes(any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
+    ReportSpec s =
+        new ReportSpec(
+            List.of(),
+            List.of(Dimension.CATEGORY),
+            List.of(Dimension.DATE),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            true);
+
+    engine.render(s, TODAY);
+
+    // The series dimension (Date) resolves candidates/data exactly as a rows dimension would —
+    // ReportEngine's axis planning treats the two identically (ReportSpec's own javadoc).
+    verify(dataFetcher).candidatesFor(Dimension.CATEGORY, List.of("expense"), s.scope());
+  }
 
   @Test
   void resolvesAxesFetchesDataAndDelegatesToTheGridBuilder() {
