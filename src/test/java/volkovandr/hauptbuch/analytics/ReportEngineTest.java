@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.analytics;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -65,7 +66,7 @@ class ReportEngineTest {
   }
 
   @Test
-  void rejectsFiltersAsNotYetWired() {
+  void acceptsFilters() {
     baseIsEur();
     ReportSpec s =
         new ReportSpec(
@@ -86,38 +87,51 @@ class ReportEngineTest {
             false,
             true);
 
-    assertThatThrownBy(() -> engine.render(s, TODAY))
-        .isInstanceOf(UnsupportedOperationException.class);
+    assertThatCode(() -> engine.render(s, TODAY)).doesNotThrowAnyException();
   }
 
   @Test
-  void rejectsScopeSubtreeRestriction() {
+  void acceptsScopeSubtreeRestriction() {
     baseIsEur();
     Scope scope = new Scope(java.util.Set.of("expense"), List.of(1L), true, false);
     ReportSpec s =
         spec(List.of(), List.of(), Measure.turnover(PresentationCurrency.BASE, Leg.NET), scope);
 
-    assertThatThrownBy(() -> engine.render(s, TODAY))
-        .isInstanceOf(UnsupportedOperationException.class);
+    assertThatCode(() -> engine.render(s, TODAY)).doesNotThrowAnyException();
   }
 
   @Test
-  void rejectsCountMeasures() {
+  void acceptsCountMeasures() {
     baseIsEur();
     ReportSpec s = spec(List.of(), List.of(), Measure.countPostings(), Scope.ofTypes("expense"));
 
-    assertThatThrownBy(() -> engine.render(s, TODAY))
-        .isInstanceOf(UnsupportedOperationException.class);
+    assertThatCode(() -> engine.render(s, TODAY)).doesNotThrowAnyException();
   }
 
   @Test
-  void rejectsAnUnwiredDimension() {
+  void acceptsEveryFlatDimensionInTheCatalogue() {
+    baseIsEur();
+    for (Dimension dim :
+        List.of(Dimension.PAYEE, Dimension.PERSON, Dimension.CURRENCY, Dimension.ACCOUNT_TYPE)) {
+      ReportSpec s =
+          spec(
+              List.of(dim),
+              List.of(),
+              Measure.turnover(PresentationCurrency.BASE, Leg.NET),
+              Scope.ofTypes("expense"));
+
+      assertThatCode(() -> engine.render(s, TODAY)).doesNotThrowAnyException();
+    }
+  }
+
+  @Test
+  void rejectsClosingBalanceOnPayeeDimension() {
     baseIsEur();
     ReportSpec s =
         spec(
             List.of(Dimension.PAYEE),
             List.of(),
-            Measure.turnover(PresentationCurrency.BASE, Leg.NET),
+            Measure.closingBalance(PresentationCurrency.BASE),
             Scope.ofTypes("expense"));
 
     assertThatThrownBy(() -> engine.render(s, TODAY))

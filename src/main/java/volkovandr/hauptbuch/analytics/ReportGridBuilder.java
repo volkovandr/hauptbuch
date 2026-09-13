@@ -224,7 +224,13 @@ class ReportGridBuilder {
   }
 
   private static String measureLabel(Measure measure) {
-    String name = measure.kind() == MeasureKind.TURNOVER ? "Turnover" : "Closing balance";
+    String name =
+        switch (measure.kind()) {
+          case TURNOVER -> "Turnover";
+          case CLOSING_BALANCE -> "Closing balance";
+          case COUNT_POSTINGS -> "Count of postings";
+          case COUNT_TRANSACTIONS -> "Count of transactions";
+        };
     return measure.currency() == PresentationCurrency.ACCOUNT ? name + " (native)" : name;
   }
 
@@ -240,24 +246,32 @@ class ReportGridBuilder {
         nonDateDim == null
             ? TOTAL_KEY
             : (axes.rowDim() == nonDateDim ? rowNode.key() : columnBucketNode.key());
-    boolean creditNatural =
-        nonDateDim == null
-            ? isCreditNaturalScope(context.scope())
-            : isCreditNatural(context.candidatesByKey().get(dimKey));
+    boolean creditNatural = isCreditNatural(context.candidatesByKey().get(dimKey), context.scope());
 
+    String monthKey =
+        axes.dateOnRows() ? rowNode.key() : axes.dateOnColumns() ? columnBucketNode.key() : null;
     if (measure.kind() == MeasureKind.TURNOVER) {
-      String monthKey =
-          axes.dateOnRows() ? rowNode.key() : axes.dateOnColumns() ? columnBucketNode.key() : null;
-      List<RawTurnoverCell> raw =
-          context.data().turnoverByLeg().getOrDefault(measure.leg(), List.of());
       List<RawTurnoverCell> matches =
-          raw.stream()
-              .filter(c -> c.dimensionKey().equals(dimKey))
-              .filter(c -> monthKey == null || c.monthKey().equals(monthKey))
-              .toList();
+          turnoverMatches(measure.leg(), dimKey, monthKey, context.data());
       return turnoverCellValue(matches, measure, context.baseCurrency(), creditNatural);
     }
+    if (measure.kind() == MeasureKind.COUNT_POSTINGS
+        || measure.kind() == MeasureKind.COUNT_TRANSACTIONS) {
+      List<RawTurnoverCell> matches = turnoverMatches(Leg.NET, dimKey, monthKey, context.data());
+      return countCellValue(matches, measure.kind());
+    }
+    return computeClosingBalanceCell(
+        measure, rowNode, columnBucketNode, dimKey, creditNatural, axes, context);
+  }
 
+  private Cell computeClosingBalanceCell(
+      Measure measure,
+      AxisNode rowNode,
+      AxisNode columnBucketNode,
+      String dimKey,
+      boolean creditNatural,
+      AxisPlan axes,
+      CellContext context) {
     String bucketKey =
         axes.dateOnRows()
             ? rowNode.key()
@@ -270,18 +284,62 @@ class ReportGridBuilder {
     return balanceCellValue(matches, measure, context.baseCurrency(), asOf, creditNatural);
   }
 
-  private static boolean isCreditNatural(TopLevelNode node) {
-    return node != null && node.type() != null && CREDIT_NATURAL_TYPES.contains(node.type());
+  /**
+   * The credit-natural flip for one cell: a node with a single known type (an account-tree row, or
+   * an {@link Dimension#ACCOUNT_TYPE}/{@link Dimension#PERSON} row, both unambiguous) flips by its
+   * own type; a node with none — no row/column dimension at all, or a dimension spanning more than
+   * one type ({@link Dimension#CURRENCY}, {@link Dimension#PAYEE}) — falls back to {@link
+   * #isCreditNaturalScope}.
+   */
+  private static boolean isCreditNatural(TopLevelNode node, Scope scope) {
+    if (node != null && node.type() != null) {
+      return CREDIT_NATURAL_TYPES.contains(node.type());
+    }
+    return isCreditNaturalScope(scope);
   }
 
   /**
-   * The credit-natural flip for a report with no row/column dimension (a plain total): flips only
-   * when every account type in scope shares the credit-natural side, so a total mixing income and
-   * expense — which has no single correct sign — is left unflipped rather than guessing.
+   * The credit-natural flip for a report with no row/column dimension (a plain total), or a
+   * dimension whose node carries no single type: flips only when every account type in scope shares
+   * the credit-natural side, so a total mixing income and expense — which has no single correct
+   * sign — is left unflipped rather than guessing.
    */
   private static boolean isCreditNaturalScope(Scope scope) {
     return !scope.accountTypes().isEmpty()
         && scope.accountTypes().stream().allMatch(CREDIT_NATURAL_TYPES::contains);
+  }
+
+  private static List<RawTurnoverCell> turnoverMatches(
+      Leg leg, String dimKey, String monthKey, GridData data) {
+    List<RawTurnoverCell> raw = data.turnoverByLeg().getOrDefault(leg, List.of());
+    return raw.stream()
+        .filter(c -> c.dimensionKey().equals(dimKey))
+        .filter(c -> monthKey == null || c.monthKey().equals(monthKey))
+        .toList();
+  }
+
+  /**
+   * A count measure's value (§5.5): the raw rows are still partitioned by currency (the same
+   * NET-leg turnover data every measure shares), so {@link RawTurnoverCell#postingCount()} sums
+   * exactly — a posting belongs to exactly one currency group. {@link
+   * RawTurnoverCell#transactionCount()} is each currency group's own distinct-transaction count;
+   * summing them over-counts a transaction whose legs in this cell span more than one currency
+   * (rare — a cross-currency split within one category/month), counting it once per currency
+   * touched rather than once overall. Not corrected here: doing so needs the raw transaction ids,
+   * which the aggregated query does not carry.
+   */
+  private static Cell countCellValue(List<RawTurnoverCell> matches, MeasureKind kind) {
+    if (matches.isEmpty()) {
+      return Cell.BLANK;
+    }
+    long total =
+        matches.stream()
+            .mapToLong(
+                kind == MeasureKind.COUNT_POSTINGS
+                    ? RawTurnoverCell::postingCount
+                    : RawTurnoverCell::transactionCount)
+            .sum();
+    return new Cell.Count(total);
   }
 
   private Cell turnoverCellValue(
@@ -360,6 +418,14 @@ class ReportGridBuilder {
     }
     if (cells.stream().allMatch(c -> c instanceof Cell.Blank)) {
       return Cell.BLANK;
+    }
+    if (cells.stream().anyMatch(c -> c instanceof Cell.Count)) {
+      long sum =
+          cells.stream()
+              .filter(c -> c instanceof Cell.Count)
+              .mapToLong(c -> ((Cell.Count) c).count())
+              .sum();
+      return new Cell.Count(sum);
     }
     List<Cell.Value> values =
         cells.stream().filter(c -> c instanceof Cell.Value).map(c -> (Cell.Value) c).toList();

@@ -46,6 +46,9 @@ final class ReportTableViewAssembler {
     if (cell instanceof Cell.Illegal) {
       return "—";
     }
+    if (cell instanceof Cell.Count count) {
+      return String.valueOf(count.count());
+    }
     Cell.Value value = (Cell.Value) cell;
     return MoneyFormat.display(MoneyFactory.of(value.amount(), value.currencyCode()), baseCurrency);
   }

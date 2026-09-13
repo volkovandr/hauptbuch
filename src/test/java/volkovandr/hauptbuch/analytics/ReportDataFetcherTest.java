@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import volkovandr.hauptbuch.analytics.repository.QueryConstraints;
 import volkovandr.hauptbuch.analytics.repository.RawBalanceCell;
 import volkovandr.hauptbuch.analytics.repository.ReportQueryRepository;
 import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
@@ -101,7 +102,8 @@ class ReportDataFetcherTest {
             "EUR",
             "NET",
             true,
-            false);
+            false,
+            QueryConstraints.NONE);
   }
 
   @Test
@@ -123,7 +125,8 @@ class ReportDataFetcherTest {
             "EUR",
             "NET",
             true,
-            false);
+            false,
+            QueryConstraints.NONE);
   }
 
   @Test
@@ -145,7 +148,8 @@ class ReportDataFetcherTest {
             "EUR",
             "NET",
             true,
-            false);
+            false,
+            QueryConstraints.NONE);
   }
 
   // ── fetchGridData: closing balance ────────────────────────────────────────
@@ -181,7 +185,8 @@ class ReportDataFetcherTest {
             "EUR");
 
     verify(queryRepository)
-        .accountTreeClosingBalance(List.of("asset"), LocalDate.of(2026, 1, 31), true, false);
+        .accountTreeClosingBalance(
+            List.of("asset"), LocalDate.of(2026, 1, 31), true, false, QueryConstraints.NONE);
     assertThat(data.balanceByBucketKey()).containsOnlyKeys("total");
   }
 
@@ -199,12 +204,14 @@ class ReportDataFetcherTest {
         "EUR");
 
     verify(queryRepository)
-        .accountTreeClosingBalance(List.of("asset"), LocalDate.of(2026, 1, 31), true, true);
+        .accountTreeClosingBalance(
+            List.of("asset"), LocalDate.of(2026, 1, 31), true, true, QueryConstraints.NONE);
   }
 
   @Test
   void closingBalanceAsOfUsesTheBucketsClippedEffectiveEndNotTheFullCalendarMonth() {
-    when(queryRepository.accountTreeClosingBalance(anyList(), any(), anyBoolean(), anyBoolean()))
+    when(queryRepository.accountTreeClosingBalance(
+            anyList(), any(), anyBoolean(), anyBoolean(), any()))
         .thenReturn(List.of(new RawBalanceCell("1", "Cash", "asset", "EUR", BigDecimal.TEN)));
     // The report's range ends mid-January (the 20th); the bucket's calendar month runs through the
     // 31st, but the as-of date must respect the report's own clipped range end (reporting.md §8.2),
@@ -223,12 +230,14 @@ class ReportDataFetcherTest {
         "EUR");
 
     verify(queryRepository)
-        .accountTreeClosingBalance(List.of("asset"), LocalDate.of(2026, 1, 20), true, false);
+        .accountTreeClosingBalance(
+            List.of("asset"), LocalDate.of(2026, 1, 20), true, false, QueryConstraints.NONE);
   }
 
   @Test
   void closingBalanceAsOfDateIsClampedToTodayWhenTheBucketExtendsIntoTheFuture() {
-    when(queryRepository.accountTreeClosingBalance(anyList(), any(), anyBoolean(), anyBoolean()))
+    when(queryRepository.accountTreeClosingBalance(
+            anyList(), any(), anyBoolean(), anyBoolean(), any()))
         .thenReturn(List.of(new RawBalanceCell("1", "Cash", "asset", "EUR", BigDecimal.TEN)));
     List<MonthBucket> septemberBucket =
         MonthBucket.monthsBetween(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
@@ -245,6 +254,7 @@ class ReportDataFetcherTest {
 
     // The bucket runs through 30 Sep, but TODAY is only the 12th — the as-of date must not run
     // ahead of today (reporting.md §8.2).
-    verify(queryRepository).accountTreeClosingBalance(List.of("asset"), TODAY, true, false);
+    verify(queryRepository)
+        .accountTreeClosingBalance(List.of("asset"), TODAY, true, false, QueryConstraints.NONE);
   }
 }
