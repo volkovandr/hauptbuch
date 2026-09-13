@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.analytics;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -19,9 +20,12 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
- * Integration tier (CLAUDE.md §6): the reporting page and the two Presets ({@link
+ * Integration tier (CLAUDE.md §6): the reporting page and the four Presets ({@link
  * ReportController}) rendered against real Postgres — the "Done when" bar of the reporting
- * sub-plan's slice a: the matrix and balance-sheet Presets render correctly against real data.
+ * sub-plan's slices a/b: every Preset renders correctly against real data, and the chart/table swap
+ * works. The renderers' own SVG-well-formedness and the pie's negative-measure refusal are {@link
+ * ChartSvgWriterTest}/{@link ChartViewAssemblerTest}'s job (CLAUDE.md §6 — no DB dependency, so the
+ * unit tier, not here); neither shipped Preset uses the pie renderer (reporting.md §16).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -70,12 +74,14 @@ class ReportControllerIntegrationTest {
   }
 
   @Test
-  void reportsPageLinksToBothPresets() throws Exception {
+  void reportsPageLinksToEveryPreset() throws Exception {
     mockMvc
         .perform(get("/reports"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("/reports/preset/category-month-matrix")))
-        .andExpect(content().string(containsString("/reports/preset/balance-sheet")));
+        .andExpect(content().string(containsString("/reports/preset/balance-sheet")))
+        .andExpect(content().string(containsString("/reports/preset/net-worth-over-time")))
+        .andExpect(content().string(containsString("/reports/preset/this-month-vs-last")));
   }
 
   @Test
@@ -119,5 +125,78 @@ class ReportControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("Cash")))
         .andExpect(content().string(containsString("1.000,00")));
+  }
+
+  @Test
+  void netWorthOverTimeRendersLineChartWithTrendOverlay() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    long opening = insertAccount("Opening Balances", "equity", "EUR", null);
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    // Two postings in different months so the trend line has more than one point to fit — a
+    // single recent posting would leave every earlier month blank (no balance on record yet).
+    postSingleCurrency(opening, cash, LocalDate.now().minusMonths(3), "500.00");
+    postSingleCurrency(opening, cash, LocalDate.now().minusDays(1), "500.00");
+
+    mockMvc
+        .perform(get("/reports/preset/net-worth-over-time"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("<svg")))
+        .andExpect(content().string(containsString("chart-trend")))
+        .andExpect(content().string(containsString("Show table")));
+  }
+
+  @Test
+  void thisMonthVsLastRendersGroupedBarChart() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long food = insertAccount("Food", "expense", "EUR", null);
+    postSingleCurrency(cash, food, LocalDate.now(), "42.50");
+
+    mockMvc
+        .perform(get("/reports/preset/this-month-vs-last"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("<svg")))
+        .andExpect(content().string(containsString("Food")));
+  }
+
+  @Test
+  void chartSwapsToItsTableFragmentAndBack() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    long opening = insertAccount("Opening Balances", "equity", "EUR", null);
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    postSingleCurrency(opening, cash, LocalDate.now().minusDays(1), "1000.00");
+
+    mockMvc
+        .perform(get("/reports/preset/net-worth-over-time/view").param("view", "table"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("<table")))
+        .andExpect(content().string(containsString("Show chart")))
+        .andExpect(content().string(not(containsString("<svg"))));
+
+    mockMvc
+        .perform(get("/reports/preset/net-worth-over-time/view").param("view", "chart"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("<svg")))
+        .andExpect(content().string(containsString("Show table")));
+  }
+
+  @Test
+  void tableOnlyPresetOffersNoChartToggle() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+
+    mockMvc
+        .perform(get("/reports/preset/category-month-matrix"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("Show chart"))));
+  }
+
+  @Test
+  void tableOnlyPresetsViewFragmentClampsToTableEvenIfAskedForChart() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+
+    mockMvc
+        .perform(get("/reports/preset/category-month-matrix/view").param("view", "chart"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("<table")));
   }
 }

@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <!--
-  A Preset's rendered table (plan stage a): the grid renderer only — no charts (stage b), no
-  expansion (stage e), no save (stage d). Every cell is already display-formatted text
-  (ReportTableViewAssembler); blank means no postings, "—" means the aggregate is arithmetically
-  meaningless (reporting.md §7).
+  A Preset's rendered table (plan stage b): the grid renderer — no expansion (stage e), no save
+  (stage d). Every cell is already display-formatted text (ReportTableViewAssembler); blank means
+  no postings, "—" means the aggregate is arithmetically meaningless (reporting.md §7). A chart
+  Preset offers a toggle back to its own renderer (§10's chart/table swap), the same hx-get/hx-swap
+  idiom the receipt image toggle uses.
 -->
 <html
   lang="en"
@@ -11,7 +12,7 @@
   th:replace="~{layout :: page(~{:: content})}"
 >
   <main class="content" th:fragment="content">
-    <section class="panel">
+    <section class="panel" id="report-frame" th:fragment="frame">
       <p class="eyebrow" th:text="${report.title()}">Report</p>
       <p class="muted report__scope" th:text="${report.scopeLine()}">Scope</p>
       <p class="muted">
@@ -19,6 +20,16 @@
         &ndash;
         <span th:text="${#temporals.format(report.resolvedEnd(), 'dd.MM.yyyy')}">end</span>
       </p>
+      <button
+        type="button"
+        class="btn btn--ghost"
+        th:if="${hasChart}"
+        hx-target="#report-frame"
+        hx-swap="outerHTML"
+        th:attr="hx-get=@{/reports/preset/{slug}/view(slug=${slug}, view='chart')}"
+      >
+        Show chart
+      </button>
 
       <table class="report">
         <thead>

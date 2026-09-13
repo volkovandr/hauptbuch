@@ -36,6 +36,7 @@ class ReportDataFetcherTest {
     return new ReportSpec(
         rows,
         List.of(Dimension.DATE),
+        List.of(),
         List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
         Scope.ofTypes("expense"),
         List.of(),
@@ -159,6 +160,7 @@ class ReportDataFetcherTest {
     return new ReportSpec(
         List.of(Dimension.ACCOUNT),
         dateOnColumns ? List.of(Dimension.DATE) : List.of(),
+        List.of(),
         List.of(Measure.closingBalance(PresentationCurrency.BASE)),
         new Scope(java.util.Set.of("asset"), List.of(), true, includePendingReview),
         List.of(),

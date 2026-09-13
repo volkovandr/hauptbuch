@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<!--
+  A Preset's rendered chart (plan stage b, reporting.md §10): line/bar/pie, server-rendered inline
+  SVG (ChartSvgWriter), no charting library, no fourth JS leaf. Panels are small multiples — one per
+  row dimension value, or one per series legend entry — see ChartViewAssembler. The toggle button
+  swaps to the same Report's table in place (§10's chart/table swap), the same hx-get/hx-swap idiom
+  the receipt image toggle uses.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel" id="report-frame" th:fragment="frame">
+      <p class="eyebrow" th:text="${chart.title()}">Report</p>
+      <p class="muted report__scope" th:text="${chart.scopeLine()}">Scope</p>
+      <p class="muted">
+        <span th:text="${#temporals.format(chart.resolvedStart(), 'dd.MM.yyyy')}">start</span>
+        &ndash;
+        <span th:text="${#temporals.format(chart.resolvedEnd(), 'dd.MM.yyyy')}">end</span>
+      </p>
+      <button
+        type="button"
+        class="btn btn--ghost"
+        hx-target="#report-frame"
+        hx-swap="outerHTML"
+        th:attr="hx-get=@{/reports/preset/{slug}/view(slug=${slug}, view='table')}"
+      >
+        Show table
+      </button>
+
+      <p th:if="${chart.refusalMessage() != null}" class="chart-refusal" th:text="${chart.refusalMessage()}">
+        Refused
+      </p>
+
+      <div th:unless="${chart.refusalMessage() != null}" class="chart-panels">
+        <figure class="chart-panel" th:each="panel : ${chart.panels()}">
+          <figcaption th:if="${panel.label() != ''}" th:text="${panel.label()}">Panel</figcaption>
+          <div th:utext="${panel.svg()}"></div>
+        </figure>
+      </div>
+    </section>
+  </main>
+</html>

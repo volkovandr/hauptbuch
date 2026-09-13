@@ -1,4 +1,4 @@
-/* Reporting screens (plan stage a): the Presets list and the table renderer. */
+/* Reporting screens (plan stage b): the Presets list, the table renderer and the chart renderer. */
 
 .reports-list {
   list-style: none;
@@ -45,4 +45,54 @@ table.report tfoot td {
   border-bottom: none;
   border-top: 2px solid var(--rule);
   font-weight: 600;
+}
+
+/* Chart renderer (reporting.md §10): small multiples stack; each panel's SVG is intrinsically
+   sized by its viewBox, so it only needs a max-width to stay legible on a phone. */
+.chart-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 0.75rem;
+}
+
+.chart-panel {
+  margin: 0;
+}
+
+.chart-panel figcaption {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  margin-bottom: 0.25rem;
+}
+
+.chart-svg {
+  width: 100%;
+  max-width: 640px;
+  height: auto;
+  font-family: var(--font-num);
+}
+
+.chart-grid {
+  stroke: var(--feint);
+  stroke-width: 1;
+}
+
+.chart-axis-label {
+  font-size: 10px;
+  fill: var(--ink-soft);
+}
+
+.chart-legend-label {
+  font-size: 11px;
+  fill: var(--ink);
+}
+
+.chart-trend {
+  opacity: 0.7;
+}
+
+.chart-refusal {
+  color: var(--oxblood);
+  font-style: italic;
 }
