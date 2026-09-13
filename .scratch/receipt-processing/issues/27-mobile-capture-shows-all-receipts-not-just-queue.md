@@ -75,19 +75,19 @@ disappears from the PC register's default `queue` view today.
   still no filter to expose in this stage.
 
 **Acceptance criteria:**
-- [ ] With 250+ historical receipts on record, most `committed`, `/receipts/capture` shows only
+- [x] With 250+ historical receipts on record, most `committed`, `/receipts/capture` shows only
       `new`/`pre_processed`/`processing`/`processed`/`failed` receipts captured in the last 90
       days.
-- [ ] A receipt committed elsewhere (e.g. from the PC register) mid-session drops out of the
+- [x] A receipt committed elsewhere (e.g. from the PC register) mid-session drops out of the
       mobile grid on the next load, mirroring the PC register's own default-queue behavior.
-- [ ] A `new` receipt just captured from the phone still appears immediately after its upload's
+- [x] A `new` receipt just captured from the phone still appears immediately after its upload's
       PRG round trip.
-- [ ] `upload()` and `deleteFromPhone()` are unaffected — they act on a specific id regardless of
+- [x] `upload()` and `deleteFromPhone()` are unaffected — they act on a specific id regardless of
       how the grid is filtered.
-- [ ] Unit tier covers the narrowed state set (repository mocked); the query's own change is a
+- [x] Unit tier covers the narrowed state set (repository mocked); the query's own change is a
       plain `where ... state in (...)` predicate — a round-trip case in the integration tier, not
       `sqlLogicTest` (no aggregation, window function, or CTE involved).
-- [ ] `./gradlew check` green.
+- [x] `./gradlew check` green.
 
 **Out of scope:**
 - Any filter UI, `state`/`range` params, or a way to reach `committed`/`voided`/older receipts
@@ -100,3 +100,9 @@ disappears from the PC register's default `queue` view today.
 Filed 2026-09-13 from an owner report in production (250+ receipts making mobile slow, plus a
 silently lost upload). Owner chose the queue-only fix over the full-filter option same day; split
 the filter option into issue 28 and moved this to ready-for-agent.
+
+**Implemented 2026-09-13** on branch `fix/mobile-capture-work-queue` (commit `b25afaf`):
+`ReceiptRepository.findForMobile` takes a `states` list (same `state in (:states)` shape as
+`findForRegister`); `ReceiptService.forMobile()` passes `ReceiptState.WORK_QUEUE`;
+`ReceiptCaptureController`/`receipt-capture.html` drop the now-dead `voidedReceiptIds` wiring.
+`./gradlew check` green. Not yet owner-confirmed or merged.
