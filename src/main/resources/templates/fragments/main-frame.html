@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<!--
+  The main page's own 1x1 Layout (reporting.md §11, plan stage c): one Frame, defaulting to the net
+  worth over time Preset. Lazy-loaded by landing.html via hx-get on load, the same idiom as the
+  tracking-stats line — only mounted once the base currency is set. The picker re-renders this whole
+  fragment in place on change (the settle-up account picker's hx-post/hx-trigger="change" idiom), so
+  "Save layout" (reporting.md §11) is simply picking a value: there is only ever one Frame here.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <section class="panel" id="main-frame" th:fragment="frame">
+      <div class="field">
+        <label class="field__label" for="main-frame-preset">Overview</label>
+        <select
+          id="main-frame-preset"
+          name="presetSlug"
+          class="input"
+          th:attr="hx-post=@{/overview/main-frame}"
+          hx-trigger="change"
+          hx-target="#main-frame"
+          hx-swap="outerHTML"
+        >
+          <!-- Shown, and selected, only while the Frame names no known Preset (cleared, or a stale
+               reference) — otherwise the browser would default to visually selecting the first real
+               option below, wrongly implying it is the Frame's current choice. -->
+          <option th:if="${!configured}" value="" selected disabled hidden>Choose a report…</option>
+          <option
+            th:each="opt : ${presetOptions}"
+            th:value="${opt.slug()}"
+            th:text="${opt.title()}"
+            th:selected="${opt.slug() == selectedSlug}"
+          >
+            Preset
+          </option>
+        </select>
+      </div>
+
+      <p th:unless="${configured}" class="muted">No report configured.</p>
+      <div th:if="${configured and baseCurrencyUnset}">
+        <p th:replace="~{fragments/base-currency-prompt :: prompt}">Set the base currency first.</p>
+      </div>
+
+      <div th:if="${report != null}">
+        <table th:replace="~{fragments/report-table-body :: body}"></table>
+      </div>
+
+      <div th:if="${chart != null}">
+        <div th:replace="~{fragments/chart-panels :: panels}"></div>
+      </div>
+    </section>
+  </body>
+</html>

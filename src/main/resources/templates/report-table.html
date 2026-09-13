@@ -31,29 +31,7 @@
         Show chart
       </button>
 
-      <table class="report">
-        <thead>
-          <tr>
-            <th></th>
-            <th th:each="col : ${report.columnLabels()}" th:text="${col}">Column</th>
-            <th th:if="${report.showRowTotals()}">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr th:each="row : ${report.rows()}">
-            <td th:text="${row.label()}">Row</td>
-            <td class="num" th:each="cell : ${row.cells()}" th:text="${cell}">0,00</td>
-            <td class="num" th:if="${report.showRowTotals()}" th:text="${row.rowTotal()}">0,00</td>
-          </tr>
-        </tbody>
-        <tfoot th:if="${report.showColumnTotals()}">
-          <tr>
-            <td>Total</td>
-            <td class="num" th:each="total : ${report.columnTotals()}" th:text="${total}">0,00</td>
-            <td class="num" th:if="${report.showRowTotals()}" th:text="${report.grandTotal()}">0,00</td>
-          </tr>
-        </tfoot>
-      </table>
+      <table th:replace="~{fragments/report-table-body :: body}"></table>
     </section>
   </main>
 </html>
