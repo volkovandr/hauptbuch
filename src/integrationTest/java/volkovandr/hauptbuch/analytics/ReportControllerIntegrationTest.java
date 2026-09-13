@@ -3,7 +3,9 @@ package volkovandr.hauptbuch.analytics;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
@@ -188,5 +190,46 @@ class ReportControllerIntegrationTest {
         .perform(get("/reports/preset/category-month-matrix/view").param("view", "chart"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("<table")));
+  }
+
+  @Test
+  void copyingPresetSavesOwnedReportAndRedirectsToIt() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+
+    mockMvc
+        .perform(post("/reports/preset/category-month-matrix/copy").param("name", "My copy"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrlPattern("/reports/*"));
+  }
+
+  @Test
+  void copyingAnUnknownPresetSlugIs404() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+
+    mockMvc
+        .perform(post("/reports/preset/no-such-preset/copy").param("name", "My copy"))
+        .andExpect(status().isNotFound());
+  }
+
+  /**
+   * A Preset cannot be deleted: it is code-defined, never a row, so there is no id to delete one by
+   * — copying it makes an independent owned Report that deletion never reaches back into.
+   */
+  @Test
+  void deletingCopiedReportLeavesOriginalPresetIntact() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    String redirect =
+        mockMvc
+            .perform(post("/reports/preset/category-month-matrix/copy").param("name", "My copy"))
+            .andReturn()
+            .getResponse()
+            .getRedirectedUrl();
+
+    mockMvc.perform(post(redirect + "/delete")).andExpect(status().is3xxRedirection());
+
+    mockMvc
+        .perform(get("/reports/preset/category-month-matrix"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Category")));
   }
 }

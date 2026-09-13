@@ -50,14 +50,11 @@ class ReportsLayoutControllerIntegrationTest {
   }
 
   @Test
-  void reportsPageShowsThePlaceholderAndAnEmptyReportList() throws Exception {
+  void reportsPageShowsAnEmptyReportListWhenNoneAreSaved() throws Exception {
     mockMvc
         .perform(get("/reports"))
         .andExpect(status().isOk())
-        .andExpect(
-            content()
-                .string(
-                    allOf(containsString("New report"), containsString("No saved reports yet"))));
+        .andExpect(content().string(containsString("No saved reports yet")));
   }
 
   @Test

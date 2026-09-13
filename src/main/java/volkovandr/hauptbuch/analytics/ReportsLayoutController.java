@@ -20,7 +20,9 @@ import volkovandr.hauptbuch.web.NavItem;
  * the same mechanism {@link MainFrameController} uses for the main page's 1x1 case, generalised to
  * N Frames. Resizing the grid only re-renders the {@code fragments/layout-config} fragment in place
  * (nothing is persisted); {@code Save layout} posts the same form's current field values and
- * persists the whole grid at once (reporting.md §11's "no cap, no drag").
+ * persists the whole grid at once (reporting.md §11's "no cap, no drag"). The saved-Report list
+ * (plan stage d) lives here too, since it shares this page; each Report's own actions are {@link
+ * SavedReportController}'s job.
  */
 @Controller
 class ReportsLayoutController {
@@ -34,19 +36,25 @@ class ReportsLayoutController {
   private final LayoutService layoutService;
   private final ReportEngine reportEngine;
   private final SettingsService settingsService;
+  private final ReportService reportService;
 
   ReportsLayoutController(
-      LayoutService layoutService, ReportEngine reportEngine, SettingsService settingsService) {
+      LayoutService layoutService,
+      ReportEngine reportEngine,
+      SettingsService settingsService,
+      ReportService reportService) {
     this.layoutService = layoutService;
     this.reportEngine = reportEngine;
     this.settingsService = settingsService;
+    this.reportService = reportService;
   }
 
-  /** The reporting page: New report (a placeholder until stage d), the Report list, the Layout. */
+  /** The reporting page: the saved-Report list (plan stage d), the Layout. */
   @GetMapping(BASE_PATH)
   String reports(Model model) {
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", "Reports · Hauptbuch");
+    model.addAttribute("savedReports", reportService.list());
     LayoutSnapshot layout = layoutService.reportsLayout();
     populateLayout(layout.rowCount(), layout.columnCount(), layout.frames(), model);
     return "reports";

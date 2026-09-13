@@ -5,6 +5,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.server.ResponseStatusException;
 import volkovandr.hauptbuch.ledger.SettingsService;
@@ -16,20 +17,29 @@ import volkovandr.hauptbuch.web.NavItem;
  * back in place ({@code /reports/preset/{slug}/view}), the same hx-get/hx-swap idiom the receipt
  * image toggle uses. The reporting page itself ({@code /reports}) is {@link
  * ReportsLayoutController}'s job — its own Layout reaches the same Presets via a Frame's picker.
+ *
+ * <p>{@code /reports/preset/{slug}/copy} (plan stage d) is the one bridge from a Preset to a saved,
+ * editable Report: {@link ReportService#copyFromPreset} clones its spec into an owned row, leaving
+ * the Preset itself untouched and still non-deletable ({@link SavedReportController} owns a saved
+ * Report's own page and its rename/duplicate/delete actions). It resolves the slug via {@link
+ * #presetFor}, the same 404-on-unknown-slug lookup every other Preset route here uses, rather than
+ * asking {@link ReportService} to know about the code-defined catalog.
  */
 @Controller
 class ReportController {
 
   private static final String BASE_PATH = "/reports";
-  private static final String NO_BASE_CURRENCY_VIEW = "report-unavailable";
   private static final String TABLE_VIEW = "table";
 
   private final ReportEngine reportEngine;
   private final SettingsService settingsService;
+  private final ReportService reportService;
 
-  ReportController(ReportEngine reportEngine, SettingsService settingsService) {
+  ReportController(
+      ReportEngine reportEngine, SettingsService settingsService, ReportService reportService) {
     this.reportEngine = reportEngine;
     this.settingsService = settingsService;
+    this.reportService = reportService;
   }
 
   /** One Preset, full page — the chosen renderer, or the table if it has none. */
@@ -52,6 +62,13 @@ class ReportController {
     return render(def, slug, asTable, model, "report-table :: frame", "report-chart :: frame");
   }
 
+  /** "Copy to my reports" (plan stage d): clones the Preset's spec into a new owned Report. */
+  @PostMapping(BASE_PATH + "/preset/{slug}/copy")
+  String copyToOwnReports(@PathVariable String slug, @RequestParam String name) {
+    SavedReport copy = reportService.copyFromPreset(presetFor(slug), name);
+    return "redirect:" + BASE_PATH + "/" + copy.reportId();
+  }
+
   private String render(
       PresetDef def,
       String slug,
@@ -60,21 +77,15 @@ class ReportController {
       String tableViewName,
       String chartViewName) {
     model.addAttribute("slug", slug);
-    return settingsService
-        .baseCurrency()
-        .map(
-            baseCurrency -> {
-              PresetRendering.Rendered rendered =
-                  PresetRendering.populate(def, baseCurrency, asTable, reportEngine);
-              if (asTable) {
-                model.addAttribute("report", rendered.report());
-                model.addAttribute("hasChart", def.renderer() != Renderer.TABLE);
-                return tableViewName;
-              }
-              model.addAttribute("chart", rendered.chart());
-              return chartViewName;
-            })
-        .orElse(NO_BASE_CURRENCY_VIEW);
+    model.addAttribute("viewBasePath", BASE_PATH + "/preset/" + slug + "/view");
+    return PresetRendering.renderOwnPage(
+        PresetRendering.Presentation.of(def),
+        asTable,
+        model,
+        settingsService,
+        reportEngine,
+        tableViewName,
+        chartViewName);
   }
 
   private static PresetDef presetFor(String slug) {
