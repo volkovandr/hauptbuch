@@ -138,11 +138,12 @@ class ReceiptCaptureScreenIntegrationTest {
   }
 
   /**
-   * The mobile grid's state dot gets the same grey "Void" treatment as the PC badge for a committed
-   * receipt whose transaction was voided from the register (issue tracker #08).
+   * The mobile grid is scoped to the working queue (issue tracker #27) — a committed receipt never
+   * appears there, voided transaction or not, unlike the PC register which still surfaces it with
+   * the grey "Void" badge (issue tracker #08).
    */
   @Test
-  void gridShowsGreyVoidDotForCommittedReceiptWhoseTransactionWasVoided() throws Exception {
+  void gridExcludesCommittedReceiptEvenWhenItsTransactionWasVoided() throws Exception {
     mockMvc
         .perform(multipart("/receipts").file(ReceiptImages.jpegPart()))
         .andExpect(status().is3xxRedirection());
@@ -166,8 +167,7 @@ class ReceiptCaptureScreenIntegrationTest {
     mockMvc
         .perform(get(CAPTURE_PATH))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("state-dot--void")))
-        .andExpect(content().string(containsString("title=\"Void\"")))
+        .andExpect(content().string(not(containsString("state-dot--void"))))
         .andExpect(content().string(not(containsString("state-dot--committed"))));
   }
 

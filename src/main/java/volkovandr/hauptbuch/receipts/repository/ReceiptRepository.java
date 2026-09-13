@@ -114,18 +114,19 @@ public class ReceiptRepository {
   }
 
   /**
-   * The mobile grid (§4): every live receipt captured on or after {@code since}, newest capture
-   * first, all states including {@code committed} (§9b extends §4). The 90-day floor keeps the grid
-   * bounded.
+   * The mobile grid (§4, narrowed to the working queue by issue tracker #27): live receipts whose
+   * state is in {@code states} and captured on or after {@code since}, newest capture first. The
+   * 90-day floor keeps the grid bounded.
    */
-  public List<Receipt> findForMobile(OffsetDateTime since) {
+  public List<Receipt> findForMobile(List<String> states, OffsetDateTime since) {
     return jdbcClient
         .sql(
             """
             select * from receipt
-            where deleted_at is null and captured_at >= :since
+            where deleted_at is null and state in (:states) and captured_at >= :since
             order by captured_at desc, receipt_id desc
             """)
+        .param("states", states)
         .param("since", since)
         .query(Receipt.class)
         .list();
