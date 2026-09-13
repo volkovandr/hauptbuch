@@ -76,7 +76,7 @@ Geometry maths (scales, tick selection, the trend line's fit) is unit-testable a
 
 ---
 
-## c — Layouts and the main page
+## c — Layouts and the main page ✅ complete (owner-confirmed 2026-09-13)
 
 - Layout configuration (rows × columns → Frames, a dropdown per Frame, **Save layout**), no cap, no
   drag (`reporting.md` §11).
@@ -154,6 +154,9 @@ transaction, a transfer, and a category-to-category correction; the CSV's shape.
 
 ## Changelog
 
+- **v0.4 (2026-09-13):** Slice c marked complete (owner-confirmed), built as two reviewed work
+  packages — the main page's 1×1 Layout, then the reporting page's configurable Layout. No scope
+  change (routine).
 - **v0.3 (2026-09-13):** Slice b marked complete (owner-confirmed). No scope change (routine).
 - **v0.2 (2026-09-13):** Slice a marked complete (owner-confirmed). No scope change (routine).
 - **v0.1 (2026-09-12):** Initial slicing from the grilling pass that produced `reporting.md` v0.1.
