@@ -92,7 +92,7 @@ configured Layout. **This is the slice that closes the gap that prompted the fea
 
 ---
 
-## d — Saving, listing and the URL
+## d — Saving, listing and the URL ✅ complete (owner-confirmed 2026-09-13)
 
 - The `report` table (`jsonb` spec + promoted name/renderer/Layout columns) and its migration.
 - Save from an ad-hoc query-string Report; rename, duplicate, delete; `/reports/{id}`.
@@ -154,6 +154,13 @@ transaction, a transfer, and a category-to-category correction; the CSV's shape.
 
 ## Changelog
 
+- **v0.5 (2026-09-13):** Slice d marked complete (owner-confirmed). Scope change: the ad-hoc
+  query-string spec builder was not built — no dimension/filter/measure picker UI exists anywhere
+  in the app, and the owner confirmed building the full spec↔query-string codec plus a generic
+  render endpoint was out of scope for this slice; saving is "copy a Preset, then rename" only.
+  Also closes a gap `V25`'s own migration comment had anticipated for this stage: a Frame (the main
+  page's and the reporting page's Layout alike) can now reference a saved Report as well as a
+  Preset.
 - **v0.4 (2026-09-13):** Slice c marked complete (owner-confirmed), built as two reviewed work
   packages — the main page's 1×1 Layout, then the reporting page's configurable Layout. No scope
   change (routine).
