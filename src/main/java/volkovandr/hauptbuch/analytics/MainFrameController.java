@@ -48,19 +48,14 @@ class MainFrameController {
     model.addAttribute("presetOptions", PresetCatalog.all());
     model.addAttribute("selectedSlug", selectedSlug.orElse(null));
 
-    Optional<PresetDef> def = selectedSlug.flatMap(PresetCatalog::find);
-    model.addAttribute("configured", def.isPresent());
-    def.ifPresent(d -> populate(d, model));
+    PresetRendering.FrameContent content =
+        PresetRendering.renderFrame(
+            selectedSlug.orElse(null), settingsService.baseCurrency(), reportEngine);
+    model.addAttribute("configured", content.configured());
+    model.addAttribute("baseCurrencyUnset", content.baseCurrencyUnset());
+    model.addAttribute("report", content.report());
+    model.addAttribute("chart", content.chart());
 
     return FRAME;
-  }
-
-  private void populate(PresetDef def, Model model) {
-    Optional<String> baseCurrency = settingsService.baseCurrency();
-    model.addAttribute("baseCurrencyUnset", baseCurrency.isEmpty());
-    baseCurrency.ifPresent(
-        currency ->
-            PresetRendering.populate(
-                def, currency, def.renderer() == Renderer.TABLE, reportEngine, model));
   }
 }

@@ -96,3 +96,29 @@ table.report tfoot td {
   color: var(--oxblood);
   font-style: italic;
 }
+
+/* The reporting page's own Layout (reporting.md §11, plan stage c part 2): the rows/columns
+   controls sit above a CSS grid of Frame cards, one per configured position. */
+.layout-dimensions {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.layout-dimensions .field {
+  margin: 0;
+}
+
+.layout-dimensions .input {
+  width: 5rem;
+}
+
+.layout-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.layout-frame {
+  min-width: 0;
+}
