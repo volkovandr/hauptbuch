@@ -41,6 +41,7 @@ class MainFrameControllerIntegrationTest {
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
   @Autowired SettingsService settingsService;
+  @Autowired ReportService reportService;
 
   private void seedFrameSlug(String slug) {
     jdbcClient
@@ -110,7 +111,7 @@ class MainFrameControllerIntegrationTest {
     settingsService.setBaseCurrency("EUR");
 
     mockMvc
-        .perform(post(PATH).param("presetSlug", "balance-sheet"))
+        .perform(post(PATH).param("selection", "preset:balance-sheet"))
         .andExpect(status().isOk())
         .andExpect(content().string(allOf(containsString("<table"), not(containsString("<svg")))));
 
@@ -118,6 +119,23 @@ class MainFrameControllerIntegrationTest {
         .perform(get(PATH))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("<table")));
+  }
+
+  @Test
+  void pickerSwitchesToSavedReportAndPersistsIt() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    SavedReport saved =
+        reportService.save("My balance sheet", Presets.balanceSheet(), Renderer.TABLE, false);
+
+    mockMvc
+        .perform(post(PATH).param("selection", "report:" + saved.reportId()))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("<table")));
+
+    mockMvc
+        .perform(get(PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("href=\"/reports/" + saved.reportId() + "\"")));
   }
 
   @Test
@@ -160,7 +178,7 @@ class MainFrameControllerIntegrationTest {
     settingsService.setBaseCurrency("EUR");
 
     mockMvc
-        .perform(post(PATH).param("presetSlug", "category-month-matrix"))
+        .perform(post(PATH).param("selection", "preset:category-month-matrix"))
         .andExpect(status().isOk())
         .andExpect(
             content()

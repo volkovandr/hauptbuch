@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.analytics;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -38,6 +39,7 @@ class ReportsLayoutControllerIntegrationTest {
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
   @Autowired SettingsService settingsService;
+  @Autowired ReportService reportService;
 
   private void seedFrameSlug(String slug) {
     jdbcClient
@@ -106,7 +108,7 @@ class ReportsLayoutControllerIntegrationTest {
             post(RESIZE_PATH)
                 .param("rowCount", "1")
                 .param("columnCount", "2")
-                .param("frame-0-0", "balance-sheet"))
+                .param("frame-0-0", "preset:balance-sheet"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("<table")));
   }
@@ -120,7 +122,7 @@ class ReportsLayoutControllerIntegrationTest {
             post(SAVE_PATH)
                 .param("rowCount", "1")
                 .param("columnCount", "2")
-                .param("frame-0-0", "balance-sheet")
+                .param("frame-0-0", "preset:balance-sheet")
                 .param("frame-0-1", ""))
         .andExpect(status().isOk())
         .andExpect(content().string(allOf(containsString("<table"), containsString("frame-0-1"))));
@@ -148,6 +150,72 @@ class ReportsLayoutControllerIntegrationTest {
         .perform(get("/reports"))
         .andExpect(status().isOk())
         .andExpect(content().string(not(containsString("href=\"/reports/preset/"))));
+  }
+
+  @Test
+  void pickerListsSavedReportsAlongsidePresets() throws Exception {
+    reportService.save("My matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+
+    mockMvc
+        .perform(get("/reports"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("My matrix")));
+  }
+
+  @Test
+  void savingFrameWithSavedReportPersistsAndRenders() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    SavedReport saved =
+        reportService.save("My balance sheet", Presets.balanceSheet(), Renderer.TABLE, false);
+
+    mockMvc
+        .perform(
+            post(SAVE_PATH)
+                .param("rowCount", "1")
+                .param("columnCount", "1")
+                .param("frame-0-0", "report:" + saved.reportId()))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("<table")));
+
+    mockMvc
+        .perform(get("/reports"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("href=\"/reports/" + saved.reportId() + "\"")));
+  }
+
+  @Test
+  void savingFrameWithUnknownReportIdIsRejected() {
+    settingsService.setBaseCurrency("EUR");
+
+    // Unhandled outside htmx (GlobalHtmxErrorAdvice re-throws for a non-htmx request), so the
+    // rejection surfaces as a thrown exception from perform() itself, not a response status.
+    assertThatThrownBy(
+            () ->
+                mockMvc.perform(
+                    post(SAVE_PATH)
+                        .param("rowCount", "1")
+                        .param("columnCount", "1")
+                        .param("frame-0-0", "report:999999")))
+        .hasRootCauseInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void deletingReportReferencedByFrameDegradesItRatherThanFailingTheDelete() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    SavedReport saved =
+        reportService.save("Disposable", Presets.balanceSheet(), Renderer.TABLE, false);
+    mockMvc.perform(
+        post(SAVE_PATH)
+            .param("rowCount", "1")
+            .param("columnCount", "1")
+            .param("frame-0-0", "report:" + saved.reportId()));
+
+    reportService.delete(saved.reportId());
+
+    mockMvc
+        .perform(get("/reports"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("No report configured")));
   }
 
   @Test

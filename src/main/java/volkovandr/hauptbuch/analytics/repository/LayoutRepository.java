@@ -34,7 +34,7 @@ public class LayoutRepository {
         jdbcClient
             .sql(
                 """
-                select row_position, col_position, preset_slug from layout_frame
+                select row_position, col_position, preset_slug, report_id from layout_frame
                 where layout_id = :layoutId
                 order by row_position, col_position
                 """)
@@ -69,13 +69,15 @@ public class LayoutRepository {
       jdbcClient
           .sql(
               """
-              insert into layout_frame (layout_id, row_position, col_position, preset_slug)
-              values (:id, :row, :col, :slug)
+              insert into layout_frame
+                (layout_id, row_position, col_position, preset_slug, report_id)
+              values (:id, :row, :col, :slug, :reportId)
               """)
           .param("id", layoutId)
           .param("row", frame.rowPosition())
           .param("col", frame.colPosition())
           .param("slug", frame.presetSlug())
+          .param("reportId", frame.reportId())
           .update();
     }
   }
