@@ -200,6 +200,10 @@ Full detail in `docs/data-model.md`. The traps:
 - **Migrations:** Flyway, plain versioned `.sql`, forward-only. A migration is "tested" when it
   applies cleanly on a fresh container and the resulting schema/data is asserted.
 - **Row mapping:** Java `record`s, mapped via `JdbcClient`. No entity graphs.
+- **Tooltips: `title` names an icon; `.help` explains a concept.** A native `title` attribute is for a
+  one-line label on an icon button or glyph. A concept the operator may need explained (reporting's
+  Scope, legs, the `—` cell) gets the CSS-only `.help` marker instead — styled, instant, and reachable
+  by keyboard. Never put a number in either (FR-UX-03).
 - **Commit messages never include a Claude session link/URL.** `Co-Authored-By` attribution lines
   are fine when the session's system instructions call for them; a `claude.ai/code/session_...` link
   in the commit body/footer is not — it doesn't belong in permanent git history.

@@ -144,21 +144,28 @@ _Avoid_: direction, inflow/outflow, sign, money in/money out
 A named, saved specification — dimensions on rows/columns/series, measures, filters, date range,
 renderer — plus its own URL. Not the rendered output: the same Report re-run tomorrow shows
 different numbers. An unnamed, unsaved spec carried in the query string is still a Report, just not
-a saved one.
+a saved one. A Report's page is also where it is edited — there is no separate viewer.
 _Avoid_: query, view, analysis, chart (for the spec)
 
 **Preset**:
 A Report the application defines in code and always provides — net worth over time, the
-category×month matrix, the balance sheet. Non-deletable and not editable in place; altering one
-means copying it to a Report of your own.
+category×month matrix, the balance sheet. Non-deletable and not editable in place; changing one's
+settings and choosing *Save as new report* is how you get a Report of your own.
 _Avoid_: default report, built-in, template, example
 
 **Layout / Frame**:
 A **Layout** is a grid of **Frames** (rows × columns), each Frame displaying one Report. The
 reporting page has a Layout; the main page has its own 1×1 Layout, so "the one report on the main
-page" is not a special case. A Report is *placed in a Frame* — it is never "pinned"; pinning stays
-exclusive to accounts.
+page" is not a special case. A Frame shows its Report's **name** as its heading and links to the
+Report's page. The reporting page shows its Layout read-only; the Layout is edited on a page of its
+own. A Report is *placed in a Frame* — it is never "pinned"; pinning stays exclusive to accounts.
 _Avoid_: dashboard, grid, tile, widget, pinned report
+
+**Scope**:
+Which kinds of account a report's measures add up — account types, plus whether closed accounts and
+`pending_review` transactions are in. Required, because every transaction sums to zero: without a
+scope every sum is 0. Scope answers "add up *what*?"; a filter answers "only *which ones*?".
+_Avoid_: population, universe, base, perimeter
 
 **Measure**:
 What a cell counts: a **turnover** or a **closing balance**, each in either the base currency or the

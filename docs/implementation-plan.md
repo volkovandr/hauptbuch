@@ -622,7 +622,7 @@ shipped; everything after it is unbuilt.
   worth in base incl. **held-balance revaluation** (FR-ANA-05, §1.2), CSV export, and **Layouts** —
   the main page becoming a 1×1 Layout defaulting to net worth over time. Sequenced in the sub-plan
   **`implementation-plan-reporting.md`** (slices a–f: engine+table, charts, Layouts, saving,
-  expansion+nesting, drill-down+CSV), ordered so the main-page net-worth chart lands third. Deliberately
+  d2 read-only Layout, d3 the Report page as editor, expansion+nesting, drill-down+CSV), ordered so the main-page net-worth chart lands third. Deliberately
   **not** a §2 stage; §2 stays closed.
   The **monthly narrative report** (FR-RPT, Q12) is *not* part of it — it stays unbuilt below and is
   revisited **with budgets**, since "fact against budget" is the half that makes it worth writing.
