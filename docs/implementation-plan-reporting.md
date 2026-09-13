@@ -1,7 +1,7 @@
 # Hauptbuch — Reporting sub-plan (slices a–f)
 
-**Status:** Draft v0.1
-**Date:** 2026-09-12
+**Status:** Draft v0.6
+**Date:** 2026-09-13
 **Owner:** volkovandr
 **Companion to:** `reporting.md` (authoritative for every design decision),
 `implementation-plan.md` (§3, the Reporting bullet), `docs/adr/0001-generic-report-engine.md`
@@ -107,7 +107,72 @@ unchanged; a Preset cannot be deleted.
 
 ---
 
+## d2 — The Layout, read-only
+
+Reworks slice **c**'s screens to `reporting.md` §11; no engine change.
+
+- **One Frame fragment**, replacing `main-frame.html` and the Frame markup inside
+  `layout-config.html`: the Report's name as heading, the rendering, **Open report →** at the bottom
+  right, a muted *No report* when unconfigured.
+- **`/reports`**: the Layout read-only, then **My reports** and **Presets** lists, then **Edit
+  layout**.
+- **`/reports/layout`**: today's rows × columns and per-Frame dropdowns (each above the same Frame
+  fragment), **Save layout** and **Cancel** returning to `/reports`.
+- **Main page**: the Frame fragment in place of the captioned picker; the picker moves below the
+  Balances panel; the Frame is hidden when no Report is chosen.
+
+Until **d3**, Open report leads to the existing read-only Report page.
+
+**Tests.** Integration tier: `/reports` renders Frames with their headings and no configuration
+inputs; `/reports/layout` persists and Cancel does not; the main page renders the heading and the
+bottom picker, and hides the Frame when unconfigured.
+
+**Done when** the reporting page and the main page read as clean Frames headed by their Reports'
+names, the Layout is edited on its own page, and `./gradlew check` is green.
+
+---
+
+## d3 — The Report page is the editor
+
+Everything the engine supports **today** becomes editable on the Report's own page
+(`reporting.md` §11a). Later slices add their own controls to it.
+
+- **Spec ↔ query-string binding** — the full spec, both directions, and the page choosing between a
+  URL draft and the saved spec; `hx-replace-url` on every re-render.
+- **Actions**: Save / Save as new report / Discard changes / Delete, the Unsaved marker; a Preset
+  offers Save as new report only; **New report** at `/reports/new`. The "Manage this report" panel,
+  Duplicate and Preset "Copy to my reports" are removed.
+- **The settings strip** (§11a.2): Rows & columns, Measures, Scope, Filters, Date range, Display, and
+  the always-visible Renderer. The chart/table swap is removed.
+- **Live vs Apply** (§11a.3); the unapplied-changes state; illegal combinations unenterable or
+  messaged.
+- **Filters** (§11a.5): fixed per-field sections, reading switches, Payee's operator; hierarchy
+  pickers storing nodes — `filter-groups.js` generalised (node mode, no hard-coded field name) with
+  acceptance coverage on the register **and** the Report page.
+- **Date range** (§11a.6): shortcuts, Date/Relative endpoints, the resolved-date label swap.
+- **Help markers** (§11a.7), including on `—` cells.
+- **Engine**: `Scope` loses `accountSubtreeRoots`; `FilterField` loses `LIFECYCLE`; Account type
+  filters are transaction-level only; `ReportSpec` rejects two filters on one field; the
+  scope-misses-the-dimension message.
+
+**Tests.** Unit tier: the spec ↔ query-string binding round-trips every spec shape (the one piece
+whose bugs silently change a Report), and the new `ReportSpec`/`ReportFilter` rejections.
+Integration tier: a draft URL renders its spec and the Unsaved marker, no parameters renders the
+saved spec; Save / Save as new / Discard / Delete; a Preset has no Save or Delete; each settings
+group renders its controls and an Apply group's control does not re-render on change; a ticked
+hierarchy node round-trips as the node; `—` carries its help marker. The filter leaf's acceptance on
+both screens.
+
+**Done when** the owner can open the matrix Preset, change its scope, filters, measures, range and
+renderer, save it as a Report of his own, and reopen it from a Frame — and `./gradlew check` is
+green.
+
+---
+
 ## e — Expansion and nesting
+
+Adds its own controls to the d3 editor: the second dimension per axis, the initial expansion state,
+parent rows as subtotal or header, and the Date ladder.
 
 - Expandable row hierarchies via htmx fragment swaps, with **remembered state** against the saved
   Report (§9.1).
@@ -154,6 +219,11 @@ transaction, a transfer, and a category-to-category correction; the CSV's shape.
 
 ## Changelog
 
+- **v0.6 (2026-09-13):** Scope change: **slices d2 and d3 inserted** before e. No slice had owned the
+  UI for editing a Report (v0.5 dropped the spec builder from d without re-homing it), and the
+  owner asked for the reporting and main pages to show Frames cleanly. Designed in `reporting.md`
+  v0.2 (§11, §11a); e gains its controls in the d3 editor. Letters e and f are kept because code
+  comments already cite them.
 - **v0.5 (2026-09-13):** Slice d marked complete (owner-confirmed). Scope change: the ad-hoc
   query-string spec builder was not built — no dimension/filter/measure picker UI exists anywhere
   in the app, and the owner confirmed building the full spec↔query-string codec plus a generic

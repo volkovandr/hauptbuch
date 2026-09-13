@@ -1,8 +1,8 @@
 # Hauptbuch — Reporting: the Report Engine, Renderers & Layouts
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.1
-**Date:** 2026-09-12
+**Status:** Draft v0.2
+**Date:** 2026-09-13
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (§5.9, FR-ANA-01–10, FR-REP-01–14),
 `data-model.md` (§4 signs, §5 leaves-only, §6.1 the two valuation rules, §10 tags),
@@ -38,11 +38,12 @@ number. The engine knows which aggregates are arithmetically meaningful and refu
 ## 2. Four objects
 
 - **Report** — a saved spec with a name and a URL. Not the output: the same Report re-run tomorrow
-  shows different figures. An unsaved spec lives in the query string and is still a Report.
+  shows different figures. An unsaved spec lives in the query string and is still a Report. **A
+  Report's page is also its editor** — there is no separate viewer (§11a).
 - **Preset** — a Report the application defines **in code**, always present, non-deletable, not
-  editable in place. `/reports/preset/net-worth` always resolves; altering a Preset means copying it
-  to a Report of your own. This is deliberate: the main page's default report must not be
-  destroyable by a botched edit.
+  editable in place. `/reports/preset/net-worth` always resolves; changing a Preset's settings
+  produces an unsaved draft whose only save is **Save as new report**. This is deliberate: the main
+  page's default report must not be destroyable by a botched edit.
 - **Layout** — a grid of Frames (rows × columns), each Frame displaying one Report.
 - **Frame** — one cell of a Layout.
 
@@ -91,7 +92,7 @@ series takes exactly one.
 | **Account type** | no | posting | the five `account.type` values |
 | **Date** | yes (the ladder, §8.2) | transaction | `transaction.date`, the only date the model carries |
 
-Filters only, never dimensions: `lifecycle`, `reconciliation`, note text. They partition nothing the
+Filters or scope toggles only, never dimensions: `lifecycle` (§6.4), `reconciliation`, note text. They partition nothing the
 owner wants to read down a page, and as dimensions they would invite a "reconciled vs unreconciled"
 grid that is a reconciliation tool, not a report.
 
@@ -198,9 +199,28 @@ currency variant.
 ### 6.1 Scope exists because every transaction sums to zero
 
 Summing *all* postings over January returns **0.00**, by construction (data-model §4). So a flow
-report cannot be defined by its dimensions alone — it needs an explicit **scope**: the account types
-and/or account subtrees whose postings the measure counts. The matrix's scope is implicit in its rows
-(categories ⇒ `income` + `expense`); a generic engine has to state it.
+report cannot be defined by its dimensions alone — it needs an explicit **scope**: the **account
+types** whose postings the measure adds up, plus the two toggles of §6.4 (closed accounts, pending
+review). The matrix's scope is implicit in its rows (categories ⇒ `income` + `expense`); a generic
+engine has to state it.
+
+Scope answers **"add up *what*?"**; a filter (§6.2) answers **"only *which ones*?"**. Three layers,
+each with one job:
+
+| Layer | Question | Required |
+|-------|----------|----------|
+| **Scope** | add up amounts on which *kinds* of account? | yes |
+| **"amounts booked to …"** filters | …and only on *these* accounts, categories, tags, currencies | no |
+| **"transactions touching …"** filters | …only from transactions that involve *this* | no |
+
+An earlier draft let scope also name **account subtrees**. It was cut: it compiled to exactly the
+SQL of an "amounts booked to" Account/Category filter, so the editor would have offered two controls
+for one meaning. Narrowing *below* an account type is a posting-level filter's job.
+
+**Scope never follows the dimensions.** Switching rows from Account to Category leaves an
+`asset`+`liability` scope as it was; the grid comes out empty and the Report says why ("Category
+covers income and expense accounts; neither is in scope"). Silently resetting a deliberately-set
+scope on a dimension change was rejected.
 
 ### 6.2 Filters come in two visibly different kinds
 
@@ -217,10 +237,20 @@ So a filter declares which it is, in words, in the UI:
 
 Defaults: Account, Payee, Person → transaction-level; Tag → transaction-level (for a category
 breakdown of a trip you want the whole transaction's shape, because the fuel line carries the tag);
-Category, Currency, Account type → posting-level. Every one of them is switchable, because both
-readings are legitimate and they give different numbers. Hiding the distinction behind a fixed
-per-field rule was rejected: the wrong reading is silent, and it is silently wrong in the direction
-of a plausible-looking answer.
+Category, Currency → posting-level. Where both readings give different numbers, the field is
+switchable, because both are legitimate. Hiding the distinction behind a fixed per-field rule was
+rejected: the wrong reading is silent, and it is silently wrong in the direction of a
+plausible-looking answer.
+
+Two exceptions. **Payee and note text** are attributes of the transaction, so the two readings
+coincide and no switch is shown. **Account type is transaction-level only**: its posting-level
+reading is exactly what scope's account types already say (§6.1), so offering it would be a second
+control for one meaning. What remains — "transactions touching a `liability`" — is the reading scope
+cannot express.
+
+A Report carries **at most one filter per field**. The one thing this gives up — two ANDed filters on
+the same field, e.g. "touching BankAaa *and* touching BankBbb" to find transfers between them — is a
+register question, not a reporting one.
 
 ### 6.3 Operators
 
@@ -228,8 +258,11 @@ of a plausible-looking answer.
 |-------|-----------|
 | Category, Account, Tag | `is one of` (multi-select) |
 | Payee | `is one of`, `matches` (regular expression, **case-insensitive**) |
-| Person, Currency, Account type, lifecycle, reconciliation | `is one of` |
+| Person, Currency, Account type, reconciliation | `is one of` |
 | note text | `contains` |
+
+`lifecycle` is **not** a filter field: the `pending_review` toggle (§6.4) already decides it, and the
+only thing a filter would add — "pending only" — is a review worklist for the register, not a report.
 
 **`is one of` on a hierarchy node includes its whole subtree.** There is no separate `is under`
 operator: selecting `Food` means Food and everything beneath it, and selecting only
@@ -278,6 +311,10 @@ A cell or total renders `—` when the aggregate would be **arithmetically meani
 This is a computed refusal, not a warning: the number is **not rendered**. A number on screen gets
 believed, and the discipline of not printing one is cheaper than the discipline of remembering
 data-model §10.4 in eighteen months. Per-tag figures remain valid; only the total across them is not.
+
+Every `—` carries a **help marker** (§11a) naming which of the three rows above applies — on a
+Report's page and in a Frame alike. It explains the absence of a number; it never reveals one, so
+FR-UX-03's no-hover-to-reveal rule is untouched.
 
 ### 7.3 Empty, zero, and suppression
 
@@ -395,11 +432,13 @@ only loss is interactivity, and FR-UX-03 forbids hover-to-reveal-the-number rega
 | **Bar** | small multiples | x-axis | the bar groups |
 | **Pie** | small multiples | the slices | unused |
 
-**Chart and table swap inside the same Frame.** Every chart has its grid available behind a toggle in
-the same UI element — one deterministic click, not a hover, and not a second copy of the numbers
-scrolling below the chart. The toggle's state is saved with the Report, like expansion state. This is
-how FR-UX-03's numbers-first rule is met: the figures are never *unavailable*, and they are never
-*only* obtainable by pointing at a pixel.
+**There is no chart/table swap.** Switching between a chart and its table *is* a change of renderer,
+and the renderer is a live control on the Report's page (§11a) — so the same control that shows a bar
+chart's table also turns it into a line chart. A separate swap would have been a second saved setting
+producing the same screen as `renderer = table`. FR-UX-03's numbers-first rule is met by that control:
+a chart's figures are always a deterministic renderer change away on its Report's page, and never
+*only* obtainable by pointing at a pixel. A Frame shows its Report's saved renderer; its figures are
+one **Open report** away.
 
 The **line renderer** carries FR-ANA-09's trend line as an option.
 
@@ -407,24 +446,141 @@ The **line renderer** carries FR-ANA-09's trend line as an option.
 
 ## 11. Layouts
 
-The reporting page holds: **New report**, the **list of saved Reports** as links, and the **Layout**
-of Frames rendering Reports inline.
+**Reading a Layout and editing it are two pages.** The reporting page (`/reports`) shows, top to
+bottom:
 
-A Layout is configured by choosing its **rows × columns**, which defines the Frames; each Frame then
-gets a **dropdown** of Reports and Presets, and the whole thing is saved with one **Save layout**.
-There is **no cap** on Frames and **no drag-and-drop** — a configurable grid plus dropdowns is the
-same implementation effort as a fixed 2×2 and needs no JS, and an integer-position-per-Report scheme
-(the alternative) has to resolve collisions that this one cannot have.
+1. The **Layout**, read-only — its Frames and nothing else: no rows/columns inputs, no dropdowns.
+2. The lists: **My reports** and **Presets**, as links, with **New report** at their head.
+3. **Edit layout**, opening `/reports/layout`.
 
-**The main page is a 1×1 Layout**, defaulting to the **net worth over time** Preset. Its Balances
-panel (`CONTEXT.md` §Landing page) answers the composition half of "how much money do I have"; the
-Frame answers the change-over-time half.
+`/reports/layout` is where a Layout is configured: choose its **rows × columns**, which defines the
+Frames; each Frame gets a **dropdown** of Reports and Presets above its rendering; **Save layout** or
+**Cancel** both return to `/reports`. There is **no cap** on Frames and **no drag-and-drop** — a
+configurable grid plus dropdowns is the same implementation effort as a fixed 2×2 and needs no JS,
+and an integer-position-per-Report scheme (the alternative) has to resolve collisions that this one
+cannot have.
+
+**A Frame** is one fragment wherever it appears: its **Report's name as the heading**, the rendered
+table or chart, and a small **Open report →** action at its bottom right, styled as a quiet app
+action rather than a bare link. No scope line, no date range — those belong to the Report's page,
+where "why doesn't this match the register" gets asked. A Frame with no Report shows a muted
+*No report*; a Layout never saved renders as an empty 1×1.
+
+**The main page is a 1×1 Layout**, defaulting to the **net worth over time** Preset. Its Frame is the
+same fragment (so its heading is the Report's name, not a generic caption); the **picker sits at the
+very bottom of the page**, below the Balances panel, since one dropdown needs no page of its own. With
+no Report chosen the Frame is hidden and only the picker remains. The Balances panel
+(`CONTEXT.md` §Landing page) answers the composition half of "how much money do I have"; the Frame
+answers the change-over-time half.
 
 > **Why not Money's default.** Money's out-of-the-box main-page report was a pie of the biggest
 > categories, which told the owner that rent was the biggest expense — something he already knew.
 > The main page's job is to show what **changed**, not what things are **made of**: composition is
 > stable and gets memorised, change carries information. This is the standard the default Preset is
 > chosen against.
+
+---
+
+## 11a. The Report page is the editor
+
+A Report is read and edited on **one page** — `/reports/{id}`, `/reports/preset/{slug}`,
+`/reports/new`. Opening a Frame's Report lands here, already able to change a filter and save. A
+separate read-only viewer was rejected as a second page showing the same report; leaving the page
+without saving never changes a stored Report, so a Frame cannot be damaged by a stray click.
+
+### 11a.1 Drafts and saving
+
+- **An unsaved draft lives in the URL as the full spec** — not a diff against the saved one — kept
+  current with `hx-replace-url` (one history entry, not one per click). No spec parameters means the
+  saved Report; any spec parameters replace it wholesale. A draft survives a reload and can be
+  bookmarked (§14).
+- While a draft is showing: an **Unsaved changes** marker beside **Save**, and **Discard changes**
+  (back to the parameter-less URL). No navigate-away warning — that needs `beforeunload`, i.e. JS
+  outside the three leaves, and the URL keeps the draft anyway.
+- **A saved Report:** Name, **Save** (overwrites; every Frame showing it follows, since Frames
+  reference rather than copy), **Save as new report**, **Delete**.
+- **A Preset:** **Save as new report** only, name prefilled "‹Preset name› copy"; no Save, no Delete.
+- **New report** starts from the category × month matrix spec — a spec needs at least one measure, so
+  it cannot start empty.
+
+### 11a.2 Layout of the page
+
+A strip of settings **above** the report, following the register's filter strip, so the report keeps
+the full width a month matrix needs. Each group is a collapsed `<details>`, so arriving from a Frame
+shows the report first:
+
+| Group | Holds |
+|-------|-------|
+| **Rows & columns** | one dropdown per axis slot (rows, columns, series), capped as §3 allows |
+| **Measures** | the measure grid (§11a.4) |
+| **Scope** | account types; include closed accounts; include pending review (§6.1, §6.4) |
+| **Filters** | one section per filter field (§11a.5) |
+| **Date range** | shortcuts and the two endpoints (§11a.6) |
+| **Display** | row totals, column totals, empty-row suppression |
+
+**Renderer** sits outside the groups, always visible: a dropdown, with the trend-line option beside
+it when Line is chosen and the pie's refusal (§7.4) beside it when it applies. Save, Discard and the
+Unsaved marker sit at the strip's right.
+
+### 11a.3 Live vs Apply
+
+**Checkbox groups and the date range wait for Apply; everything else is live.** A live control
+re-renders the report via htmx on change, with a short delay. A checkbox group (the hierarchy
+trees, scope's account types, Person, Currency, reconciliation, the measure grid) and the date range
+carry their own **Apply**, because their intermediate states are not what the operator wants to see —
+ticking twelve accounts is one decision, not twelve queries, and switching an endpoint from `month`
+to `week` is meaningless until its offset is changed too. A group with unapplied changes shows it on
+its Apply button (a CSS state, no JS).
+
+**Illegal combinations:** structural ones (an operator a field does not offer, a leg on a closing
+balance, a second series) are made **unenterable** by the form's shape — the spec records already
+reject them. Data-dependent refusals (the pie, `—`) stay where §7 puts them, in the rendered report.
+Rows-plus-series, a temporary engine limit, is a message rather than a disabled control.
+
+### 11a.4 Measures
+
+A fixed grid; column order follows it, not the order of ticking:
+
+```
+                        Base   Account currency
+Turnover — net           ☐        ☐
+Turnover — debits        ☐        ☐
+Turnover — credits       ☐        ☐
+Closing balance          ☐        ☐
+Count of postings        ☐    (no currency)
+Count of transactions    ☐    (no currency)
+```
+
+At least one must be ticked. Reordering measures is not offered.
+
+### 11a.5 Filters
+
+One **fixed section per field** — Category, Account, Tag, Payee, Person, Currency, Account type,
+reconciliation, note text; an empty section is no filter. Each carries the reading switch — **only
+transactions touching … / only amounts booked to …** — where §6.2 says the reading matters, and Payee
+its operator choice. No "add filter" rows, hence no dynamic form.
+
+**Ticking a hierarchy node stores the node**, per §6.3's subtree rule: ticking `Food` saves `Food`,
+so a `Food:Bakery` created next year is in every Report already filtering on Food. Its descendants
+render ticked and disabled. Storing ticked leaves instead — the register's behaviour — was rejected:
+it silently drops future children. `filter-groups.js` gains this node mode; it stays one of the three
+sanctioned leaves.
+
+### 11a.6 Date range
+
+Named **shortcuts** fill both endpoints and apply immediately — a shortcut is a complete choice. Each
+endpoint has a **Date / Relative** switch: a date field, or unit, offset and edge. Beside each, what
+it **resolves to today** ("= 01.06.2026"), refreshed by swapping only that label while editing — no
+report query runs until Apply.
+
+### 11a.7 Help markers
+
+The concepts in this document that a label cannot carry get a **help marker**: a CSS-only ⓘ whose
+text shows on hover and on keyboard focus. Placed on **Scope**, the **filter reading switch**,
+**measure kind** (turnover vs closing balance), **leg**, **presentation currency**, **range
+endpoints**, **include pending review**, and every **`—`** cell (§7.2). A `title` attribute names an
+icon; a help marker explains a concept — the native tooltip's delay, styling and lack of keyboard
+reach make it the wrong vehicle for three sentences on scope.
 
 ---
 
@@ -463,9 +619,10 @@ PDF export (FR-ANA-06's parenthetical) is **not** in scope.
   assignment. No normalised `report_dimension` / `report_filter` / `report_measure` tables: nothing
   ever asks "which reports filter on Food", and every v2 feature would otherwise be a migration.
 - **Ad-hoc Reports carry the whole spec in the query string** — bookmarkable, shareable, and
-  matching how the owner will actually work (fiddle with the URL, get something good, *then* name
-  it). Saving mints a row and a short `/reports/{id}`. Presets live at
-  `/reports/preset/{slug}` and are code-defined.
+  matching how the owner will actually work (change settings, get something good, *then* name it).
+  The query string is written by the editor (§11a.1), never by hand; a saved Report with unsaved
+  changes carries its draft the same way. Saving mints a row and a short `/reports/{id}`. Presets live
+  at `/reports/preset/{slug}` and are code-defined.
 - **The engine's public API is `spec in → grid out`.** That is what the UI wants anyway, and it makes
   the eventual MCP read tool (FR-MCP) a thin wrapper rather than a refactor — the same
   "one implementation, two callers" shape CLAUDE.md §3 established for `operations`. **Nothing is
@@ -531,6 +688,16 @@ management screen.
 
 ## Changelog
 
+- **v0.2 (2026-09-13):** From a grilling pass on the missing editor — v0.1 specified no UI for
+  choosing dimensions, measures, scope, filters or renderer. New **§11a**: a Report's page is its
+  editor (no separate viewer), drafts in the URL, live controls vs Apply groups, the measure grid,
+  fixed filter sections storing hierarchy *nodes*, the endpoint editor, help markers. **§11**: the
+  reporting page shows its Layout read-only; configuration moves to `/reports/layout`; a Frame is one
+  fragment headed by its Report's name; the main page's picker moves to the page bottom. **§10**: the
+  chart/table swap is removed — the renderer control replaces it. **§6.1**: scope loses account
+  subtrees (a duplicate of the posting-level filter) and never follows the dimensions. **§6.2**:
+  Account type is transaction-level only; one filter per field. **§6.3**: `lifecycle` is no longer a
+  filter field. **§7.2**: every `—` explains itself.
 - **v0.1 (2026-09-12):** Initial design, from a full grilling pass. Establishes the report engine
   (dimensions, the four measures, legs, scope, the two filter kinds, the legality rules), the
   start/end anchor grammar, hierarchies with `auto` expansion and the `(unspecified)` row, four
