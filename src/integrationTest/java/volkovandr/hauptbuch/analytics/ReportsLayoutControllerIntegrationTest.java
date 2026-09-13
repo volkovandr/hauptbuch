@@ -132,6 +132,25 @@ class ReportsLayoutControllerIntegrationTest {
   }
 
   @Test
+  void configuredFrameLinksToThePresetsOwnPageWhereCopyToMyReportsLives() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    seedFrameSlug("balance-sheet");
+
+    mockMvc
+        .perform(get("/reports"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("href=\"/reports/preset/balance-sheet\"")));
+  }
+
+  @Test
+  void unconfiguredFrameOffersNoOpenFullReportLink() throws Exception {
+    mockMvc
+        .perform(get("/reports"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("href=\"/reports/preset/"))));
+  }
+
+  @Test
   void staleFrameReferenceDegradesToEmptyFrameRatherThanFiveHundreding() throws Exception {
     settingsService.setBaseCurrency("EUR");
     seedFrameSlug("no-such-preset-any-more");

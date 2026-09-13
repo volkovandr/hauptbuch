@@ -35,6 +35,9 @@
         </select>
       </div>
 
+      <p th:if="${configured}" class="actions">
+        <a th:href="@{/reports/preset/{slug}(slug=${selectedSlug})}">Open full report</a>
+      </p>
       <p th:unless="${configured}" class="muted">No report configured.</p>
       <div th:if="${configured and baseCurrencyUnset}">
         <p th:replace="~{fragments/base-currency-prompt :: prompt}">Set the base currency first.</p>

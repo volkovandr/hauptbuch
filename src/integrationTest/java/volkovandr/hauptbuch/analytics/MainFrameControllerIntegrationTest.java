@@ -130,6 +130,18 @@ class MainFrameControllerIntegrationTest {
   }
 
   @Test
+  void configuredFrameLinksToThePresetsOwnPageWhereCopyToMyReportsLives() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    seedOpeningBalance();
+
+    mockMvc
+        .perform(get(PATH))
+        .andExpect(status().isOk())
+        .andExpect(
+            content().string(containsString("href=\"/reports/preset/net-worth-over-time\"")));
+  }
+
+  @Test
   void staleFrameReferenceDegradesToEmptyFrameRatherThanFiveHundreding() throws Exception {
     settingsService.setBaseCurrency("EUR");
     seedFrameSlug("no-such-preset-any-more");

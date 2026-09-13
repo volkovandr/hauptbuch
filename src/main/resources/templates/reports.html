@@ -15,7 +15,8 @@
     <section class="panel">
       <p class="eyebrow">Reports</p>
       <p class="muted" th:if="${#lists.isEmpty(savedReports)}">
-        No saved reports yet — open a Preset below and use "Copy to my reports" to start one.
+        No saved reports yet — pick a Preset in a Frame below, click "Open full report", then use
+        "Copy to my reports" to start one.
       </p>
       <ul class="reports-list" th:unless="${#lists.isEmpty(savedReports)}">
         <li th:each="saved : ${savedReports}">
