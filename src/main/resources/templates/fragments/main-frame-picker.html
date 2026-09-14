@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!--
+  The main page's Frame picker (reporting.md §11, plan stage d2): sits below the Balances panel,
+  changing what the Frame above (fragments/main-frame.html) shows — "the picker sits at the very
+  bottom of the page ... since one dropdown needs no page of its own." Lazy-loaded separately from
+  the Frame (the two no longer sit next to each other) and posts its change back to
+  /overview/main-frame, retargeting #main-frame's innerHTML rather than swapping itself — the
+  settle-up screen's account-picker idiom generalised to a non-adjacent target. #main-frame is
+  landing.html's own static container (present from first paint), never this fragment's or
+  main-frame.html's own element, so the target always exists regardless of which of the two
+  lazy-loaded fragments' hx-get resolves first.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <section class="panel" th:fragment="picker">
+      <div class="field">
+        <label class="field__label" for="main-frame-preset">Overview</label>
+        <select
+          id="main-frame-preset"
+          name="selection"
+          class="input"
+          th:attr="hx-post=@{/overview/main-frame}"
+          hx-trigger="change"
+          hx-target="#main-frame"
+          hx-swap="innerHTML"
+        >
+          <!-- Shown, and selected, only while the Frame names no known Preset/Report (cleared, or a
+               stale reference) — otherwise the browser would default to visually selecting the
+               first real option below, wrongly implying it is the Frame's current choice. -->
+          <option th:if="${!configured}" value="" selected disabled hidden>Choose a report…</option>
+          <optgroup label="Presets">
+            <option
+              th:each="opt : ${presetOptions}"
+              th:value="${'preset:' + opt.slug()}"
+              th:text="${opt.title()}"
+              th:selected="${('preset:' + opt.slug()) == selectedValue}"
+            >
+              Preset
+            </option>
+          </optgroup>
+          <optgroup label="My reports" th:unless="${#lists.isEmpty(savedReportOptions)}">
+            <option
+              th:each="saved : ${savedReportOptions}"
+              th:value="${'report:' + saved.reportId()}"
+              th:text="${saved.name()}"
+              th:selected="${('report:' + saved.reportId()) == selectedValue}"
+            >
+              Report
+            </option>
+          </optgroup>
+        </select>
+      </div>
+    </section>
+  </body>
+</html>

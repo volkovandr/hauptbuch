@@ -8,18 +8,24 @@ import org.springframework.web.bind.annotation.RequestParam;
 import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
- * The main page's own 1x1 Layout (reporting.md §11, plan stage c; a Frame's saved-Report reference
- * is stage d's follow-up): one Frame, defaulting to the net worth over time Preset, with a picker
- * to show any other Preset or saved Report instead. Lazy-loaded from the landing page above the
- * Balances panel, the same {@code hx-get} idiom {@link TrackingStatsController} uses; the picker
- * then re-renders the Frame in place on {@code change}, the same idiom the settle-up screen's
- * account picker uses.
+ * The main page's own 1x1 Layout (reporting.md §11, plan stage d2): one Frame, defaulting to the
+ * net worth over time Preset, read-only and hidden entirely while unconfigured — its picker moved
+ * out to {@link #picker}, below the Balances panel, so the Frame itself reads as a clean report
+ * rather than a captioned control. Both are lazy-loaded from the landing page, the same {@code
+ * hx-get} idiom {@link TrackingStatsController} uses; the picker's {@code change} handler then
+ * retargets the Frame elsewhere on the page (the settle-up screen's account picker idiom,
+ * generalised to a non-adjacent target). {@code landing.html} itself — not either lazy-loaded
+ * fragment — owns the stable {@code id="main-frame"} swap target, so the picker's retarget can
+ * never race the Frame's own slower initial load (both fire on {@code hx-trigger="load"}, but only
+ * the Frame's actually renders a report).
  */
 @Controller
 class MainFrameController {
 
   private static final String PATH = "/overview/main-frame";
+  private static final String PICKER_PATH = PATH + "/picker";
   private static final String FRAME = "fragments/main-frame :: frame";
+  private static final String PICKER_FRAGMENT = "fragments/main-frame-picker :: picker";
 
   private final LayoutService layoutService;
   private final ReportEngine reportEngine;
@@ -39,7 +45,13 @@ class MainFrameController {
 
   @GetMapping(PATH)
   String mainFrame(Model model) {
-    return render(layoutService.mainFrameSelection(), model);
+    return renderFrame(layoutService.mainFrameSelection(), model);
+  }
+
+  /** The picker, lazy-loaded separately since it no longer sits next to the Frame it controls. */
+  @GetMapping(PICKER_PATH)
+  String picker(Model model) {
+    return renderPicker(layoutService.mainFrameSelection(), model);
   }
 
   /** The picker's {@code change} handler: saves the choice, then re-renders the Frame with it. */
@@ -47,24 +59,33 @@ class MainFrameController {
   String updateMainFrame(@RequestParam String selection, Model model) {
     FrameSelection decoded = FrameSelection.decode(selection);
     layoutService.updateMainFrame(decoded);
-    return render(decoded, model);
+    return renderFrame(decoded, model);
   }
 
-  private String render(FrameSelection selection, Model model) {
-    model.addAttribute("presetOptions", PresetCatalog.all());
-    model.addAttribute("savedReportOptions", reportService.list());
-    model.addAttribute("selectedValue", selection.encoded());
-
+  private String renderFrame(FrameSelection selection, Model model) {
     PresetRendering.FrameContent content =
         PresetRendering.renderFrame(
             selection, settingsService.baseCurrency(), reportEngine, reportService);
-    model.addAttribute("configured", content.configured());
-    model.addAttribute("baseCurrencyUnset", content.baseCurrencyUnset());
-    model.addAttribute("report", content.report());
-    model.addAttribute("chart", content.chart());
+    String openFullReportUrl = content.configured() ? selection.fullReportUrl() : null;
     model.addAttribute(
-        "openFullReportUrl", content.configured() ? selection.fullReportUrl() : null);
-
+        "frame",
+        new FrameView(
+            null,
+            selection.encoded(),
+            content.configured(),
+            content.baseCurrencyUnset(),
+            content.title(),
+            content.report(),
+            content.chart(),
+            openFullReportUrl));
     return FRAME;
+  }
+
+  private String renderPicker(FrameSelection selection, Model model) {
+    model.addAttribute("presetOptions", PresetCatalog.all());
+    model.addAttribute("savedReportOptions", reportService.list());
+    model.addAttribute("selectedValue", selection.encoded());
+    model.addAttribute("configured", PresetRendering.isKnown(selection, reportService));
+    return PICKER_FRAGMENT;
   }
 }

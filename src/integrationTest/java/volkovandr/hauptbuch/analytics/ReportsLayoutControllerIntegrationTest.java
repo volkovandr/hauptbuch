@@ -7,6 +7,7 @@ import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.Test;
@@ -21,10 +22,12 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
- * Integration tier (CLAUDE.md §6): the reporting page's own Layout ({@link
- * ReportsLayoutController}), reporting.md §11 / plan stage c part 2 — the persisted 1x1 empty
- * default, resizing the grid without persisting, {@code Save layout} persisting the whole grid at
- * once, and a stale Frame reference degrading rather than 500ing (mirroring {@link
+ * Integration tier (CLAUDE.md §6): the reporting page and its Layout ({@link
+ * ReportsLayoutController}), reporting.md §11 / plan stage d2 — {@code /reports} rendering its
+ * Frames read-only with no configuration inputs plus the My reports and Presets lists, {@code
+ * /reports/layout} resizing the grid without persisting and {@code Save layout} persisting the
+ * whole grid at once and navigating back to {@code /reports} via {@code HX-Redirect}, and a stale
+ * Frame reference degrading rather than 500ing (mirroring {@link
  * MainFrameControllerIntegrationTest}'s bar for the main page's own Layout).
  */
 @SpringBootTest
@@ -33,8 +36,9 @@ import volkovandr.hauptbuch.ledger.SettingsService;
 @Transactional
 class ReportsLayoutControllerIntegrationTest {
 
+  private static final String REPORTS_PATH = "/reports";
+  private static final String LAYOUT_PATH = "/reports/layout";
   private static final String RESIZE_PATH = "/reports/layout/resize";
-  private static final String SAVE_PATH = "/reports/layout";
 
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
@@ -54,22 +58,57 @@ class ReportsLayoutControllerIntegrationTest {
   @Test
   void reportsPageShowsAnEmptyReportListWhenNoneAreSaved() throws Exception {
     mockMvc
-        .perform(get("/reports"))
+        .perform(get(REPORTS_PATH))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("No saved reports yet")));
   }
 
   @Test
-  void reportsPageDefaultsToTheOneByOneEmptyLayout() throws Exception {
+  void reportsPageListsEveryPreset() throws Exception {
     mockMvc
-        .perform(get("/reports"))
+        .perform(get(REPORTS_PATH))
         .andExpect(status().isOk())
         .andExpect(
             content()
                 .string(
                     allOf(
-                        containsString("Choose a report"),
-                        containsString("No report configured"))));
+                        containsString("href=\"/reports/preset/balance-sheet\""),
+                        containsString("Balance sheet"))));
+  }
+
+  @Test
+  void reportsPageDefaultsToTheOneByOneEmptyLayoutWithNoConfigurationInputs() throws Exception {
+    mockMvc
+        .perform(get(REPORTS_PATH))
+        .andExpect(status().isOk())
+        .andExpect(
+            content().string(allOf(containsString("No report."), not(containsString("<select")))));
+  }
+
+  @Test
+  void reportsPageOffersAnEditLayoutLink() throws Exception {
+    mockMvc
+        .perform(get(REPORTS_PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("href=\"/reports/layout\"")));
+  }
+
+  @Test
+  void editLayoutPageShowsTheGridWithDropdownsPerFrame() throws Exception {
+    mockMvc
+        .perform(get(LAYOUT_PATH))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(allOf(containsString("frame-0-0"), containsString("Choose a report"))));
+  }
+
+  @Test
+  void editLayoutPageOffersCancelLinkBackToReports() throws Exception {
+    mockMvc
+        .perform(get(LAYOUT_PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("href=\"/reports\"")));
   }
 
   @Test
@@ -85,7 +124,7 @@ class ReportsLayoutControllerIntegrationTest {
 
     // Not persisted: a fresh GET still shows the seeded 1x1 shape.
     mockMvc
-        .perform(get("/reports"))
+        .perform(get(LAYOUT_PATH))
         .andExpect(status().isOk())
         .andExpect(content().string(not(containsString("frame-0-1"))));
   }
@@ -114,23 +153,23 @@ class ReportsLayoutControllerIntegrationTest {
   }
 
   @Test
-  void saveLayoutPersistsShapeAndEveryFramesPreset() throws Exception {
+  void saveLayoutPersistsShapeAndEveryFramesPresetAndNavigatesBackViaHxRedirect() throws Exception {
     settingsService.setBaseCurrency("EUR");
 
     mockMvc
         .perform(
-            post(SAVE_PATH)
+            post(LAYOUT_PATH)
                 .param("rowCount", "1")
                 .param("columnCount", "2")
                 .param("frame-0-0", "preset:balance-sheet")
                 .param("frame-0-1", ""))
         .andExpect(status().isOk())
-        .andExpect(content().string(allOf(containsString("<table"), containsString("frame-0-1"))));
+        .andExpect(header().string("HX-Redirect", REPORTS_PATH));
 
     mockMvc
-        .perform(get("/reports"))
+        .perform(get(REPORTS_PATH))
         .andExpect(status().isOk())
-        .andExpect(content().string(allOf(containsString("<table"), containsString("frame-0-1"))));
+        .andExpect(content().string(containsString("<table")));
   }
 
   @Test
@@ -139,17 +178,17 @@ class ReportsLayoutControllerIntegrationTest {
     seedFrameSlug("balance-sheet");
 
     mockMvc
-        .perform(get("/reports"))
+        .perform(get(REPORTS_PATH))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("href=\"/reports/preset/balance-sheet\"")));
   }
 
   @Test
-  void unconfiguredFrameOffersNoOpenFullReportLink() throws Exception {
+  void unconfiguredFrameOffersNoOpenReportLink() throws Exception {
     mockMvc
-        .perform(get("/reports"))
+        .perform(get(REPORTS_PATH))
         .andExpect(status().isOk())
-        .andExpect(content().string(not(containsString("href=\"/reports/preset/"))));
+        .andExpect(content().string(not(containsString("Open report"))));
   }
 
   @Test
@@ -157,7 +196,7 @@ class ReportsLayoutControllerIntegrationTest {
     reportService.save("My matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
 
     mockMvc
-        .perform(get("/reports"))
+        .perform(get(LAYOUT_PATH))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("My matrix")));
   }
@@ -170,15 +209,15 @@ class ReportsLayoutControllerIntegrationTest {
 
     mockMvc
         .perform(
-            post(SAVE_PATH)
+            post(LAYOUT_PATH)
                 .param("rowCount", "1")
                 .param("columnCount", "1")
                 .param("frame-0-0", "report:" + saved.reportId()))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("<table")));
+        .andExpect(header().string("HX-Redirect", REPORTS_PATH));
 
     mockMvc
-        .perform(get("/reports"))
+        .perform(get(REPORTS_PATH))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("href=\"/reports/" + saved.reportId() + "\"")));
   }
@@ -192,7 +231,7 @@ class ReportsLayoutControllerIntegrationTest {
     assertThatThrownBy(
             () ->
                 mockMvc.perform(
-                    post(SAVE_PATH)
+                    post(LAYOUT_PATH)
                         .param("rowCount", "1")
                         .param("columnCount", "1")
                         .param("frame-0-0", "report:999999")))
@@ -205,7 +244,7 @@ class ReportsLayoutControllerIntegrationTest {
     SavedReport saved =
         reportService.save("Disposable", Presets.balanceSheet(), Renderer.TABLE, false);
     mockMvc.perform(
-        post(SAVE_PATH)
+        post(LAYOUT_PATH)
             .param("rowCount", "1")
             .param("columnCount", "1")
             .param("frame-0-0", "report:" + saved.reportId()));
@@ -213,9 +252,9 @@ class ReportsLayoutControllerIntegrationTest {
     reportService.delete(saved.reportId());
 
     mockMvc
-        .perform(get("/reports"))
+        .perform(get(REPORTS_PATH))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("No report configured")));
+        .andExpect(content().string(containsString("No report.")));
   }
 
   @Test
@@ -224,13 +263,13 @@ class ReportsLayoutControllerIntegrationTest {
     seedFrameSlug("no-such-preset-any-more");
 
     mockMvc
-        .perform(get("/reports"))
+        .perform(get(REPORTS_PATH))
         .andExpect(status().isOk())
-        .andExpect(
-            content()
-                .string(
-                    allOf(
-                        containsString("No report configured"),
-                        containsString("Choose a report"))));
+        .andExpect(content().string(containsString("No report.")));
+
+    mockMvc
+        .perform(get(LAYOUT_PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Choose a report")));
   }
 }

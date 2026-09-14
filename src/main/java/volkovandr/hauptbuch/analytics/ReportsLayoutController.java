@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.analytics;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -16,14 +17,17 @@ import volkovandr.hauptbuch.web.NavItem;
 
 /**
  * The reporting page ({@code /reports}) and its own configurable Layout (reporting.md §11, plan
- * stage c part 2; a Frame's saved-Report reference is stage d's follow-up): a rows x columns grid
- * of Frames, each a picker plus its live rendered Preset or saved Report — the same mechanism
- * {@link MainFrameController} uses for the main page's 1x1 case, generalised to N Frames. Resizing
- * the grid only re-renders the {@code fragments/layout-config} fragment in place (nothing is
- * persisted); {@code Save layout} posts the same form's current field values and persists the whole
- * grid at once (reporting.md §11's "no cap, no drag"). The saved-Report list (plan stage d) lives
- * here too, since it shares this page; each Report's own actions are {@link
- * SavedReportController}'s job.
+ * stage d2): {@code /reports} shows the Layout read-only — its Frames and nothing else, no
+ * rows/columns inputs, no dropdowns — then the <b>My reports</b> and <b>Presets</b> lists, then
+ * <b>Edit layout</b>. {@code /reports/layout} is the separate editing page: rows x columns and a
+ * picker per Frame above its live-rendered preview ({@code fragments/frame.html}, shared with the
+ * read-only page so neither can drift on how a Frame looks); resizing the grid only re-renders the
+ * {@code fragments/layout-config} fragment in place (unpersisted), while {@code Save layout}
+ * persists the whole grid at once and navigates back to {@code /reports} via the {@code
+ * HX-Redirect} response header (the receipt-confirm screen's confirm-and-advance idiom) rather than
+ * a real form submit — matching {@code Cancel}'s own plain navigation back (reporting.md §11's "no
+ * cap, no drag"). The saved-Report list lives here too, since it shares {@code /reports}; each
+ * Report's own actions are {@link SavedReportController}'s job.
  */
 @Controller
 class ReportsLayoutController {
@@ -50,15 +54,29 @@ class ReportsLayoutController {
     this.reportService = reportService;
   }
 
-  /** The reporting page: the saved-Report list (plan stage d), the Layout. */
+  /** The reporting page: the Layout read-only, the saved-Report list, the Presets list. */
   @GetMapping(BASE_PATH)
   String reports(Model model) {
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", "Reports · Hauptbuch");
     model.addAttribute("savedReports", reportService.list());
+    model.addAttribute("presets", PresetCatalog.all());
+
+    LayoutSnapshot layout = layoutService.reportsLayout();
+    model.addAttribute(
+        "frames", frameViews(layout.rowCount(), layout.columnCount(), layout.frames(), false));
+    model.addAttribute("columnCount", layout.columnCount());
+    return "reports";
+  }
+
+  /** {@code /reports/layout}: the Layout's editor — rows x columns and a picker per Frame. */
+  @GetMapping(LAYOUT_PATH)
+  String editLayout(Model model) {
+    model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
+    model.addAttribute("title", "Edit layout · Hauptbuch");
     LayoutSnapshot layout = layoutService.reportsLayout();
     populateLayout(layout.rowCount(), layout.columnCount(), layout.frames(), model);
-    return "reports";
+    return "reports-layout";
   }
 
   /**
@@ -79,15 +97,23 @@ class ReportsLayoutController {
     return LAYOUT_FRAGMENT;
   }
 
-  /** {@code Save layout}: persists the grid's current shape and every Frame's selection at once. */
+  /**
+   * {@code Save layout}: persists the grid's current shape and every Frame's selection, then
+   * navigates back to {@code /reports} via {@code HX-Redirect} — reporting.md §11 spells out "Save
+   * layout or Cancel both return to /reports" as a real navigation, not an in-place swap, but a
+   * plain {@code type="submit"} button would let Enter in the Rows/Columns inputs (which only
+   * resize on {@code change}) submit the stale, not-yet-resized field set.
+   */
   @PostMapping(LAYOUT_PATH)
   String save(
       @RequestParam int rowCount,
       @RequestParam int columnCount,
       @RequestParam Map<String, String> allParams,
-      Model model) {
+      Model model,
+      HttpServletResponse response) {
     List<LayoutFrameRow> frames = parseFrames(allParams, rowCount, columnCount);
     layoutService.saveReportsLayout(rowCount, columnCount, frames);
+    response.setHeader("HX-Redirect", BASE_PATH);
     populateLayout(rowCount, columnCount, frames, model);
     return LAYOUT_FRAGMENT;
   }
@@ -98,20 +124,30 @@ class ReportsLayoutController {
     model.addAttribute("columnCount", columnCount);
     model.addAttribute("presetOptions", PresetCatalog.all());
     model.addAttribute("savedReportOptions", reportService.list());
+    model.addAttribute("frames", frameViews(rowCount, columnCount, frames, true));
+  }
 
+  /**
+   * Every grid position's {@link FrameView}, row-major — the one place {@code /reports} (no field
+   * names, unindexed) and {@link #populateLayout} (a {@code frame-row-col} field name per position,
+   * for the editor's pickers) build that list, so the two cannot silently diverge on how a Frame
+   * resolves.
+   */
+  private List<FrameView> frameViews(
+      int rowCount, int columnCount, List<LayoutFrameRow> frames, boolean withFieldNames) {
     Optional<String> baseCurrency = settingsService.baseCurrency();
     List<FrameView> views = new ArrayList<>();
     for (int row = 0; row < rowCount; row++) {
       for (int col = 0; col < columnCount; col++) {
-        views.add(frameView(row, col, selectionAt(frames, row, col), baseCurrency));
+        String fieldName = withFieldNames ? FRAME_PARAM_PREFIX + row + "-" + col : null;
+        views.add(frameView(selectionAt(frames, row, col), baseCurrency, fieldName));
       }
     }
-    model.addAttribute("frames", views);
+    return views;
   }
 
   private FrameView frameView(
-      int row, int col, FrameSelection selection, Optional<String> baseCurrency) {
-    String fieldName = FRAME_PARAM_PREFIX + row + "-" + col;
+      FrameSelection selection, Optional<String> baseCurrency, String fieldName) {
     PresetRendering.FrameContent content =
         PresetRendering.renderFrame(selection, baseCurrency, reportEngine, reportService);
     String openFullReportUrl = content.configured() ? selection.fullReportUrl() : null;
@@ -120,6 +156,7 @@ class ReportsLayoutController {
         selection.encoded(),
         content.configured(),
         content.baseCurrencyUnset(),
+        content.title(),
         content.report(),
         content.chart(),
         openFullReportUrl);

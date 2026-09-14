@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <!--
-  Reporting page (plan stage c part 2; the saved-Report list is stage d): the list of saved Reports,
-  and the page's own configurable Layout (fragments/layout-config.html, reporting.md §11). The
-  stage-b flat Presets list is superseded by the Layout — its Frames reach the same Presets via
-  their own picker. A Report is made by opening a Preset and using its "Copy to my reports" action
-  (fragments/report-copy.html) — there is no free-form spec builder yet.
+  Reporting page (reporting.md §11, plan stage d2): the Layout read-only — its Frames and nothing
+  else, no rows/columns inputs, no dropdowns (fragments/frame.html, shared with the editor at
+  /reports/layout so the two cannot drift) — then the My reports and Presets lists, then Edit
+  layout. Reworks stage c/d's screen, which carried the Layout's editing controls inline; a Report
+  is made by opening a Preset and using its "Copy to my reports" action
+  (fragments/report-copy.html) — there is still no free-form spec builder (that arrives in d3).
 -->
 <html
   lang="en"
@@ -12,11 +13,19 @@
   th:replace="~{layout :: page(~{:: content})}"
 >
   <main class="content" th:fragment="content">
+    <div
+      class="layout-grid"
+      th:style="'grid-template-columns: repeat(' + ${columnCount} + ', 1fr)'"
+    >
+      <div class="layout-frame" th:each="frame : ${frames}">
+        <div th:replace="~{fragments/frame :: frame(frame=${frame})}"></div>
+      </div>
+    </div>
+
     <section class="panel">
-      <p class="eyebrow">Reports</p>
+      <p class="eyebrow">My reports</p>
       <p class="muted" th:if="${#lists.isEmpty(savedReports)}">
-        No saved reports yet — pick a Preset in a Frame below, click "Open full report", then use
-        "Copy to my reports" to start one.
+        No saved reports yet — open a Preset below and use "Copy to my reports" to start one.
       </p>
       <ul class="reports-list" th:unless="${#lists.isEmpty(savedReports)}">
         <li th:each="saved : ${savedReports}">
@@ -25,6 +34,19 @@
       </ul>
     </section>
 
-    <div th:replace="~{fragments/layout-config :: config}"></div>
+    <section class="panel">
+      <p class="eyebrow">Presets</p>
+      <ul class="reports-list">
+        <li th:each="preset : ${presets}">
+          <a th:href="@{/reports/preset/{slug}(slug=${preset.slug()})}" th:text="${preset.title()}"
+            >Preset</a
+          >
+        </li>
+      </ul>
+    </section>
+
+    <p class="actions">
+      <a class="btn" th:href="@{/reports/layout}">Edit layout</a>
+    </p>
   </main>
 </html>

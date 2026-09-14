@@ -31,12 +31,17 @@
     </div>
 
     <!--
-      Main-page Frame (reporting.md §11, plan stage c): the main page's own 1x1 Layout, defaulting to
-      the net worth over time Preset — lazy-loaded so a full-page open pays nothing for it, the same
-      idiom the tracking-stats line above uses. Only mounted once the base currency is set; the
-      Balances panel below answers "what do I have", this answers "how has it changed".
+      Main-page Frame (reporting.md §11, plan stage d2): the main page's own 1x1 Layout, defaulting
+      to the net worth over time Preset, read-only and hidden entirely while unconfigured —
+      lazy-loaded so a full-page open pays nothing for it, the same idiom the tracking-stats line
+      above uses. Only mounted once the base currency is set; the Balances panel below answers "what
+      do I have", this answers "how has it changed". Its picker lives separately, below Balances.
+      This div — not the fragment it loads — owns id="main-frame": it is present from first paint,
+      so the picker's retargeted POST can never race this hx-get's own (slower — it renders a real
+      report) response.
     -->
     <div
+      id="main-frame"
       th:if="${baseCurrencySet}"
       th:attr="hx-get=@{/overview/main-frame}"
       hx-trigger="load"
@@ -75,6 +80,18 @@
         <span class="num" th:text="${balancesPanel.total()}">9.200,00</span>
       </p>
     </section>
+
+    <!--
+      Main-page Frame picker (reporting.md §11, plan stage d2): "the picker sits at the very bottom
+      of the page, below the Balances panel, since one dropdown needs no page of its own" — moved
+      out of the Frame itself so the Frame above reads as a clean report. Lazy-loaded separately,
+      only once the base currency is set (the Frame it controls is gated the same way).
+    -->
+    <div
+      th:if="${baseCurrencySet}"
+      th:attr="hx-get=@{/overview/main-frame/picker}"
+      hx-trigger="load"
+    ></div>
 
     <section class="panel" th:unless="${baseCurrencySet}">
       <p class="eyebrow">First run</p>

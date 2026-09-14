@@ -97,8 +97,16 @@ table.report tfoot td {
   font-style: italic;
 }
 
-/* The reporting page's own Layout (reporting.md §11, plan stage c part 2): the rows/columns
-   controls sit above a CSS grid of Frame cards, one per configured position. */
+/* A Frame (reporting.md §11, plan stage d2): the "Open report →" action sits at the bottom right,
+   a quiet app action rather than a bare link. */
+.frame__open {
+  margin: 0.5rem 0 0;
+  text-align: right;
+}
+
+/* The reporting page's own Layout (reporting.md §11, plan stage c part 2 / d2): the read-only
+   Layout and its editor both lay Frames out as a CSS grid; the editor's rows/columns controls sit
+   above it. */
 .layout-dimensions {
   display: flex;
   align-items: flex-end;
@@ -117,6 +125,7 @@ table.report tfoot td {
 .layout-grid {
   display: grid;
   gap: 1rem;
+  margin-bottom: 1.5rem;
 }
 
 .layout-frame {

@@ -94,11 +94,16 @@ final class PresetRendering {
    * A Frame's whole rendered state (reporting.md §11): {@code configured} false when {@code
    * selection} is {@link FrameSelection#EMPTY} or names no known Preset/Report (an emptied or stale
    * Frame — §16), {@code baseCurrencyUnset} true when it names a real one but the book has no base
-   * currency yet. {@code report}/{@code chart} are set only when both are true, matching {@link
-   * #populate}.
+   * currency yet. {@code title} is the resolved Preset/Report's name, {@code null} when
+   * unconfigured (the Frame fragment's heading, plan stage d2). {@code report}/{@code chart} are
+   * set only when both flags allow it, matching {@link #populate}.
    */
   record FrameContent(
-      boolean configured, boolean baseCurrencyUnset, ReportTableView report, ChartView chart) {}
+      boolean configured,
+      boolean baseCurrencyUnset,
+      String title,
+      ReportTableView report,
+      ChartView chart) {}
 
   /**
    * Resolves {@code selection} to a Preset or a saved Report and renders it — the shared "what does
@@ -113,15 +118,24 @@ final class PresetRendering {
       ReportService reportService) {
     Optional<Presentation> presentation = resolve(selection, reportService);
     if (presentation.isEmpty()) {
-      return new FrameContent(false, false, null, null);
-    }
-    if (baseCurrency.isEmpty()) {
-      return new FrameContent(true, true, null, null);
+      return new FrameContent(false, false, null, null, null);
     }
     Presentation shown = presentation.get();
+    if (baseCurrency.isEmpty()) {
+      return new FrameContent(true, true, shown.title(), null, null);
+    }
     Rendered rendered =
         populate(shown, baseCurrency.get(), shown.renderer() == Renderer.TABLE, reportEngine);
-    return new FrameContent(true, false, rendered.report(), rendered.chart());
+    return new FrameContent(true, false, shown.title(), rendered.report(), rendered.chart());
+  }
+
+  /**
+   * Whether {@code selection} names a known Preset or saved Report — the same check {@link
+   * #renderFrame} makes, exposed for a caller (the main page's picker, plan stage d2) that only
+   * needs the placeholder-option decision, not a full render.
+   */
+  static boolean isKnown(FrameSelection selection, ReportService reportService) {
+    return resolve(selection, reportService).isPresent();
   }
 
   private static Optional<Presentation> resolve(

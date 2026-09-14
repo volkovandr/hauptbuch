@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<!--
+  The reporting page's Layout editor (reporting.md §11, plan stage d2): its own page, reached from
+  /reports' "Edit layout" action — fragments/layout-config.html holds the rows x columns controls,
+  the per-Frame pickers and their live previews, and Save layout / Cancel.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <div th:replace="~{fragments/layout-config :: config}"></div>
+  </main>
+</html>
