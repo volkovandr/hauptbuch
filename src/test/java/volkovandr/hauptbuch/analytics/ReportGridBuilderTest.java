@@ -690,4 +690,49 @@ class ReportGridBuilderTest {
 
     assertThat(grid.rowTotals()).containsExactly(new Cell.Count(5));
   }
+
+  @Test
+  void carriesTheScopeMismatchMessageWhenScopeMissesTheDimension() {
+    AxisPlan axes =
+        new AxisPlan(Dimension.CATEGORY, Dimension.DATE, Dimension.CATEGORY, false, true);
+    List<AxisNode> rows = List.of();
+    List<AxisNode> columns = List.of(new AxisNode("2026-01", "Jan 2026"));
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("asset", "liability"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            true);
+
+    ReportGrid grid =
+        builder.build(spec, axes, rows, columns, Map.of(), turnoverData(), "EUR", JANUARY);
+
+    assertThat(grid.scopeMismatch())
+        .isEqualTo("Category covers income and expense accounts; neither is in scope.");
+  }
+
+  @Test
+  void scopeMismatchIsNullWhenScopeAndDimensionAgree() {
+    AxisPlan axes =
+        new AxisPlan(Dimension.CATEGORY, Dimension.DATE, Dimension.CATEGORY, false, true);
+    List<AxisNode> rows = List.of(new AxisNode("1", "Food"));
+    List<AxisNode> columns = List.of(new AxisNode("2026-01", "Jan 2026"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    GridData data =
+        turnoverData(turnover("1", "Food", "expense", "2026-01", "EUR", "50.00", "50.00"));
+
+    ReportGrid grid =
+        builder.build(
+            matrixSpec(false, false, false), axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.scopeMismatch()).isNull();
+  }
 }

@@ -98,7 +98,8 @@ class ReportGridBuilder {
         columnTotals,
         grandTotal,
         resolved.start(),
-        resolved.end());
+        resolved.end(),
+        ScopeDimensionMismatch.check(axes.nonDateDim(), spec.scope()));
   }
 
   private List<List<Cell>> buildCells(

@@ -2,7 +2,6 @@ package volkovandr.hauptbuch.analytics;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -20,14 +19,14 @@ class ScopeHeaderTextTest {
 
   @Test
   void statesEveryTypeIsInScopeWhenAccountTypesIsEmpty() {
-    Scope scope = new Scope(Set.of(), List.of(), true, false);
+    Scope scope = new Scope(Set.of(), true, false);
 
     assertThat(ScopeHeaderText.render(scope)).startsWith("All types ·");
   }
 
   @Test
   void reflectsTheNonDefaultToggles() {
-    Scope scope = new Scope(Set.of("asset"), List.of(), false, true);
+    Scope scope = new Scope(Set.of("asset"), false, true);
 
     assertThat(ScopeHeaderText.render(scope))
         .isEqualTo("Asset · closed accounts excluded · pending-review transactions included");

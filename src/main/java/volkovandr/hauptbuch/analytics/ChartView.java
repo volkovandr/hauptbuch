@@ -10,7 +10,9 @@ import java.util.List;
  *
  * @param panels one panel per small multiple (reporting.md §3); a single entry otherwise; empty
  *     when {@code refusalMessage} is set
- * @param refusalMessage the pie's negative-measure refusal (§7.4), {@code null} otherwise
+ * @param refusalMessage why there are no panels — the pie's negative-measure refusal (§7.4) or the
+ *     "scope misses the dimension" message (§6.1, {@link ScopeDimensionMismatch}); {@code null}
+ *     otherwise
  */
 public record ChartView(
     String title,

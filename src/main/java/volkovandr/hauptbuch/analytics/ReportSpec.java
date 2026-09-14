@@ -1,6 +1,8 @@
 package volkovandr.hauptbuch.analytics;
 
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * A Report's specification (reporting.md §1–§2): dimensions on rows/columns/series, measures,
@@ -24,8 +26,10 @@ import java.util.List;
  * @param columns 0 or 1 column dimension
  * @param series 0 or 1 series dimension — chart-only, unused by the table renderer (§3)
  * @param measures the report's columns-of-measures; at least one
- * @param scope which account types/subtrees a flow measure counts (§6.1)
- * @param filters AND-combined filter clauses (§6.2)
+ * @param scope which account types a flow measure counts (§6.1)
+ * @param filters AND-combined filter clauses (§6.2); at most one per {@link FilterField} (§6.2 —
+ *     two ANDed filters on the same field, e.g. "touching BankAaa and touching BankBbb", is a
+ *     register question, not a reporting one)
  * @param range the date range, as two anchor-grammar endpoints (§8.1)
  * @param rowTotals whether to add a totals column, summing each row across columns (§7.1)
  * @param columnTotals whether to add a totals row, summing each column across rows (§7.1)
@@ -65,6 +69,13 @@ public record ReportSpec(
     }
     if (measures.isEmpty()) {
       throw new IllegalArgumentException("A report needs at least one measure.");
+    }
+    Set<FilterField> seenFields = EnumSet.noneOf(FilterField.class);
+    for (ReportFilter filter : filters) {
+      if (!seenFields.add(filter.field())) {
+        throw new IllegalArgumentException(
+            "A report carries at most one filter per field (§6.2): " + filter.field());
+      }
     }
   }
 }
