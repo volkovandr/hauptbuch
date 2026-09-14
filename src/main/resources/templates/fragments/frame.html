@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!--
+  A Frame (reporting.md §11, plan stage d2): a Report's name as heading, its rendered table or
+  chart, and an "Open report →" action at the bottom right — or a muted "No report" when
+  unconfigured. Takes the whole {@link FrameView} as one fragment parameter (the settle-up screen's
+  parametrized-fragment idiom, {@code settle-up :: amounts(view=...)}) rather than six loose
+  {@code th:with} variables, so a field added to FrameView cannot silently go unset at one call
+  site. The one fragment used wherever a Frame's content appears: the reporting page's read-only
+  Layout (reports.html), each cell of its editor (/reports/layout, fragments/layout-config.html),
+  and — wrapped by fragments/main-frame.html, which hides it entirely instead of showing "No
+  report" (reporting.md §11's main-page rule) — the main page.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <section class="panel frame" th:fragment="frame(frame)">
+      <p class="eyebrow" th:if="${frame.configured()}" th:text="${frame.title()}">Report name</p>
+      <p class="muted" th:unless="${frame.configured()}">No report.</p>
+
+      <div th:if="${frame.configured() and frame.baseCurrencyUnset()}">
+        <p th:replace="~{fragments/base-currency-prompt :: prompt}">Set the base currency first.</p>
+      </div>
+
+      <div th:if="${frame.report() != null}" th:with="report=${frame.report()}">
+        <table th:replace="~{fragments/report-table-body :: body}"></table>
+      </div>
+      <div th:if="${frame.chart() != null}" th:with="chart=${frame.chart()}">
+        <div th:replace="~{fragments/chart-panels :: panels}"></div>
+      </div>
+
+      <p th:if="${frame.configured()}" class="frame__open">
+        <a th:href="@{${frame.openFullReportUrl()}}">Open report →</a>
+      </p>
+    </section>
+  </body>
+</html>

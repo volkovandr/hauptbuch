@@ -23,11 +23,12 @@ import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
  * Integration tier (CLAUDE.md §6): the main page's Frame ({@link MainFrameController}),
- * reporting.md §11 / plan stage c — the default net worth over time render, the picker switching to
- * a different Preset and persisting it, the no-base-currency message, and a stale/emptied Frame
- * degrading rather than 500ing (the plan's "Frame whose Report was deleted" bar, exercised here
- * with a hand-seeded unknown slug since Presets themselves are non-deletable). {@code
- * landing.html}'s lazy-load hook is asserted alongside the Balances panel's own gate ({@code
+ * reporting.md §11 / plan stage d2 — the default net worth over time render (heading + rendering,
+ * no picker inline), the picker (now its own lazy-loaded fragment) switching to a different Preset
+ * and persisting it, the no-base-currency message, and a stale/emptied Frame reference hiding the
+ * Frame entirely rather than showing a "No report" placeholder (reporting.md §11's main-page rule)
+ * or 500ing. {@code landing.html}'s two lazy-load hooks (the Frame, and the picker below the
+ * Balances panel) are asserted alongside the Balances panel's own gate ({@code
  * LandingBalancesPanelIntegrationTest}).
  */
 @SpringBootTest
@@ -37,6 +38,7 @@ import volkovandr.hauptbuch.ledger.SettingsService;
 class MainFrameControllerIntegrationTest {
 
   private static final String PATH = "/overview/main-frame";
+  private static final String PICKER_PATH = PATH + "/picker";
 
   @Autowired MockMvc mockMvc;
   @Autowired JdbcClient jdbcClient;
@@ -98,12 +100,35 @@ class MainFrameControllerIntegrationTest {
         .perform(get(PATH))
         .andExpect(status().isOk())
         .andExpect(
-            content()
-                .string(
-                    allOf(
-                        containsString("<svg"),
-                        containsString("selected"),
-                        containsString("Net worth over time"))));
+            content().string(allOf(containsString("<svg"), containsString("Net worth over time"))));
+  }
+
+  @Test
+  void frameCarriesNoPickerInline() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    seedOpeningBalance();
+
+    mockMvc
+        .perform(get(PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("<select"))));
+  }
+
+  /**
+   * landing.html's own container owns {@code id="main-frame"} (asserted in {@code
+   * landingsOwnMainFrameContainerCarriesTheIdBeforeAnyLazyLoadResolves}); this GET's response is
+   * swapped into that container's innerHTML, so it must not carry the id itself — a second element
+   * with the same id would make the picker's retarget ambiguous.
+   */
+  @Test
+  void frameResponseCarriesNoIdOfItsOwn() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    seedOpeningBalance();
+
+    mockMvc
+        .perform(get(PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("id=\"main-frame\""))));
   }
 
   @Test
@@ -160,17 +185,45 @@ class MainFrameControllerIntegrationTest {
   }
 
   @Test
-  void staleFrameReferenceDegradesToEmptyFrameRatherThanFiveHundreding() throws Exception {
+  void staleFrameReferenceHidesTheFrameEntirely() throws Exception {
     settingsService.setBaseCurrency("EUR");
     seedFrameSlug("no-such-preset-any-more");
 
     mockMvc
         .perform(get(PATH))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("No report configured")))
-        // No real Preset is left wrongly looking selected in the picker (a browser defaults to the
-        // first <option> when none is marked selected) — the placeholder holds that spot instead.
+        .andExpect(
+            content()
+                .string(
+                    allOf(
+                        not(containsString("No report")),
+                        not(containsString("class=\"panel frame\"")))));
+  }
+
+  @Test
+  void pickerShowsThePlaceholderWhenTheFrameIsUnconfigured() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    seedFrameSlug("no-such-preset-any-more");
+
+    mockMvc
+        .perform(get(PICKER_PATH))
+        .andExpect(status().isOk())
         .andExpect(content().string(containsString("Choose a report")));
+  }
+
+  @Test
+  void pickerReflectsThePersistedSelection() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+
+    mockMvc
+        .perform(get(PICKER_PATH))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    allOf(
+                        containsString("value=\"preset:net-worth-over-time\""),
+                        not(containsString("Choose a report")))));
   }
 
   @Test
@@ -186,21 +239,39 @@ class MainFrameControllerIntegrationTest {
   }
 
   @Test
-  void landingMountsTheLazyLoadContainerOnceTheBaseCurrencyIsSet() throws Exception {
+  void landingMountsBothLazyLoadContainersOnceTheBaseCurrencyIsSet() throws Exception {
     settingsService.setBaseCurrency("EUR");
 
     mockMvc
         .perform(get("/"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString(PATH)))
+        .andExpect(content().string(containsString(PICKER_PATH)))
         .andExpect(content().string(containsString("hx-trigger=\"load\"")));
   }
 
+  /**
+   * The picker's POST retargets {@code #main-frame} by id — that id must already be in the DOM at
+   * first paint (owned by landing.html's own container), not only after the Frame's own {@code
+   * hx-get} resolves, or a selection made in that window would persist server-side but never swap
+   * into anything (no htmx target found).
+   */
   @Test
-  void landingOmitsTheContainerBeforeTheBaseCurrencyIsSet() throws Exception {
+  void landingsOwnMainFrameContainerCarriesTheIdBeforeAnyLazyLoadResolves() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+
     mockMvc
         .perform(get("/"))
         .andExpect(status().isOk())
-        .andExpect(content().string(not(containsString(PATH))));
+        .andExpect(content().string(containsString("id=\"main-frame\"")));
+  }
+
+  @Test
+  void landingOmitsBothContainersBeforeTheBaseCurrencyIsSet() throws Exception {
+    mockMvc
+        .perform(get("/"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString(PATH))))
+        .andExpect(content().string(not(containsString(PICKER_PATH))));
   }
 }
