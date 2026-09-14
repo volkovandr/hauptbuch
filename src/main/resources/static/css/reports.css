@@ -97,6 +97,16 @@ table.report tfoot td {
   font-style: italic;
 }
 
+/* The editor actions strip (reporting.md §11a.1, plan stage d3): the Unsaved marker reads as a
+   quiet callout, not an error — the same attention blue the register uses for its own focus/active
+   state, never the ledger's credit/negative red. */
+.report-actions__unsaved {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--focus);
+}
+
 /* A Frame (reporting.md §11, plan stage d2): the "Open report →" action sits at the bottom right,
    a quiet app action rather than a bare link. */
 .frame__open {

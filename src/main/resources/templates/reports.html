@@ -4,8 +4,8 @@
   else, no rows/columns inputs, no dropdowns (fragments/frame.html, shared with the editor at
   /reports/layout so the two cannot drift) — then the My reports and Presets lists, then Edit
   layout. Reworks stage c/d's screen, which carried the Layout's editing controls inline; a Report
-  is made by opening a Preset and using its "Copy to my reports" action
-  (fragments/report-copy.html) — there is still no free-form spec builder (that arrives in d3).
+  is made either from scratch (New report, /reports/new) or from a Preset's own page's "Save as new
+  report" action (reporting.md §11a.1, plan stage d3).
 -->
 <html
   lang="en"
@@ -25,13 +25,16 @@
     <section class="panel">
       <p class="eyebrow">My reports</p>
       <p class="muted" th:if="${#lists.isEmpty(savedReports)}">
-        No saved reports yet — open a Preset below and use "Copy to my reports" to start one.
+        No saved reports yet — start one below, or open a Preset and use "Save as new report".
       </p>
       <ul class="reports-list" th:unless="${#lists.isEmpty(savedReports)}">
         <li th:each="saved : ${savedReports}">
           <a th:href="@{/reports/{id}(id=${saved.reportId()})}" th:text="${saved.name()}">My report</a>
         </li>
       </ul>
+      <p class="actions">
+        <a class="btn" th:href="@{/reports/new}">New report</a>
+      </p>
     </section>
 
     <section class="panel">

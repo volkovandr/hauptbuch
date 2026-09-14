@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <!--
-  A Report's rendered chart (plan stage b, reporting.md §10; the saved-Report actions are stage d):
+  A Report's rendered chart (plan stage b, reporting.md §10; the editor actions are stage d3):
   line/bar/pie, server-rendered inline SVG (ChartSvgWriter), no charting library, no fourth JS leaf.
   Panels are small multiples — one per row dimension value, or one per series legend entry — see
   ChartViewAssembler. The toggle button swaps to the same Report's table in place (§10's chart/table
   swap), the same hx-get/hx-swap idiom the receipt image toggle uses. Shared by a Preset's own page
-  (ReportController, {@code slug} set, offering "Copy to my reports") and a saved Report's own page
-  (SavedReportController, {@code savedReport} set, offering rename/duplicate/delete).
+  (ReportController) and a saved Report's own page (SavedReportController) — both populate `editor`
+  (fragments/report-actions) and `viewToggleUrl` identically (PresetRendering); a not-yet-saved
+  /reports/new draft always starts TABLE-only, so it never renders here.
 -->
 <html
   lang="en"
@@ -27,7 +28,7 @@
         class="btn btn--ghost"
         hx-target="#report-frame"
         hx-swap="outerHTML"
-        th:attr="hx-get=@{${viewBasePath}(view='table')}"
+        th:attr="hx-get=@{${viewToggleUrl}}, hx-replace-url=@{${canonicalUrl}}"
       >
         Show table
       </button>
@@ -35,8 +36,6 @@
       <div th:replace="~{fragments/chart-panels :: panels}"></div>
     </section>
 
-    <div th:replace="~{fragments/report-manage :: manage}"></div>
-
-    <div th:if="${slug != null}" th:replace="~{fragments/report-copy :: copy}"></div>
+    <div th:replace="~{fragments/report-actions :: actions}"></div>
   </main>
 </html>

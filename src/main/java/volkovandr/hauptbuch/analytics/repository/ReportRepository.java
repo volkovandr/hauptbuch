@@ -72,11 +72,15 @@ public class ReportRepository {
         .toList();
   }
 
-  /** Renames a Report in place. */
-  public void rename(long reportId, String name) {
+  /**
+   * Overwrites a Report's name and spec in place (reporting.md §11a.1's Save) — its renderer/trend
+   * line are untouched; the editor has no control for either.
+   */
+  public void update(long reportId, String name, ReportSpec spec) {
     jdbcClient
-        .sql("update report set name = :name where report_id = :id")
+        .sql("update report set name = :name, spec = :spec::jsonb where report_id = :id")
         .param("name", name)
+        .param("spec", ReportSpecJson.toJson(spec))
         .param("id", reportId)
         .update();
   }
