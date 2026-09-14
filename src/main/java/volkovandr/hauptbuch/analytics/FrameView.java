@@ -5,11 +5,11 @@ package volkovandr.hauptbuch.analytics;
  * its picker's field name and current selection (used only by {@code /reports/layout}'s editor —
  * the read-only {@code /reports} page ignores both), and — when it names a known Preset/Report and
  * the book has a base currency — that Report's name and rendered table or chart plus a link to its
- * own full page (where a Preset's "Copy to my reports" or a saved Report's rename/duplicate/delete
- * live). Grid position is not carried here — the template lays Frames out purely by list order
- * inside a CSS grid. Shared by both screens so neither can drift on how a Frame renders (the shared
- * {@code fragments/frame.html} fragment reads its model variables straight off this record's field
- * names via {@code th:with}).
+ * own full page (where the editor actions strip — Save, Save as new report, Delete — lives,
+ * reporting.md §11a.1). Grid position is not carried here — the template lays Frames out purely by
+ * list order inside a CSS grid. Shared by both screens so neither can drift on how a Frame renders
+ * (the shared {@code fragments/frame.html} fragment reads its model variables straight off this
+ * record's field names via {@code th:with}).
  *
  * @param fieldName the picker's {@code <select name="...">}, encoding this Frame's grid position
  * @param selectedValue the raw stored/submitted, {@link FrameSelection}-encoded value, even when it

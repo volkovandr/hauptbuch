@@ -8,12 +8,11 @@ import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.analytics.repository.ReportRepository;
 
 /**
- * Saving, listing, renaming, duplicating and deleting Reports (reporting.md §14, plan stage d).
- * Presets ({@link PresetCatalog}) are never rows here and so can never be deleted through this
- * service — {@link #copyFromPreset} is the one bridge between the two, cloning a Preset's spec into
- * an owned, editable row. Resolving a Preset slug to a {@link PresetDef} is the caller's job (the
- * catalog is a web-facing, code-defined concept this service does not otherwise need to know
- * about); this only ever clones the tuple it is handed.
+ * Saving, listing, updating and deleting Reports (reporting.md §14/§11a, plan stage d3). Presets
+ * ({@link PresetCatalog}) are never rows here and so can never be deleted through this service —
+ * {@link ReportEditorController#saveAsNew} is the one bridge from a Preset (or a not-yet-saved
+ * {@code /reports/new} draft) to an owned, editable row, via the same {@link #save} every other
+ * "Save as new report" uses.
  */
 @Service
 class ReportService {
@@ -35,30 +34,27 @@ class ReportService {
     return reportRepository.findById(reportId);
   }
 
-  /** Saves a new Report. Rejected before the write if {@code name} is blank. */
+  /**
+   * Saves a new Report — a Preset's or a saved Report's "Save as new report" (reporting.md §11a.1),
+   * and {@code /reports/new}'s first save alike; the caller already resolved whichever draft is in
+   * play into {@code spec}. Rejected before the write if {@code name} is blank.
+   */
   SavedReport save(String name, ReportSpec spec, Renderer renderer, boolean trendLine) {
     SavedReport saved = reportRepository.insert(requireName(name), spec, renderer, trendLine);
     LOG.info("Report saved: id={}, name={}", saved.reportId(), saved.name());
     return saved;
   }
 
-  /** Clones {@code preset}'s spec into a new owned Report named {@code name}. */
-  SavedReport copyFromPreset(PresetDef preset, String name) {
-    return save(name, preset.spec(), preset.renderer(), preset.trendLine());
-  }
-
-  /** Clones an existing Report's spec into a new one named {@code name}. */
-  SavedReport duplicate(long reportId, String name) {
-    SavedReport source = requireReport(reportId);
-    return save(name, source.spec(), source.renderer(), source.trendLine());
-  }
-
-  /** Renames a Report in place. Rejected before the write if {@code name} is blank. */
-  void rename(long reportId, String name) {
+  /**
+   * Overwrites a saved Report's name and spec in place (reporting.md §11a.1's Save — every Frame
+   * showing it follows, since Frames reference rather than copy). Rejected before the write if
+   * {@code name} is blank or {@code reportId} is unknown.
+   */
+  void updateSpec(long reportId, String name, ReportSpec spec) {
     requireReport(reportId);
     String trimmed = requireName(name);
-    reportRepository.rename(reportId, trimmed);
-    LOG.info("Report renamed: id={}, name={}", reportId, trimmed);
+    reportRepository.update(reportId, trimmed, spec);
+    LOG.info("Report updated: id={}, name={}", reportId, trimmed);
   }
 
   void delete(long reportId) {

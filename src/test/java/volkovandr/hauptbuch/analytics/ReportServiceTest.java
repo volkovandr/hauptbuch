@@ -53,72 +53,38 @@ class ReportServiceTest {
   }
 
   @Test
-  void copyFromPresetClonesItsSpecRendererAndTrendLine() {
-    ReportService service = reportService();
-    PresetDef netWorthOverTime = PresetCatalog.find(Presets.NET_WORTH_OVER_TIME_SLUG).orElseThrow();
-    when(reportRepository.insert(any(), any(), any(), anyBoolean()))
-        .thenReturn(new SavedReport(1L, "Mine", Presets.netWorthOverTime(), Renderer.LINE, true));
-
-    service.copyFromPreset(netWorthOverTime, "Mine");
-
-    verify(reportRepository).insert("Mine", Presets.netWorthOverTime(), Renderer.LINE, true);
-  }
-
-  @Test
-  void duplicateClonesAnExistingReportsSpecUnderNewName() {
-    ReportService service = reportService();
-    SavedReport source =
-        new SavedReport(7L, "Original", Presets.balanceSheet(), Renderer.TABLE, false);
-    when(reportRepository.findById(7L)).thenReturn(Optional.of(source));
-    when(reportRepository.insert(any(), any(), any(), anyBoolean()))
-        .thenReturn(new SavedReport(8L, "Copy", Presets.balanceSheet(), Renderer.TABLE, false));
-
-    service.duplicate(7L, "Copy");
-
-    verify(reportRepository).insert("Copy", Presets.balanceSheet(), Renderer.TABLE, false);
-  }
-
-  @Test
-  void duplicateRejectsAnUnknownId() {
+  void updateSpecRejectsAnUnknownId() {
     ReportService service = reportService();
     when(reportRepository.findById(404L)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> service.duplicate(404L, "Copy"))
+    assertThatThrownBy(() -> service.updateSpec(404L, "New name", Presets.balanceSheet()))
         .isInstanceOf(IllegalArgumentException.class);
+    verify(reportRepository, never()).update(anyLong(), any(), any());
   }
 
   @Test
-  void renameRejectsAnUnknownId() {
-    ReportService service = reportService();
-    when(reportRepository.findById(404L)).thenReturn(Optional.empty());
-
-    assertThatThrownBy(() -> service.rename(404L, "New name"))
-        .isInstanceOf(IllegalArgumentException.class);
-    verify(reportRepository, never()).rename(anyLong(), any());
-  }
-
-  @Test
-  void renameRejectsBlankName() {
+  void updateSpecRejectsBlankName() {
     ReportService service = reportService();
     when(reportRepository.findById(1L))
         .thenReturn(
             Optional.of(
                 new SavedReport(1L, "Existing", Presets.balanceSheet(), Renderer.TABLE, false)));
 
-    assertThatThrownBy(() -> service.rename(1L, "")).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> service.updateSpec(1L, "", Presets.balanceSheet()))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
-  void renameDelegatesToTheRepositoryWhenTheReportExists() {
+  void updateSpecDelegatesToTheRepositoryWithTheTrimmedName() {
     ReportService service = reportService();
     when(reportRepository.findById(1L))
         .thenReturn(
             Optional.of(
                 new SavedReport(1L, "Existing", Presets.balanceSheet(), Renderer.TABLE, false)));
 
-    service.rename(1L, "Renamed");
+    service.updateSpec(1L, "  Renamed  ", Presets.categoryMonthMatrix());
 
-    verify(reportRepository).rename(1L, "Renamed");
+    verify(reportRepository).update(1L, "Renamed", Presets.categoryMonthMatrix());
   }
 
   @Test

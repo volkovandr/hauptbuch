@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!--
+  The editor actions strip (reporting.md §11a.1/§11a.2, plan stage d3): Save (a saved Report only —
+  overwrites in place, every Frame showing it follows), Save as new report (every page — a Preset, a
+  saved Report, or a not-yet-saved /reports/new draft), Discard changes and the Unsaved marker (both
+  shown only while a draft is in the URL), and Delete (a saved Report only). Both forms resubmit the
+  page's current effective spec (draft or saved) as hidden fields, so Save/Save as new always commit
+  what is actually on screen. Replaces the old "Manage this report" panel (rename/duplicate) and the
+  Preset-only "Copy to my reports" panel — both actions are now the same "Save as new report"
+  everywhere, per reporting.md's v0.2 changelog.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <!-- The effective spec's own hidden fields (reporting.md §11a.1) — both Save and Save as new
+         report resubmit exactly the same {@code editor.specParams()}, factored out so they cannot
+         drift on which parameter each carries. -->
+    <th:block th:fragment="spec-hidden-fields(specParams)">
+      <th:block th:each="entry : ${specParams}">
+        <input
+          type="hidden"
+          th:each="value : ${entry.value}"
+          th:name="${entry.key}"
+          th:value="${value}"
+        />
+      </th:block>
+    </th:block>
+
+    <section class="panel report-actions" th:fragment="actions">
+      <p th:if="${editor.unsaved()}" class="report-actions__unsaved">Unsaved changes</p>
+
+      <form
+        th:if="${editor.reportId() != null}"
+        method="post"
+        th:action="@{/reports/{id}/save(id=${editor.reportId()})}"
+        class="form"
+      >
+        <div class="field">
+          <label class="field__label" th:for="${'report-name-' + editor.reportId()}">Name</label>
+          <input
+            th:id="${'report-name-' + editor.reportId()}"
+            name="name"
+            type="text"
+            class="input"
+            th:value="${editor.currentName()}"
+            required
+            autocomplete="off"
+          />
+        </div>
+        <th:block th:replace="~{::spec-hidden-fields(${editor.specParams()})}"></th:block>
+        <p class="actions">
+          <button type="submit" class="btn">Save</button>
+        </p>
+      </form>
+
+      <form method="post" th:action="@{/reports/save-as-new}" class="form">
+        <div class="field">
+          <label class="field__label" for="report-save-as-new-name">Save as new report</label>
+          <input
+            id="report-save-as-new-name"
+            name="name"
+            type="text"
+            class="input"
+            th:value="${editor.saveAsNewName()}"
+            required
+            autocomplete="off"
+          />
+        </div>
+        <input type="hidden" name="renderer" th:value="${editor.renderer()}" />
+        <input type="hidden" name="trendLine" th:value="${editor.trendLine()}" />
+        <th:block th:replace="~{::spec-hidden-fields(${editor.specParams()})}"></th:block>
+        <p class="actions">
+          <button type="submit" class="btn">Save as new report</button>
+        </p>
+      </form>
+
+      <p class="actions" th:if="${editor.unsaved()}">
+        <a class="btn btn--ghost" th:href="@{${editor.discardUrl()}}">Discard changes</a>
+      </p>
+
+      <form
+        th:if="${editor.reportId() != null}"
+        method="post"
+        th:action="@{/reports/{id}/delete(id=${editor.reportId()})}"
+        class="form"
+      >
+        <p class="actions">
+          <button type="submit" class="btn btn--danger">Delete report</button>
+        </p>
+      </form>
+    </section>
+  </body>
+</html>

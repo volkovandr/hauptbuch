@@ -3,9 +3,7 @@ package volkovandr.hauptbuch.analytics;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
@@ -18,17 +16,21 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.MultiValueMap;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
- * Integration tier (CLAUDE.md §6): the four Presets' own pages ({@link ReportController}) rendered
- * against real Postgres — the "Done when" bar of the reporting sub-plan's slices a/b: every Preset
- * renders correctly against real data, and the chart/table swap works. The reporting page itself is
- * {@link ReportsLayoutControllerIntegrationTest}'s job. The renderers' own SVG-well-formedness and
- * the pie's negative-measure refusal are {@link ChartSvgWriterTest}/{@link
- * ChartViewAssemblerTest}'s job (CLAUDE.md §6 — no DB dependency, so the unit tier, not here);
- * neither shipped Preset uses the pie renderer (reporting.md §16).
+ * Integration tier (CLAUDE.md §6): the four Presets' own pages and editor ({@link
+ * ReportController}, reporting.md §11a, plan stage d3) rendered against real Postgres — every
+ * Preset renders correctly against real data, the chart/table swap works, and a draft in the query
+ * string overrides a Preset's own spec with the Unsaved marker shown. The reporting page itself is
+ * {@link ReportsLayoutControllerIntegrationTest}'s job; "Save as new report" (the one bridge from a
+ * Preset to an owned Report) is {@link ReportEditorControllerIntegrationTest}'s job, since it is
+ * one shared endpoint every editor page posts to. The renderers' own SVG-well-formedness and the
+ * pie's negative-measure refusal are {@link ChartSvgWriterTest}/{@link ChartViewAssemblerTest}'s
+ * job (CLAUDE.md §6 — no DB dependency, so the unit tier, not here); neither shipped Preset uses
+ * the pie renderer (reporting.md §16).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -163,7 +165,12 @@ class ReportControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("<table")))
         .andExpect(content().string(containsString("Show chart")))
-        .andExpect(content().string(not(containsString("<svg"))));
+        .andExpect(content().string(not(containsString("<svg"))))
+        // hx-replace-url on the toggle (reporting.md §11a.1) keeps the address bar current —
+        // here it is unchanged, since there is no draft to preserve across the swap.
+        .andExpect(
+            content()
+                .string(containsString("hx-replace-url=\"/reports/preset/net-worth-over-time\"")));
 
     mockMvc
         .perform(get("/reports/preset/net-worth-over-time/view").param("view", "chart"))
@@ -193,43 +200,39 @@ class ReportControllerIntegrationTest {
   }
 
   @Test
-  void copyingPresetSavesOwnedReportAndRedirectsToIt() throws Exception {
+  void presetRendersItsOwnActionsWithNoUnsavedMarkerAndNoSaveOrDeleteButton() throws Exception {
     settingsService.setBaseCurrency("EUR");
-
-    mockMvc
-        .perform(post("/reports/preset/category-month-matrix/copy").param("name", "My copy"))
-        .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrlPattern("/reports/*"));
-  }
-
-  @Test
-  void copyingAnUnknownPresetSlugIs404() throws Exception {
-    settingsService.setBaseCurrency("EUR");
-
-    mockMvc
-        .perform(post("/reports/preset/no-such-preset/copy").param("name", "My copy"))
-        .andExpect(status().isNotFound());
-  }
-
-  /**
-   * A Preset cannot be deleted: it is code-defined, never a row, so there is no id to delete one by
-   * — copying it makes an independent owned Report that deletion never reaches back into.
-   */
-  @Test
-  void deletingCopiedReportLeavesOriginalPresetIntact() throws Exception {
-    settingsService.setBaseCurrency("EUR");
-    String redirect =
-        mockMvc
-            .perform(post("/reports/preset/category-month-matrix/copy").param("name", "My copy"))
-            .andReturn()
-            .getResponse()
-            .getRedirectedUrl();
-
-    mockMvc.perform(post(redirect + "/delete")).andExpect(status().is3xxRedirection());
 
     mockMvc
         .perform(get("/reports/preset/category-month-matrix"))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("Category")));
+        .andExpect(content().string(containsString("Save as new report")))
+        .andExpect(content().string(not(containsString("Unsaved changes"))))
+        .andExpect(content().string(not(containsString("Delete report"))));
+  }
+
+  @Test
+  void draftInTheQueryStringOverridesThePresetsOwnSpecAndShowsTheUnsavedMarker() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    MultiValueMap<String, String> draft = ReportSpecQueryString.toParams(Presets.balanceSheet());
+
+    mockMvc
+        .perform(get("/reports/preset/category-month-matrix").params(draft))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Unsaved changes")))
+        // The balance sheet's own scope ("Asset, Equity, Liability") rather than the matrix
+        // Preset's ("Expense, Income") is the proof the draft, not the Preset's own spec, rendered.
+        .andExpect(content().string(containsString("Asset, Equity, Liability")));
+  }
+
+  @Test
+  void discardChangesLinksBackToThePresetsBareUrl() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    MultiValueMap<String, String> draft = ReportSpecQueryString.toParams(Presets.balanceSheet());
+
+    mockMvc
+        .perform(get("/reports/preset/category-month-matrix").params(draft))
+        .andExpect(
+            content().string(containsString("href=\"/reports/preset/category-month-matrix\"")));
   }
 }

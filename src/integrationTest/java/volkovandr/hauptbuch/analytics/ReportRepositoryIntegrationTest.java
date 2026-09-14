@@ -83,15 +83,17 @@ class ReportRepositoryIntegrationTest {
   }
 
   @Test
-  void renameChangesTheNameOnly() {
+  void updateChangesTheNameAndSpecButNotRendererOrTrendLine() {
     SavedReport inserted =
-        reportRepository.insert("Original name", Presets.balanceSheet(), Renderer.TABLE, false);
+        reportRepository.insert("Original name", Presets.balanceSheet(), Renderer.LINE, true);
 
-    reportRepository.rename(inserted.reportId(), "Renamed");
+    reportRepository.update(inserted.reportId(), "Renamed", ELABORATE_SPEC);
 
     SavedReport found = reportRepository.findById(inserted.reportId()).orElseThrow();
     assertThat(found.name()).isEqualTo("Renamed");
-    assertThat(found.spec()).isEqualTo(Presets.balanceSheet());
+    assertThat(found.spec()).isEqualTo(ELABORATE_SPEC);
+    assertThat(found.renderer()).isEqualTo(Renderer.LINE);
+    assertThat(found.trendLine()).isTrue();
   }
 
   @Test
