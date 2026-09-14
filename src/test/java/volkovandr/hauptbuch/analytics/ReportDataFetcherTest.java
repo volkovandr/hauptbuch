@@ -162,7 +162,7 @@ class ReportDataFetcherTest {
         dateOnColumns ? List.of(Dimension.DATE) : List.of(),
         List.of(),
         List.of(Measure.closingBalance(PresentationCurrency.BASE)),
-        new Scope(java.util.Set.of("asset"), List.of(), true, includePendingReview),
+        new Scope(java.util.Set.of("asset"), true, includePendingReview),
         List.of(),
         new DateRange(
             new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31)),

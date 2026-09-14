@@ -39,7 +39,7 @@ class ReportRepositoryIntegrationTest {
               Measure.turnover(PresentationCurrency.BASE, Leg.NET),
               Measure.closingBalance(PresentationCurrency.ACCOUNT),
               Measure.countTransactions()),
-          new Scope(Set.of("income", "expense"), List.of(11L, 22L), false, true),
+          new Scope(Set.of("income", "expense"), false, true),
           List.of(
               new ReportFilter(
                   FilterField.PAYEE,

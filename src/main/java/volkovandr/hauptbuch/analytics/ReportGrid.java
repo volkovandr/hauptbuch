@@ -20,6 +20,9 @@ import java.util.List;
  *     axis is off
  * @param resolvedStart the range's resolved start (§8.1), for the header line
  * @param resolvedEnd the range's resolved end (§8.1), for the header line
+ * @param scopeMismatch the "scope misses the dimension" message (§6.1, {@link
+ *     ScopeDimensionMismatch}), computed once here for every renderer to read; {@code null} when
+ *     scope and dimension agree
  */
 public record ReportGrid(
     List<AxisNode> rows,
@@ -29,7 +32,8 @@ public record ReportGrid(
     List<Cell> columnTotals,
     Cell grandTotal,
     LocalDate resolvedStart,
-    LocalDate resolvedEnd) {
+    LocalDate resolvedEnd,
+    String scopeMismatch) {
 
   /** Defensively copies the lists to immutable ones. */
   public ReportGrid {

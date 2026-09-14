@@ -88,4 +88,57 @@ class ReportSpecTest {
                     true))
         .isInstanceOf(IllegalArgumentException.class);
   }
+
+  @Test
+  void rejectsTwoFiltersOnTheSameField() {
+    List<ReportFilter> filters =
+        List.of(
+            new ReportFilter(
+                FilterField.CATEGORY, FilterLevel.POSTING, FilterOperator.IS_ONE_OF, List.of("1")),
+            new ReportFilter(
+                FilterField.CATEGORY, FilterLevel.POSTING, FilterOperator.IS_ONE_OF, List.of("2")));
+
+    assertThatThrownBy(
+            () ->
+                new ReportSpec(
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+                    Scope.ofTypes("expense"),
+                    filters,
+                    A_RANGE,
+                    false,
+                    false,
+                    true))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void acceptsOneFilterPerDistinctField() {
+    List<ReportFilter> filters =
+        List.of(
+            new ReportFilter(
+                FilterField.CATEGORY, FilterLevel.POSTING, FilterOperator.IS_ONE_OF, List.of("1")),
+            new ReportFilter(
+                FilterField.PAYEE,
+                FilterLevel.TRANSACTION,
+                FilterOperator.IS_ONE_OF,
+                List.of("2")));
+
+    assertThatCode(
+            () ->
+                new ReportSpec(
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+                    Scope.ofTypes("expense"),
+                    filters,
+                    A_RANGE,
+                    false,
+                    false,
+                    true))
+        .doesNotThrowAnyException();
+  }
 }

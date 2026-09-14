@@ -86,4 +86,28 @@ class ReportFilterTest {
                     FilterField.NOTE, FilterLevel.POSTING, FilterOperator.CONTAINS, List.of("x")))
         .doesNotThrowAnyException();
   }
+
+  @Test
+  void rejectsPostingLevelAccountTypeFilter() {
+    assertThatThrownBy(
+            () ->
+                new ReportFilter(
+                    FilterField.ACCOUNT_TYPE,
+                    FilterLevel.POSTING,
+                    FilterOperator.IS_ONE_OF,
+                    List.of("asset")))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void acceptsTransactionLevelAccountTypeFilter() {
+    assertThatCode(
+            () ->
+                new ReportFilter(
+                    FilterField.ACCOUNT_TYPE,
+                    FilterLevel.TRANSACTION,
+                    FilterOperator.IS_ONE_OF,
+                    List.of("asset")))
+        .doesNotThrowAnyException();
+  }
 }

@@ -86,8 +86,7 @@ class ReportDataFetcher {
       List<MonthBucket> buckets,
       LocalDate today,
       String baseCurrency) {
-    QueryConstraints constraints =
-        new QueryConstraints(spec.scope().accountSubtreeRoots(), spec.filters());
+    QueryConstraints constraints = new QueryConstraints(spec.filters());
     Map<Leg, List<RawTurnoverCell>> turnoverByLeg =
         fetchTurnover(spec, axes.nonDateDim(), types, resolved, baseCurrency, constraints);
 

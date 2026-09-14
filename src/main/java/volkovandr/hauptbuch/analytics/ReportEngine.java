@@ -19,10 +19,10 @@ import volkovandr.hauptbuch.ledger.SettingsService;
  * Dimension#ACCOUNT}/{@link Dimension#PERSON}/{@link Dimension#CURRENCY}/{@link
  * Dimension#ACCOUNT_TYPE}, plus no dimension at all) — {@link Dimension#TAG} and {@link
  * Dimension#PAYEE} have no closing balance (neither is an account) and are rejected for it with a
- * clear message. Filters (§6.2–§6.3) and {@link Scope#accountSubtreeRoots()} (§6.1) are applied by
- * {@link volkovandr.hauptbuch.analytics.repository.ReportQueryRepository}. Stage a's own cap
- * remains: at most one dimension per axis, and at most one of the two axes may carry a non-Date
- * dimension at all (nesting two different non-Date dimensions across axes is stage e's job).
+ * clear message. Filters (§6.2–§6.3) are applied by {@link
+ * volkovandr.hauptbuch.analytics.repository.ReportQueryRepository}. Stage a's own cap remains: at
+ * most one dimension per axis, and at most one of the two axes may carry a non-Date dimension at
+ * all (nesting two different non-Date dimensions across axes is stage e's job).
  */
 @Service
 public class ReportEngine {

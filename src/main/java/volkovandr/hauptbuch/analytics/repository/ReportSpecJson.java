@@ -126,9 +126,6 @@ final class ReportSpecJson {
     ArrayNode types = MAPPER.createArrayNode();
     scope.accountTypes().forEach(types::add);
     node.set("accountTypes", types);
-    ArrayNode roots = MAPPER.createArrayNode();
-    scope.accountSubtreeRoots().forEach(roots::add);
-    node.set("accountSubtreeRoots", roots);
     node.put("includeClosedAccounts", scope.includeClosedAccounts());
     node.put("includePendingReview", scope.includePendingReview());
     return node;
@@ -137,11 +134,8 @@ final class ReportSpecJson {
   private static Scope scopeFrom(JsonNode node) {
     Set<String> types = new LinkedHashSet<>();
     node.get("accountTypes").forEach(n -> types.add(n.asText()));
-    List<Long> roots = new ArrayList<>();
-    node.get("accountSubtreeRoots").forEach(n -> roots.add(n.asLong()));
     return new Scope(
         types,
-        roots,
         node.get("includeClosedAccounts").asBoolean(),
         node.get("includePendingReview").asBoolean());
   }

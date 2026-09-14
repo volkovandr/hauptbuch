@@ -17,6 +17,13 @@
     <section class="panel" id="report-frame" th:fragment="frame">
       <p class="eyebrow" th:text="${report.title()}">Report</p>
       <p class="muted report__scope" th:text="${report.scopeLine()}">Scope</p>
+      <p
+        class="muted report__scope-mismatch"
+        th:if="${report.scopeMismatch() != null}"
+        th:text="${report.scopeMismatch()}"
+      >
+        Scope mismatch
+      </p>
       <p class="muted">
         <span th:text="${#temporals.format(report.resolvedStart(), 'dd.MM.yyyy')}">start</span>
         &ndash;

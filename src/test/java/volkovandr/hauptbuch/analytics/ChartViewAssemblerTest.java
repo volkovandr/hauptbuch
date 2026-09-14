@@ -10,9 +10,10 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Unit tier (CLAUDE.md §6): {@link ChartViewAssembler} — small multiples vs. series-as-legend
- * (reporting.md §3, {@link ReportSpec}'s javadoc) and the pie negative-measure refusal (§7.4). Grid
- * assembly itself is {@link ReportGridBuilderTest}'s job; this class only turns an already-built
- * {@link ReportGrid} into panels.
+ * (reporting.md §3, {@link ReportSpec}'s javadoc), the pie negative-measure refusal (§7.4), and the
+ * "scope misses the dimension" refusal (§6.1). Grid assembly itself is {@link
+ * ReportGridBuilderTest}'s job; this class only turns an already-built {@link ReportGrid} into
+ * panels.
  */
 class ChartViewAssemblerTest {
 
@@ -49,7 +50,8 @@ class ChartViewAssemblerTest {
             List.of(),
             Cell.BLANK,
             START,
-            END);
+            END,
+            null);
 
     ChartView view = ChartViewAssembler.assemble("Title", spec, grid, "EUR", Renderer.BAR, false);
 
@@ -70,7 +72,8 @@ class ChartViewAssemblerTest {
             List.of(),
             Cell.BLANK,
             START,
-            END);
+            END,
+            null);
 
     ChartView view = ChartViewAssembler.assemble("Title", spec, grid, "EUR", Renderer.LINE, false);
 
@@ -90,7 +93,8 @@ class ChartViewAssemblerTest {
             List.of(),
             Cell.BLANK,
             START,
-            END);
+            END,
+            null);
 
     ChartView view = ChartViewAssembler.assemble("Title", spec, grid, "EUR", Renderer.LINE, true);
 
@@ -110,7 +114,8 @@ class ChartViewAssemblerTest {
             List.of(),
             Cell.BLANK,
             START,
-            END);
+            END,
+            null);
 
     ChartView view = ChartViewAssembler.assemble("Title", spec, grid, "EUR", Renderer.PIE, false);
 
@@ -130,11 +135,26 @@ class ChartViewAssemblerTest {
             List.of(),
             Cell.BLANK,
             START,
-            END);
+            END,
+            null);
 
     ChartView view = ChartViewAssembler.assemble("Title", spec, grid, "EUR", Renderer.PIE, false);
 
     assertThat(view.panels()).hasSize(2);
+  }
+
+  @Test
+  void scopeMismatchOnTheGridRefusesRatherThanRenderingAnEmptyChart() {
+    ReportSpec spec = specWithRows(List.of(), List.of());
+    String message = "Category covers income and expense accounts; neither is in scope.";
+    ReportGrid grid =
+        new ReportGrid(
+            List.of(), List.of(), List.of(), List.of(), List.of(), Cell.BLANK, START, END, message);
+
+    ChartView view = ChartViewAssembler.assemble("Title", spec, grid, "EUR", Renderer.BAR, false);
+
+    assertThat(view.refusalMessage()).isEqualTo(message);
+    assertThat(view.panels()).isEmpty();
   }
 
   @Test
@@ -162,7 +182,8 @@ class ChartViewAssemblerTest {
             List.of(),
             Cell.BLANK,
             START,
-            END);
+            END,
+            null);
 
     assertThatThrownBy(
             () -> ChartViewAssembler.assemble("Title", spec, grid, "EUR", Renderer.LINE, false))

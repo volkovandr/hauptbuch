@@ -93,16 +93,6 @@ class ReportEngineTest {
   }
 
   @Test
-  void acceptsScopeSubtreeRestriction() {
-    baseIsEur();
-    Scope scope = new Scope(java.util.Set.of("expense"), List.of(1L), true, false);
-    ReportSpec s =
-        spec(List.of(), List.of(), Measure.turnover(PresentationCurrency.BASE, Leg.NET), scope);
-
-    assertThatCode(() -> engine.render(s, TODAY)).doesNotThrowAnyException();
-  }
-
-  @Test
   void acceptsCountMeasures() {
     baseIsEur();
     ReportSpec s = spec(List.of(), List.of(), Measure.countPostings(), Scope.ofTypes("expense"));

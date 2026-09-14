@@ -9,6 +9,8 @@ import java.util.List;
  * template does no formatting of its own.
  *
  * @param scopeLine the muted header line (§6.4)
+ * @param scopeMismatch the "scope misses the dimension" message (§6.1, {@link
+ *     ScopeDimensionMismatch}); {@code null} when scope and dimension agree
  * @param columnLabels the rendered column headers
  * @param rows one row per surviving (post-suppression) {@link AxisNode}
  * @param columnTotals the bottom totals row; empty when not shown
@@ -17,6 +19,7 @@ import java.util.List;
 public record ReportTableView(
     String title,
     String scopeLine,
+    String scopeMismatch,
     LocalDate resolvedStart,
     LocalDate resolvedEnd,
     List<String> columnLabels,

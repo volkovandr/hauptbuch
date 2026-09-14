@@ -23,8 +23,7 @@ import volkovandr.hauptbuch.analytics.ReportFilter;
  * PinnedBalanceRepository} and {@code RegisterRepository} already use — the Modulith boundary is on
  * Java types, not on shared storage.
  *
- * <p>Every turnover/closing-balance method takes a {@link QueryConstraints}: {@link
- * QueryConstraints#accountSubtreeRoots()} (reporting.md §6.1) and {@link
+ * <p>Every turnover/closing-balance method takes a {@link QueryConstraints}: its {@link
  * QueryConstraints#filters()} (§6.2–§6.3) are compiled by {@link #compileExtra} into one extra
  * {@code and}-ed SQL fragment, referencing whichever of this query's own {@code p}(osting)/{@code
  * a}(ccount)/{@code t}(ransaction) aliases every method consistently uses — a posting-level filter
@@ -43,7 +42,6 @@ public class ReportQueryRepository {
   private static final String INCLUDE_CLOSED = "includeClosedAccounts";
   private static final String INCLUDE_PENDING_REVIEW = "includePendingReview";
   private static final String AS_OF = "asOf";
-  private static final String SCOPE_SUBTREE_IDS = "scopeSubtreeIds";
   private static final String WHERE = "where ";
   private static final String AND = "  and ";
   private static final String ON = " on ";
@@ -871,13 +869,12 @@ public class ReportQueryRepository {
         .list();
   }
 
-  // ── scope subtree restriction and filter compilation (§6.1–§6.3) ───────────
+  // ── filter compilation (§6.2–§6.3) ──────────────────────────────────────────
 
   /**
    * The live subtree of {@code roots}: the roots themselves and every live descendant, walked to
-   * arbitrary depth via {@code parent_id} (data-model §5) — shared by {@link
-   * volkovandr.hauptbuch.analytics.Scope#accountSubtreeRoots()} and a {@code CATEGORY}/{@code
-   * ACCOUNT} filter's {@code IS_ONE_OF} subtree semantics (§6.3).
+   * arbitrary depth via {@code parent_id} (data-model §5) — a {@code CATEGORY}/{@code ACCOUNT}
+   * filter's {@code IS_ONE_OF} subtree semantics (§6.3).
    */
   private List<Long> subtreeAccountIds(List<Long> roots) {
     if (roots.isEmpty()) {
@@ -930,11 +927,6 @@ public class ReportQueryRepository {
   private CompiledExtra compileExtra(QueryConstraints constraints) {
     StringBuilder sql = new StringBuilder(128);
     Map<String, Object> params = new LinkedHashMap<>();
-    if (!constraints.accountSubtreeRoots().isEmpty()) {
-      List<Long> ids = subtreeAccountIds(constraints.accountSubtreeRoots());
-      params.put(SCOPE_SUBTREE_IDS, orNoMatch(ids));
-      sql.append(AND).append("a.account_id in (:").append(SCOPE_SUBTREE_IDS).append(")\n");
-    }
     List<ReportFilter> filters = constraints.filters();
     for (int i = 0; i < filters.size(); i++) {
       sql.append(AND).append(filterPredicate(filters.get(i), i, params)).append('\n');
@@ -955,7 +947,6 @@ public class ReportQueryRepository {
       case PERSON -> personPredicate(filter, key, params);
       case CURRENCY -> currencyFilterPredicate(filter, key, params);
       case ACCOUNT_TYPE -> accountTypeFilterPredicate(filter, key, params);
-      case LIFECYCLE -> lifecyclePredicate(filter, key, params);
       case RECONCILIATION -> reconciliationPredicate(filter, key, params);
       case NOTE -> notePredicate(filter, key, params);
     };
@@ -1075,22 +1066,18 @@ public class ReportQueryRepository {
         alias + ".currency_code in (:" + key + ")");
   }
 
+  /**
+   * {@code ACCOUNT_TYPE} is transaction-level only (§6.2's exception): its posting-level reading is
+   * exactly what scope's account types already say, so it is always compiled as an {@code exists}
+   * over the transaction's own postings — {@link ReportFilter}'s constructor already refuses any
+   * other level for this field.
+   */
   private String accountTypeFilterPredicate(
       ReportFilter filter, String key, Map<String, Object> params) {
     params.put(key, filter.values());
     String alias = "fa_" + key;
     String join = " join account " + alias + ON + alias + ".account_id = fp_" + key + ".account_id";
-    return postingOrTransaction(
-        filter.level(), key, "a.type in (:" + key + ")", join, alias + ".type in (:" + key + ")");
-  }
-
-  /**
-   * {@code lifecycle} lives on {@code transaction}; level makes no difference (see {@link
-   * #payeePredicate}).
-   */
-  private String lifecyclePredicate(ReportFilter filter, String key, Map<String, Object> params) {
-    params.put(key, filter.values());
-    return "t.lifecycle in (:" + key + ")";
+    return existsAcrossTransaction(key, join, alias + ".type in (:" + key + ")");
   }
 
   private String reconciliationPredicate(

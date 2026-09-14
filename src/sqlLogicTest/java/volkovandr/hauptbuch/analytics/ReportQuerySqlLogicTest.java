@@ -977,33 +977,6 @@ class ReportQuerySqlLogicTest {
     amount(byLabel(cells, "liability").nativeBalance(), "-20.00");
   }
 
-  // ── scope subtree restriction (§6.1) ──────────────────────────────────────
-
-  @Test
-  void accountSubtreeRootsRestrictsTurnoverToTheGivenSubtreesDescendants() {
-    long food = insertAccount("Food", "expense", EUR, null);
-    long restaurants = insertAccount("Restaurants", "expense", EUR, food);
-    long fuel = insertAccount("Fuel", "expense", EUR, null);
-    long cash = insertAccount("Cash", "asset", EUR, null);
-    postSingleCurrency(cash, restaurants, LocalDate.of(2026, 1, 5), "20.00");
-    postSingleCurrency(cash, fuel, LocalDate.of(2026, 1, 6), "15.00");
-
-    List<RawTurnoverCell> cells =
-        repository.totalTurnover(
-            List.of("expense"),
-            LocalDate.of(2026, 1, 1),
-            LocalDate.of(2026, 1, 31),
-            EUR,
-            "NET",
-            true,
-            false,
-            new QueryConstraints(List.of(food), List.of()));
-
-    // Restricted to the Food subtree: only the Restaurants posting counts, Fuel is excluded.
-    assertThat(cells).hasSize(1);
-    amount(cells.get(0).nativeAmount(), "20.00");
-  }
-
   // ── filters (§6.2–§6.3) ────────────────────────────────────────────────────
 
   @Test
@@ -1029,7 +1002,7 @@ class ReportQuerySqlLogicTest {
             "NET",
             true,
             false,
-            new QueryConstraints(List.of(), List.of(filter)));
+            new QueryConstraints(List.of(filter)));
 
     assertThat(cells).hasSize(1);
     amount(cells.get(0).nativeAmount(), "20.00");
@@ -1060,7 +1033,7 @@ class ReportQuerySqlLogicTest {
             "NET",
             true,
             false,
-            new QueryConstraints(List.of(), List.of(filter)));
+            new QueryConstraints(List.of(filter)));
 
     assertThat(cells).hasSize(1);
     amount(cells.get(0).nativeAmount(), "20.00");
@@ -1093,7 +1066,7 @@ class ReportQuerySqlLogicTest {
             "NET",
             true,
             false,
-            new QueryConstraints(List.of(), List.of(filter)));
+            new QueryConstraints(List.of(filter)));
 
     assertThat(cells).hasSize(1);
     amount(cells.get(0).nativeAmount(), "20.00");
@@ -1127,7 +1100,7 @@ class ReportQuerySqlLogicTest {
             "NET",
             true,
             false,
-            new QueryConstraints(List.of(), List.of(filter)));
+            new QueryConstraints(List.of(filter)));
 
     assertThat(cells).hasSize(1);
     amount(cells.get(0).nativeAmount(), "20.00");
@@ -1157,7 +1130,7 @@ class ReportQuerySqlLogicTest {
             "NET",
             true,
             false,
-            new QueryConstraints(List.of(), List.of(filter)));
+            new QueryConstraints(List.of(filter)));
 
     assertThat(cells).hasSize(1);
     amount(cells.get(0).nativeAmount(), "20.00");
@@ -1188,7 +1161,7 @@ class ReportQuerySqlLogicTest {
             "DEBITS",
             true,
             false,
-            new QueryConstraints(List.of(), List.of(filter)));
+            new QueryConstraints(List.of(filter)));
 
     assertThat(cells).hasSize(1);
     amount(cells.get(0).nativeAmount(), "30.00");
@@ -1215,14 +1188,18 @@ class ReportQuerySqlLogicTest {
             "NET",
             true,
             false,
-            new QueryConstraints(List.of(), List.of(filter)));
+            new QueryConstraints(List.of(filter)));
 
     assertThat(cells).hasSize(1);
     amount(cells.get(0).nativeAmount(), "15.00");
   }
 
   @Test
-  void accountTypeFilterCanNarrowWithinWiderScope() {
+  void accountTypeFilterIsTransactionLevelOnly() {
+    // §6.2's exception: ACCOUNT_TYPE has no posting-level reading (that is exactly what scope's
+    // own account types already say), so the filter always means "transactions touching a
+    // liability" — every in-scope leg of such a transaction is summed, not only the liability leg
+    // itself.
     long cash = insertAccount("Cash", "asset", EUR, null);
     long card = insertAccount("Credit Card", "liability", EUR, null);
     long opening = insertAccount("Opening Balances", "equity", EUR, null);
@@ -1231,7 +1208,7 @@ class ReportQuerySqlLogicTest {
     ReportFilter filter =
         new ReportFilter(
             FilterField.ACCOUNT_TYPE,
-            FilterLevel.POSTING,
+            FilterLevel.TRANSACTION,
             FilterOperator.IS_ONE_OF,
             List.of("liability"));
 
@@ -1241,43 +1218,13 @@ class ReportQuerySqlLogicTest {
             LocalDate.of(2026, 1, 31),
             true,
             false,
-            new QueryConstraints(List.of(), List.of(filter)));
+            new QueryConstraints(List.of(filter)));
 
+    // Only the card-opening transaction touches a liability; its own in-scope (asset/liability)
+    // leg is the card's, the equity leg is out of scope either way.
     assertThat(cells).hasSize(1);
     // Raw, unflipped native sum (see the equivalent note in accountTypeClosingBalance's test).
     amount(cells.get(0).nativeBalance(), "-20.00");
-  }
-
-  @Test
-  void lifecycleFilterCanSelectPendingReviewTransactionsIndependentlyOfTheScopeToggle() {
-    long cash = insertAccount("Cash", "asset", EUR, null);
-    long food = insertAccount("Food", "expense", EUR, null);
-    postSingleCurrency(cash, food, LocalDate.of(2026, 1, 5), "20.00"); // confirmed
-    long pendingTxn = insertTransaction(LocalDate.of(2026, 1, 6), true, false);
-    insertPosting(pendingTxn, cash, "-15.00", null);
-    insertPosting(pendingTxn, food, "15.00", null);
-    ReportFilter filter =
-        new ReportFilter(
-            FilterField.LIFECYCLE,
-            FilterLevel.TRANSACTION,
-            FilterOperator.IS_ONE_OF,
-            List.of("pending_review"));
-
-    // includePendingReview=true so the pending transaction is in scope at all; the filter then
-    // narrows to ONLY the pending one.
-    List<RawTurnoverCell> cells =
-        repository.totalTurnover(
-            List.of("expense"),
-            LocalDate.of(2026, 1, 1),
-            LocalDate.of(2026, 1, 31),
-            EUR,
-            "NET",
-            true,
-            true,
-            new QueryConstraints(List.of(), List.of(filter)));
-
-    assertThat(cells).hasSize(1);
-    amount(cells.get(0).nativeAmount(), "15.00");
   }
 
   @Test
@@ -1305,7 +1252,7 @@ class ReportQuerySqlLogicTest {
             "NET",
             true,
             false,
-            new QueryConstraints(List.of(), List.of(filter)));
+            new QueryConstraints(List.of(filter)));
 
     assertThat(cells).hasSize(1);
     amount(cells.get(0).nativeAmount(), "20.00");
@@ -1335,7 +1282,7 @@ class ReportQuerySqlLogicTest {
             "NET",
             true,
             false,
-            new QueryConstraints(List.of(), List.of(filter)));
+            new QueryConstraints(List.of(filter)));
 
     // The Food leg itself is unreconciled, but the Cash leg of the SAME transaction is — a
     // transaction-level filter admits the transaction, then the measure still sums the Food leg.
@@ -1366,7 +1313,7 @@ class ReportQuerySqlLogicTest {
             "NET",
             true,
             false,
-            new QueryConstraints(List.of(), List.of(filter)));
+            new QueryConstraints(List.of(filter)));
 
     assertThat(cells).hasSize(1);
     amount(cells.get(0).nativeAmount(), "20.00");
@@ -1393,7 +1340,7 @@ class ReportQuerySqlLogicTest {
             "NET",
             true,
             false,
-            new QueryConstraints(List.of(), List.of(filter)));
+            new QueryConstraints(List.of(filter)));
 
     assertThat(cells).hasSize(1);
     amount(cells.get(0).nativeAmount(), "20.00");
