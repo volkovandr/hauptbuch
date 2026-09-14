@@ -1,7 +1,7 @@
 # Hauptbuch — Reporting sub-plan (slices a–f)
 
-**Status:** Draft v0.6
-**Date:** 2026-09-13
+**Status:** Draft v0.7
+**Date:** 2026-09-14
 **Owner:** volkovandr
 **Companion to:** `reporting.md` (authoritative for every design decision),
 `implementation-plan.md` (§3, the Reporting bullet), `docs/adr/0001-generic-report-engine.md`
@@ -107,7 +107,7 @@ unchanged; a Preset cannot be deleted.
 
 ---
 
-## d2 — The Layout, read-only
+## d2 — The Layout, read-only ✅ complete (owner-confirmed 2026-09-14)
 
 Reworks slice **c**'s screens to `reporting.md` §11; no engine change.
 
@@ -219,6 +219,7 @@ transaction, a transfer, and a category-to-category correction; the CSV's shape.
 
 ## Changelog
 
+- **v0.7 (2026-09-14):** Slice d2 marked complete (owner-confirmed). No scope change (routine).
 - **v0.6 (2026-09-13):** Scope change: **slices d2 and d3 inserted** before e. No slice had owned the
   UI for editing a Report (v0.5 dropped the spec builder from d without re-homing it), and the
   owner asked for the reporting and main pages to show Frames cleanly. Designed in `reporting.md`
