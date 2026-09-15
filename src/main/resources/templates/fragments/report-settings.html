@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<!--
+  The Report page's settings strip (reporting.md §11a.2/§11a.3, plan stage d3): Rows & columns,
+  Measures, Scope, Date range and Display as collapsed <details> groups, plus the always-visible
+  Renderer control — everything the engine supports today except Filters (plan stage d4). Shared by
+  report-table.html and report-chart.html's own "page" fragment.
+
+  Every group is its own <form>, GETting the page's own URL (`settings.pagePath()`): hidden fields
+  carry the rest of the current state (each group's own `otherParams`, built server-side in
+  ReportSettingsView so a group never has to know another group's field names), alongside the
+  group's own real, named inputs. Live groups (Rows & columns, Display, Renderer) set
+  hx-trigger="change" so they fire with no button; Apply groups (Measures, Scope's account types,
+  the date range's endpoint editors) keep the form's default submit trigger and show a real Apply
+  button, which is also the plain-GET fallback with htmx off. hx-replace-url="true" tells htmx to
+  set the address bar to the request it just made — since every group's request already carries the
+  whole state, that IS the draft's own bookmarkable URL (reporting.md §11a.1), with no separate
+  canonical-URL computation needed.
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <section class="panel report-settings" th:fragment="strip" aria-label="Report settings">
+      <details class="report-settings__group">
+        <summary>Rows &amp; columns</summary>
+        <form
+          class="report-settings__form"
+          method="get"
+          th:action="@{${settings.pagePath()}}"
+          hx-trigger="change"
+          hx-target="#report-page"
+          hx-swap="outerHTML"
+          hx-replace-url="true"
+          th:attr="hx-get=@{${settings.pagePath()}}"
+        >
+          <div class="report-settings__row">
+            <div class="field">
+              <label class="field__label" for="settings-rows">Rows</label>
+              <select
+                id="settings-rows"
+                name="rows"
+                class="input"
+                th:disabled="${settings.rowsColumns().rowsDisabled()}"
+              >
+                <option
+                  th:each="opt : ${settings.rowsColumns().rows()}"
+                  th:value="${opt.value()}"
+                  th:selected="${opt.selected()}"
+                  th:text="${opt.label()}"
+                ></option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label" for="settings-columns">Columns</label>
+              <select id="settings-columns" name="columns" class="input">
+                <option
+                  th:each="opt : ${settings.rowsColumns().columns()}"
+                  th:value="${opt.value()}"
+                  th:selected="${opt.selected()}"
+                  th:text="${opt.label()}"
+                ></option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label" for="settings-series">Series</label>
+              <select
+                id="settings-series"
+                name="series"
+                class="input"
+                th:disabled="${settings.rowsColumns().seriesDisabled()}"
+              >
+                <option
+                  th:each="opt : ${settings.rowsColumns().series()}"
+                  th:value="${opt.value()}"
+                  th:selected="${opt.selected()}"
+                  th:text="${opt.label()}"
+                ></option>
+              </select>
+            </div>
+          </div>
+          <th:block
+            th:replace="~{fragments/report-actions :: hidden-fields(${settings.rowsColumns().otherParams()})}"
+          ></th:block>
+        </form>
+      </details>
+
+      <details class="report-settings__group">
+        <summary>Measures</summary>
+        <form
+          class="report-settings__form"
+          method="get"
+          th:action="@{${settings.pagePath()}}"
+          hx-target="#report-page"
+          hx-swap="outerHTML"
+          hx-replace-url="true"
+          th:attr="hx-get=@{${settings.pagePath()}}"
+        >
+          <table class="report-settings__measures">
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                <th scope="col">Base</th>
+                <th scope="col">Account currency</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr th:each="row : ${settings.measures().rows()}">
+                <th scope="row" th:text="${row.label()}">Turnover — net</th>
+                <td>
+                  <input
+                    type="checkbox"
+                    name="measure"
+                    th:value="${row.base().value()}"
+                    th:checked="${row.base().checked()}"
+                  />
+                </td>
+                <td th:if="${row.hasCurrencies()}">
+                  <input
+                    type="checkbox"
+                    name="measure"
+                    th:value="${row.account().value()}"
+                    th:checked="${row.account().checked()}"
+                  />
+                </td>
+                <td th:unless="${row.hasCurrencies()}" class="muted">(no currency)</td>
+              </tr>
+            </tbody>
+          </table>
+          <th:block
+            th:replace="~{fragments/report-actions :: hidden-fields(${settings.measures().otherParams()})}"
+          ></th:block>
+          <p class="actions"><button type="submit" class="btn">Apply</button></p>
+        </form>
+      </details>
+
+      <details class="report-settings__group">
+        <summary>Scope</summary>
+        <form
+          class="report-settings__form"
+          method="get"
+          th:action="@{${settings.pagePath()}}"
+          hx-trigger="change"
+          hx-target="#report-page"
+          hx-swap="outerHTML"
+          hx-replace-url="true"
+          th:attr="hx-get=@{${settings.pagePath()}}"
+        >
+          <label class="check">
+            <input
+              type="checkbox"
+              name="includeClosed"
+              value="true"
+              th:checked="${settings.scope().includeClosed()}"
+            />
+            Include closed accounts
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              name="includePending"
+              value="true"
+              th:checked="${settings.scope().includePendingReview()}"
+            />
+            Include pending-review transactions
+          </label>
+          <th:block
+            th:replace="~{fragments/report-actions :: hidden-fields(${settings.scope().togglesOtherParams()})}"
+          ></th:block>
+        </form>
+        <form
+          class="report-settings__form"
+          method="get"
+          th:action="@{${settings.pagePath()}}"
+          hx-target="#report-page"
+          hx-swap="outerHTML"
+          hx-replace-url="true"
+          th:attr="hx-get=@{${settings.pagePath()}}"
+        >
+          <p class="report-settings__scope-types">
+            <label class="check" th:each="opt : ${settings.scope().types()}">
+              <input
+                type="checkbox"
+                name="scopeType"
+                th:value="${opt.value()}"
+                th:checked="${opt.checked()}"
+              />
+              <span th:text="${opt.label()}">Asset</span>
+            </label>
+          </p>
+          <th:block
+            th:replace="~{fragments/report-actions :: hidden-fields(${settings.scope().typesOtherParams()})}"
+          ></th:block>
+          <p class="actions"><button type="submit" class="btn">Apply</button></p>
+        </form>
+      </details>
+
+      <details class="report-settings__group">
+        <summary>Date range</summary>
+        <p class="report-settings__date-shortcuts">
+          <a
+            th:each="shortcut : ${settings.dateRange().shortcuts()}"
+            class="link"
+            th:text="${shortcut.label()}"
+            th:href="@{${shortcut.url()}}"
+            hx-target="#report-page"
+            hx-swap="outerHTML"
+            hx-replace-url="true"
+            th:attr="hx-get=@{${shortcut.url()}}"
+          >Year to date</a
+          >
+        </p>
+        <form
+          class="report-settings__form"
+          method="get"
+          th:action="@{${settings.pagePath()}}"
+          hx-target="#report-page"
+          hx-swap="outerHTML"
+          hx-replace-url="true"
+          th:attr="hx-get=@{${settings.pagePath()}}"
+        >
+          <th:block
+            th:replace="~{::endpoint('Start', 'range-start', ${settings.dateRange().start()})}"
+          ></th:block>
+          <th:block
+            th:replace="~{::endpoint('End', 'range-end', ${settings.dateRange().end()})}"
+          ></th:block>
+          <th:block
+            th:replace="~{fragments/report-actions :: hidden-fields(${settings.dateRange().otherParams()})}"
+          ></th:block>
+          <p class="actions"><button type="submit" class="btn">Apply</button></p>
+        </form>
+      </details>
+
+      <details class="report-settings__group">
+        <summary>Display</summary>
+        <form
+          class="report-settings__form"
+          method="get"
+          th:action="@{${settings.pagePath()}}"
+          hx-trigger="change"
+          hx-target="#report-page"
+          hx-swap="outerHTML"
+          hx-replace-url="true"
+          th:attr="hx-get=@{${settings.pagePath()}}"
+        >
+          <label class="check">
+            <input
+              type="checkbox"
+              name="rowTotals"
+              value="true"
+              th:checked="${settings.display().rowTotals()}"
+            />
+            Row totals
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              name="columnTotals"
+              value="true"
+              th:checked="${settings.display().columnTotals()}"
+            />
+            Column totals
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              name="suppressEmptyRows"
+              value="true"
+              th:checked="${settings.display().suppressEmptyRows()}"
+            />
+            Suppress empty rows
+          </label>
+          <th:block
+            th:replace="~{fragments/report-actions :: hidden-fields(${settings.display().otherParams()})}"
+          ></th:block>
+        </form>
+      </details>
+
+      <form
+        class="report-settings__form report-settings__renderer"
+        method="get"
+        th:action="@{${settings.pagePath()}}"
+        hx-trigger="change"
+        hx-target="#report-page"
+        hx-swap="outerHTML"
+        hx-replace-url="true"
+        th:attr="hx-get=@{${settings.pagePath()}}"
+      >
+        <div class="field">
+          <label class="field__label" for="settings-renderer">Renderer</label>
+          <select id="settings-renderer" name="renderer" class="input">
+            <option
+              value="TABLE"
+              th:selected="${settings.renderer().renderer() == 'TABLE'}"
+            >Table</option>
+            <option value="LINE" th:selected="${settings.renderer().renderer() == 'LINE'}"
+              >Line</option
+            >
+            <option value="BAR" th:selected="${settings.renderer().renderer() == 'BAR'}"
+              >Bar</option
+            >
+            <option value="PIE" th:selected="${settings.renderer().renderer() == 'PIE'}"
+              >Pie</option
+            >
+          </select>
+        </div>
+        <!-- The hidden fallback comes AFTER the checkbox, not before: an unchecked checkbox omits
+             its own field entirely, and a browser serializes same-named fields in DOM order, so
+             "checkbox then hidden" submits trendLine=true,false (first() -> true) when ticked and
+             just trendLine=false when not — the ordinary way to make an unticked checkbox read as
+             a reliable false instead of silently falling back to whatever was last saved. -->
+        <label class="check" th:if="${settings.renderer().showTrendLine()}">
+          <input
+            type="checkbox"
+            name="trendLine"
+            value="true"
+            th:checked="${settings.renderer().trendLine()}"
+          />
+          Trend line
+        </label>
+        <input type="hidden" name="trendLine" value="false" th:if="${settings.renderer().showTrendLine()}" />
+        <input
+          type="hidden"
+          name="trendLine"
+          th:value="${settings.renderer().trendLine()}"
+          th:unless="${settings.renderer().showTrendLine()}"
+        />
+        <th:block
+          th:replace="~{fragments/report-actions :: hidden-fields(${settings.renderer().otherParams()})}"
+        ></th:block>
+      </form>
+    </section>
+
+    <!-- One date-range endpoint's editor (§11a.6): the Date/Relative switch is CSS-only (two radios
+         plus sibling-selector show/hide, reports.css), so both field sets are always in the DOM and
+         always submitted — ReportSpecQueryString only reads the set the `type` radio names. The
+         resolved-date label refreshes live via a narrow endpoint that touches no report data
+         (RangeEndpointLabelController), matching "no report query runs until Apply". -->
+    <fieldset th:fragment="endpoint(heading, idPrefix, fields)" class="report-settings__endpoint">
+      <legend th:text="${heading}">Start</legend>
+      <label class="check">
+        <input
+          type="radio"
+          th:name="${fields.fieldPrefix() + 'type'}"
+          value="LITERAL"
+          class="endpoint-mode-literal"
+          th:checked="${fields.literal()}"
+          th:attr="hx-get=@{/reports/settings/resolve-endpoint},
+                   hx-target=${'#' + idPrefix + '-resolved'},
+                   hx-swap='innerHTML',
+                   hx-include=${'closest fieldset'}"
+        />
+        Date
+      </label>
+      <label class="check">
+        <input
+          type="radio"
+          th:name="${fields.fieldPrefix() + 'type'}"
+          value="RELATIVE"
+          class="endpoint-mode-relative"
+          th:checked="${!fields.literal()}"
+          th:attr="hx-get=@{/reports/settings/resolve-endpoint},
+                   hx-target=${'#' + idPrefix + '-resolved'},
+                   hx-swap='innerHTML',
+                   hx-include=${'closest fieldset'}"
+        />
+        Relative
+      </label>
+      <span class="endpoint-literal">
+        <input
+          type="date"
+          th:name="${fields.fieldPrefix() + 'date'}"
+          th:value="${fields.date()}"
+          th:attr="hx-get=@{/reports/settings/resolve-endpoint},
+                   hx-target=${'#' + idPrefix + '-resolved'},
+                   hx-swap='innerHTML',
+                   hx-include=${'closest fieldset'},
+                   hx-trigger='change'"
+        />
+      </span>
+      <span class="endpoint-relative">
+        <select
+          th:name="${fields.fieldPrefix() + 'unit'}"
+          class="input"
+          th:attr="hx-get=@{/reports/settings/resolve-endpoint},
+                   hx-target=${'#' + idPrefix + '-resolved'},
+                   hx-swap='innerHTML',
+                   hx-include=${'closest fieldset'},
+                   hx-trigger='change'"
+        >
+          <option
+            th:each="unit : ${T(volkovandr.hauptbuch.analytics.RangeUnit).values()}"
+            th:value="${unit.name()}"
+            th:selected="${unit.name() == fields.unit()}"
+            th:text="${unit.name()}"
+          ></option>
+        </select>
+        <input
+          type="number"
+          th:name="${fields.fieldPrefix() + 'offset'}"
+          th:value="${fields.offset()}"
+          class="input report-settings__offset"
+          th:attr="hx-get=@{/reports/settings/resolve-endpoint},
+                   hx-target=${'#' + idPrefix + '-resolved'},
+                   hx-swap='innerHTML',
+                   hx-include=${'closest fieldset'},
+                   hx-trigger='change'"
+        />
+        <select
+          th:name="${fields.fieldPrefix() + 'edge'}"
+          class="input"
+          th:attr="hx-get=@{/reports/settings/resolve-endpoint},
+                   hx-target=${'#' + idPrefix + '-resolved'},
+                   hx-swap='innerHTML',
+                   hx-include=${'closest fieldset'},
+                   hx-trigger='change'"
+        >
+          <option
+            th:each="edge : ${T(volkovandr.hauptbuch.analytics.RangeEdge).values()}"
+            th:value="${edge.name()}"
+            th:selected="${edge.name() == fields.edge()}"
+            th:text="${edge.name()}"
+          ></option>
+        </select>
+      </span>
+      <span class="muted" th:id="${idPrefix + '-resolved'}" th:text="${fields.resolvedLabel()}"
+        >= 01.06.2026</span
+      >
+    </fieldset>
+  </body>
+</html>

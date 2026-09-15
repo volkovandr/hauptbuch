@@ -6,23 +6,23 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.web.NavItem;
 
 /**
  * A saved Report's own page and editor (reporting.md §14/§11a, plan stage d3): {@code
- * /reports/{id}}, the same table/chart rendering and chart-table swap as a Preset's own page
- * ({@link ReportController}), plus the actions a Preset does not offer because it is owned and
- * deletable — Save (overwrites in place, every Frame showing it follows), and Delete. "Save as new
- * report" is every editor page's own action, POSTed to {@link ReportEditorController} instead.
+ * /reports/{id}}, the same rendering as a Preset's own page ({@link ReportController}) — including
+ * the settings strip re-GETting this same URL on every change, an htmx request getting back just
+ * the {@code #report-page} fragment — plus the actions a Preset does not offer because it is owned
+ * and deletable: Save (overwrites in place, every Frame showing it follows), and Delete. "Save as
+ * new report" is every editor page's own action, POSTed to {@link ReportEditorController} instead.
  */
 @Controller
 class SavedReportController {
 
   private static final String BASE_PATH = "/reports";
-  private static final String TABLE_VIEW = "table";
-  private static final String CHART_VIEW = "chart";
   private static final String REDIRECT_TO_LIST = "redirect:" + BASE_PATH;
 
   private final ReportService reportService;
@@ -37,22 +37,23 @@ class SavedReportController {
   }
 
   /**
-   * One saved Report, full page — its own renderer, or the table if it has none. {@code reportId}
-   * is constrained to digits so this never contests {@code /reports/preset/{slug}} (both are
-   * two-segment patterns with one literal and one variable segment — a slug that happened to read
-   * "preset" or "new" would otherwise be an ambiguous match at request time).
+   * One saved Report, full page or (for an htmx settings-strip request) just its {@code
+   * #report-page}. {@code reportId} is constrained to digits so this never contests {@code
+   * /reports/preset/{slug}} (both are two-segment patterns with one literal and one variable
+   * segment — a slug that happened to read "preset" or "new" would otherwise be an ambiguous match
+   * at request time).
    */
   @GetMapping(BASE_PATH + "/{reportId:\\d+}")
   String show(
       @PathVariable long reportId,
       @RequestParam MultiValueMap<String, String> params,
+      @RequestHeader(value = PresetRendering.HX_REQUEST_HEADER, required = false) String hxRequest,
       Model model) {
     SavedReport saved = requireReport(reportId);
     PresetRendering.Presentation effective =
         PresetRendering.resolvePresentation(PresetRendering.Presentation.of(saved), params);
     boolean unsaved = ReportSpecQueryString.isPresent(params);
     String pagePath = BASE_PATH + "/" + reportId;
-    boolean asTable = effective.renderer() == Renderer.TABLE;
 
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("title", saved.name() + " · Hauptbuch");
@@ -60,56 +61,33 @@ class SavedReportController {
         "editor",
         PresetRendering.editorView(
             effective, unsaved, reportId, saved.name(), pagePath, saved.name() + " copy"));
-    model.addAttribute(
-        "viewToggleUrl",
-        PresetRendering.viewToggleUrl(
-            pagePath + "/view", asTable ? CHART_VIEW : TABLE_VIEW, unsaved, effective.spec()));
-    model.addAttribute(
-        "canonicalUrl", PresetRendering.canonicalUrl(pagePath, unsaved, effective.spec()));
-    return PresetRendering.renderOwnPage(
-        effective, asTable, model, settingsService, reportEngine, "report-table", "report-chart");
-  }
-
-  /** The chart/table swap fragment (reporting.md §10) — returns just the {@code #report-frame}. */
-  @GetMapping(BASE_PATH + "/{reportId:\\d+}/view")
-  String view(
-      @PathVariable long reportId,
-      @RequestParam String view,
-      @RequestParam MultiValueMap<String, String> params,
-      Model model) {
-    SavedReport saved = requireReport(reportId);
-    PresetRendering.Presentation effective =
-        PresetRendering.resolvePresentation(PresetRendering.Presentation.of(saved), params);
-    boolean unsaved = ReportSpecQueryString.isPresent(params);
-    boolean asTable = saved.renderer() == Renderer.TABLE || TABLE_VIEW.equals(view);
-    String pagePath = BASE_PATH + "/" + reportId;
-
-    model.addAttribute(
-        "viewToggleUrl",
-        PresetRendering.viewToggleUrl(
-            pagePath + "/view", asTable ? CHART_VIEW : TABLE_VIEW, unsaved, effective.spec()));
-    model.addAttribute(
-        "canonicalUrl", PresetRendering.canonicalUrl(pagePath, unsaved, effective.spec()));
     return PresetRendering.renderOwnPage(
         effective,
-        asTable,
+        effective.renderer() == Renderer.TABLE,
         model,
         settingsService,
         reportEngine,
-        "report-table :: frame",
-        "report-chart :: frame");
+        pagePath,
+        hxRequest);
   }
 
   /**
-   * Save (reporting.md §11a.1): overwrites the Report's name and spec with the actions strip's
-   * resubmitted current values — whatever was showing, draft or not.
+   * Save (reporting.md §11a.1): overwrites the Report's name, spec, renderer and trend line with
+   * the actions strip's resubmitted current values — whatever was showing, draft or not.
    */
   @PostMapping(BASE_PATH + "/{reportId:\\d+}/save")
   String save(
       @PathVariable long reportId,
       @RequestParam String name,
+      @RequestParam String renderer,
+      @RequestParam boolean trendLine,
       @RequestParam MultiValueMap<String, String> params) {
-    reportService.updateSpec(reportId, name, ReportSpecQueryString.fromParams(params));
+    reportService.updateSpec(
+        reportId,
+        name,
+        ReportSpecQueryString.fromParams(params),
+        Renderer.valueOf(renderer),
+        trendLine);
     return "redirect:" + BASE_PATH + "/" + reportId;
   }
 

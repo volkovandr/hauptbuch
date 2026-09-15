@@ -105,9 +105,60 @@ class ReportSpecQueryStringTest {
   }
 
   @Test
-  void isNotPresentWithNoMeasureParam() {
+  void isNotPresentWithNoParamsAtAll() {
     assertThat(
             ReportSpecQueryString.isPresent(new org.springframework.util.LinkedMultiValueMap<>()))
         .isFalse();
+  }
+
+  @Test
+  void isPresentEvenWithEveryMeasureUnticked() {
+    // A settings-strip Apply with every Measures checkbox cleared (plan stage d3) submits no
+    // `measure` param at all — isPresent must still say "yes, a draft" so the rest of the edit
+    // (rows, scope, range, ...) is not silently discarded back to the saved/Preset spec.
+    org.springframework.util.MultiValueMap<String, String> params =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    params.remove("measure");
+
+    assertThat(ReportSpecQueryString.isPresent(params)).isTrue();
+  }
+
+  @Test
+  void decodesBlankAxisParamAsNoDimension() {
+    // The settings strip's "None" <select> option (plan stage d3) submits its own value, an empty
+    // string, rather than omitting the parameter the way toParams does for an empty axis.
+    org.springframework.util.MultiValueMap<String, String> params =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    params.set("rows", "");
+
+    ReportSpec decoded = ReportSpecQueryString.fromParams(params);
+
+    assertThat(decoded.rows()).isEmpty();
+  }
+
+  @Test
+  void blankLiteralEndpointDateResolvesToTodayInsteadOfThrowing() {
+    // Apply submitted while the Date/Relative switch (reporting.md §11a.6) sits on Date but no
+    // date was ever picked — the settings strip's own live preview degrades the same way.
+    org.springframework.util.MultiValueMap<String, String> params =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    params.set("rangeStart.type", "LITERAL");
+    params.set("rangeStart.date", "");
+
+    ReportSpec decoded = ReportSpecQueryString.fromParams(params);
+
+    assertThat(decoded.range().start()).isEqualTo(new RangeEndpoint.Literal(LocalDate.now()));
+  }
+
+  @Test
+  void malformedLiteralEndpointDateResolvesToTodayInsteadOfThrowing() {
+    org.springframework.util.MultiValueMap<String, String> params =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    params.set("rangeStart.type", "LITERAL");
+    params.set("rangeStart.date", "not-a-date");
+
+    ReportSpec decoded = ReportSpecQueryString.fromParams(params);
+
+    assertThat(decoded.range().start()).isEqualTo(new RangeEndpoint.Literal(LocalDate.now()));
   }
 }

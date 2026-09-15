@@ -141,3 +141,109 @@ table.report tfoot td {
 .layout-frame {
   min-width: 0;
 }
+
+/* The Report page's settings strip (reporting.md §11a.2/§11a.3, plan stage d3): collapsed <details>
+   groups above the report, following the register's own filter-strip look. */
+.report-settings {
+  margin: var(--rhythm) 0 0.5rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--rule);
+  background: var(--paper-edge);
+}
+
+.report-settings__group {
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.report-settings__group summary {
+  cursor: pointer;
+  color: var(--ink-muted, inherit);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.report-settings__form {
+  margin-top: 0.4rem;
+}
+
+.report-settings__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.report-settings__measures {
+  border-collapse: collapse;
+  margin-bottom: 0.4rem;
+}
+
+.report-settings__measures th,
+.report-settings__measures td {
+  padding: 0.15rem 0.6rem 0.15rem 0;
+  text-align: center;
+  font-weight: 400;
+}
+
+.report-settings__measures th[scope="row"] {
+  text-align: left;
+  font-weight: 400;
+}
+
+.report-settings__scope-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.3rem 0;
+}
+
+.report-settings__date-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+  margin: 0.2rem 0 0.6rem;
+}
+
+.report-settings__endpoint {
+  border: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.report-settings__endpoint legend {
+  font-weight: 600;
+  padding: 0;
+}
+
+.report-settings__offset {
+  width: 4rem;
+}
+
+/* The Date/Relative switch (reporting.md §11a.6) is CSS-only — no JS leaf involved: the two radios
+   pick which field set is relevant, :has() shows the matching one. Both sets stay in the DOM and
+   are always submitted either way; ReportSpecQueryString only reads the one the "type" radio names
+   (ReportSettingsView's own javadoc explains why that is safe). */
+.report-settings__endpoint .endpoint-relative {
+  display: none;
+}
+
+.report-settings__endpoint:has(.endpoint-mode-relative:checked) .endpoint-literal {
+  display: none;
+}
+
+.report-settings__endpoint:has(.endpoint-mode-relative:checked) .endpoint-relative {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.report-settings__renderer {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}

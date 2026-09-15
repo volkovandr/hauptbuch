@@ -1,27 +1,42 @@
 package volkovandr.hauptbuch.analytics;
 
+import java.time.LocalDate;
 import java.util.Optional;
 import org.springframework.ui.Model;
+import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.web.util.UriComponentsBuilder;
 import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
  * Renders a Preset's spec as its table or chart view (reporting.md §10/§16) — the shared middle of
- * {@link ReportController} (a Preset's own page, with its chart/table swap), {@link
- * SavedReportController} (a saved Report's own page, plan stage d, the same swap), {@link
- * ReportEditorController} (a not-yet-saved {@code /reports/new} draft, plan stage d3), {@link
- * MainFrameController} (a Preset shown in the main page's Frame, with no swap), and {@link
- * ReportsLayoutController} (a Preset shown in one of the reporting page's Frames), so none of the
- * five can silently drift on how a Report renders. {@link #resolvePresentation}, {@link
- * #editorView} and {@link #viewToggleUrl} are the three editor pages' (§11a.1's unsaved-draft
- * pieces) shared logic in the same spirit.
+ * {@link ReportController} (a Preset's own page), {@link SavedReportController} (a saved Report's
+ * own page, plan stage d), {@link ReportEditorController} (a not-yet-saved {@code /reports/new}
+ * draft, plan stage d3), {@link MainFrameController} (a Preset shown in the main page's Frame), and
+ * {@link ReportsLayoutController} (a Preset shown in one of the reporting page's Frames), so none
+ * of the five can silently drift on how a Report renders. {@link #resolvePresentation} and {@link
+ * #editorView} are the editor pages' (§11a.1's unsaved-draft pieces) shared logic in the same
+ * spirit; the settings strip's own view is {@link ReportSettingsView}, built inside {@link
+ * #renderOwnPage}.
  */
 final class PresetRendering {
 
   private static final String NO_BASE_CURRENCY_VIEW = "report-unavailable";
 
+  /**
+   * The header name every editor page's {@code @RequestHeader} binds to decide between its full
+   * page and just the {@code #report-page} fragment — one shared constant so the three controllers
+   * ({@link ReportController}, {@link SavedReportController}, {@link ReportEditorController})
+   * cannot drift on the header they read, the same one {@link
+   * volkovandr.hauptbuch.web.GlobalHtmxErrorAdvice} checks for its own, unrelated purpose.
+   */
+  static final String HX_REQUEST_HEADER = "HX-Request";
+
   private PresetRendering() {}
+
+  /** Whether the {@code HX-Request} header names an htmx request. */
+  private static boolean isHtmxRequest(String hxRequestHeader) {
+    return "true".equalsIgnoreCase(hxRequestHeader);
+  }
 
   /**
    * The (title, spec, renderer, trendLine) tuple every renderable Report carries, whether it is a
@@ -89,9 +104,13 @@ final class PresetRendering {
   /**
    * Renders {@code presentation} as a full "own page" — table or chart, per {@code asTable}, or the
    * base-currency prompt when the book has none yet — populating {@code model} exactly as {@link
-   * ReportController} and {@link SavedReportController} both need. Pulled out of the two
-   * controllers themselves (plan stage d) so the base-currency branch and the report/chart/hasChart
-   * model wiring live in exactly one place, matching this class's own reason for existing.
+   * ReportController} and {@link SavedReportController} both need, including the settings strip's
+   * own view ({@link ReportSettingsView}, plan stage d3). Pulled out of the controllers themselves
+   * (plan stage d) so the base-currency branch and the model wiring live in exactly one place,
+   * matching this class's own reason for existing. {@code hxRequestHeader} decides, in this one
+   * place, whether the caller gets back {@code report-table}/{@code report-chart}'s full page or
+   * just their {@code :: page} fragment — every editor page made this choice the same way, so
+   * settling it here keeps a fourth caller from having to redecide it.
    */
   static String renderOwnPage(
       Presentation presentation,
@@ -99,16 +118,20 @@ final class PresetRendering {
       Model model,
       SettingsService settingsService,
       ReportEngine reportEngine,
-      String tableViewName,
-      String chartViewName) {
+      String pagePath,
+      String hxRequestHeader) {
+    boolean fragment = isHtmxRequest(hxRequestHeader);
+    String tableViewName = fragment ? "report-table :: page" : "report-table";
+    String chartViewName = fragment ? "report-chart :: page" : "report-chart";
     return settingsService
         .baseCurrency()
         .map(
             baseCurrency -> {
               Rendered rendered = populate(presentation, baseCurrency, asTable, reportEngine);
+              model.addAttribute(
+                  "settings", ReportSettingsView.build(presentation, pagePath, LocalDate.now()));
               if (asTable) {
                 model.addAttribute("report", rendered.report());
-                model.addAttribute("hasChart", presentation.renderer() != Renderer.TABLE);
                 return tableViewName;
               }
               model.addAttribute("chart", rendered.chart());
@@ -120,15 +143,38 @@ final class PresetRendering {
   /**
    * The spec a Report's page actually renders (reporting.md §11a.1): {@code params}' own draft when
    * {@link ReportSpecQueryString#isPresent} says one is there, else {@code base}'s own saved/Preset
-   * spec unchanged. {@code base}'s title, renderer and trend line never come from the query string
-   * — the editor offers no control for any of them yet.
+   * spec unchanged. {@code base}'s title never comes from the query string — the editor offers no
+   * control for it. The renderer and trend line (plan stage d3's own settings-strip controls) are
+   * read independently, defaulting to {@code base}'s own when the draft's request happened not to
+   * carry them — it always does in practice, since every settings-strip form resubmits {@link
+   * #allParams} whole, but a hand-typed spec-only URL should still resolve sensibly.
    */
   static Presentation resolvePresentation(Presentation base, MultiValueMap<String, String> params) {
     if (!ReportSpecQueryString.isPresent(params)) {
       return base;
     }
+    String rendererParam = params.getFirst("renderer");
+    String trendLineParam = params.getFirst("trendLine");
+    Renderer renderer = rendererParam == null ? base.renderer() : Renderer.valueOf(rendererParam);
+    boolean trendLine =
+        trendLineParam == null ? base.trendLine() : Boolean.parseBoolean(trendLineParam);
     return new Presentation(
-        base.title(), ReportSpecQueryString.fromParams(params), base.renderer(), base.trendLine());
+        base.title(), ReportSpecQueryString.fromParams(params), renderer, trendLine);
+  }
+
+  /**
+   * {@code effective}'s whole editable state as query parameters (plan stage d3): {@link
+   * ReportSpecQueryString#toParams}'s spec fields plus {@code renderer}/{@code trendLine}, which
+   * are "promoted columns" (§14) rather than part of {@link ReportSpec} itself. The settings
+   * strip's own groups ({@link ReportSettingsView}) each resubmit this whole map, minus the
+   * field(s) the group itself owns, as hidden fields alongside its own real inputs.
+   */
+  static MultiValueMap<String, String> allParams(Presentation effective) {
+    MultiValueMap<String, String> params =
+        new LinkedMultiValueMap<>(ReportSpecQueryString.toParams(effective.spec()));
+    params.add("renderer", effective.renderer().name());
+    params.add("trendLine", String.valueOf(effective.trendLine()));
+    return params;
   }
 
   /**
@@ -153,38 +199,6 @@ final class PresetRendering {
         ReportSpecQueryString.toParams(effective.spec()),
         effective.renderer().name(),
         effective.trendLine());
-  }
-
-  /**
-   * The chart/table swap's {@code hx-get} target (reporting.md §10/§11a.1): {@code viewPath} plus
-   * {@code view=otherView}, carrying the current draft's spec parameters along too when {@code
-   * unsaved} — otherwise swapping mid-edit would silently drop the draft back to the saved spec.
-   */
-  static String viewToggleUrl(String viewPath, String otherView, boolean unsaved, ReportSpec spec) {
-    UriComponentsBuilder builder =
-        UriComponentsBuilder.fromPath(viewPath).queryParam("view", otherView);
-    if (unsaved) {
-      builder.queryParams(ReportSpecQueryString.toParams(spec));
-    }
-    return builder.build().encode().toUriString();
-  }
-
-  /**
-   * The current effective spec's own bookmarkable URL (reporting.md §11a.1: an unsaved draft is
-   * "kept current with hx-replace-url … survives a reload and can be bookmarked") — {@code
-   * pagePath} bare when there is no draft, else {@code pagePath} plus the draft's own spec
-   * parameters. Set as {@code hx-replace-url} on every htmx re-render (the chart/table toggle is
-   * the only one this work package wires up), so the address bar never drifts from what is showing.
-   */
-  static String canonicalUrl(String pagePath, boolean unsaved, ReportSpec spec) {
-    if (!unsaved) {
-      return pagePath;
-    }
-    return UriComponentsBuilder.fromPath(pagePath)
-        .queryParams(ReportSpecQueryString.toParams(spec))
-        .build()
-        .encode()
-        .toUriString();
   }
 
   /**

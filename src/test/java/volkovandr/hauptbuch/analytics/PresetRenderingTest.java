@@ -8,10 +8,10 @@ import org.springframework.util.MultiValueMap;
 
 /**
  * Unit tier (CLAUDE.md §6): {@link PresetRendering}'s editor-page helpers (reporting.md §11a.1,
- * plan stage d3) — resolving a draft, building the actions strip's view, and the chart/table
- * toggle's URL. Full-page rendering itself is each controller's own integration coverage ({@code
- * ReportControllerIntegrationTest}, {@code SavedReportControllerIntegrationTest}, {@code
- * ReportEditorControllerIntegrationTest}).
+ * plan stage d3) — resolving a draft (including its own renderer/trend line), building the actions
+ * strip's view, and {@link PresetRendering#allParams}. Full-page rendering itself is each
+ * controller's own integration coverage ({@code ReportControllerIntegrationTest}, {@code
+ * SavedReportControllerIntegrationTest}, {@code ReportEditorControllerIntegrationTest}).
  */
 class PresetRenderingTest {
 
@@ -29,15 +29,41 @@ class PresetRenderingTest {
   }
 
   @Test
-  void resolvePresentationSubstitutesTheDraftSpecButKeepsTitleRendererAndTrendLine() {
+  void resolvePresentationSubstitutesTheDraftSpecButKeepsTheTitle() {
     MultiValueMap<String, String> params = ReportSpecQueryString.toParams(Presets.balanceSheet());
 
     PresetRendering.Presentation effective = PresetRendering.resolvePresentation(BASE, params);
 
     assertThat(effective.spec()).isEqualTo(Presets.balanceSheet());
     assertThat(effective.title()).isEqualTo(BASE.title());
+    // No renderer/trendLine params in this draft (a hand-built spec-only URL) — falls back to BASE.
     assertThat(effective.renderer()).isEqualTo(BASE.renderer());
     assertThat(effective.trendLine()).isEqualTo(BASE.trendLine());
+  }
+
+  @Test
+  void resolvePresentationReadsTheDraftsOwnRendererAndTrendLine() {
+    MultiValueMap<String, String> params =
+        PresetRendering.allParams(
+            new PresetRendering.Presentation(
+                BASE.title(), Presets.netWorthOverTime(), Renderer.LINE, true));
+
+    PresetRendering.Presentation effective = PresetRendering.resolvePresentation(BASE, params);
+
+    assertThat(effective.renderer()).isEqualTo(Renderer.LINE);
+    assertThat(effective.trendLine()).isTrue();
+  }
+
+  @Test
+  void allParamsCarriesTheSpecPlusRendererAndTrendLine() {
+    PresetRendering.Presentation presentation =
+        new PresetRendering.Presentation(BASE.title(), Presets.balanceSheet(), Renderer.PIE, true);
+
+    MultiValueMap<String, String> params = PresetRendering.allParams(presentation);
+
+    assertThat(ReportSpecQueryString.fromParams(params)).isEqualTo(Presets.balanceSheet());
+    assertThat(params.getFirst("renderer")).isEqualTo("PIE");
+    assertThat(params.getFirst("trendLine")).isEqualTo("true");
   }
 
   @Test
@@ -53,22 +79,5 @@ class PresetRenderingTest {
     assertThat(view.renderer()).isEqualTo("TABLE");
     assertThat(view.trendLine()).isFalse();
     assertThat(ReportSpecQueryString.fromParams(view.specParams())).isEqualTo(BASE.spec());
-  }
-
-  @Test
-  void viewToggleUrlOmitsSpecParamsWhenNotUnsaved() {
-    String url =
-        PresetRendering.viewToggleUrl("/reports/preset/x/view", "chart", false, BASE.spec());
-
-    assertThat(url).isEqualTo("/reports/preset/x/view?view=chart");
-  }
-
-  @Test
-  void viewToggleUrlCarriesTheDraftSpecWhenUnsaved() {
-    String url =
-        PresetRendering.viewToggleUrl("/reports/preset/x/view", "chart", true, BASE.spec());
-
-    assertThat(url).startsWith("/reports/preset/x/view?view=chart&");
-    assertThat(url).contains("measure=");
   }
 }

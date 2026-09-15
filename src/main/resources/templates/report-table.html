@@ -1,13 +1,14 @@
 <!DOCTYPE html>
 <!--
-  A Report's rendered table (plan stage b; the editor actions are stage d3): the grid renderer — no
+  A Report's rendered table (plan stage b; the editor is stage d3): the grid renderer — no
   expansion (stage e). Every cell is already display-formatted text (ReportTableViewAssembler);
   blank means no postings, "—" means the aggregate is arithmetically meaningless (reporting.md §7).
-  A chart Report offers a toggle back to its own renderer (§10's chart/table swap), the same
-  hx-get/hx-swap idiom the receipt image toggle uses. Shared by a Preset's own page
-  (ReportController), a saved Report's own page (SavedReportController) and a not-yet-saved
-  /reports/new draft (ReportEditorController) — all three populate `editor` (fragments/report-actions)
-  and `viewToggleUrl` identically (PresetRendering).
+  Shared by a Preset's own page (ReportController), a saved Report's own page
+  (SavedReportController) and a not-yet-saved /reports/new draft (ReportEditorController) — all
+  three populate `settings` (fragments/report-settings) and `editor` (fragments/report-actions)
+  identically (PresetRendering). `page` is the whole settings-strip+frame+actions region every
+  settings-strip control re-GETs and swaps via htmx (`#report-page`, outerHTML); the controllers
+  return this fragment for an htmx request and the full document otherwise.
 -->
 <html
   lang="en"
@@ -15,35 +16,29 @@
   th:replace="~{layout :: page(~{:: content})}"
 >
   <main class="content" th:fragment="content">
-    <section class="panel" id="report-frame" th:fragment="frame">
-      <p class="eyebrow" th:text="${report.title()}">Report</p>
-      <p class="muted report__scope" th:text="${report.scopeLine()}">Scope</p>
-      <p
-        class="muted report__scope-mismatch"
-        th:if="${report.scopeMismatch() != null}"
-        th:text="${report.scopeMismatch()}"
-      >
-        Scope mismatch
-      </p>
-      <p class="muted">
-        <span th:text="${#temporals.format(report.resolvedStart(), 'dd.MM.yyyy')}">start</span>
-        &ndash;
-        <span th:text="${#temporals.format(report.resolvedEnd(), 'dd.MM.yyyy')}">end</span>
-      </p>
-      <button
-        type="button"
-        class="btn btn--ghost"
-        th:if="${hasChart}"
-        hx-target="#report-frame"
-        hx-swap="outerHTML"
-        th:attr="hx-get=@{${viewToggleUrl}}, hx-replace-url=@{${canonicalUrl}}"
-      >
-        Show chart
-      </button>
+    <div id="report-page" th:fragment="page">
+      <div th:replace="~{fragments/report-settings :: strip}"></div>
 
-      <table th:replace="~{fragments/report-table-body :: body}"></table>
-    </section>
+      <section class="panel" id="report-frame" th:fragment="frame">
+        <p class="eyebrow" th:text="${report.title()}">Report</p>
+        <p class="muted report__scope" th:text="${report.scopeLine()}">Scope</p>
+        <p
+          class="muted report__scope-mismatch"
+          th:if="${report.scopeMismatch() != null}"
+          th:text="${report.scopeMismatch()}"
+        >
+          Scope mismatch
+        </p>
+        <p class="muted">
+          <span th:text="${#temporals.format(report.resolvedStart(), 'dd.MM.yyyy')}">start</span>
+          &ndash;
+          <span th:text="${#temporals.format(report.resolvedEnd(), 'dd.MM.yyyy')}">end</span>
+        </p>
 
-    <div th:replace="~{fragments/report-actions :: actions}"></div>
+        <table th:replace="~{fragments/report-table-body :: body}"></table>
+      </section>
+
+      <div th:replace="~{fragments/report-actions :: actions}"></div>
+    </div>
   </main>
 </html>

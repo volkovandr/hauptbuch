@@ -57,9 +57,11 @@ class ReportServiceTest {
     ReportService service = reportService();
     when(reportRepository.findById(404L)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> service.updateSpec(404L, "New name", Presets.balanceSheet()))
+    assertThatThrownBy(
+            () ->
+                service.updateSpec(404L, "New name", Presets.balanceSheet(), Renderer.TABLE, false))
         .isInstanceOf(IllegalArgumentException.class);
-    verify(reportRepository, never()).update(anyLong(), any(), any());
+    verify(reportRepository, never()).update(anyLong(), any(), any(), any(), anyBoolean());
   }
 
   @Test
@@ -70,7 +72,8 @@ class ReportServiceTest {
             Optional.of(
                 new SavedReport(1L, "Existing", Presets.balanceSheet(), Renderer.TABLE, false)));
 
-    assertThatThrownBy(() -> service.updateSpec(1L, "", Presets.balanceSheet()))
+    assertThatThrownBy(
+            () -> service.updateSpec(1L, "", Presets.balanceSheet(), Renderer.TABLE, false))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
@@ -82,9 +85,10 @@ class ReportServiceTest {
             Optional.of(
                 new SavedReport(1L, "Existing", Presets.balanceSheet(), Renderer.TABLE, false)));
 
-    service.updateSpec(1L, "  Renamed  ", Presets.categoryMonthMatrix());
+    service.updateSpec(1L, "  Renamed  ", Presets.categoryMonthMatrix(), Renderer.LINE, true);
 
-    verify(reportRepository).update(1L, "Renamed", Presets.categoryMonthMatrix());
+    verify(reportRepository)
+        .update(1L, "Renamed", Presets.categoryMonthMatrix(), Renderer.LINE, true);
   }
 
   @Test

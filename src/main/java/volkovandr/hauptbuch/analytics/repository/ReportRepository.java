@@ -73,13 +73,21 @@ public class ReportRepository {
   }
 
   /**
-   * Overwrites a Report's name and spec in place (reporting.md §11a.1's Save) — its renderer/trend
-   * line are untouched; the editor has no control for either.
+   * Overwrites a Report's name, spec, renderer and trend line in place (reporting.md §11a.1's Save
+   * — every Frame showing it follows, since Frames reference rather than copy).
    */
-  public void update(long reportId, String name, ReportSpec spec) {
+  public void update(
+      long reportId, String name, ReportSpec spec, Renderer renderer, boolean trendLine) {
     jdbcClient
-        .sql("update report set name = :name, spec = :spec::jsonb where report_id = :id")
+        .sql(
+            """
+            update report
+            set name = :name, renderer = :renderer, trend_line = :trendLine, spec = :spec::jsonb
+            where report_id = :id
+            """)
         .param("name", name)
+        .param("renderer", renderer.name())
+        .param("trendLine", trendLine)
         .param("spec", ReportSpecJson.toJson(spec))
         .param("id", reportId)
         .update();

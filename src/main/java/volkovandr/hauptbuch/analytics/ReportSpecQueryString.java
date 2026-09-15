@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.analytics;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -18,25 +19,38 @@ import org.springframework.util.MultiValueMap;
  * Percent-encoding itself is Spring MVC's job on the way in and a URL builder's job on the way out;
  * this class only ever sees already-decoded parameter values.
  *
- * <p>A {@link ReportSpec} always carries at least one measure ({@link ReportSpec}'s own
- * constructor), so the {@code measure} parameter's presence is the marker {@link #isPresent} reads
- * to decide "is this a draft at all" (§11a.1: no spec parameters means the saved Report).
+ * <p>{@link #isPresent} reads {@code rangeStart.type}'s presence, not {@code measure}'s, to decide
+ * "is this a draft at all" (§11a.1: no spec parameters means the saved Report). {@link #toParams}
+ * always writes both endpoints' {@code type} unconditionally, unlike {@code measure} — a settings-
+ * strip Apply with every Measures checkbox unticked would otherwise carry no {@code measure}
+ * parameter at all and read as "no draft", silently reverting the whole edit (rows, scope, date
+ * range, everything) back to the saved/Preset spec instead of surfacing {@link ReportSpec}'s own
+ * "needs at least one measure" rejection.
  */
 final class ReportSpecQueryString {
 
   private static final String MEASURE = "measure";
   private static final String TOKEN_SEP = "-";
-  private static final String RANGE_START = "rangeStart.";
-  private static final String RANGE_END = "rangeEnd.";
-  private static final String LITERAL = "LITERAL";
+  private static final String TYPE = "type";
+
+  /** Reused by {@link RangeEndpointLabelController}, which reads one endpoint's own fields. */
+  static final String RANGE_START = "rangeStart.";
+
+  /** Reused by {@link RangeEndpointLabelController}, which reads one endpoint's own fields. */
+  static final String RANGE_END = "rangeEnd.";
+
+  /**
+   * Reused by {@link RangeEndpointLabelController}, which decides Literal vs Relative the same way.
+   */
+  static final String LITERAL = "LITERAL";
+
   private static final String RELATIVE = "RELATIVE";
 
   private ReportSpecQueryString() {}
 
   /** Whether {@code params} encodes a draft spec at all. */
   static boolean isPresent(MultiValueMap<String, String> params) {
-    List<String> measures = params.get(MEASURE);
-    return measures != null && !measures.isEmpty();
+    return params.getFirst(RANGE_START + TYPE) != null;
   }
 
   /** Encodes {@code spec} as query parameters, ready for a URL builder or {@code hx-get}. */
@@ -83,11 +97,15 @@ final class ReportSpecQueryString {
   }
 
   private static List<Dimension> dimensionList(MultiValueMap<String, String> params, String key) {
+    // A settings-strip <select> (plan stage d3) always submits its "None" option's own value, an
+    // empty string, rather than omitting the parameter the way toParams does when the list is
+    // empty — both must decode the same way.
     String value = params.getFirst(key);
-    return value == null ? List.of() : List.of(Dimension.valueOf(value));
+    return (value == null || value.isEmpty()) ? List.of() : List.of(Dimension.valueOf(value));
   }
 
-  private static String measureToken(Measure measure) {
+  /** The settings-strip's Measures grid (plan stage d3) needs the same token for its checkboxes. */
+  static String measureToken(Measure measure) {
     return switch (measure.kind()) {
       case TURNOVER ->
           String.join(TOKEN_SEP, "TURNOVER", measure.leg().name(), measure.currency().name());
@@ -166,25 +184,53 @@ final class ReportSpecQueryString {
   private static void putEndpoint(
       MultiValueMap<String, String> params, String prefix, RangeEndpoint endpoint) {
     if (endpoint instanceof RangeEndpoint.Literal literal) {
-      params.add(prefix + "type", LITERAL);
+      params.add(prefix + TYPE, LITERAL);
       params.add(prefix + "date", literal.date().toString());
       return;
     }
     RangeEndpoint.Relative relative = (RangeEndpoint.Relative) endpoint;
-    params.add(prefix + "type", RELATIVE);
+    params.add(prefix + TYPE, RELATIVE);
     params.add(prefix + "unit", relative.unit().name());
     params.add(prefix + "offset", String.valueOf(relative.offset()));
     params.add(prefix + "edge", relative.edge().name());
   }
 
+  /**
+   * Just the range's own parameters, for a date-range shortcut link (plan stage d3): filling both
+   * endpoints is a complete decision (reporting.md §11a.6), so a shortcut carries these alongside
+   * the rest of the current state rather than the whole {@link #toParams} encoding.
+   */
+  static MultiValueMap<String, String> rangeParams(DateRange range) {
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    putEndpoint(params, RANGE_START, range.start());
+    putEndpoint(params, RANGE_END, range.end());
+    return params;
+  }
+
   private static RangeEndpoint endpointFrom(MultiValueMap<String, String> params, String prefix) {
-    if (LITERAL.equals(require(params, prefix + "type"))) {
-      return new RangeEndpoint.Literal(LocalDate.parse(require(params, prefix + "date")));
+    if (LITERAL.equals(require(params, prefix + TYPE))) {
+      return literalOrToday(params.getFirst(prefix + "date"));
     }
     return new RangeEndpoint.Relative(
         RangeUnit.valueOf(require(params, prefix + "unit")),
         Integer.parseInt(require(params, prefix + "offset")),
         RangeEdge.valueOf(require(params, prefix + "edge")));
+  }
+
+  /**
+   * A blank or malformed literal date — Apply submitted before the Date field was ever filled in —
+   * resolves to today rather than throwing; the settings strip's own live preview ({@code
+   * RangeEndpointLabelController}) already degrades the same way for the same input.
+   */
+  private static RangeEndpoint literalOrToday(String date) {
+    if (date == null) {
+      return new RangeEndpoint.Literal(LocalDate.now());
+    }
+    try {
+      return new RangeEndpoint.Literal(LocalDate.parse(date));
+    } catch (DateTimeParseException malformed) {
+      return new RangeEndpoint.Literal(LocalDate.now());
+    }
   }
 
   /** A required query parameter, malformed if absent (mirrors {@code ReportSpecJson}'s style). */
