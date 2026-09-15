@@ -29,6 +29,15 @@ final class ScopeDimensionMismatch {
   private ScopeDimensionMismatch() {}
 
   /**
+   * {@link Dimension#CATEGORY}/{@link Dimension#ACCOUNT}'s own backing account types, or {@code
+   * null} for any other dimension. Reused by {@link ReportFilterViewAssembler}'s Account filter
+   * section (plan stage d3-4) so the pairing is not hardcoded a second time.
+   */
+  static List<String> accountTypesFor(Dimension dimension) {
+    return EXPECTED_TYPES.get(dimension);
+  }
+
+  /**
    * {@code null} when {@code nonDateDim} is not {@link Dimension#CATEGORY}/{@link
    * Dimension#ACCOUNT}, when scope is every type ({@link Scope#accountTypes()} empty), or when
    * scope overlaps the dimension's own account types.

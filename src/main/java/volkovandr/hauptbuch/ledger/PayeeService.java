@@ -37,6 +37,14 @@ public class PayeeService {
   }
 
   /**
+   * The live payees, alphabetical — what the Report page's Payee filter section lists (reporting.md
+   * §11a.5, plan stage d3).
+   */
+  public List<Payee> findAllLive() {
+    return payeeRepository.findAllLive();
+  }
+
+  /**
    * The existing payee a dock field's text names, or empty if it is a not-yet-created payee — the
    * lookup the ghost suggestion (register §3.9) keys on. The text is parsed the same way the commit
    * parses it ({@code Name - City - Country}) and matched on name+city+country, so a picked

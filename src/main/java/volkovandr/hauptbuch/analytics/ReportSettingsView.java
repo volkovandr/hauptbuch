@@ -13,9 +13,10 @@ import org.springframework.web.util.UriComponentsBuilder;
 /**
  * The settings strip's own view (reporting.md §11a.2/§11a.3, plan stage d3): Rows &amp; columns,
  * Measures, Scope, Date range, Display, and the always-visible Renderer — everything the engine
- * supports today, minus Filters (plan stage d4). Built once per render from the page's own
- * effective {@link PresetRendering.Presentation} and shared by the table and chart editor pages
- * ({@code fragments/report-settings.html}).
+ * supports today except Filters, which is {@link ReportFilterView}/{@link
+ * ReportFilterViewAssembler}'s own (plan stage d3-4) since it needs DB reads this class does not.
+ * Built once per render from the page's own effective {@link PresetRendering.Presentation} and
+ * shared by the table and chart editor pages ({@code fragments/report-settings.html}).
  *
  * <p>Each group is its own {@code <form>}: hidden fields carry the REST of {@link
  * PresetRendering#allParams} (every field this group does not itself own), alongside the group's
@@ -34,8 +35,12 @@ import org.springframework.web.util.UriComponentsBuilder;
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 final class ReportSettingsView {
 
-  /** Alphabetical, matching {@link ScopeHeaderText}'s own ordering of the same five values. */
-  private static final List<String> ACCOUNT_TYPES =
+  /**
+   * Alphabetical, matching {@link ScopeHeaderText}'s own ordering of the same five values. Reused
+   * by {@link ReportFilterViewAssembler} for the Filters group's Account type section, which offers
+   * the identical five values (plan stage d3-4).
+   */
+  static final List<String> ACCOUNT_TYPES =
       List.of("asset", "equity", "expense", "income", "liability");
 
   private static final String[] RANGE_KEYS = {
@@ -262,7 +267,10 @@ final class ReportSettingsView {
         without(all, "includeClosed", "includePending"));
   }
 
-  private static String capitalize(String value) {
+  /**
+   * Reused by {@link ReportFilterViewAssembler} for label text of the same shape (plan stage d3-4).
+   */
+  static String capitalize(String value) {
     return value.substring(0, 1).toUpperCase(Locale.ROOT) + value.substring(1);
   }
 

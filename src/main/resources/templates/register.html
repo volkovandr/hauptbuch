@@ -35,13 +35,14 @@
 <!--      </p>-->
 <!--    </div>-->
 
-    <form class="register-filter" method="get" th:action="@{/register}">
+    <form class="register-filter" data-filter-tidy-up-all method="get" th:action="@{/register}">
       <!-- The account filter (register §2.3, issue transaction-register-ui/22): a one-line tab strip
            of five pickers over a collapsible panel. Clicking a tab htmx-swaps THIS control only
            (`filterControl`) — no register query runs; only Apply re-renders the rows. The panel
            degrades to plain `name="accountId"` checkboxes that still submit with Apply when JS is
            off. Group toggles (parent accounts, person names) are driven by the `filter-groups.js`
-           leaf via the data-attributes below. -->
+           leaf (group mode) via the data-attributes below; `data-filter-tidy-up-all` opts this form
+           into the all-ticked-means-omit-the-filter tidy-up on submit. -->
       <div id="register-filter-control" th:fragment="filterControl">
         <!-- The active picker, carried so Apply submits it. It lives INSIDE this fragment so a tab
              switch (which htmx-swaps the whole fragment) keeps it in step with the visible tab. -->

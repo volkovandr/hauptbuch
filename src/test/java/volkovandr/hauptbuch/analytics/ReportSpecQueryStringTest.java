@@ -161,4 +161,54 @@ class ReportSpecQueryStringTest {
 
     assertThat(decoded.range().start()).isEqualTo(new RangeEndpoint.Literal(LocalDate.now()));
   }
+
+  @Test
+  void filterFieldWithNoTickedValueDecodesToNoFilterAtAll() {
+    // The settings strip's Filters group (plan stage d3-4) always resubmits filterField/level/op
+    // for every one of the nine fixed sections, ticked or not — an empty one must not throw
+    // ReportFilter's own "needs at least one value" rejection (reporting.md §11a.5).
+    org.springframework.util.MultiValueMap<String, String> params =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    params.add("filterField", "PAYEE");
+    params.add("filter.PAYEE.level", "TRANSACTION");
+    params.add("filter.PAYEE.op", "IS_ONE_OF");
+
+    ReportSpec decoded = ReportSpecQueryString.fromParams(params);
+
+    assertThat(decoded.filters()).isEmpty();
+  }
+
+  @Test
+  void payeeMatchesRoundTripsUnderItsOwnKeyAlongsideStaleValues() {
+    // The Payee section keeps both the checkbox list (name="filter.PAYEE.value") and the regex
+    // field always in the DOM (mirroring the date-range endpoint fields), so a stale/empty checkbox
+    // submission must not collide with the regex's own value.
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(Measure.countTransactions()),
+            Scope.ofTypes("expense"),
+            List.of(
+                new ReportFilter(
+                    FilterField.PAYEE,
+                    FilterLevel.TRANSACTION,
+                    FilterOperator.MATCHES,
+                    List.of("(?i)shop.*"))),
+            new DateRange(
+                new RangeEndpoint.Relative(RangeUnit.YEAR, 0, RangeEdge.START),
+                new RangeEndpoint.Relative(RangeUnit.DAY, 0, RangeEdge.START)),
+            false,
+            false,
+            false);
+
+    org.springframework.util.MultiValueMap<String, String> params =
+        ReportSpecQueryString.toParams(spec);
+    // A stray empty entry under the sibling checkbox-list key, as the settings strip's own
+    // always-in-the-DOM checkbox list would submit with nothing ticked.
+    params.add("filter.PAYEE.value", "");
+
+    assertThat(ReportSpecQueryString.fromParams(params)).isEqualTo(spec);
+  }
 }

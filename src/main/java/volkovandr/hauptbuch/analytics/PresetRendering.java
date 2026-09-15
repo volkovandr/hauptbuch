@@ -118,6 +118,7 @@ final class PresetRendering {
       Model model,
       SettingsService settingsService,
       ReportEngine reportEngine,
+      ReportFilterViewAssembler filterViewAssembler,
       String pagePath,
       String hxRequestHeader) {
     boolean fragment = isHtmxRequest(hxRequestHeader);
@@ -130,6 +131,9 @@ final class PresetRendering {
               Rendered rendered = populate(presentation, baseCurrency, asTable, reportEngine);
               model.addAttribute(
                   "settings", ReportSettingsView.build(presentation, pagePath, LocalDate.now()));
+              model.addAttribute(
+                  "filters",
+                  filterViewAssembler.build(presentation.spec(), allParams(presentation)));
               if (asTable) {
                 model.addAttribute("report", rendered.report());
                 return tableViewName;

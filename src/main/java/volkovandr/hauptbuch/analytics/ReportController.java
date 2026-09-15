@@ -29,10 +29,15 @@ class ReportController {
 
   private final ReportEngine reportEngine;
   private final SettingsService settingsService;
+  private final ReportFilterViewAssembler filterViewAssembler;
 
-  ReportController(ReportEngine reportEngine, SettingsService settingsService) {
+  ReportController(
+      ReportEngine reportEngine,
+      SettingsService settingsService,
+      ReportFilterViewAssembler filterViewAssembler) {
     this.reportEngine = reportEngine;
     this.settingsService = settingsService;
+    this.filterViewAssembler = filterViewAssembler;
   }
 
   /**
@@ -62,6 +67,7 @@ class ReportController {
         model,
         settingsService,
         reportEngine,
+        filterViewAssembler,
         pagePath,
         hxRequest);
   }

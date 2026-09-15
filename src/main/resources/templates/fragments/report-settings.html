@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <!--
   The Report page's settings strip (reporting.md §11a.2/§11a.3, plan stage d3): Rows & columns,
-  Measures, Scope, Date range and Display as collapsed <details> groups, plus the always-visible
-  Renderer control — everything the engine supports today except Filters (plan stage d4). Shared by
-  report-table.html and report-chart.html's own "page" fragment.
+  Measures, Scope, Filters, Date range and Display as collapsed <details> groups, plus the
+  always-visible Renderer control — everything the engine supports today. Shared by
+  report-table.html and report-chart.html's own "page" fragment. The Filters group's own markup
+  lives in fragments/report-filters.html (plan stage d3-4), kept out of this file the same way the
+  date-range endpoint editor already is.
 
   Every group is its own <form>, GETting the page's own URL (`settings.pagePath()`): hidden fields
   carry the rest of the current state (each group's own `otherParams`, built server-side in
@@ -190,6 +192,11 @@
           ></th:block>
           <p class="actions"><button type="submit" class="btn">Apply</button></p>
         </form>
+      </details>
+
+      <details class="report-settings__group">
+        <summary>Filters</summary>
+        <div th:replace="~{fragments/report-filters :: filters}"></div>
       </details>
 
       <details class="report-settings__group">
