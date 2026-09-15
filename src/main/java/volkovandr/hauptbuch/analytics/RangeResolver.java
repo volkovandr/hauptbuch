@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.analytics;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Resolves the start/end anchor grammar (reporting.md §8.1) against "today", and buckets a resolved
@@ -9,6 +10,8 @@ import java.time.YearMonth;
  * dependency on the book, so it is unit-tested rather than SQL-logic-tested.
  */
 final class RangeResolver {
+
+  private static final DateTimeFormatter LABEL_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
   private RangeResolver() {}
 
@@ -20,7 +23,11 @@ final class RangeResolver {
         resolveEndpoint(range.start(), today), resolveEndpoint(range.end(), today));
   }
 
-  private static LocalDate resolveEndpoint(RangeEndpoint endpoint, LocalDate today) {
+  /**
+   * A single endpoint resolved to a date — the settings strip's "resolves to" label (plan stage d3)
+   * needs this without a full {@link DateRange}.
+   */
+  static LocalDate resolveEndpoint(RangeEndpoint endpoint, LocalDate today) {
     if (endpoint instanceof RangeEndpoint.Literal literal) {
       return literal.date();
     }
@@ -63,6 +70,15 @@ final class RangeResolver {
   private static YearMonth quarterStart(LocalDate date) {
     int quarterIndex = (date.getMonthValue() - 1) / 3;
     return YearMonth.of(date.getYear(), quarterIndex * 3 + 1);
+  }
+
+  /**
+   * The settings strip's own "resolves to" label for one endpoint (reporting.md §11a.6, e.g. "=
+   * 01.06.2026") — shared by the initial render ({@link ReportSettingsView}) and the live preview
+   * ({@link RangeEndpointLabelController}) so the two can never format the same date differently.
+   */
+  static String resolvedLabel(RangeEndpoint endpoint, LocalDate today) {
+    return "= " + LABEL_FORMAT.format(resolveEndpoint(endpoint, today));
   }
 
   /** The resolved endpoints of a {@link DateRange}. */

@@ -46,14 +46,15 @@ class ReportService {
   }
 
   /**
-   * Overwrites a saved Report's name and spec in place (reporting.md §11a.1's Save — every Frame
-   * showing it follows, since Frames reference rather than copy). Rejected before the write if
-   * {@code name} is blank or {@code reportId} is unknown.
+   * Overwrites a saved Report's name, spec, renderer and trend line in place (reporting.md §11a.1's
+   * Save — every Frame showing it follows, since Frames reference rather than copy). Rejected
+   * before the write if {@code name} is blank or {@code reportId} is unknown.
    */
-  void updateSpec(long reportId, String name, ReportSpec spec) {
+  void updateSpec(
+      long reportId, String name, ReportSpec spec, Renderer renderer, boolean trendLine) {
     requireReport(reportId);
     String trimmed = requireName(name);
-    reportRepository.update(reportId, trimmed, spec);
+    reportRepository.update(reportId, trimmed, spec, renderer, trendLine);
     LOG.info("Report updated: id={}, name={}", reportId, trimmed);
   }
 

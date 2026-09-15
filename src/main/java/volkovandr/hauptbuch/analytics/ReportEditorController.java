@@ -5,6 +5,7 @@ import org.springframework.ui.Model;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.web.NavItem;
@@ -12,10 +13,12 @@ import volkovandr.hauptbuch.web.NavItem;
 /**
  * {@code /reports/new} (reporting.md §11a.1, plan stage d3): a not-yet-saved Report's own page,
  * starting from the category × month matrix spec — a spec always needs at least one measure ({@link
- * ReportSpec}'s own constructor), so it cannot start empty. {@code POST /reports/save-as-new} is
- * the "Save as new report" action every editor page offers — a Preset ({@link ReportController}), a
- * saved Report with unsaved changes ({@link SavedReportController}) or this page all post here,
- * rather than each carrying its own copy of "mint a Report from the current draft".
+ * ReportSpec}'s own constructor), so it cannot start empty. Its settings strip re-GETs this same
+ * URL on every change, an htmx request getting back just the {@code #report-page} fragment, like
+ * the other two editor pages ({@link ReportController}, {@link SavedReportController}). {@code POST
+ * /reports/save-as-new} is the "Save as new report" action every editor page offers — a Preset, a
+ * saved Report with unsaved changes, or this page all post here, rather than each carrying its own
+ * copy of "mint a Report from the current draft".
  */
 @Controller
 class ReportEditorController {
@@ -35,7 +38,10 @@ class ReportEditorController {
   }
 
   @GetMapping(NEW_PATH)
-  String newReport(@RequestParam MultiValueMap<String, String> params, Model model) {
+  String newReport(
+      @RequestParam MultiValueMap<String, String> params,
+      @RequestHeader(value = PresetRendering.HX_REQUEST_HEADER, required = false) String hxRequest,
+      Model model) {
     PresetRendering.Presentation base =
         new PresetRendering.Presentation(
             "New report", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
@@ -46,10 +52,14 @@ class ReportEditorController {
     model.addAttribute("title", "New report · Hauptbuch");
     model.addAttribute(
         "editor", PresetRendering.editorView(effective, unsaved, null, null, NEW_PATH, ""));
-    // The default spec's own renderer is TABLE (Presets.categoryMonthMatrix()), so there is no
-    // chart to toggle to yet — no viewToggleUrl needed, matching report-table.html's th:if.
     return PresetRendering.renderOwnPage(
-        effective, true, model, settingsService, reportEngine, "report-table", "report-chart");
+        effective,
+        effective.renderer() == Renderer.TABLE,
+        model,
+        settingsService,
+        reportEngine,
+        NEW_PATH,
+        hxRequest);
   }
 
   /**

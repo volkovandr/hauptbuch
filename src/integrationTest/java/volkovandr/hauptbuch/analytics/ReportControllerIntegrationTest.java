@@ -23,14 +23,16 @@ import volkovandr.hauptbuch.ledger.SettingsService;
 /**
  * Integration tier (CLAUDE.md §6): the four Presets' own pages and editor ({@link
  * ReportController}, reporting.md §11a, plan stage d3) rendered against real Postgres — every
- * Preset renders correctly against real data, the chart/table swap works, and a draft in the query
- * string overrides a Preset's own spec with the Unsaved marker shown. The reporting page itself is
- * {@link ReportsLayoutControllerIntegrationTest}'s job; "Save as new report" (the one bridge from a
- * Preset to an owned Report) is {@link ReportEditorControllerIntegrationTest}'s job, since it is
- * one shared endpoint every editor page posts to. The renderers' own SVG-well-formedness and the
- * pie's negative-measure refusal are {@link ChartSvgWriterTest}/{@link ChartViewAssemblerTest}'s
- * job (CLAUDE.md §6 — no DB dependency, so the unit tier, not here); neither shipped Preset uses
- * the pie renderer (reporting.md §16).
+ * Preset renders correctly against real data, an htmx request gets back just the {@code
+ * #report-page} fragment while a plain request gets the full shell, the settings strip renders its
+ * groups, switching the Renderer control changes what is drawn, and a draft in the query string
+ * overrides a Preset's own spec with the Unsaved marker shown. The reporting page itself is {@link
+ * ReportsLayoutControllerIntegrationTest}'s job; "Save as new report" (the one bridge from a Preset
+ * to an owned Report) is {@link ReportEditorControllerIntegrationTest}'s job, since it is one
+ * shared endpoint every editor page posts to. The renderers' own SVG-well-formedness and the pie's
+ * negative-measure refusal are {@link ChartSvgWriterTest}/{@link ChartViewAssemblerTest}'s job
+ * (CLAUDE.md §6 — no DB dependency, so the unit tier, not here); neither shipped Preset uses the
+ * pie renderer (reporting.md §16).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -136,7 +138,7 @@ class ReportControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("<svg")))
         .andExpect(content().string(containsString("chart-trend")))
-        .andExpect(content().string(containsString("Show table")));
+        .andExpect(content().string(containsString("Renderer")));
   }
 
   @Test
@@ -154,49 +156,55 @@ class ReportControllerIntegrationTest {
   }
 
   @Test
-  void chartSwapsToItsTableFragmentAndBack() throws Exception {
+  void anHtmxRequestGetsBackJustTheReportPageFragmentNotTheShell() throws Exception {
     settingsService.setBaseCurrency("EUR");
-    long opening = insertAccount("Opening Balances", "equity", "EUR", null);
-    long cash = insertAccount("Cash", "asset", "EUR", null);
-    postSingleCurrency(opening, cash, LocalDate.now().minusDays(1), "1000.00");
 
     mockMvc
-        .perform(get("/reports/preset/net-worth-over-time/view").param("view", "table"))
+        .perform(get("/reports/preset/category-month-matrix").header("HX-Request", "true"))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("<table")))
-        .andExpect(content().string(containsString("Show chart")))
-        .andExpect(content().string(not(containsString("<svg"))))
-        // hx-replace-url on the toggle (reporting.md §11a.1) keeps the address bar current —
-        // here it is unchanged, since there is no draft to preserve across the swap.
-        .andExpect(
-            content()
-                .string(containsString("hx-replace-url=\"/reports/preset/net-worth-over-time\"")));
-
-    mockMvc
-        .perform(get("/reports/preset/net-worth-over-time/view").param("view", "chart"))
-        .andExpect(status().isOk())
-        .andExpect(content().string(containsString("<svg")))
-        .andExpect(content().string(containsString("Show table")));
+        .andExpect(content().string(containsString("id=\"report-page\"")))
+        .andExpect(content().string(not(containsString("app-bar__brand"))));
   }
 
   @Test
-  void tableOnlyPresetOffersNoChartToggle() throws Exception {
+  void plainRequestGetsTheFullPageShell() throws Exception {
     settingsService.setBaseCurrency("EUR");
 
     mockMvc
         .perform(get("/reports/preset/category-month-matrix"))
         .andExpect(status().isOk())
-        .andExpect(content().string(not(containsString("Show chart"))));
+        .andExpect(content().string(containsString("app-bar__brand")))
+        .andExpect(content().string(containsString("id=\"report-page\"")));
   }
 
   @Test
-  void tableOnlyPresetsViewFragmentClampsToTableEvenIfAskedForChart() throws Exception {
+  void theSettingsStripRendersEveryGroup() throws Exception {
     settingsService.setBaseCurrency("EUR");
 
     mockMvc
-        .perform(get("/reports/preset/category-month-matrix/view").param("view", "chart"))
+        .perform(get("/reports/preset/category-month-matrix"))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("<table")));
+        .andExpect(content().string(containsString("Rows &amp; columns")))
+        .andExpect(content().string(containsString("Measures")))
+        .andExpect(content().string(containsString("Scope")))
+        .andExpect(content().string(containsString("Date range")))
+        .andExpect(content().string(containsString("Display")))
+        .andExpect(content().string(containsString("Renderer")));
+  }
+
+  @Test
+  void switchingTheRendererToLineRendersTheChartInstead() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    MultiValueMap<String, String> draft =
+        PresetRendering.allParams(
+            new PresetRendering.Presentation(
+                "x", Presets.netWorthOverTime(), Renderer.LINE, false));
+
+    mockMvc
+        .perform(get("/reports/preset/category-month-matrix").params(draft))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("<svg")))
+        .andExpect(content().string(containsString("Unsaved changes")));
   }
 
   @Test

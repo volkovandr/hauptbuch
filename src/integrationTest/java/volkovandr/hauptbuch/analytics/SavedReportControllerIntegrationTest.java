@@ -95,13 +95,15 @@ class SavedReportControllerIntegrationTest {
   }
 
   @Test
-  void saveOverwritesTheSpecInPlaceAndRedirectsBackToTheSameReport() throws Exception {
+  void saveOverwritesTheSpecRendererAndTrendLineAndRedirectsBackToTheSameReport() throws Exception {
     settingsService.setBaseCurrency("EUR");
+    MultiValueMap<String, String> newSpec =
+        ReportSpecQueryString.toParams(Presets.netWorthOverTime());
+    newSpec.add("name", "New name");
+    newSpec.add("renderer", "LINE");
+    newSpec.add("trendLine", "true");
     SavedReport saved =
         reportService.save("Old name", Presets.balanceSheet(), Renderer.TABLE, false);
-    MultiValueMap<String, String> newSpec =
-        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
-    newSpec.add("name", "New name");
 
     mockMvc
         .perform(post("/reports/" + saved.reportId() + "/save").params(newSpec))
@@ -110,9 +112,9 @@ class SavedReportControllerIntegrationTest {
 
     SavedReport updated = reportService.find(saved.reportId()).orElseThrow();
     assertThat(updated.name()).isEqualTo("New name");
-    assertThat(updated.spec()).isEqualTo(Presets.categoryMonthMatrix());
-    // Renderer/trend line are untouched by Save — the editor offers no control for either yet.
-    assertThat(updated.renderer()).isEqualTo(Renderer.TABLE);
+    assertThat(updated.spec()).isEqualTo(Presets.netWorthOverTime());
+    assertThat(updated.renderer()).isEqualTo(Renderer.LINE);
+    assertThat(updated.trendLine()).isTrue();
   }
 
   @Test
@@ -130,38 +132,51 @@ class SavedReportControllerIntegrationTest {
   }
 
   @Test
-  void chartSwapsToItsTableFragmentAndBack() throws Exception {
+  void anHtmxRequestGetsBackJustTheReportPageFragmentNotTheShell() throws Exception {
     settingsService.setBaseCurrency("EUR");
     SavedReport saved =
         reportService.save("My chart", Presets.netWorthOverTime(), Renderer.LINE, true);
 
     mockMvc
-        .perform(get("/reports/" + saved.reportId() + "/view").param("view", "table"))
-        .andExpect(status().isOk())
-        .andExpect(content().string(containsString("<table")))
-        .andExpect(content().string(containsString("Show chart")));
-
-    mockMvc
-        .perform(get("/reports/" + saved.reportId() + "/view").param("view", "chart"))
+        .perform(get("/reports/" + saved.reportId()).header("HX-Request", "true"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("<svg")))
-        .andExpect(content().string(containsString("Show table")));
+        .andExpect(content().string(not(containsString("app-bar__brand"))));
   }
 
   @Test
-  void chartToggleCarriesTheDraftSpecIntoTheReplacedUrl() throws Exception {
+  void switchingTheRendererToTableRendersTheTableInstead() throws Exception {
     settingsService.setBaseCurrency("EUR");
     SavedReport saved =
         reportService.save("My chart", Presets.netWorthOverTime(), Renderer.LINE, true);
     MultiValueMap<String, String> draft =
-        ReportSpecQueryString.toParams(Presets.netWorthOverTime());
+        PresetRendering.allParams(
+            new PresetRendering.Presentation(
+                "x", Presets.netWorthOverTime(), Renderer.TABLE, false));
 
     mockMvc
-        .perform(get("/reports/" + saved.reportId() + "/view").param("view", "table").params(draft))
-        // hx-replace-url (reporting.md §11a.1) keeps the address bar's draft current across the
-        // swap — its target is the page's own bookmark URL, carrying the same spec parameters.
-        .andExpect(
-            content().string(containsString("hx-replace-url=\"/reports/" + saved.reportId() + "?")))
-        .andExpect(content().string(containsString("measure=CLOSING_BALANCE")));
+        .perform(get("/reports/" + saved.reportId()).params(draft))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("<table")))
+        .andExpect(content().string(containsString("Unsaved changes")));
+  }
+
+  @Test
+  void draftWithTrendLineExplicitlyFalseTurnsTheOverlayOff() throws Exception {
+    // What the browser actually submits when the Trend line checkbox is unticked (report-settings
+    // .html: a hidden trendLine=false fallback sits right after the checkbox so an unticked box's
+    // own field, which a browser omits, does not leave the last-saved true value in place).
+    settingsService.setBaseCurrency("EUR");
+    SavedReport saved =
+        reportService.save("My chart", Presets.netWorthOverTime(), Renderer.LINE, true);
+    MultiValueMap<String, String> draft =
+        PresetRendering.allParams(
+            new PresetRendering.Presentation(
+                "x", Presets.netWorthOverTime(), Renderer.LINE, false));
+
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()).params(draft))
+        .andExpect(status().isOk())
+        .andExpect(content().string(not(containsString("chart-trend"))));
   }
 }

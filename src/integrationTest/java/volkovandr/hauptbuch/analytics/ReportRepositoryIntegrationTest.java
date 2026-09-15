@@ -83,17 +83,17 @@ class ReportRepositoryIntegrationTest {
   }
 
   @Test
-  void updateChangesTheNameAndSpecButNotRendererOrTrendLine() {
+  void updateChangesTheNameSpecRendererAndTrendLine() {
     SavedReport inserted =
         reportRepository.insert("Original name", Presets.balanceSheet(), Renderer.LINE, true);
 
-    reportRepository.update(inserted.reportId(), "Renamed", ELABORATE_SPEC);
+    reportRepository.update(inserted.reportId(), "Renamed", ELABORATE_SPEC, Renderer.BAR, false);
 
     SavedReport found = reportRepository.findById(inserted.reportId()).orElseThrow();
     assertThat(found.name()).isEqualTo("Renamed");
     assertThat(found.spec()).isEqualTo(ELABORATE_SPEC);
-    assertThat(found.renderer()).isEqualTo(Renderer.LINE);
-    assertThat(found.trendLine()).isTrue();
+    assertThat(found.renderer()).isEqualTo(Renderer.BAR);
+    assertThat(found.trendLine()).isFalse();
   }
 
   @Test
