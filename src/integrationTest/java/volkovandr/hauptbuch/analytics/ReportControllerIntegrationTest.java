@@ -1,6 +1,8 @@
 package volkovandr.hauptbuch.analytics;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.matchesRegex;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -8,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,6 +19,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.MultiValueMap;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
@@ -187,9 +192,116 @@ class ReportControllerIntegrationTest {
         .andExpect(content().string(containsString("Rows &amp; columns")))
         .andExpect(content().string(containsString("Measures")))
         .andExpect(content().string(containsString("Scope")))
+        .andExpect(content().string(containsString("Filters")))
         .andExpect(content().string(containsString("Date range")))
         .andExpect(content().string(containsString("Display")))
         .andExpect(content().string(containsString("Renderer")));
+  }
+
+  @Test
+  void theFiltersGroupRendersEveryFixedFieldSection() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+
+    mockMvc
+        .perform(get("/reports/preset/category-month-matrix"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString(">Category<")))
+        .andExpect(content().string(containsString(">Account<")))
+        .andExpect(content().string(containsString(">Tag<")))
+        .andExpect(content().string(containsString(">Payee<")))
+        .andExpect(content().string(containsString(">Person<")))
+        .andExpect(content().string(containsString(">Currency<")))
+        .andExpect(content().string(containsString(">Account type<")))
+        .andExpect(content().string(containsString(">Reconciliation<")))
+        .andExpect(content().string(containsString(">Note text<")))
+        .andExpect(content().string(containsString("only transactions touching")))
+        .andExpect(content().string(containsString("only amounts booked to")))
+        .andExpect(content().string(containsString("is one of")))
+        .andExpect(content().string(containsString("matches (regular expression)")));
+  }
+
+  @Test
+  void tickingCategoryNodeRendersItsChildTickedAndDisabled() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    long food = insertAccount("Food", "expense", "EUR", null);
+    final long bakery = insertAccount("Bakery", "expense", "EUR", food);
+
+    MultiValueMap<String, String> draft =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    draft.add("filterField", "CATEGORY");
+    draft.add("filter.CATEGORY.level", "POSTING");
+    draft.add("filter.CATEGORY.op", "IS_ONE_OF");
+    draft.add("filter.CATEGORY.value", String.valueOf(food));
+
+    MvcResult result =
+        mockMvc
+            .perform(get("/reports/preset/category-month-matrix").params(draft))
+            .andExpect(status().isOk())
+            .andReturn();
+    String body = result.getResponse().getContentAsString();
+
+    // Food itself: ticked, still interactive (not disabled) — the explicitly-stored node. A
+    // top-level node's own data-filter-ancestors is omitted (Thymeleaf drops an empty th:attr
+    // value), which filter-groups.js's node mode already tolerates client-side.
+    String foodTag = filterCheckboxTag(body, food);
+    assertThat(foodTag).contains("checked=\"checked\"").doesNotContain("disabled=\"disabled\"");
+    // Bakery: covered by Food's own subtree rule — ticked AND disabled, its own id never submitted.
+    String bakeryTag = filterCheckboxTag(body, bakery);
+    assertThat(bakeryTag)
+        .contains("checked=\"checked\"")
+        .contains("disabled=\"disabled\"")
+        .contains("data-filter-ancestors=\"" + food + "\"");
+  }
+
+  @Test
+  void payeeMatchesOperatorRendersItsRegexAndTicksTheMatchesRadio() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    MultiValueMap<String, String> draft =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    draft.add("filterField", "PAYEE");
+    draft.add("filter.PAYEE.level", "TRANSACTION");
+    draft.add("filter.PAYEE.op", "MATCHES");
+    draft.add("filter.PAYEE.matches", "(?i)shop.*");
+
+    mockMvc
+        .perform(get("/reports/preset/category-month-matrix").params(draft))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("value=\"(?i)shop.*\"")))
+        .andExpect(
+            content()
+                .string(
+                    matchesRegex(
+                        "(?s).*name=\"filter.PAYEE.op\"\\s+value=\"MATCHES\"\\s+"
+                            + "class=\"payee-mode-matches\"\\s+checked=\"checked\".*")));
+  }
+
+  @Test
+  void currencyFilterSectionDefaultsToPostingLevelWhenNoFilterIsSet() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+
+    mockMvc
+        .perform(get("/reports/preset/category-month-matrix"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    matchesRegex(
+                        "(?s).*name=\"filter.CURRENCY.level\"\\s+value=\"POSTING\"\\s+"
+                            + "checked=\"checked\".*")));
+  }
+
+  /**
+   * The one hierarchy-tree checkbox for a node id — anchored on {@code data-filter-node}, never a
+   * hidden passthrough field (every <em>other</em> filter section's own {@code <form>} resubmits
+   * this node's ticked value as a plain hidden field too, since it does not own that filter).
+   */
+  private static String filterCheckboxTag(String body, long nodeId) {
+    Matcher matcher =
+        Pattern.compile("<input[^>]*data-filter-node=\"" + nodeId + "\"[^>]*/>").matcher(body);
+    if (!matcher.find()) {
+      throw new AssertionError("No <input data-filter-node=\"" + nodeId + "\"> tag found");
+    }
+    return matcher.group();
   }
 
   @Test

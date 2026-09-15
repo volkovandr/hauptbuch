@@ -28,12 +28,17 @@ class SavedReportController {
   private final ReportService reportService;
   private final ReportEngine reportEngine;
   private final SettingsService settingsService;
+  private final ReportFilterViewAssembler filterViewAssembler;
 
   SavedReportController(
-      ReportService reportService, ReportEngine reportEngine, SettingsService settingsService) {
+      ReportService reportService,
+      ReportEngine reportEngine,
+      SettingsService settingsService,
+      ReportFilterViewAssembler filterViewAssembler) {
     this.reportService = reportService;
     this.reportEngine = reportEngine;
     this.settingsService = settingsService;
+    this.filterViewAssembler = filterViewAssembler;
   }
 
   /**
@@ -67,6 +72,7 @@ class SavedReportController {
         model,
         settingsService,
         reportEngine,
+        filterViewAssembler,
         pagePath,
         hxRequest);
   }

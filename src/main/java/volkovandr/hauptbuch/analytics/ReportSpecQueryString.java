@@ -156,23 +156,47 @@ final class ReportSpecQueryString {
       String prefix = filterPrefix(filter.field());
       params.add(prefix + "level", filter.level().name());
       params.add(prefix + "op", filter.operator().name());
-      filter.values().forEach(v -> params.add(prefix + "value", v));
+      filter.values().forEach(v -> params.add(valueKey(filter.field(), filter.operator()), v));
     }
   }
 
+  /**
+   * Every field's values live under {@code value} except Payee's {@code MATCHES} regex (plan stage
+   * d3-4): the settings strip's Payee section keeps both its checkbox list ({@code value}, read for
+   * {@code IS_ONE_OF}) and its regex field always in the DOM — the same "both always submitted,
+   * only one decoded" idiom the date-range endpoint fields already use ({@code ReportSettingsView})
+   * — so the two need non-colliding parameter names or a stray empty regex field would land in the
+   * same {@code value} list as the ticked payee ids.
+   */
+  private static String valueKey(FilterField field, FilterOperator operator) {
+    String prefix = filterPrefix(field);
+    return field == FilterField.PAYEE && operator == FilterOperator.MATCHES
+        ? prefix + "matches"
+        : prefix + "value";
+  }
+
+  /**
+   * An empty values list decodes to no filter at all for that field (reporting.md §11a.5: "an empty
+   * section is no filter") rather than {@link ReportFilter}'s own "needs at least one value"
+   * rejection — the settings strip's per-field Apply form (plan stage d3-4) always resubmits {@code
+   * filterField}/{@code level}/{@code op} for every one of the nine fixed sections regardless of
+   * whether any value is ticked, so a section with nothing ticked must degrade to "not present"
+   * rather than fail the whole render.
+   */
   private static List<ReportFilter> filtersList(MultiValueMap<String, String> params) {
     List<String> fields = params.getOrDefault("filterField", List.of());
     List<ReportFilter> result = new ArrayList<>();
     for (String fieldName : fields) {
       FilterField field = FilterField.valueOf(fieldName);
       String prefix = filterPrefix(field);
-      List<String> values = params.getOrDefault(prefix + "value", List.of());
+      FilterOperator operator = FilterOperator.valueOf(require(params, prefix + "op"));
+      List<String> values = params.getOrDefault(valueKey(field, operator), List.of());
+      if (values.isEmpty()) {
+        continue;
+      }
       result.add(
           new ReportFilter(
-              field,
-              FilterLevel.valueOf(require(params, prefix + "level")),
-              FilterOperator.valueOf(require(params, prefix + "op")),
-              values));
+              field, FilterLevel.valueOf(require(params, prefix + "level")), operator, values));
     }
     return result;
   }

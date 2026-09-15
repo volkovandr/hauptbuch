@@ -1,11 +1,14 @@
 package volkovandr.hauptbuch.categories.repository;
 
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.categories.Tag;
+import volkovandr.hauptbuch.categories.TagNode;
 
 /**
  * Native-SQL CRUD for the {@code tag} vocabulary (data-model §10.1). A tag is shared-taxonomy
@@ -26,6 +29,34 @@ public class TagRepository {
   private static final String NAME = "name";
   private static final String PARENT_ID = "parentId";
   private static final String TAG_ID = "tagId";
+
+  /**
+   * The recursive walk of the live tag forest: every parentless tag, then every live descendant
+   * reached through {@code parent_id} to arbitrary depth (data-model §10.1's hierarchy is not
+   * limited to two levels), mirroring {@code AccountRepository}'s own {@code LIVE_TREE_CTE}. Each
+   * row carries its {@code depth} (0 = top level) and a {@code sort_path} of ancestor names, so
+   * {@code order by sort_path} lists every node immediately followed by all of its descendants,
+   * alphabetical among siblings at each level. A soft-deleted tag cuts the walk — its descendants
+   * are not reached.
+   */
+  private static final String LIVE_TREE_CTE =
+      """
+      with recursive tree as (
+        select tag_id, name, parent_id, deleted_at,
+               0 as depth,
+               array[name] as sort_path
+        from tag
+        where deleted_at is null
+          and parent_id is null
+        union all
+        select t.tag_id, t.name, t.parent_id, t.deleted_at,
+               tree.depth + 1,
+               tree.sort_path || t.name
+        from tag t
+        join tree on t.parent_id = tree.tag_id
+        where t.deleted_at is null
+      )
+      """;
 
   private final JdbcClient jdbcClient;
 
@@ -77,5 +108,27 @@ public class TagRepository {
         .param(PARENT_ID, parentId)
         .query(Tag.class)
         .optional();
+  }
+
+  /**
+   * Every live tag, annotated with its true depth in the parent-chain (0 = top level, 1 = child, 2
+   * = grandchild, …) and listed depth-first — every node immediately followed by all of its
+   * descendants, alphabetical among siblings at each level. What a tag hierarchy picker renders
+   * (reporting.md §11a.5's Tag filter section), mirroring {@code
+   * AccountRepository#findLiveByTypesWithDepth}.
+   */
+  public List<TagNode> findLiveWithDepth() {
+    return jdbcClient
+        .sql(LIVE_TREE_CTE + "select " + TAG_COLUMNS + ", depth from tree order by sort_path")
+        .query(
+            (rs, rowNum) ->
+                new TagNode(
+                    new Tag(
+                        rs.getLong("tag_id"),
+                        rs.getString("name"),
+                        rs.getObject("parent_id", Long.class),
+                        rs.getObject("deleted_at", OffsetDateTime.class)),
+                    rs.getInt("depth")))
+        .list();
   }
 }

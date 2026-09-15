@@ -29,12 +29,17 @@ class ReportEditorController {
   private final ReportEngine reportEngine;
   private final SettingsService settingsService;
   private final ReportService reportService;
+  private final ReportFilterViewAssembler filterViewAssembler;
 
   ReportEditorController(
-      ReportEngine reportEngine, SettingsService settingsService, ReportService reportService) {
+      ReportEngine reportEngine,
+      SettingsService settingsService,
+      ReportService reportService,
+      ReportFilterViewAssembler filterViewAssembler) {
     this.reportEngine = reportEngine;
     this.settingsService = settingsService;
     this.reportService = reportService;
+    this.filterViewAssembler = filterViewAssembler;
   }
 
   @GetMapping(NEW_PATH)
@@ -58,6 +63,7 @@ class ReportEditorController {
         model,
         settingsService,
         reportEngine,
+        filterViewAssembler,
         NEW_PATH,
         hxRequest);
   }

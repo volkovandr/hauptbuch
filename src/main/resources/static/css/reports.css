@@ -247,3 +247,73 @@ table.report tfoot td {
   gap: 1rem;
   margin-top: 0.5rem;
 }
+
+/* The Filters group (reporting.md §11a.5, plan stage d3-4): one fixed section per field, each its
+   own <form> (an Apply group, same reasoning as Measures/Scope's account types). */
+.report-settings__filter {
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.report-settings__filter:last-child {
+  border-bottom: none;
+}
+
+.report-settings__filter-label {
+  font-weight: 600;
+  margin: 0 0 0.2rem;
+}
+
+.report-settings__filter-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.1rem 0 0.3rem;
+  font-size: 0.78rem;
+  color: var(--ink-muted, inherit);
+}
+
+.report-settings__filter-options {
+  list-style: none;
+  margin: 0 0 0.3rem;
+  padding: 0;
+  max-height: 12rem;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+}
+
+/* Hierarchy tree rows (Category/Account/Tag) — the same --depth idiom as the register's own account
+   filter (register.css .register-filter__item), reused here for filter-groups.js's node mode. */
+.report-settings__filter-tree {
+  list-style: none;
+  margin: 0 0 0.3rem;
+  padding: 0;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.report-settings__filter-tree li {
+  padding-left: calc(var(--depth, 0) * 1.2rem);
+}
+
+.report-settings__filter-note input {
+  width: 100%;
+  max-width: 24rem;
+}
+
+/* Payee's operator switch (§11a.5): both the checkbox list and the regex field always render, CSS
+   only picks which is visible — same idiom as the Date/Relative endpoint switch above. */
+.report-settings__filter-payee .payee-matches {
+  display: none;
+}
+
+.report-settings__filter-payee:has(.payee-mode-matches:checked) .payee-is-one-of {
+  display: none;
+}
+
+.report-settings__filter-payee:has(.payee-mode-matches:checked) .payee-matches {
+  display: block;
+}

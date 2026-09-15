@@ -50,10 +50,11 @@ outranks cleverness, brevity, and raw capability every time. Concretely:
    and `generate_series` the analytics rely on.
 6. **UI is server-rendered Thymeleaf + htmx. No SPA, no npm, no bundler, no TypeScript.** Bespoke JS
    is confined to three isolated *leaves* only: the keyboard layer (`keyboard.js`), the Cropper.js
-   image component (`receipt-editor.js`), and the register account-filter group-toggle layer
-   (`filter-groups.js`, sanctioned by transaction-register-ui/22). Each is a few hundred lines of
-   dependency-free vanilla JS, markup-driven, that the app degrades gracefully without. Do not
-   thread JS through the app, and do not add a fourth leaf without the owner's agreement.
+   image component (`receipt-editor.js`), and the filter group-toggle layer (`filter-groups.js`,
+   sanctioned by transaction-register-ui/22, generalised to a second, node-mode consumer — the
+   Report page's hierarchy filter sections — by reporting's plan stage d3-4). Each is a few hundred
+   lines of dependency-free vanilla JS, markup-driven, that the app degrades gracefully without. Do
+   not thread JS through the app, and do not add a fourth leaf without the owner's agreement.
 7. **The service layer upholds invariants — it is domain operations, not CRUD.** Recording a
    transaction creates balanced postings and enforces sum-to-zero and leaves-only. Generic per-table
    CRUD is only for true reference data (payees, tags, account definitions).

@@ -63,6 +63,14 @@ public class TagService {
   }
 
   /**
+   * Every live tag, depth-annotated and listed depth-first — what the Tag filter section's
+   * hierarchy picker renders (reporting.md §11a.5, plan stage d3).
+   */
+  public List<TagNode> findLiveWithDepth() {
+    return tagRepository.findLiveWithDepth();
+  }
+
+  /**
    * Resolve a tag echo from the AI parser to an <em>existing</em> tag, <strong>without creating
    * anything</strong> (data-model §13.3, plan stage 9d). The AI emits a tag only when a
    * per-category note instructs it, echoing the name the note itself supplied — a suggestion, never
