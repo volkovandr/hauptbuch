@@ -1,6 +1,6 @@
 # Opening/reviewing a processed receipt runs a full, unbounded register query it never uses
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: high
 Area: Receipts — post-process editor (`ReceiptProcessingController.addEditor`, `RegisterService.view`,
@@ -87,5 +87,4 @@ the viewed accounts or running `RegisterRepository.findRows`, and pointed
 `ReceiptProcessingController.addEditor` at it instead of `view()`. Added unit tests asserting
 `datalists()` returns the same options and never touches `settingsService.baseCurrency()`,
 `registerPickerService.membership()`, or `registerRepository.findRows()`. `./gradlew check` is
-green; `/code-review` found no issues. Awaiting the owner's confirmation on the real Pi before
-marking `resolved`.
+green; `/code-review` found no issues. Confirmed fixed by the owner 2026-09-19 on the Pi.
