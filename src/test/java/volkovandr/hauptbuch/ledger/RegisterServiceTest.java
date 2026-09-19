@@ -172,4 +172,24 @@ class RegisterServiceTest {
 
     assertThat(view.personTargets()).containsExactly("for Max", "by Max", "for Alice", "by Alice");
   }
+
+  @Test
+  void datalistsOffersTheSameOptionsAsViewWithoutResolvingRows() {
+    when(accountService.findLiveByTypes(List.of("asset", "liability")))
+        .thenReturn(List.of(ownAccount(CASH, "Cash")));
+
+    RegisterView view = registerService.datalists();
+
+    assertThat(view.accounts()).extracting(RegisterAccountOption::name).containsExactly("Cash");
+    assertThat(view.rows()).isEmpty();
+  }
+
+  @Test
+  void datalistsNeverResolvesViewedAccountsOrFetchesRows() {
+    registerService.datalists();
+
+    verify(settingsService, never()).baseCurrency();
+    verify(registerPickerService, never()).membership(any(), any(), any());
+    verify(registerRepository, never()).findRows(anyList(), any(), any(), any(), anyString());
+  }
 }

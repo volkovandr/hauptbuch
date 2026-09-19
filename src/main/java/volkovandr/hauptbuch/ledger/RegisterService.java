@@ -41,6 +41,10 @@ public class RegisterService {
    */
   private static final String CATEGORY_PATH_SEPARATOR = " - ";
 
+  /** The filter {@link #datalists()} reports on a view that never resolves or shows any rows. */
+  private static final RegisterFilter NO_FILTER =
+      new RegisterFilter(List.of(), null, null, null, null);
+
   private final RegisterRepository registerRepository;
   private final PayeeRepository payeeRepository;
   private final AccountService accountService;
@@ -85,6 +89,24 @@ public class RegisterService {
     List<RegisterRowView> rows =
         baseCurrency.map(base -> renderRows(viewed, filter, base)).orElseGet(List::of);
 
+    return assembleView(rows, pickable, filter);
+  }
+
+  /**
+   * The register's shared datalists (accounts, payees, categories, transfer/person targets, tags)
+   * with no rows — for a caller that only needs the pickers, such as the receipt editor's
+   * Category/Account/Payee fields (issue tracker receipt-processing/30). {@link #view} resolves the
+   * viewed accounts and runs the windowed running-balance row query even when its caller discards
+   * {@link RegisterView#rows()}; that query scans an account's <em>entire</em> live history (§2.7),
+   * so paying for it just to reach the option lists was the register-screen-sized cost of opening a
+   * single receipt.
+   */
+  public RegisterView datalists() {
+    return assembleView(List.of(), pickable(openOwnAccounts()), NO_FILTER);
+  }
+
+  private RegisterView assembleView(
+      List<RegisterRowView> rows, List<Account> pickable, RegisterFilter filter) {
     List<RegisterAccountOption> accountOptions = accountOptions(pickable);
     List<RegisterPayeeOption> payeeOptions = payeeOptions(filter.payeeId());
     List<RegisterCategoryOption> categoryOptions = categoryOptions();
