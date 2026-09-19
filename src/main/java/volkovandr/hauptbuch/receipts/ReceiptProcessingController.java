@@ -13,7 +13,6 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.util.UriComponentsBuilder;
 import volkovandr.hauptbuch.ledger.CurrencyService;
-import volkovandr.hauptbuch.ledger.RegisterFilter;
 import volkovandr.hauptbuch.ledger.RegisterService;
 import volkovandr.hauptbuch.web.NavItem;
 
@@ -576,8 +575,11 @@ class ReceiptProcessingController {
     model.addAttribute("id", receipt.receiptId());
     model.addAttribute(RECEIPT, receipt);
     model.addAttribute("editor", receiptEditorService.panel(form));
-    model.addAttribute(
-        "register", registerService.view(new RegisterFilter(List.of(), null, null, null, null)));
+    // datalists(), not view(): the editor only ever reads the option lists below, never
+    // register.rows() — view() would additionally resolve the viewed accounts and run the
+    // windowed running-balance row query over their entire history for nothing (issue tracker
+    // receipt-processing/30).
+    model.addAttribute("register", registerService.datalists());
     // The header currency-picker (a shared fragment) renders its <select> from `currencies`,
     // exactly
     // as the register and settings screens supply it — without it the picker is an empty, unusable
