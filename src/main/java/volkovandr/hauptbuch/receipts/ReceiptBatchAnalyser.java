@@ -140,6 +140,7 @@ public class ReceiptBatchAnalyser {
               new ReceiptBatchSubmission(
                   config.model(),
                   config.apiKey(),
+                  config,
                   promptBuilder.build(
                       aiVocabularyService.aiVocabulary(), settingsService.aiSystemPrompt()),
                   AnthropicPrompts.EDITED_MEDIA_TYPE,

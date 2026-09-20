@@ -4,11 +4,14 @@ import com.anthropic.client.AnthropicClient;
 import com.anthropic.core.http.StreamResponse;
 import com.anthropic.errors.AnthropicException;
 import com.anthropic.errors.NotFoundException;
+import com.anthropic.models.messages.Message;
+import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.batches.BatchCreateParams;
 import com.anthropic.models.messages.batches.MessageBatch;
 import com.anthropic.models.messages.batches.MessageBatchErroredResult;
 import com.anthropic.models.messages.batches.MessageBatchIndividualResponse;
 import com.anthropic.models.messages.batches.MessageBatchResult;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +30,14 @@ import org.springframework.stereotype.Component;
  * discount is applied by the caller when it freezes each member's {@code parse_cost} — it is
  * Anthropic's pricing rule, not an operator-tunable rate, so it lives as a constant rather than a
  * setting.
+ *
+ * <p><strong>Cache pre-warm (issue receipt-processing/31):</strong> the Batches API dispatches a
+ * batch's members for parallel processing rather than strictly one at a time, and a cache entry
+ * only becomes readable once the first write has started landing — so most members of a freshly
+ * submitted batch would find the cache still empty and each write their own entry instead of
+ * reading the one the design assumes. {@link #submit} sends a standalone, synchronous {@code
+ * max_tokens: 0} call carrying the identical cached system block before creating the batch, so
+ * every member finds the cache already populated.
  */
 @Component
 class AnthropicReceiptBatchClient implements ReceiptBatchClient {
@@ -43,6 +54,7 @@ class AnthropicReceiptBatchClient implements ReceiptBatchClient {
 
   @Override
   public String submit(ReceiptBatchSubmission submission) {
+    warmCache(submission);
     BatchCreateParams.Builder params = BatchCreateParams.builder();
     for (ReceiptBatchItem item : submission.items()) {
       params.addRequest(
@@ -94,6 +106,48 @@ class AnthropicReceiptBatchClient implements ReceiptBatchClient {
       // half-price job over one bad tick, so treat it as "not ended yet" and poll again in 30 s.
       LOG.warn("Batch {} poll attempt failed; will retry", batchId, e);
       return Optional.empty();
+    }
+  }
+
+  /**
+   * Populate the shared system-prompt cache entry before the batch's members can race for it
+   * (receipt-processing/31). A {@code max_tokens: 0} request reads the identical cached prefix into
+   * the model and returns immediately with no billed output tokens — the one write the 9h design
+   * assumes, instead of one per member that starts before the first write lands. A failed pre-warm
+   * doesn't block the batch: members simply fall back to racing for a cold cache, the same outcome
+   * as if this call didn't exist.
+   *
+   * <p>Unlike the batch members, this call is never a {@code ReceiptBatchOutcome} and so never
+   * contributes to any receipt's frozen {@code parse_cost} — attributing a shared prefix write to
+   * one receipt would misstate that receipt's cost. Its own billed cost is only logged, at INFO
+   * (the level this repo reserves for an AI call's outcome).
+   */
+  private void warmCache(ReceiptBatchSubmission submission) {
+    MessageCreateParams warmup =
+        MessageCreateParams.builder()
+            .model(submission.model())
+            .maxTokens(0L)
+            .systemOfTextBlockParams(AnthropicPrompts.systemBlocks(submission.systemPrompt(), true))
+            .addUserMessage("warmup")
+            .build();
+    try {
+      Message response = clients.forKey(submission.apiKey()).messages().create(warmup);
+      ReceiptParseResult usage = AnthropicPrompts.resultOf(response);
+      BigDecimal cost =
+          submission
+              .pricing()
+              .costOf(
+                  usage.tokensIn(),
+                  usage.tokensOut(),
+                  usage.tokensCacheWrite(),
+                  usage.tokensCacheRead());
+      LOG.info(
+          "Batch cache pre-warm: tokensIn={} tokensCacheWrite={} cost={}",
+          usage.tokensIn(),
+          usage.tokensCacheWrite(),
+          cost);
+    } catch (AnthropicException e) {
+      LOG.warn("Batch cache pre-warm failed; members may each write the cache", e);
     }
   }
 
