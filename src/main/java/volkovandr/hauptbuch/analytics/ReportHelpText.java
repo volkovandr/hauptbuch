@@ -15,37 +15,29 @@ package volkovandr.hauptbuch.analytics;
 public final class ReportHelpText {
 
   public static final String SCOPE =
-      "Which account types a measure adds up — asset, liability, income, expense, equity —"
-          + " plus closed accounts and pending-review transactions. A filter narrows which"
-          + " transactions or postings qualify; Scope decides what kind of account counts at all.";
+      "Which account types count toward this measure, plus closed accounts and pending-review"
+          + " transactions. Filters narrow this further.";
 
   public static final String FILTER_READING_SWITCH =
-      "“Transactions touching …” counts a transaction if any of its postings match."
-          + " “Amounts booked to …” counts only the matching postings themselves"
-          + " — the two can give different totals for the same filter.";
+      "“Transactions touching …” matches by transaction. “Amounts booked to …” matches by"
+          + " posting — these can give different totals.";
 
   public static final String MEASURE_KIND =
-      "Turnover is a flow, summed over the period. Closing balance is a stock, the position at"
-          + " period’s end — it can be summed across accounts but never across time, so a"
-          + " total that would need that renders —.";
+      "Turnover is a flow over the period. Closing balance is a stock at period’s end — it is"
+          + " never summed across time.";
 
   public static final String LEG =
-      "Net, debits and credits only apply to Turnover, and are independent of account type:"
-          + " spending is always a credit, on a debit card or a credit card alike.";
+      "Net, debits and credits apply only to Turnover, independent of account type.";
 
   public static final String PRESENTATION_CURRENCY =
-      "Base values every posting or balance in the ledger’s base currency. Account currency"
-          + " shows native amounts with no conversion — only where every account contributing"
-          + " to the cell shares one currency, otherwise it renders —.";
+      "Base converts everything to the base currency. Account currency shows native amounts,"
+          + " but only where every contributing account shares one currency.";
 
   public static final String RANGE_ENDPOINT =
-      "A literal date is fixed. A relative endpoint is a unit, offset and edge — start or end"
-          + " — resolved against today each time the Report is opened; the label beside it"
-          + " shows what that resolves to.";
+      "A fixed date, or a relative offset from today — resolved live in the label beside it.";
 
   public static final String INCLUDE_PENDING_REVIEW =
-      "Recurring pre-registrations and unreviewed captures aren’t facts yet; including them"
-          + " can inflate the current period. The header line above shows when this is on.";
+      "Recurring and unreviewed items aren’t facts yet, so they’re excluded by default.";
 
   private ReportHelpText() {}
 }
