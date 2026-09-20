@@ -42,7 +42,10 @@
         hx-replace-url="true"
         th:attr="hx-get=@{${settings.pagePath()}}"
       >
-        <p class="report-settings__filter-switch">
+        <p
+          class="report-settings__filter-switch"
+          th:with="help=${T(volkovandr.hauptbuch.analytics.ReportHelpText).FILTER_READING_SWITCH}"
+        >
           <label class="check">
             <input
               type="radio"
@@ -61,6 +64,7 @@
             />
             only amounts booked to …
           </label>
+          <span th:replace="~{fragments/help-marker :: marker(${help})}"></span>
         </p>
         <input type="hidden" name="filterField" th:value="${field}" />
         <input type="hidden" th:name="${'filter.' + field + '.op'}" value="IS_ONE_OF" />
@@ -105,7 +109,11 @@
         hx-replace-url="true"
         th:attr="hx-get=@{${settings.pagePath()}}"
       >
-        <p class="report-settings__filter-switch" th:if="${section.showLevelSwitch()}">
+        <p
+          class="report-settings__filter-switch"
+          th:if="${section.showLevelSwitch()}"
+          th:with="help=${T(volkovandr.hauptbuch.analytics.ReportHelpText).FILTER_READING_SWITCH}"
+        >
           <label class="check">
             <input
               type="radio"
@@ -124,6 +132,7 @@
             />
             only amounts booked to …
           </label>
+          <span th:replace="~{fragments/help-marker :: marker(${help})}"></span>
         </p>
         <input
           type="hidden"

@@ -17,9 +17,10 @@ import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
 import volkovandr.hauptbuch.ledger.ExchangeRateService;
 
 /**
- * Unit tier (CLAUDE.md §6): {@link ReportGridBuilder} — axis assembly, the credit-natural display
- * flip (data-model §4.1), the legality rules (reporting.md §7.2), row suppression (§7.3) and totals
- * (§7.1) — with only rates mocked. Inputs are hand-built rather than routed through {@link
+ * Unit tier (CLAUDE.md §6): {@link ReportGridBuilder} wired to a real {@link CellValuation} (only
+ * rates mocked) — axis assembly, the credit-natural display flip (data-model §4.1), the legality
+ * rules (reporting.md §7.2), row suppression (§7.3) and totals (§7.1) exercised end to end through
+ * {@link ReportGridBuilder#build}. Inputs are hand-built rather than routed through {@link
  * ReportEngine}, so each test states exactly the raw data a fetch would have produced.
  */
 class ReportGridBuilderTest {
@@ -28,7 +29,8 @@ class ReportGridBuilderTest {
       new RangeResolver.ResolvedRange(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31));
 
   private final ExchangeRateService exchangeRateService = mock();
-  private final ReportGridBuilder builder = new ReportGridBuilder(exchangeRateService);
+  private final ReportGridBuilder builder =
+      new ReportGridBuilder(new CellValuation(exchangeRateService));
 
   private static ReportSpec matrixSpec(
       boolean rowTotals, boolean columnTotals, boolean suppressEmptyRows) {
@@ -235,7 +237,7 @@ class ReportGridBuilderTest {
 
     ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
 
-    assertThat(grid.cells().get(0).get(0)).isEqualTo(Cell.ILLEGAL);
+    assertThat(grid.cells().get(0).get(0)).isEqualTo(new Cell.Illegal(Cell.Reason.MULTI_CURRENCY));
   }
 
   @Test
@@ -254,7 +256,45 @@ class ReportGridBuilderTest {
         builder.build(
             matrixSpec(false, false, false), axes, rows, columns, byKey, data, "EUR", JANUARY);
 
-    assertThat(grid.cells().get(0).get(0)).isEqualTo(Cell.ILLEGAL);
+    assertThat(grid.cells().get(0).get(0)).isEqualTo(new Cell.Illegal(Cell.Reason.MISSING_RATE));
+  }
+
+  @Test
+  void totalPropagatesItsOwnIllegalAddendsReasonRatherThanGenericising() {
+    // A row/column total with no structural reason of its own (single measure, no time/tag axis)
+    // still can't sum an already-illegal cell — it must carry that cell's own reason forward, not a
+    // fresh, less specific one.
+    AxisPlan axes = new AxisPlan(Dimension.CATEGORY, null, Dimension.CATEGORY, false, false);
+    List<AxisNode> rows = List.of(new AxisNode("1", "Food"));
+    List<AxisNode> columns = List.of(new AxisNode("total", "Total"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    RawTurnoverCell missingRate =
+        new RawTurnoverCell(
+            "1", "Food", "expense", "2026-01", "CHF", new BigDecimal("10.00"), null, 1, 1, 1);
+    GridData data = turnoverData(missingRate);
+    ReportSpec spec = matrixSpecWithTotals(List.of(Dimension.CATEGORY), List.of());
+
+    ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.rowTotals()).containsExactly(new Cell.Illegal(Cell.Reason.MISSING_RATE));
+    assertThat(grid.columnTotals()).containsExactly(new Cell.Illegal(Cell.Reason.MISSING_RATE));
+    assertThat(grid.grandTotal()).isEqualTo(new Cell.Illegal(Cell.Reason.MISSING_RATE));
+  }
+
+  private static ReportSpec matrixSpecWithTotals(List<Dimension> rows, List<Dimension> columns) {
+    return new ReportSpec(
+        rows,
+        columns,
+        List.of(),
+        List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+        Scope.ofTypes("expense"),
+        List.of(),
+        new DateRange(
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+        true,
+        true,
+        false);
   }
 
   @Test
@@ -285,7 +325,7 @@ class ReportGridBuilderTest {
 
     ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
 
-    assertThat(grid.columnTotals()).containsExactly(Cell.ILLEGAL);
+    assertThat(grid.columnTotals()).containsExactly(new Cell.Illegal(Cell.Reason.CROSS_TAG_TOTAL));
   }
 
   @Test
@@ -321,7 +361,7 @@ class ReportGridBuilderTest {
 
     ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
 
-    assertThat(grid.rowTotals()).containsExactly(Cell.ILLEGAL);
+    assertThat(grid.rowTotals()).containsExactly(new Cell.Illegal(Cell.Reason.TIME_AXIS_BALANCE));
   }
 
   @Test
@@ -467,7 +507,7 @@ class ReportGridBuilderTest {
 
     ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
 
-    assertThat(grid.cells().get(0).get(0)).isEqualTo(Cell.ILLEGAL);
+    assertThat(grid.cells().get(0).get(0)).isEqualTo(new Cell.Illegal(Cell.Reason.MISSING_RATE));
   }
 
   // ── no-dimension totals (rows=[], columns=[Date]) ──────────────────────────
@@ -568,7 +608,7 @@ class ReportGridBuilderTest {
 
     // 1000.00 (base) + 1000.00 (native) must NOT silently sum to 2000.00 — they are two views of
     // the same figure, not additive quantities.
-    assertThat(grid.rowTotals()).containsExactly(Cell.ILLEGAL);
+    assertThat(grid.rowTotals()).containsExactly(new Cell.Illegal(Cell.Reason.MULTI_MEASURE_TOTAL));
   }
 
   // ── count measures (§5.5) ───────────────────────────────────────────────

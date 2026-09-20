@@ -85,7 +85,10 @@
       </details>
 
       <details class="report-settings__group">
-        <summary>Measures</summary>
+        <summary th:with="help=${T(volkovandr.hauptbuch.analytics.ReportHelpText).MEASURE_KIND}"
+          >Measures
+          <span th:replace="~{fragments/help-marker :: marker(${help})}"></span
+        ></summary>
         <form
           class="report-settings__form"
           method="get"
@@ -98,9 +101,17 @@
           <table class="report-settings__measures">
             <thead>
               <tr>
-                <th scope="col"></th>
+                <th scope="col" th:with="help=${T(volkovandr.hauptbuch.analytics.ReportHelpText).LEG}"
+                  >Measure
+                  <span th:replace="~{fragments/help-marker :: marker(${help})}"></span
+                ></th>
                 <th scope="col">Base</th>
-                <th scope="col">Account currency</th>
+                <th
+                  scope="col"
+                  th:with="help=${T(volkovandr.hauptbuch.analytics.ReportHelpText).PRESENTATION_CURRENCY}"
+                  >Account currency
+                  <span th:replace="~{fragments/help-marker :: marker(${help})}"></span
+                ></th>
               </tr>
             </thead>
             <tbody>
@@ -134,7 +145,10 @@
       </details>
 
       <details class="report-settings__group">
-        <summary>Scope</summary>
+        <summary th:with="help=${T(volkovandr.hauptbuch.analytics.ReportHelpText).SCOPE}"
+          >Scope
+          <span th:replace="~{fragments/help-marker :: marker(${help})}"></span
+        ></summary>
         <form
           class="report-settings__form"
           method="get"
@@ -163,6 +177,11 @@
             />
             Include pending-review transactions
           </label>
+          <span
+            th:with="help=${T(volkovandr.hauptbuch.analytics.ReportHelpText).INCLUDE_PENDING_REVIEW}"
+          >
+            <span th:replace="~{fragments/help-marker :: marker(${help})}"></span>
+          </span>
           <th:block
             th:replace="~{fragments/report-actions :: hidden-fields(${settings.scope().togglesOtherParams()})}"
           ></th:block>
@@ -342,7 +361,10 @@
          resolved-date label refreshes live via a narrow endpoint that touches no report data
          (RangeEndpointLabelController), matching "no report query runs until Apply". -->
     <fieldset th:fragment="endpoint(heading, idPrefix, fields)" class="report-settings__endpoint">
-      <legend th:text="${heading}">Start</legend>
+      <legend th:with="help=${T(volkovandr.hauptbuch.analytics.ReportHelpText).RANGE_ENDPOINT}">
+        <span th:text="${heading}">Start</span>
+        <span th:replace="~{fragments/help-marker :: marker(${help})}"></span>
+      </legend>
       <label class="check">
         <input
           type="radio"

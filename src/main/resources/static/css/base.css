@@ -246,6 +246,50 @@ h2 {
   border: 0;
 }
 
+/* The CSS-only help marker (reporting.md §11a.7, plan stage d3-5): `title` names an icon; `.help`
+   explains a concept (CLAUDE.md §5) — a keyboard-focusable ⓘ, its text an absolutely-positioned
+   sibling shown on hover or focus. No bespoke JS. A shared primitive, not reporting-specific, so any
+   future screen can reuse it without a second implementation. */
+.help {
+  position: relative;
+  display: inline-flex;
+  margin-left: 0.3rem;
+  cursor: help;
+  color: var(--ink-soft);
+}
+
+.help__icon {
+  font-size: 0.85em;
+  line-height: 1;
+}
+
+.help__text {
+  display: none;
+  position: absolute;
+  z-index: 5;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 0.3rem;
+  width: max-content;
+  max-width: 18rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.75rem;
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1.35;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.help:hover .help__text,
+.help:focus-visible .help__text {
+  display: block;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;

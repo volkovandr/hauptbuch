@@ -17,9 +17,6 @@ public sealed interface Cell {
   /** The shared "no postings" instance — {@link Blank} carries no fields. */
   Cell BLANK = new Blank();
 
-  /** The shared "meaningless aggregate" instance — {@link Illegal} carries no fields. */
-  Cell ILLEGAL = new Illegal();
-
   /** No postings matched — rendered blank (§7.3). */
   record Blank() implements Cell {}
 
@@ -43,8 +40,34 @@ public sealed interface Cell {
 
   /**
    * The aggregate would be arithmetically meaningless — rendered {@code —} (§7.2). Never a number.
+   * {@code reason} is why, so the table renderer's help marker (§11a.7) can name it rather than
+   * leave every dash equally unexplained.
    */
-  record Illegal() implements Cell {}
+  record Illegal(Reason reason) implements Cell {
+    public Illegal {
+      if (reason == null) {
+        throw new IllegalArgumentException("An Illegal cell needs a reason.");
+      }
+    }
+  }
+
+  /**
+   * Why a cell or total is {@link Illegal} — reporting.md §7.2, extended by two data-driven cases
+   * the doc's own three situations don't name: a missing exchange rate, and a total spanning
+   * multiple measures (e.g. base next to native) rather than multiple accounts.
+   */
+  enum Reason {
+    /** A closing balance summed along the time axis — a stock has no "sum of two moments". */
+    TIME_AXIS_BALANCE,
+    /** An account-currency cell or total spanning more than one native currency. */
+    MULTI_CURRENCY,
+    /** A total across tag rows/columns — tags overlap, so it would double-count a posting. */
+    CROSS_TAG_TOTAL,
+    /** No exchange rate is recorded on or before the valuation date. */
+    MISSING_RATE,
+    /** A row/column total summing across more than one measure — different views, not addends. */
+    MULTI_MEASURE_TOTAL
+  }
 
   /**
    * A count measure's value (§5.5) — postings or distinct transactions, never a money amount, so it
