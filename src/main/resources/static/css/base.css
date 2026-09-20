@@ -268,10 +268,14 @@ h2 {
   position: absolute;
   z-index: 5;
   bottom: 100%;
-  left: 0;
+  /* Right-anchored, growing leftward: a marker is far more often close to the content area's
+     right edge (a wide report table's last column, a settings-strip row's trailing control) than
+     its left, so this is the direction least likely to run past the viewport. The width clamp
+     keeps it inside the viewport either way on a narrow window. */
+  right: 0;
   margin-bottom: 0.3rem;
   width: max-content;
-  max-width: 18rem;
+  max-width: min(16rem, calc(100vw - 2rem));
   padding: 0.4rem 0.6rem;
   background: var(--ink);
   color: var(--paper);

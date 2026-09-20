@@ -63,20 +63,11 @@ final class ReportTableViewAssembler {
   /** The §11a.7 help-marker text for one of §7.2's illegal-cell reasons. */
   private static String illegalCellHelp(Cell.Reason reason) {
     return switch (reason) {
-      case TIME_AXIS_BALANCE ->
-          "A closing balance is a snapshot, not a flow — last period's balance plus this period's "
-              + "isn't a real quantity, so it can't be summed across time.";
-      case MULTI_CURRENCY ->
-          "This spans more than one native currency; adding them together isn't a number.";
-      case CROSS_TAG_TOTAL ->
-          "Tags overlap — a posting tagged in more than one of these would be counted twice, so no "
-              + "total is shown.";
-      case MISSING_RATE ->
-          "No exchange rate is recorded on or before this date, so this can't be valued in the "
-              + "base currency.";
-      case MULTI_MEASURE_TOTAL ->
-          "These columns are different presentations of one figure (e.g. base vs. native), not "
-              + "additive quantities.";
+      case TIME_AXIS_BALANCE -> "A balance is a snapshot — it can't be summed across time.";
+      case MULTI_CURRENCY -> "This spans more than one native currency, so it can't be added up.";
+      case CROSS_TAG_TOTAL -> "Tags overlap, so a total here would double-count some postings.";
+      case MISSING_RATE -> "No exchange rate is recorded for this date.";
+      case MULTI_MEASURE_TOTAL -> "These are different presentations of one figure, not addable.";
     };
   }
 }
