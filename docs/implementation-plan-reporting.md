@@ -1,7 +1,7 @@
 # Hauptbuch — Reporting sub-plan (slices a–f)
 
-**Status:** Draft v0.7
-**Date:** 2026-09-14
+**Status:** Draft v0.8
+**Date:** 2026-09-20
 **Owner:** volkovandr
 **Companion to:** `reporting.md` (authoritative for every design decision),
 `implementation-plan.md` (§3, the Reporting bullet), `docs/adr/0001-generic-report-engine.md`
@@ -132,7 +132,7 @@ names, the Layout is edited on its own page, and `./gradlew check` is green.
 
 ---
 
-## d3 — The Report page is the editor
+## d3 — The Report page is the editor ✅ complete (owner-confirmed 2026-09-20)
 
 Everything the engine supports **today** becomes editable on the Report's own page
 (`reporting.md` §11a). Later slices add their own controls to it.
@@ -219,6 +219,7 @@ transaction, a transfer, and a category-to-category correction; the CSV's shape.
 
 ## Changelog
 
+- **v0.8 (2026-09-20):** Slice d3 marked complete (owner-confirmed). No scope change (routine).
 - **v0.7 (2026-09-14):** Slice d2 marked complete (owner-confirmed). No scope change (routine).
 - **v0.6 (2026-09-13):** Scope change: **slices d2 and d3 inserted** before e. No slice had owned the
   UI for editing a Report (v0.5 dropped the spec builder from d without re-homing it), and the
