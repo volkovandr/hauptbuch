@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<!--
+  The CSS-only help marker (reporting.md §11a.7, CLAUDE.md §5, plan stage d3-5): a small ⓘ that
+  shows its text on hover and on keyboard focus, for a concept a label can't carry. `title` names an
+  icon; `.help` explains a concept — no bespoke JS (a focusable <span>, base.css's :hover/
+  :focus-visible rule does the rest), so it degrades to nothing shown but a plain, harmless glyph
+  with JS or CSS off.
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <span class="help" tabindex="0" th:attr="aria-label=${text}" th:fragment="marker(text)">
+      <span class="help__icon" aria-hidden="true">ⓘ</span>
+      <span class="help__text" aria-hidden="true" th:text="${text}">Help text</span>
+    </span>
+  </body>
+</html>

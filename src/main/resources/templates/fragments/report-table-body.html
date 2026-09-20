@@ -4,6 +4,9 @@
   (ReportTableViewAssembler) drawn as a grid, with its row/column totals when shown. Shared by
   report-table.html (a Preset's own page) and fragments/frame.html (any Frame, plan stage d2) so the
   two cannot drift on whether totals appear.
+
+  Every cell is a ReportTableView.CellText: `text` is already display-formatted, `help` is non-null
+  only for an illegal "—" (§7.2) and renders the help marker (§11a.7) naming which reason applies.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
   <body>
@@ -18,15 +21,39 @@
       <tbody>
         <tr th:each="row : ${report.rows()}">
           <td th:text="${row.label()}">Row</td>
-          <td class="num" th:each="cell : ${row.cells()}" th:text="${cell}">0,00</td>
-          <td class="num" th:if="${report.showRowTotals()}" th:text="${row.rowTotal()}">0,00</td>
+          <td class="num" th:each="cell : ${row.cells()}">
+            <span th:text="${cell.text()}">0,00</span>
+            <span th:if="${cell.help() != null}">
+              <span th:replace="~{fragments/help-marker :: marker(${cell.help()})}"></span>
+            </span>
+          </td>
+          <td class="num" th:if="${report.showRowTotals()}">
+            <span th:text="${row.rowTotal().text()}">0,00</span>
+            <span th:if="${row.rowTotal().help() != null}">
+              <span
+                th:replace="~{fragments/help-marker :: marker(${row.rowTotal().help()})}"
+              ></span>
+            </span>
+          </td>
         </tr>
       </tbody>
       <tfoot th:if="${report.showColumnTotals()}">
         <tr>
           <td>Total</td>
-          <td class="num" th:each="total : ${report.columnTotals()}" th:text="${total}">0,00</td>
-          <td class="num" th:if="${report.showRowTotals()}" th:text="${report.grandTotal()}">0,00</td>
+          <td class="num" th:each="total : ${report.columnTotals()}">
+            <span th:text="${total.text()}">0,00</span>
+            <span th:if="${total.help() != null}">
+              <span th:replace="~{fragments/help-marker :: marker(${total.help()})}"></span>
+            </span>
+          </td>
+          <td class="num" th:if="${report.showRowTotals()}">
+            <span th:text="${report.grandTotal().text()}">0,00</span>
+            <span th:if="${report.grandTotal().help() != null}">
+              <span
+                th:replace="~{fragments/help-marker :: marker(${report.grandTotal().help()})}"
+              ></span>
+            </span>
+          </td>
         </tr>
       </tfoot>
     </table>

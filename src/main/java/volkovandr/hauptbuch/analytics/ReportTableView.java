@@ -26,8 +26,8 @@ public record ReportTableView(
     List<RowView> rows,
     boolean showRowTotals,
     boolean showColumnTotals,
-    List<String> columnTotals,
-    String grandTotal) {
+    List<CellText> columnTotals,
+    CellText grandTotal) {
 
   /** Defensively copies the lists to immutable ones. */
   public ReportTableView {
@@ -37,11 +37,18 @@ public record ReportTableView(
   }
 
   /** One rendered row: its label, its formatted cells, and its row total (blank when not shown). */
-  public record RowView(String label, List<String> cells, String rowTotal) {
+  public record RowView(String label, List<CellText> cells, CellText rowTotal) {
 
     /** Defensively copies {@code cells} to an immutable list. */
     public RowView {
       cells = List.copyOf(cells);
     }
   }
+
+  /**
+   * One formatted cell or total (§10): already-display-ready {@code text}, plus {@code help} — the
+   * §11a.7 help-marker text naming which of §7.2's reasons made it {@code —} — {@code null} for a
+   * blank cell or a real figure, which need no explaining.
+   */
+  public record CellText(String text, String help) {}
 }

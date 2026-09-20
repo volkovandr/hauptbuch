@@ -8,6 +8,8 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
 /** Turns a {@link ReportGrid} into the table renderer's display-ready {@link ReportTableView}. */
 final class ReportTableViewAssembler {
 
+  private static final ReportTableView.CellText BLANK = new ReportTableView.CellText("", null);
+
   private ReportTableViewAssembler() {}
 
   static ReportTableView assemble(
@@ -15,16 +17,18 @@ final class ReportTableViewAssembler {
     List<String> columnLabels = grid.columns().stream().map(AxisNode::label).toList();
     List<ReportTableView.RowView> rows = new ArrayList<>();
     for (int i = 0; i < grid.rows().size(); i++) {
-      List<String> cells = grid.cells().get(i).stream().map(c -> format(c, baseCurrency)).toList();
-      String rowTotal = spec.rowTotals() ? format(grid.rowTotals().get(i), baseCurrency) : "";
+      List<ReportTableView.CellText> cells =
+          grid.cells().get(i).stream().map(c -> format(c, baseCurrency)).toList();
+      ReportTableView.CellText rowTotal =
+          spec.rowTotals() ? format(grid.rowTotals().get(i), baseCurrency) : BLANK;
       rows.add(new ReportTableView.RowView(grid.rows().get(i).label(), cells, rowTotal));
     }
-    List<String> columnTotals =
+    List<ReportTableView.CellText> columnTotals =
         spec.columnTotals()
             ? grid.columnTotals().stream().map(c -> format(c, baseCurrency)).toList()
             : List.of();
-    String grandTotal =
-        spec.rowTotals() && spec.columnTotals() ? format(grid.grandTotal(), baseCurrency) : "";
+    ReportTableView.CellText grandTotal =
+        spec.rowTotals() && spec.columnTotals() ? format(grid.grandTotal(), baseCurrency) : BLANK;
 
     return new ReportTableView(
         title,
@@ -40,17 +44,39 @@ final class ReportTableViewAssembler {
         grandTotal);
   }
 
-  private static String format(Cell cell, String baseCurrency) {
+  private static ReportTableView.CellText format(Cell cell, String baseCurrency) {
     if (cell instanceof Cell.Blank) {
-      return "";
+      return BLANK;
     }
-    if (cell instanceof Cell.Illegal) {
-      return "—";
+    if (cell instanceof Cell.Illegal illegal) {
+      return new ReportTableView.CellText("—", illegalCellHelp(illegal.reason()));
     }
     if (cell instanceof Cell.Count count) {
-      return String.valueOf(count.count());
+      return new ReportTableView.CellText(String.valueOf(count.count()), null);
     }
     Cell.Value value = (Cell.Value) cell;
-    return MoneyFormat.display(MoneyFactory.of(value.amount(), value.currencyCode()), baseCurrency);
+    return new ReportTableView.CellText(
+        MoneyFormat.display(MoneyFactory.of(value.amount(), value.currencyCode()), baseCurrency),
+        null);
+  }
+
+  /** The §11a.7 help-marker text for one of §7.2's illegal-cell reasons. */
+  private static String illegalCellHelp(Cell.Reason reason) {
+    return switch (reason) {
+      case TIME_AXIS_BALANCE ->
+          "A closing balance is a snapshot, not a flow — last period's balance plus this period's "
+              + "isn't a real quantity, so it can't be summed across time.";
+      case MULTI_CURRENCY ->
+          "This spans more than one native currency; adding them together isn't a number.";
+      case CROSS_TAG_TOTAL ->
+          "Tags overlap — a posting tagged in more than one of these would be counted twice, so no "
+              + "total is shown.";
+      case MISSING_RATE ->
+          "No exchange rate is recorded on or before this date, so this can't be valued in the "
+              + "base currency.";
+      case MULTI_MEASURE_TOTAL ->
+          "These columns are different presentations of one figure (e.g. base vs. native), not "
+              + "additive quantities.";
+    };
   }
 }

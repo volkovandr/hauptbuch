@@ -111,7 +111,9 @@ class ReportControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("Category")))
         .andExpect(content().string(containsString("Food")))
-        .andExpect(content().string(containsString("42,50")));
+        .andExpect(content().string(containsString("42,50")))
+        .andExpect(
+            content().string(not(containsString("help__text\" aria-hidden=\"true\"></span>"))));
   }
 
   @Test
@@ -125,7 +127,30 @@ class ReportControllerIntegrationTest {
         .perform(get("/reports/preset/balance-sheet"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("Cash")))
-        .andExpect(content().string(containsString("1.000,00")));
+        .andExpect(content().string(containsString("1.000,00")))
+        // Regression guard (§11a.7): a legal cell must render with no help marker at all, not one
+        // with an empty tooltip — a same-tag th:if/th:replace combination on report-table-body.html
+        // once rendered exactly this for every legal cell (fixed during plan stage d3-5).
+        .andExpect(
+            content().string(not(containsString("help__text\" aria-hidden=\"true\"></span>"))));
+  }
+
+  @Test
+  void balanceSheetAccountCurrencyCellSpanningTwoCurrenciesShowsHelpMarker() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    long opening = insertAccount("Opening Balances", "equity", "EUR", null);
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long cashEur = insertAccount("Cash-EUR", "asset", "EUR", cash);
+    long cashChf = insertAccount("Cash-CHF", "asset", "CHF", cash);
+    postSingleCurrency(opening, cashEur, LocalDate.now().minusDays(1), "500.00");
+    postSingleCurrency(opening, cashChf, LocalDate.now().minusDays(1), "300.00");
+
+    mockMvc
+        .perform(get("/reports/preset/balance-sheet"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("—")))
+        .andExpect(content().string(containsString("class=\"help\"")))
+        .andExpect(content().string(containsString("more than one native currency")));
   }
 
   @Test
