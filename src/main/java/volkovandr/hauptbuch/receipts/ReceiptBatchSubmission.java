@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.receipts;
 
 import java.util.List;
+import volkovandr.hauptbuch.ledger.AiSettings;
 
 /**
  * One Batches-API create call (9h): the settings every member shares, plus the members themselves.
@@ -12,6 +13,9 @@ import java.util.List;
  *
  * @param model the Anthropic model id (from {@code settings.ai_model})
  * @param apiKey the resolved API key (DB first, {@code ANTHROPIC_API_KEY} env fallback)
+ * @param pricing the rates the adapter costs its own cache pre-warm call at for logging
+ *     (receipt-processing/31) — each member's own {@code parse_cost} is still computed
+ *     independently, from that member's own usage, once its result comes back
  * @param systemPrompt the instructions + vocabulary + TOON skeleton every member shares
  * @param mediaType the members' image MIME type ({@code image/jpeg} — the baked edited copies)
  * @param items the members, keyed by receipt id
@@ -19,6 +23,7 @@ import java.util.List;
 public record ReceiptBatchSubmission(
     String model,
     String apiKey,
+    AiSettings pricing,
     String systemPrompt,
     String mediaType,
     List<ReceiptBatchItem> items) {
