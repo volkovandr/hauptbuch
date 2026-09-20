@@ -1,6 +1,6 @@
 # Batch submit fires all members in parallel with no cache pre-warm, so a batch writes the cache many times instead of once
 
-Status: open
+Status: resolved
 Category: bug
 Severity: medium
 Area: Receipts — AI Batches API path (stage 9h, prompt caching)
@@ -214,6 +214,6 @@ the now-deleted `batch-cache-warmup-delay-seconds` key after the field was remov
 `AnthropicProperties` — Spring's relaxed binder silently ignores an unmapped key, so it was inert but
 misleading. Removed.
 
-`./gradlew check` green (all three test tiers, Checkstyle/PMD/SpotBugs/Spotless/JaCoCo). Not yet
-owner-confirmed in production — the real test is the same one that found v2 insufficient: submit a
-multi-receipt selection cold and check the finished batch's `tokensCacheRead`/`tokensCacheWrite`.
+`./gradlew check` green (all three test tiers, Checkstyle/PMD/SpotBugs/Spotless/JaCoCo).
+
+**Owner-confirmed 2026-09-20, in production:** "it worked just perfectly fine!" — resolved.
