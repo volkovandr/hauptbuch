@@ -585,6 +585,19 @@ table.receipts tbody td {
   white-space: pre;
 }
 
+/* The reparse/reseed raw-text editor (receipt-process.html) shares .ai-prompt-preview's monospace
+   look with the read-only previews above, but it is a <textarea> the owner edits by hand — e.g. to
+   quote an item name the AI left unquoted when it contained a comma — so it needs real room, not a
+   scrollable 24rem box. .input's own resize handle was capped by that max-height (owner feedback:
+   dragging it bigger topped out around 20 rows). Scoped to the element so the read-only <pre>
+   previews (import-preview.html, ai-prompt.html) keep their compact box. */
+textarea.ai-prompt-preview {
+  width: 700px;
+  max-width: 100%;
+  height: 800px;
+  max-height: none;
+}
+
 /* ── Processed view (owner feedback 2026-08-02): give the seeded data the room, not the image.
    The post-process editor line carries more fields than the register split (an Item column), so on
    a wide screen it needs the width — the tall scan does not. Let this state use the full screen
