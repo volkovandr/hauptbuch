@@ -168,6 +168,7 @@ class ReceiptSortTest {
         null,
         null,
         null,
+        null,
         null);
   }
 }

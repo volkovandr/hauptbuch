@@ -119,6 +119,22 @@ public class ReceiptAnalysisService {
   }
 
   /**
+   * Queue receipts behind a cache-priming warm-up batch (receipt-processing/31 v3) — they are
+   * claimed and processing, but not yet a member of any batch.
+   */
+  public void assignWarmupFollowup(List<Long> receiptIds, String warmupBatchId) {
+    receiptRepository.assignWarmupFollowup(receiptIds, warmupBatchId);
+  }
+
+  /**
+   * The receipts still queued behind a warm-up batch (receipt-processing/31 v3) — released as a
+   * real batch once the poller sees that batch end.
+   */
+  public List<Long> warmupFollowupIds(String warmupBatchId) {
+    return receiptRepository.findWarmupFollowupIds(warmupBatchId);
+  }
+
+  /**
    * Normalise whatever a caller hands us into what {@code parse_error} should hold: never null, and
    * short enough that a long SDK message cannot overflow a UI line (the full detail is logged at
    * the call site). Done here rather than in each worker so the column has one guard, not several.

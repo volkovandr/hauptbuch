@@ -89,6 +89,7 @@ class ReceiptServiceTest {
         null,
         null,
         null,
+        null,
         merchantText,
         null,
         null,

@@ -165,3 +165,55 @@ Spotless/JaCoCo). No new unit test — same reasoning as the original pre-warm c
 `AnthropicReceiptBatchClient` is a thin SDK adapter, and the new branching (an `if` plus a
 `Thread.sleep` call) has no decision logic worth mocking the SDK three levels deep to reach. Not yet
 owner-confirmed with the pause in production.
+
+**Superseded the same day — the v2 pause was deployed and tested, and 60 s did not help either.**
+The owner reported the token usage still showed no cache benefit even after raising the pause to
+60 s. That ruled out "the pause was too short." Two further manual tests pinned down why: (1) a real
+1-item **batch**, left to finish, then a real N-item batch — 100% hit; (2) one receipt processed
+*synchronously* (no batch at all, the same real single-parse request shape the batch members send),
+then a batch — still a miss. If a 60 s pause after a synchronous write and a plain synchronous call
+both fail to warm the batch path while a real batch always does, no pause length could ever have
+fixed it — the batch dispatcher simply does not read a cache entry a synchronous Messages-API call
+wrote. Anthropic's own batch-processing docs confirm this structurally — they document exactly two
+levers for batch cache hit rate ("maintain a steady stream of requests" and the 1-hour TTL) and never
+mention a standalone `max_tokens: 0` pre-warm for the Batches API at all (that pattern is documented
+only for the synchronous Messages API).
+
+**Fix (v3), implemented 2026-09-20, not yet owner-confirmed:** moved the warm-up a layer up, out of
+`AnthropicReceiptBatchClient` entirely.
+
+- `AnthropicReceiptBatchClient` reverts to a plain adapter — no `warmCache`, no `pause`, no
+  `max_tokens: 0` call anywhere. `ReceiptBatchSubmission` drops the `pricing` field that only existed
+  for the old pre-warm's cost logging.
+- `ReceiptBatchAnalyser.submit` now splits a selection of more than one item (when
+  `hauptbuch.receipts.ai.batch-cache-warmup-enabled`, still default `true`, no delay setting anymore):
+  the first item goes out alone, as its own real 1-item batch, immediately assigned via the existing
+  `assignBatch`; the rest are queued behind it via a new `warmup_batch_id` column (migration `V29`) —
+  `batch_id` stays null for them, so they are claimed and `processing` but not yet a member of any
+  batch. Non-blocking by owner's explicit direction ("even a 1-item batch can take over a minute; the
+  app must stay usable") — `submit` returns immediately rather than waiting.
+- The existing `@Scheduled` poller releases the queue: once it polls the warm-up batch to an end
+  (succeeded, failed, or gone — `ReceiptBatchAnalyser.releaseWarmupFollowup`), it submits everything
+  waiting behind it as a real batch, via the same `submit` path with a guard against re-splitting
+  (`allowWarmupSplit=false`) so one warm-up item never chains into another. If the warm-up batch
+  itself can't even be created (submit-level failure), there is nothing to wait on, so every item is
+  sent in one ordinary batch instead of stranding the rest.
+- The 9e startup sweep (`sweepOrphanedProcessing`) now also exempts a receipt with a live
+  `warmup_batch_id` — a JVM restart mid-wait does not fail it; the poller still resumes the warm-up
+  batch by its own `batch_id` (untouched by the restart) and releases the queue exactly as if nothing
+  happened.
+- New `ReceiptQueryRepository`/`ReceiptAnalysisService` methods: `assignWarmupFollowup`,
+  `findWarmupFollowupIds`/`warmupFollowupIds` — round-trip tier (plain updates/select, CLAUDE.md §6),
+  covered in `ReceiptRepositoryIntegrationTest`. `ReceiptBatchAnalyser`'s split/queue/release
+  orchestration is covered in `ReceiptBatchAnalyserTest` (unit tier, network/DB mocked): the split
+  when enabled, no split for a single item, the graceful one-batch fallback when the warm-up submit
+  itself fails, and release firing on both the poll-success and poll-failure paths.
+
+Code review (medium effort) on this v3 change caught one stale leftover: `application.yaml` still set
+the now-deleted `batch-cache-warmup-delay-seconds` key after the field was removed from
+`AnthropicProperties` — Spring's relaxed binder silently ignores an unmapped key, so it was inert but
+misleading. Removed.
+
+`./gradlew check` green (all three test tiers, Checkstyle/PMD/SpotBugs/Spotless/JaCoCo). Not yet
+owner-confirmed in production — the real test is the same one that found v2 insufficient: submit a
+multi-receipt selection cold and check the finished batch's `tokensCacheRead`/`tokensCacheWrite`.

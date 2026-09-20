@@ -26,6 +26,9 @@ public class ReceiptRepository {
   /** The bind name shared by every "fail this receipt with a reason" update. */
   private static final String PARSE_ERROR = "parseError";
 
+  /** The bind name shared by every "these receipt ids" query. */
+  private static final String IDS = "ids";
+
   private final JdbcClient jdbcClient;
 
   ReceiptRepository(JdbcClient jdbcClient) {
@@ -143,7 +146,7 @@ public class ReceiptRepository {
     }
     return jdbcClient
         .sql("select * from receipt where receipt_id in (:ids) and deleted_at is null")
-        .param("ids", ids)
+        .param(IDS, ids)
         .query(Receipt.class)
         .list();
   }
@@ -271,16 +274,17 @@ public class ReceiptRepository {
    * background worker makes before the API call. Returns the rows affected — zero when the receipt
    * is not (any longer) an un-deleted {@code pre_processed} one, so a double-submit claims nothing.
    *
-   * <p>The claim <em>clears</em> any {@code batch_id} a previous round left behind (9h). Every
-   * claim starts out single-mode; the batch path re-stamps its id immediately after the create call
-   * returns. Without this a retried batch member would keep pointing at its dead batch — exempting
-   * it from the startup sweep and luring the poller into failing a perfectly live single parse.
+   * <p>The claim <em>clears</em> any {@code batch_id} a previous round left behind (9h), and any
+   * {@code warmup_batch_id} (receipt-processing/31 v3) with it. Every claim starts out single-mode;
+   * the batch path re-stamps its id immediately after the create call returns. Without this a
+   * retried batch member would keep pointing at its dead batch — exempting it from the startup
+   * sweep and luring the poller into failing a perfectly live single parse.
    */
   public int markProcessing(long receiptId) {
     return jdbcClient
         .sql(
             """
-            update receipt set state = 'processing', batch_id = null
+            update receipt set state = 'processing', batch_id = null, warmup_batch_id = null
             where receipt_id = :id and state = 'pre_processed' and deleted_at is null
             """)
         .param("id", receiptId)
@@ -386,13 +390,15 @@ public class ReceiptRepository {
    * one).
    *
    * <p>The {@code batch_id} goes too (9h): a retried member has left that batch, so it should stop
-   * carrying the register's batch badge and stop keeping a finished batch on the poller's list.
+   * carrying the register's batch badge and stop keeping a finished batch on the poller's list. The
+   * {@code warmup_batch_id} goes the same way (receipt-processing/31 v3).
    */
   public int retryToPreProcessed(long receiptId) {
     return jdbcClient
         .sql(
             """
-            update receipt set state = 'pre_processed', parse_error = null, batch_id = null
+            update receipt set state = 'pre_processed', parse_error = null,
+                                batch_id = null, warmup_batch_id = null
             where receipt_id = :id and state = 'failed' and deleted_at is null
             """)
         .param("id", receiptId)
@@ -402,14 +408,18 @@ public class ReceiptRepository {
   /**
    * The startup sweep (9e): flip every orphaned single-mode {@code processing} receipt (no {@code
    * batch_id}, not soft-deleted) to {@code failed} — its worker thread died with the JVM. Batch
-   * rows are exempt (9h's poller resumes them). Returns how many were swept.
+   * rows are exempt (9h's poller resumes them), and so are rows waiting on a warm-up batch to end
+   * (no {@code batch_id} yet, but a live {@code warmup_batch_id} — receipt-processing/31 v3): the
+   * poller resumes those too, the moment it polls the warm-up batch to its end. Returns how many
+   * were swept.
    */
   public int sweepOrphanedProcessing(String parseError) {
     return jdbcClient
         .sql(
             """
             update receipt set state = 'failed', parse_error = :parseError
-            where state = 'processing' and batch_id is null and deleted_at is null
+            where state = 'processing' and batch_id is null and warmup_batch_id is null
+              and deleted_at is null
             """)
         .param(PARSE_ERROR, parseError)
         .update();
@@ -420,8 +430,10 @@ public class ReceiptRepository {
   /**
    * Stamp the Batches-API id on every member of a just-created batch (9h). Written immediately
    * after the create call returns, so a restart finds the job again — the poller resumes it and the
-   * 9e startup sweep leaves it alone. Empty {@code ids} short-circuits (an {@code in ()} is invalid
-   * SQL).
+   * 9e startup sweep leaves it alone. Clears {@code warmup_batch_id} in the same write
+   * (receipt-processing/31 v3): a receipt that was queued behind a warm-up batch is, from this
+   * moment, a real member of {@code batchId} instead. Empty {@code ids} short-circuits (an {@code
+   * in ()} is invalid SQL).
    */
   public int assignBatch(List<Long> ids, String batchId) {
     if (ids.isEmpty()) {
@@ -430,12 +442,53 @@ public class ReceiptRepository {
     return jdbcClient
         .sql(
             """
-            update receipt set batch_id = :batchId
+            update receipt set batch_id = :batchId, warmup_batch_id = null
             where receipt_id in (:ids) and deleted_at is null
             """)
         .param("batchId", batchId)
-        .param("ids", ids)
+        .param(IDS, ids)
         .update();
+  }
+
+  /**
+   * Queue {@code ids} behind {@code warmupBatchId} (receipt-processing/31 v3): they are claimed and
+   * processing, but not yet a member of any batch — {@code batch_id} stays null. The poller submits
+   * them for real, via {@link #assignBatch}, once it sees {@code warmupBatchId} end. Empty {@code
+   * ids} short-circuits.
+   */
+  public int assignWarmupFollowup(List<Long> ids, String warmupBatchId) {
+    if (ids.isEmpty()) {
+      return 0;
+    }
+    return jdbcClient
+        .sql(
+            """
+            update receipt set warmup_batch_id = :warmupBatchId
+            where receipt_id in (:ids) and deleted_at is null
+            """)
+        .param("warmupBatchId", warmupBatchId)
+        .param(IDS, ids)
+        .update();
+  }
+
+  /**
+   * The still-live receipts queued behind {@code warmupBatchId} (receipt-processing/31 v3) — what
+   * the poller releases as a real batch once it sees that batch end, whether it succeeded or not. A
+   * receipt soft-deleted while queued simply drops out, the same tolerance every other batch lookup
+   * here gives a mid-flight delete.
+   */
+  public List<Long> findWarmupFollowupIds(String warmupBatchId) {
+    return jdbcClient
+        .sql(
+            """
+            select receipt_id from receipt
+            where warmup_batch_id = :warmupBatchId and batch_id is null
+              and state = 'processing' and deleted_at is null
+            order by receipt_id asc
+            """)
+        .param("warmupBatchId", warmupBatchId)
+        .query(Long.class)
+        .list();
   }
 
   /**
@@ -488,7 +541,7 @@ public class ReceiptRepository {
             where receipt_id in (:ids) and state = 'processing' and deleted_at is null
             """)
         .param(PARSE_ERROR, parseError)
-        .param("ids", ids)
+        .param(IDS, ids)
         .update();
   }
 

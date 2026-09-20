@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -37,6 +38,7 @@ import volkovandr.hauptbuch.ledger.SettingsService;
 class ReceiptBatchAnalyserTest {
 
   private static final String BATCH_ID = "msgbatch_01";
+  private static final String WARMUP_BATCH_ID = "msgbatch_warmup";
   private static final long ONE = 1L;
   private static final long TWO = 2L;
 
@@ -47,6 +49,7 @@ class ReceiptBatchAnalyserTest {
   @Mock private ReceiptPromptBuilder promptBuilder;
   @Mock private SettingsService settingsService;
   @Mock private AiVocabularyService aiVocabularyService;
+  @Mock private AnthropicProperties properties;
 
   private ReceiptBatchAnalyser analyser() {
     return new ReceiptBatchAnalyser(
@@ -56,10 +59,16 @@ class ReceiptBatchAnalyserTest {
         analysisService,
         promptBuilder,
         settingsService,
-        aiVocabularyService);
+        aiVocabularyService,
+        properties);
   }
 
-  /** Rates of 1 USD/MTok all round, so a cost is readable straight off the token counts. */
+  /**
+   * Rates of 1 USD/MTok all round, so a cost is readable straight off the token counts. Also stubs
+   * an empty warm-up follow-up list, since every {@code pollBatch} call now checks for one
+   * (receipt-processing/31 v3) — {@code batchCacheWarmupEnabled} is left unstubbed (false, so
+   * {@code submit} never splits) unless a test opts in.
+   */
   private void stubSettings() {
     when(settingsService.aiConfig())
         .thenReturn(
@@ -70,6 +79,7 @@ class ReceiptBatchAnalyserTest {
                 BigDecimal.ONE,
                 BigDecimal.ONE,
                 BigDecimal.ONE));
+    when(analysisService.warmupFollowupIds(anyString())).thenReturn(List.of());
   }
 
   private void stubReceipt(long id) {
@@ -87,6 +97,7 @@ class ReceiptBatchAnalyserTest {
         "edit.jpg",
         "{}",
         "note",
+        null,
         null,
         null,
         null,
@@ -198,6 +209,111 @@ class ReceiptBatchAnalyserTest {
     analyser().submit(List.of(ONE));
 
     verify(analysisService).failClaimed(List.of(ONE), "Unexpected error: boom");
+  }
+
+  // ── Cache warm-up (receipt-processing/31 v3) ───────────────────────────────
+
+  @Test
+  void submitPrimesTheCacheWithOneRealItemAndQueuesTheRestWhenWarmupIsEnabled() {
+    stubSettings();
+    when(properties.batchCacheWarmupEnabled()).thenReturn(true);
+    stubReceipt(ONE);
+    stubReceipt(TWO);
+    when(promptBuilder.build(any(), any())).thenReturn("system");
+    when(promptBuilder.userText(anyString())).thenReturn("Parse this receipt. note");
+    when(batchClient.submit(any())).thenReturn(WARMUP_BATCH_ID);
+
+    analyser().submit(List.of(ONE, TWO));
+
+    ArgumentCaptor<ReceiptBatchSubmission> sent =
+        ArgumentCaptor.forClass(ReceiptBatchSubmission.class);
+    verify(batchClient, times(1)).submit(sent.capture());
+    assertThat(sent.getValue().items())
+        .extracting(ReceiptBatchItem::receiptId)
+        .containsExactly(ONE);
+    verify(analysisService).assignBatch(List.of(ONE), WARMUP_BATCH_ID);
+    verify(analysisService).assignWarmupFollowup(List.of(TWO), WARMUP_BATCH_ID);
+  }
+
+  @Test
+  void submitSendsOneBatchWhenOnlyOneItemEvenWithWarmupEnabled() {
+    stubSettings();
+    when(properties.batchCacheWarmupEnabled()).thenReturn(true);
+    stubReceipt(ONE);
+    when(promptBuilder.build(any(), any())).thenReturn("system");
+    when(promptBuilder.userText(anyString())).thenReturn("Parse this receipt. note");
+    when(batchClient.submit(any())).thenReturn(BATCH_ID);
+
+    analyser().submit(List.of(ONE));
+
+    verify(batchClient, times(1)).submit(any());
+    verify(analysisService, never()).assignWarmupFollowup(any(), anyString());
+  }
+
+  /** No warm-up batch to wait on, so everyone is sent in one ordinary batch instead. */
+  @Test
+  void submitFallsBackToOneBatchWhenTheWarmupSubmitFails() {
+    stubSettings();
+    when(properties.batchCacheWarmupEnabled()).thenReturn(true);
+    stubReceipt(ONE);
+    stubReceipt(TWO);
+    when(promptBuilder.build(any(), any())).thenReturn("system");
+    when(promptBuilder.userText(anyString())).thenReturn("Parse this receipt. note");
+    when(batchClient.submit(any()))
+        .thenThrow(new ReceiptParseException("Batch submit failed: 429"))
+        .thenReturn(BATCH_ID);
+
+    analyser().submit(List.of(ONE, TWO));
+
+    ArgumentCaptor<ReceiptBatchSubmission> sent =
+        ArgumentCaptor.forClass(ReceiptBatchSubmission.class);
+    verify(batchClient, times(2)).submit(sent.capture());
+    assertThat(sent.getValue().items())
+        .extracting(ReceiptBatchItem::receiptId)
+        .containsExactly(ONE, TWO);
+    verify(analysisService).assignBatch(List.of(ONE, TWO), BATCH_ID);
+    verify(analysisService, never()).assignWarmupFollowup(any(), anyString());
+  }
+
+  @Test
+  void pollReleasesReceiptsQueuedBehindFinishedWarmupBatch() {
+    stubSettings();
+    when(analysisService.batchMemberIds(WARMUP_BATCH_ID)).thenReturn(Set.of(ONE));
+    when(batchClient.poll(WARMUP_BATCH_ID, "key"))
+        .thenReturn(Optional.of(List.of(ReceiptBatchOutcome.succeeded(ONE, body()))));
+    when(analysisService.warmupFollowupIds(WARMUP_BATCH_ID)).thenReturn(List.of(TWO));
+    stubReceipt(TWO);
+    when(promptBuilder.build(any(), any())).thenReturn("system");
+    when(promptBuilder.userText(anyString())).thenReturn("Parse this receipt. note");
+    when(batchClient.submit(any())).thenReturn(BATCH_ID);
+
+    analyser().pollBatch(WARMUP_BATCH_ID);
+
+    ArgumentCaptor<ReceiptBatchSubmission> sent =
+        ArgumentCaptor.forClass(ReceiptBatchSubmission.class);
+    verify(batchClient).submit(sent.capture());
+    assertThat(sent.getValue().items())
+        .extracting(ReceiptBatchItem::receiptId)
+        .containsExactly(TWO);
+    verify(analysisService).assignBatch(List.of(TWO), BATCH_ID);
+  }
+
+  /** The follow-up releases even when the warm-up batch itself is gone — its members still fail. */
+  @Test
+  void pollReleasesQueuedReceiptsEvenWhenTheWarmupBatchIsGone() {
+    stubSettings();
+    when(batchClient.poll(WARMUP_BATCH_ID, "key"))
+        .thenThrow(new ReceiptParseException("Batch poll failed: 404"));
+    when(analysisService.warmupFollowupIds(WARMUP_BATCH_ID)).thenReturn(List.of(TWO));
+    stubReceipt(TWO);
+    when(promptBuilder.build(any(), any())).thenReturn("system");
+    when(promptBuilder.userText(anyString())).thenReturn("Parse this receipt. note");
+    when(batchClient.submit(any())).thenReturn(BATCH_ID);
+
+    analyser().pollBatch(WARMUP_BATCH_ID);
+
+    verify(analysisService).failBatchMembers(WARMUP_BATCH_ID, "Batch poll failed: 404");
+    verify(analysisService).assignBatch(List.of(TWO), BATCH_ID);
   }
 
   // ── Polling and distribution ────────────────────────────────────────────────

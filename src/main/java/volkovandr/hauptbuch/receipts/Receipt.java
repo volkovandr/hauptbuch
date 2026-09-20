@@ -26,6 +26,10 @@ import java.time.OffsetDateTime;
  *     with the bake and replayed onto the original on re-edit; null until the first Save
  * @param aiNote per-receipt prompt guidance (9c); null until entered
  * @param batchId Batches API id while processing (9h); null in single mode
+ * @param warmupBatchId the cache-priming batch this receipt is queued behind (receipt-processing/31
+ *     v3); null outside that window. Non-null means claimed and processing but not yet a member of
+ *     any batch — {@code batchId} stays null until the named batch ends and this receipt is
+ *     submitted for real
  * @param parseRaw raw AI response retained for audit (9e); null until analysed
  * @param merchantText parsed merchant (9e); null until processed
  * @param receiptDate parsed receipt date (9e); null until processed
@@ -65,6 +69,7 @@ public record Receipt(
     String editRecipe,
     String aiNote,
     String batchId,
+    String warmupBatchId,
     String parseRaw,
     String merchantText,
     LocalDate receiptDate,

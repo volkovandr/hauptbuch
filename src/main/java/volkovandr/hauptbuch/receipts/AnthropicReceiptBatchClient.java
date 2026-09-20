@@ -4,18 +4,14 @@ import com.anthropic.client.AnthropicClient;
 import com.anthropic.core.http.StreamResponse;
 import com.anthropic.errors.AnthropicException;
 import com.anthropic.errors.NotFoundException;
-import com.anthropic.models.messages.Message;
-import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.batches.BatchCreateParams;
 import com.anthropic.models.messages.batches.MessageBatch;
 import com.anthropic.models.messages.batches.MessageBatchErroredResult;
 import com.anthropic.models.messages.batches.MessageBatchIndividualResponse;
 import com.anthropic.models.messages.batches.MessageBatchResult;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -32,17 +28,16 @@ import org.springframework.stereotype.Component;
  * Anthropic's pricing rule, not an operator-tunable rate, so it lives as a constant rather than a
  * setting.
  *
- * <p><strong>Cache pre-warm (issue receipt-processing/31):</strong> the Batches API dispatches a
- * batch's members for parallel processing rather than strictly one at a time, so most members of a
- * freshly submitted batch would otherwise find the cache still empty and each write their own entry
- * instead of reading the one the design assumes. {@link #submit} sends a standalone, synchronous
- * {@code max_tokens: 0} call carrying the identical cached system block before creating the batch,
- * so at least the earliest-dispatched members can read it, then pauses (both configurable via
- * {@link AnthropicProperties}) before creating the batch — the pre-warm call returning does not by
- * itself guarantee the write has landed everywhere the batch's members will be dispatched from.
- * This raises the hit rate but does not guarantee it: Anthropic's own docs state batch cache hits
- * are "provided on a best-effort basis" because members are processed "asynchronously and
- * concurrently" (30–98% observed hit rates).
+ * <p><strong>No cache pre-warm here (issue receipt-processing/31):</strong> an earlier version of
+ * this class sent a standalone, synchronous {@code max_tokens: 0} call before creating the batch,
+ * hoping to write the shared cache entry before the batch's members raced for it. Confirmed in
+ * production (and against Anthropic's own docs, which document no such technique for the Batches
+ * API — only "maintain a steady stream of requests" and the 1-hour TTL) that this never worked: the
+ * Batches API dispatches independently of the synchronous Messages API and does not read cache
+ * entries the latter writes, no matter how long a pause follows. The fix moved up a layer — {@link
+ * ReceiptBatchAnalyser} submits a real 1-item batch first and queues the rest behind it, since only
+ * a real batch's own cache write is visible to a later batch's members. This class stays a plain
+ * adapter with no warm-up logic of its own.
  */
 @Component
 class AnthropicReceiptBatchClient implements ReceiptBatchClient {
@@ -59,9 +54,6 @@ class AnthropicReceiptBatchClient implements ReceiptBatchClient {
 
   @Override
   public String submit(ReceiptBatchSubmission submission) {
-    if (properties.batchCacheWarmupEnabled() && warmCache(submission)) {
-      pause(properties.batchCacheWarmupDelaySeconds());
-    }
     BatchCreateParams.Builder params = BatchCreateParams.builder();
     for (ReceiptBatchItem item : submission.items()) {
       params.addRequest(
@@ -113,68 +105,6 @@ class AnthropicReceiptBatchClient implements ReceiptBatchClient {
       // half-price job over one bad tick, so treat it as "not ended yet" and poll again in 30 s.
       LOG.warn("Batch {} poll attempt failed; will retry", batchId, e);
       return Optional.empty();
-    }
-  }
-
-  /**
-   * Populate the shared system-prompt cache entry before the batch's members can race for it
-   * (receipt-processing/31). A {@code max_tokens: 0} request reads the identical cached prefix into
-   * the model and returns immediately with no billed output tokens — the one write the 9h design
-   * assumes, instead of one per member that starts before the first write lands. A failed pre-warm
-   * doesn't block the batch: members simply fall back to racing for a cold cache, the same outcome
-   * as if this call didn't exist.
-   *
-   * <p>Unlike the batch members, this call is never a {@code ReceiptBatchOutcome} and so never
-   * contributes to any receipt's frozen {@code parse_cost} — attributing a shared prefix write to
-   * one receipt would misstate that receipt's cost. Its own billed cost is only logged, at INFO
-   * (the level this repo reserves for an AI call's outcome).
-   *
-   * @return whether the call succeeded — {@link #submit} only pauses for the write to propagate
-   *     ({@link AnthropicProperties#batchCacheWarmupDelaySeconds}) when there was a write to wait
-   *     for; a failed pre-warm has nothing to propagate, so pausing after one would only delay the
-   *     batch for no benefit.
-   */
-  private boolean warmCache(ReceiptBatchSubmission submission) {
-    MessageCreateParams warmup =
-        MessageCreateParams.builder()
-            .model(submission.model())
-            .maxTokens(0L)
-            .systemOfTextBlockParams(AnthropicPrompts.systemBlocks(submission.systemPrompt(), true))
-            .addUserMessage("warmup")
-            .build();
-    try {
-      Message response = clients.forKey(submission.apiKey()).messages().create(warmup);
-      ReceiptParseResult usage = AnthropicPrompts.resultOf(response);
-      BigDecimal cost =
-          submission
-              .pricing()
-              .costOf(
-                  usage.tokensIn(),
-                  usage.tokensOut(),
-                  usage.tokensCacheWrite(),
-                  usage.tokensCacheRead());
-      LOG.info(
-          "Batch cache pre-warm: tokensIn={} tokensCacheWrite={} cost={}",
-          usage.tokensIn(),
-          usage.tokensCacheWrite(),
-          cost);
-      return true;
-    } catch (AnthropicException e) {
-      LOG.warn("Batch cache pre-warm failed; members may each write the cache", e);
-      return false;
-    }
-  }
-
-  // PMD.DoNotUseThreads: a J2EE-era rule against spawning threads. What it flags here is
-  // Thread.currentThread().interrupt(), the correct handling of InterruptedException — restoring
-  // the flag rather than swallowing it (mirrors backup/ProcessPgDumpRunner's own suppression).
-  @SuppressWarnings("PMD.DoNotUseThreads")
-  private void pause(long seconds) {
-    try {
-      TimeUnit.SECONDS.sleep(seconds);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new ReceiptParseException("Batch cache pre-warm pause was interrupted.", e);
     }
   }
 

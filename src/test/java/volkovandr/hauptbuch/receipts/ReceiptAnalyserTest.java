@@ -88,6 +88,7 @@ class ReceiptAnalyserTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -113,6 +114,7 @@ class ReceiptAnalyserTest {
         "orig.jpg",
         "edit.jpg",
         "{}",
+        null,
         null,
         null,
         rawParse,

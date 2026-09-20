@@ -489,6 +489,7 @@ class ReceiptSplitEntriesTest {
         null,
         null,
         null,
+        null,
         CASH,
         null,
         null,

@@ -176,6 +176,7 @@ class ReceiptCommitServiceTest {
         null,
         null,
         null,
+        null,
         1L,
         transactionId,
         null,
