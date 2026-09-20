@@ -33,12 +33,26 @@ import volkovandr.hauptbuch.ledger.SettingsService;
  * batch_id} write orphans that batch — its members are swept to {@code failed} at boot and the
  * half-price spend is lost. No batch cancel in 9h: soft-deleting a member is the per-receipt
  * escape.
+ *
+ * <p><strong>Cache warm-up (receipt-processing/31 v3):</strong> a selection of more than one item
+ * sends its first item alone as a real 1-item batch and queues the rest behind it — the only kind
+ * of cache write a later batch's members reliably read; a standalone synchronous pre-warm call
+ * (v1/v2 of this issue) never worked. A queued receipt carries {@code warmupBatchId} instead of
+ * {@code batchId} until the poller sees the warm-up batch end and submits it for real.
  */
 // DoNotUseThreads: as in 9e, the ratified design is a dedicated single-thread executor — the submit
 // must run off the request thread. AvoidCatchingGenericException: the worker's outer guard
 // deliberately catches any RuntimeException so an unexpected error still lands the members in
-// `failed` rather than leaving them stuck `processing`.
-@SuppressWarnings({"PMD.DoNotUseThreads", "PMD.AvoidCatchingGenericException"})
+// `failed` rather than leaving them stuck `processing`. CouplingBetweenObjects: this class's whole
+// job is orchestrating the batch lifecycle end to end — claim, split/submit (receipt-processing/31
+// v3), poll, distribute — so it naturally names every DTO and collaborator along that path (mirrors
+// ReportGridBuilder's own justified suppression); splitting it up would just move the same list of
+// types onto another class's signature.
+@SuppressWarnings({
+  "PMD.DoNotUseThreads",
+  "PMD.AvoidCatchingGenericException",
+  "PMD.CouplingBetweenObjects"
+})
 @Component
 public class ReceiptBatchAnalyser {
 
@@ -76,6 +90,7 @@ public class ReceiptBatchAnalyser {
   private final ReceiptPromptBuilder promptBuilder;
   private final SettingsService settingsService;
   private final AiVocabularyService aiVocabularyService;
+  private final AnthropicProperties properties;
 
   ReceiptBatchAnalyser(
       ReceiptService receiptService,
@@ -84,7 +99,8 @@ public class ReceiptBatchAnalyser {
       ReceiptAnalysisService analysisService,
       ReceiptPromptBuilder promptBuilder,
       SettingsService settingsService,
-      AiVocabularyService aiVocabularyService) {
+      AiVocabularyService aiVocabularyService,
+      AnthropicProperties properties) {
     this.receiptService = receiptService;
     this.batchClient = batchClient;
     this.receiptAnalyser = receiptAnalyser;
@@ -92,6 +108,7 @@ public class ReceiptBatchAnalyser {
     this.promptBuilder = promptBuilder;
     this.settingsService = settingsService;
     this.aiVocabularyService = aiVocabularyService;
+    this.properties = properties;
   }
 
   /**
@@ -118,8 +135,18 @@ public class ReceiptBatchAnalyser {
    * Build and send the batch, then stamp its id on every member (package-visible so tests drive it
    * synchronously). A failure anywhere here fails all the claimed members with the reason — the
    * standard Retry path takes it from there.
+   *
+   * <p>When cache warm-up is enabled (receipt-processing/31 v3) and there is more than one item,
+   * only the first is sent now, as its own real 1-item batch — the only kind of cache write a later
+   * batch's members reliably read (a standalone synchronous pre-warm call never worked). The rest
+   * are queued behind it and released by {@link #releaseWarmupFollowup} once the poller sees that
+   * batch end.
    */
   void submit(List<Long> receiptIds) {
+    submit(receiptIds, true);
+  }
+
+  private void submit(List<Long> receiptIds, boolean allowWarmupSplit) {
     try {
       List<ReceiptBatchItem> items = new ArrayList<>();
       for (Long id : receiptIds) {
@@ -135,28 +162,81 @@ public class ReceiptBatchAnalyser {
       }
 
       AiSettings config = settingsService.aiConfig();
-      String batchId =
-          batchClient.submit(
-              new ReceiptBatchSubmission(
-                  config.model(),
-                  config.apiKey(),
-                  config,
-                  promptBuilder.build(
-                      aiVocabularyService.aiVocabulary(), settingsService.aiSystemPrompt()),
-                  AnthropicPrompts.EDITED_MEDIA_TYPE,
-                  items));
-      analysisService.assignBatch(sending, batchId);
-      LOG.info(
-          "Batch {} submitted: receipts={} model={} cached=true",
-          batchId,
-          sending.size(),
-          config.model());
+      String systemPrompt =
+          promptBuilder.build(aiVocabularyService.aiVocabulary(), settingsService.aiSystemPrompt());
+      if (allowWarmupSplit && properties.batchCacheWarmupEnabled() && items.size() > 1) {
+        submitWithWarmup(items, config, systemPrompt);
+      } else {
+        sendBatch(items, config, systemPrompt);
+      }
     } catch (ReceiptParseException e) {
       LOG.warn("Batch submit failed for {} receipt(s)", receiptIds.size(), e);
       analysisService.failClaimed(receiptIds, e.getMessage());
     } catch (RuntimeException e) {
       LOG.error("Batch submit errored unexpectedly for {} receipt(s)", receiptIds.size(), e);
       analysisService.failClaimed(receiptIds, "Unexpected error: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Send the first item alone as a real 1-item batch to prime the cache, then queue the rest behind
+   * it (receipt-processing/31 v3). Non-blocking: returns immediately — the app stays usable while
+   * the warm-up batch runs, which can take well over a minute. If the warm-up batch itself cannot
+   * be created, there is nothing to wait on, so every item is sent in one ordinary batch instead of
+   * stranding the rest.
+   */
+  private void submitWithWarmup(
+      List<ReceiptBatchItem> items, AiSettings config, String systemPrompt) {
+    ReceiptBatchItem warmupItem = items.get(0);
+    List<ReceiptBatchItem> rest = items.subList(1, items.size());
+    String warmupBatchId;
+    try {
+      warmupBatchId = sendBatch(List.of(warmupItem), config, systemPrompt);
+    } catch (ReceiptParseException e) {
+      LOG.warn(
+          "Batch cache warm-up submit failed; sending {} receipt(s) in one batch instead",
+          items.size(),
+          e);
+      sendBatch(items, config, systemPrompt);
+      return;
+    }
+    List<Long> restIds = rest.stream().map(ReceiptBatchItem::receiptId).toList();
+    analysisService.assignWarmupFollowup(restIds, warmupBatchId);
+    LOG.info(
+        "Batch cache warm-up {} submitted: {} receipt(s) queued behind it",
+        warmupBatchId,
+        restIds.size());
+  }
+
+  /** Build and send one real batch, stamp its id on every member, and log it. */
+  private String sendBatch(List<ReceiptBatchItem> items, AiSettings config, String systemPrompt) {
+    String batchId =
+        batchClient.submit(
+            new ReceiptBatchSubmission(
+                config.model(),
+                config.apiKey(),
+                systemPrompt,
+                AnthropicPrompts.EDITED_MEDIA_TYPE,
+                items));
+    List<Long> sending = items.stream().map(ReceiptBatchItem::receiptId).toList();
+    analysisService.assignBatch(sending, batchId);
+    LOG.info(
+        "Batch {} submitted: receipts={} model={} cached=true",
+        batchId,
+        sending.size(),
+        config.model());
+    return batchId;
+  }
+
+  /**
+   * Once a batch has ended — succeeded, failed, or gone — submit whatever is still queued behind it
+   * as its own real batch (receipt-processing/31 v3). {@code false} for {@code allowWarmupSplit}:
+   * one warm-up item per user-submitted selection, not a chain of them.
+   */
+  private void releaseWarmupFollowup(String batchId) {
+    List<Long> pending = analysisService.warmupFollowupIds(batchId);
+    if (!pending.isEmpty()) {
+      submit(pending, false);
     }
   }
 
@@ -172,7 +252,12 @@ public class ReceiptBatchAnalyser {
     }
   }
 
-  /** Poll one batch and, if it has ended, distribute its results (package-visible for tests). */
+  /**
+   * Poll one batch and, if it has ended, distribute its results (package-visible for tests). Either
+   * way a batch ends — landed or failed — also releases whatever is queued behind it as a warm-up
+   * follow-up (receipt-processing/31 v3); a still-running batch ({@code outcomes} empty) releases
+   * nothing yet.
+   */
   void pollBatch(String batchId) {
     AiSettings config = settingsService.aiConfig();
     Optional<List<ReceiptBatchOutcome>> outcomes;
@@ -181,13 +266,19 @@ public class ReceiptBatchAnalyser {
     } catch (ReceiptParseException e) {
       LOG.warn("Batch {} is gone; failing its members", batchId, e);
       analysisService.failBatchMembers(batchId, e.getMessage());
+      releaseWarmupFollowup(batchId);
       return;
     } catch (RuntimeException e) {
       LOG.error("Batch {} poll errored unexpectedly", batchId, e);
       analysisService.failBatchMembers(batchId, "Unexpected error: " + e.getMessage());
+      releaseWarmupFollowup(batchId);
       return;
     }
-    outcomes.ifPresent(results -> distribute(batchId, results, config));
+    outcomes.ifPresent(
+        results -> {
+          distribute(batchId, results, config);
+          releaseWarmupFollowup(batchId);
+        });
   }
 
   /**

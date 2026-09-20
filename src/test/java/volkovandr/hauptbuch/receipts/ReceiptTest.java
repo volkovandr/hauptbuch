@@ -23,6 +23,7 @@ class ReceiptTest {
         null,
         null,
         null,
+        null,
         text,
         null,
         null,

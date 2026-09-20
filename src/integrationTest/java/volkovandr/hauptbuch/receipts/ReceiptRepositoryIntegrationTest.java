@@ -500,6 +500,104 @@ class ReceiptRepositoryIntegrationTest {
     assertThat(receiptRepository.findById(member).orElseThrow().state()).isEqualTo("processing");
   }
 
+  // ── Warm-up follow-up (receipt-processing/31 v3) ─────────────────────────────
+
+  @Test
+  void assignWarmupFollowupStampsEveryReceiptAndFindsThemBack() {
+    long one = capturedWithState("processing");
+    long two = capturedWithState("processing");
+
+    assertThat(receiptRepository.assignWarmupFollowup(List.of(one, two), "msgbatch_warmup"))
+        .isEqualTo(2);
+
+    Receipt found = receiptRepository.findById(one).orElseThrow();
+    assertThat(found.warmupBatchId()).isEqualTo("msgbatch_warmup");
+    assertThat(found.batchId()).isNull();
+    assertThat(receiptRepository.findWarmupFollowupIds("msgbatch_warmup"))
+        .containsExactly(one, two);
+  }
+
+  @Test
+  void assignWarmupFollowupIgnoresEmptySelection() {
+    assertThat(receiptRepository.assignWarmupFollowup(List.of(), "msgbatch_warmup")).isZero();
+  }
+
+  /**
+   * The poller's release list is the live, still-{@code processing}, not-yet-real-member receipts
+   * only: a landed one, a soft-deleted one, and one that already became a real batch member all
+   * drop out.
+   */
+  @Test
+  void findWarmupFollowupIdsSkipsLandedDeletedAndPromotedMembers() {
+    long queued = capturedWithState("processing");
+    long landed = capturedWithState("processed");
+    long deleted = capturedWithState("processing");
+    long promoted = capturedWithState("processing");
+    receiptRepository.assignWarmupFollowup(
+        List.of(queued, landed, deleted, promoted), "msgbatch_warmup");
+    receiptRepository.softDelete(deleted);
+    receiptRepository.assignBatch(List.of(promoted), "msgbatch_real");
+
+    assertThat(receiptRepository.findWarmupFollowupIds("msgbatch_warmup")).containsExactly(queued);
+  }
+
+  /** Once a receipt becomes a real batch member, {@code assignBatch} clears the stale marker. */
+  @Test
+  void assignBatchClearsAnyWaitingWarmupBatchId() {
+    long id = capturedWithState("processing");
+    receiptRepository.assignWarmupFollowup(List.of(id), "msgbatch_warmup");
+
+    receiptRepository.assignBatch(List.of(id), "msgbatch_real");
+
+    Receipt found = receiptRepository.findById(id).orElseThrow();
+    assertThat(found.batchId()).isEqualTo("msgbatch_real");
+    assertThat(found.warmupBatchId()).isNull();
+  }
+
+  /**
+   * A receipt queued behind a warm-up batch is exempt from the 9e startup sweep too — the poller
+   * releases it once it sees the warm-up batch end, restart or not.
+   */
+  @Test
+  void startupSweepLeavesWarmupFollowupReceiptsAlone() {
+    long single = capturedWithState("processing");
+    long queued = capturedWithState("processing");
+    receiptRepository.assignWarmupFollowup(List.of(queued), "msgbatch_warmup");
+
+    assertThat(receiptRepository.sweepOrphanedProcessing("restarted")).isEqualTo(1);
+
+    assertThat(receiptRepository.findById(single).orElseThrow().state()).isEqualTo("failed");
+    assertThat(receiptRepository.findById(queued).orElseThrow().state()).isEqualTo("processing");
+  }
+
+  @Test
+  void retryClearsTheWarmupBatchId() {
+    long id = capturedWithState("failed");
+    jdbcClient
+        .sql("update receipt set warmup_batch_id = :id where receipt_id = :receiptId")
+        .param("id", "msgbatch_warmup")
+        .param("receiptId", id)
+        .update();
+
+    assertThat(receiptRepository.retryToPreProcessed(id)).isEqualTo(1);
+
+    assertThat(receiptRepository.findById(id).orElseThrow().warmupBatchId()).isNull();
+  }
+
+  @Test
+  void claimingClearsStaleWarmupBatchId() {
+    long id = capturedWithState("pre_processed");
+    jdbcClient
+        .sql("update receipt set warmup_batch_id = :id where receipt_id = :receiptId")
+        .param("id", "msgbatch_warmup")
+        .param("receiptId", id)
+        .update();
+
+    assertThat(receiptRepository.markProcessing(id)).isEqualTo(1);
+
+    assertThat(receiptRepository.findById(id).orElseThrow().warmupBatchId()).isNull();
+  }
+
   /** Insert a receipt in a given state at "now", returning its id. */
   private long capturedWithState(String state) {
     Receipt r = receiptRepository.insertCaptured("pc", "originals/2026/07/x.jpg");
