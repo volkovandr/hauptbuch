@@ -94,3 +94,42 @@ Spotless/JaCoCo). No new unit test: `AnthropicReceiptBatchClient` is a thin SDK 
 branching logic to test without the network, same as its untested single-parse sibling
 `AnthropicReceiptParser` — consistent with the existing pattern for this pair of classes. Not yet
 owner-confirmed.
+
+**Production evidence, 2026-09-20 — pre-warm helps but does not eliminate the problem.** First
+real batch through the fix, 6 members:
+
+```
+12:42:25  Batch cache pre-warm: tokensIn=6 tokensCacheWrite=1478 cost=0.003707
+12:42:27  Batch msgbatch_...5naM submitted: receipts=6 model=claude-sonnet-5 cached=true
+12:44:23  Batch msgbatch_...5naM finished: receipts=6 succeeded=4 failed=2 tokensIn=10892
+          tokensOut=9283 tokensCacheWrite=7390 tokensCacheRead=1478 cost=0.066695
+```
+
+`tokensCacheRead=1478` is exactly one prefix's worth — only **1 of the 6 members** read the
+pre-warmed entry. `tokensCacheWrite=7390` is exactly `5 × 1478` — the other **5 each wrote their
+own fresh entry**, the same failure the fix targets, just less often (5 writes instead of 6).
+
+Checked against Anthropic's own docs
+(`platform.claude.com/docs/en/build-with-claude/batch-processing.md`, "Using prompt caching with
+Message Batches"): *"because batch requests are processed asynchronously and concurrently, cache
+hits are provided on a best-effort basis. Users typically experience cache hit rates ranging from
+30% to 98%."* This is not a bug in the pre-warm implementation — the mechanics (standalone,
+synchronous `max_tokens: 0` call, identical `AnthropicPrompts.systemBlocks`-built system block,
+completed before `batches().create`) match Anthropic's documented pre-warm pattern exactly. But
+Anthropic does not document pre-warming as a fix for Batches-API cache-hit variance specifically —
+best-effort/concurrent-dispatch is stated as inherent to the Batches API, not something pre-warming
+is claimed to eliminate. Corrected the class Javadoc, which had overclaimed "every member finds the
+cache already populated" — fixed to describe the real, partial effect.
+
+The one lever Anthropic's docs *do* document specifically for batches: **"Because batches can take
+longer than 5 minutes to process, consider using the 1-hour cache duration... for better cache hit
+rates when processing batches with shared context."** Not yet applied here — doing so isn't a
+one-line change in this codebase: `AiSettings.priceCacheWrite` (data-model §3.8, the Settings
+screen's rate fields) is a single flat rate calibrated for Anthropic's 5-minute-TTL write price
+(1.25×); Anthropic prices a 1-hour-TTL write differently (2×), so switching the batch path's
+`cache_control` to `ttl: "1h"` without a second rate field would make every batch member's frozen
+`parse_cost` (and the pre-warm's logged cost) under-report the real charge whenever a member writes
+instead of reads. Raised with the owner rather than pushed unilaterally, since it touches the
+pricing/settings data model — pending direction on whether to add a second cache-write rate (and
+Settings-screen field) for the 1-hour tier, or accept the partial improvement as-is and only fix the
+misleading claim in comments (done).
