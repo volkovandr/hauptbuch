@@ -1,6 +1,6 @@
 # Batch submit fires all members in parallel with no cache pre-warm, so a batch writes the cache many times instead of once
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: medium
 Area: Receipts — AI Batches API path (stage 9h, prompt caching)
@@ -133,3 +133,9 @@ instead of reads. Raised with the owner rather than pushed unilaterally, since i
 pricing/settings data model — pending direction on whether to add a second cache-write rate (and
 Settings-screen field) for the 1-hour tier, or accept the partial improvement as-is and only fix the
 misleading claim in comments (done).
+
+**Owner decision, 2026-09-20:** leave the 5-minute TTL and accept the best-effort hit rate — do not
+add a second cache-write rate field or switch the batch path to the 1-hour tier. The pre-warm call
+(and its cost logging) stays as implemented; it demonstrably helps (production: 1 of 6 members hit
+it rather than 0) without touching the pricing/settings data model. Resolved with this as the final
+shape.
