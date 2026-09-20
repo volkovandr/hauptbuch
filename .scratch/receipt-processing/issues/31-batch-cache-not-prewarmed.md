@@ -1,6 +1,6 @@
 # Batch submit fires all members in parallel with no cache pre-warm, so a batch writes the cache many times instead of once
 
-Status: resolved
+Status: open
 Category: bug
 Severity: medium
 Area: Receipts — AI Batches API path (stage 9h, prompt caching)
@@ -139,3 +139,29 @@ add a second cache-write rate field or switch the batch path to the 1-hour tier.
 (and its cost logging) stays as implemented; it demonstrably helps (production: 1 of 6 members hit
 it rather than 0) without touching the pricing/settings data model. Resolved with this as the final
 shape.
+
+**Reopened 2026-09-20 — a pause after the pre-warm call raises the hit rate further.** The owner
+manually tested submitting a lone 1-receipt batch, letting it finish, then submitting a 21-receipt
+batch immediately after: 100% cache hit. That is consistent with the pre-warm call *returning* not
+being the same as the write having propagated everywhere Anthropic dispatches a batch's members from
+— the first production test (6 members, comments above) issued `batches().create` immediately after
+the pre-warm call returned, giving the write no time to land before members started racing for it.
+
+Fix: `AnthropicReceiptBatchClient.submit` now pauses after `warmCache` and before
+`batches().create()`, both configurable via new `AnthropicProperties` fields
+(`hauptbuch.receipts.ai.batch-cache-warmup-enabled` / `batch-cache-warmup-delay-seconds`, default
+`true` / `10`) — an operator can disable the whole pre-warm-and-pause behavior, or tune the pause, if
+either ever proves not worth its cost. Implemented via `TimeUnit.SECONDS.sleep` on the receipt-batch
+worker thread (`ReceiptBatchAnalyser`'s dedicated single-thread executor — never a request thread),
+with the same interrupt-handling pattern as `backup/ProcessPgDumpRunner`.
+
+Code review (medium effort) flagged that the pause fired even when `warmCache` itself failed (its
+`AnthropicException` is caught and logged, so `submit` had no way to know) — there is no cache write
+to wait for in that case, so the pause was pure delay for no benefit. Fixed in the same change:
+`warmCache` now returns whether it succeeded, and `submit` only pauses when it did.
+
+`./gradlew check` green (unit, integration, and SQL-logic tiers, plus Checkstyle/PMD/SpotBugs/
+Spotless/JaCoCo). No new unit test — same reasoning as the original pre-warm change:
+`AnthropicReceiptBatchClient` is a thin SDK adapter, and the new branching (an `if` plus a
+`Thread.sleep` call) has no decision logic worth mocking the SDK three levels deep to reach. Not yet
+owner-confirmed with the pause in production.

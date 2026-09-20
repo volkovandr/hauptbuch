@@ -66,3 +66,9 @@ hauptbuch:
     # truncated ordinary-sized receipts (issue 02). 16384 comfortably covers a ~50-item receipt.
     ai:
       max-tokens: 16384
+      # Batch cache pre-warm (receipt-processing/31): a standalone max_tokens:0 call that writes the
+      # shared system-prompt cache entry before the batch's members can race for a cold one, then a
+      # pause before batches().create so the write has time to land. Both configurable in case either
+      # ever proves not worth it — see the AnthropicProperties javadoc.
+      batch-cache-warmup-enabled: true
+      batch-cache-warmup-delay-seconds: 10
