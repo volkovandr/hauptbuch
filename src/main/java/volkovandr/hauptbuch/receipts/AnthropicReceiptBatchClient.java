@@ -32,12 +32,15 @@ import org.springframework.stereotype.Component;
  * setting.
  *
  * <p><strong>Cache pre-warm (issue receipt-processing/31):</strong> the Batches API dispatches a
- * batch's members for parallel processing rather than strictly one at a time, and a cache entry
- * only becomes readable once the first write has started landing — so most members of a freshly
- * submitted batch would find the cache still empty and each write their own entry instead of
- * reading the one the design assumes. {@link #submit} sends a standalone, synchronous {@code
- * max_tokens: 0} call carrying the identical cached system block before creating the batch, so
- * every member finds the cache already populated.
+ * batch's members for parallel processing rather than strictly one at a time, so most members of a
+ * freshly submitted batch would otherwise find the cache still empty and each write their own entry
+ * instead of reading the one the design assumes. {@link #submit} sends a standalone, synchronous
+ * {@code max_tokens: 0} call carrying the identical cached system block before creating the batch,
+ * so at least the earliest-dispatched members can read it. This raises the hit rate but does not
+ * guarantee it: Anthropic's own docs state batch cache hits are "provided on a best-effort basis"
+ * because members are processed "asynchronously and concurrently" (30–98% observed hit rates) —
+ * confirmed in production here too (issue receipt-processing/31 comments: 1 of 6 members hit the
+ * pre-warmed entry, the other 5 each wrote their own).
  */
 @Component
 class AnthropicReceiptBatchClient implements ReceiptBatchClient {
