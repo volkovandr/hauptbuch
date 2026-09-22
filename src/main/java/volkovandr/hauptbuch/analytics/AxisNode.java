@@ -19,8 +19,11 @@ package volkovandr.hauptbuch.analytics;
  * @param expandable whether this node has a second dimension nested beneath it (stage e, §3) —
  *     never true below depth 0 in e1, which does not yet expand a depth-1 node further
  * @param parentKey the parent node's {@link #key}, or {@code null} for a depth-0 node
+ * @param expanded whether an {@link #expandable} node is currently showing its children in the
+ *     frontier (stage e2, §9.1/§9.2) — always {@code false} for a non-expandable node
  */
-public record AxisNode(String key, String label, int depth, boolean expandable, String parentKey) {
+public record AxisNode(
+    String key, String label, int depth, boolean expandable, String parentKey, boolean expanded) {
 
   /**
    * The sentinel key for an axis with no dimension at all (a plain total) — one shared constant so
@@ -29,8 +32,13 @@ public record AxisNode(String key, String label, int depth, boolean expandable, 
    */
   static final String TOTAL_KEY = "total";
 
-  /** A depth-0, non-expandable, parentless node — every axis node before stage e. */
+  /** A depth-0, non-expandable, parentless, collapsed node — every axis node before stage e. */
   public AxisNode(String key, String label) {
-    this(key, label, 0, false, null);
+    this(key, label, 0, false, null, false);
+  }
+
+  /** A depth-0 or depth-1 node not currently expanded — every axis node before stage e2. */
+  public AxisNode(String key, String label, int depth, boolean expandable, String parentKey) {
+    this(key, label, depth, expandable, parentKey, false);
   }
 }

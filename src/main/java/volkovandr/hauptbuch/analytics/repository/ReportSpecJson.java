@@ -61,6 +61,40 @@ final class ReportSpecJson {
     }
   }
 
+  /**
+   * Encodes a saved Report's remembered expansion state (reporting.md §9.1, plan stage e2) as a
+   * JSON array of top-level node keys, ready for the {@code expanded_node_keys::jsonb} cast —
+   * {@code null} stays {@code null} (no explicit state yet; every render falls back to {@code
+   * auto}).
+   */
+  static String toNodeKeysJson(Set<String> keys) {
+    if (keys == null) {
+      return null;
+    }
+    ArrayNode array = MAPPER.createArrayNode();
+    keys.forEach(array::add);
+    try {
+      return MAPPER.writeValueAsString(array);
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("Failed to encode expanded node keys as JSON.", e);
+    }
+  }
+
+  /** Decodes a {@code report.expanded_node_keys} document back into a key set, or {@code null}. */
+  // PMD.ReturnEmptyCollectionRatherThanNull: null is not "no keys" here, it is "no explicit state
+  // at all" (auto decides) — a real, distinct third state from an empty-but-explicit set (plan
+  // stage e2, reporting.md §9.1/§9.2), so it must survive the round trip rather than collapse to
+  // an empty collection.
+  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
+  static Set<String> fromNodeKeysJson(String json) {
+    if (json == null) {
+      return null;
+    }
+    Set<String> keys = new LinkedHashSet<>();
+    readTree(json).forEach(node -> keys.add(node.asText()));
+    return keys;
+  }
+
   /** Decodes a {@code report.spec} document back into a {@link ReportSpec}. */
   static ReportSpec fromJson(String json) {
     JsonNode root = readTree(json);

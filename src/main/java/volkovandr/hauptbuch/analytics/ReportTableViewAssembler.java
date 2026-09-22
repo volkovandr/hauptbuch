@@ -12,16 +12,38 @@ final class ReportTableViewAssembler {
 
   private ReportTableViewAssembler() {}
 
+  /** {@link #assemble(String, ReportSpec, ReportGrid, String, Long)} with no toggle control. */
   static ReportTableView assemble(
       String title, ReportSpec spec, ReportGrid grid, String baseCurrency) {
+    return assemble(title, spec, grid, baseCurrency, null);
+  }
+
+  /**
+   * Turns a {@link ReportGrid} into a display-ready {@link ReportTableView}.
+   *
+   * @param toggleReportId the saved Report id the row-tree's expand/collapse links post to (plan
+   *     stage e2), carried straight onto {@link ReportTableView#toggleReportId} — see its own
+   *     javadoc for when this is {@code null}
+   */
+  static ReportTableView assemble(
+      String title, ReportSpec spec, ReportGrid grid, String baseCurrency, Long toggleReportId) {
     List<String> columnLabels = grid.columns().stream().map(AxisNode::label).toList();
     List<ReportTableView.RowView> rows = new ArrayList<>();
     for (int i = 0; i < grid.rows().size(); i++) {
+      AxisNode node = grid.rows().get(i);
       List<ReportTableView.CellText> cells =
           grid.cells().get(i).stream().map(c -> format(c, baseCurrency)).toList();
       ReportTableView.CellText rowTotal =
           spec.rowTotals() ? format(grid.rowTotals().get(i), baseCurrency) : BLANK;
-      rows.add(new ReportTableView.RowView(grid.rows().get(i).label(), cells, rowTotal));
+      rows.add(
+          new ReportTableView.RowView(
+              node.key(),
+              node.label(),
+              node.depth(),
+              node.expandable(),
+              node.expanded(),
+              cells,
+              rowTotal));
     }
     List<ReportTableView.CellText> columnTotals =
         spec.columnTotals()
@@ -41,7 +63,8 @@ final class ReportTableViewAssembler {
         spec.rowTotals(),
         spec.columnTotals(),
         columnTotals,
-        grandTotal);
+        grandTotal,
+        toggleReportId);
   }
 
   private static ReportTableView.CellText format(Cell cell, String baseCurrency) {

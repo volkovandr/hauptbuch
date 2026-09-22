@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.analytics;
 
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.ui.Model;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -44,14 +45,32 @@ final class PresetRendering {
    * id) — collecting it into one type keeps {@link #populate} and {@link #renderOwnPage} from
    * ballooning into a long-parameter-list smell as a second caller (plan stage d) joined the first.
    */
-  record Presentation(String title, ReportSpec spec, Renderer renderer, boolean trendLine) {
+  record Presentation(
+      String title,
+      ReportSpec spec,
+      Renderer renderer,
+      boolean trendLine,
+      Set<String> expandedNodeKeys) {
+
+    /**
+     * A Presentation with no remembered expansion state (a Preset, or any not-yet-saved draft) —
+     * every render of it falls back to {@code auto} (reporting.md §9.1/§9.2, plan stage e2).
+     */
+    Presentation(String title, ReportSpec spec, Renderer renderer, boolean trendLine) {
+      this(title, spec, renderer, trendLine, null);
+    }
 
     static Presentation of(PresetDef def) {
       return new Presentation(def.title(), def.spec(), def.renderer(), def.trendLine());
     }
 
     static Presentation of(SavedReport saved) {
-      return new Presentation(saved.name(), saved.spec(), saved.renderer(), saved.trendLine());
+      return new Presentation(
+          saved.name(),
+          saved.spec(),
+          saved.renderer(),
+          saved.trendLine(),
+          saved.expandedNodeKeys());
     }
   }
 
@@ -80,14 +99,30 @@ final class PresetRendering {
       String renderer,
       boolean trendLine) {}
 
-  /** Renders {@code presentation} as its table or chart view, per {@code asTable}. */
+  /**
+   * Renders {@code presentation} as its table or chart view, per {@code asTable}, using {@code
+   * presentation}'s own remembered expansion state (reporting.md §9.1, plan stage e2) — {@code
+   * null} for a Preset or an unsaved draft, which always render {@code auto}. {@code
+   * toggleExpansionReportId} enables the table's own expand/collapse controls (only a saved
+   * Report's full page does; a Frame's compact card does not, plan stage e2) — see {@link
+   * ReportTableViewAssembler#assemble}.
+   */
   static Rendered populate(
-      Presentation presentation, String baseCurrency, boolean asTable, ReportEngine reportEngine) {
-    ReportGrid grid = reportEngine.render(presentation.spec());
+      Presentation presentation,
+      String baseCurrency,
+      boolean asTable,
+      ReportEngine reportEngine,
+      Long toggleExpansionReportId) {
+    ReportGrid grid =
+        reportEngine.render(presentation.spec(), LocalDate.now(), presentation.expandedNodeKeys());
     if (asTable) {
       return new Rendered(
           ReportTableViewAssembler.assemble(
-              presentation.title(), presentation.spec(), grid, baseCurrency),
+              presentation.title(),
+              presentation.spec(),
+              grid,
+              baseCurrency,
+              toggleExpansionReportId),
           null);
     }
     return new Rendered(
@@ -111,6 +146,10 @@ final class PresetRendering {
    * place, whether the caller gets back {@code report-table}/{@code report-chart}'s full page or
    * just their {@code :: page} fragment — every editor page made this choice the same way, so
    * settling it here keeps a fourth caller from having to redecide it.
+   *
+   * @param toggleExpansionReportId the saved Report id to enable the table's own expand/collapse
+   *     controls for (plan stage e2), or {@code null} for a Preset or a page currently showing an
+   *     unsaved draft — see {@link #populate}
    */
   static String renderOwnPage(
       Presentation presentation,
@@ -120,7 +159,8 @@ final class PresetRendering {
       ReportEngine reportEngine,
       ReportFilterViewAssembler filterViewAssembler,
       String pagePath,
-      String hxRequestHeader) {
+      String hxRequestHeader,
+      Long toggleExpansionReportId) {
     boolean fragment = isHtmxRequest(hxRequestHeader);
     String tableViewName = fragment ? "report-table :: page" : "report-table";
     String chartViewName = fragment ? "report-chart :: page" : "report-chart";
@@ -128,7 +168,9 @@ final class PresetRendering {
         .baseCurrency()
         .map(
             baseCurrency -> {
-              Rendered rendered = populate(presentation, baseCurrency, asTable, reportEngine);
+              Rendered rendered =
+                  populate(
+                      presentation, baseCurrency, asTable, reportEngine, toggleExpansionReportId);
               model.addAttribute(
                   "settings", ReportSettingsView.build(presentation, pagePath, LocalDate.now()));
               model.addAttribute(
@@ -239,8 +281,10 @@ final class PresetRendering {
     if (baseCurrency.isEmpty()) {
       return new FrameContent(true, true, shown.title(), null, null);
     }
+    // A Frame's compact card shows the same remembered tree as the full page but never offers its
+    // own toggle (plan stage e2) — reportId null disables ReportTableView's expand/collapse links.
     Rendered rendered =
-        populate(shown, baseCurrency.get(), shown.renderer() == Renderer.TABLE, reportEngine);
+        populate(shown, baseCurrency.get(), shown.renderer() == Renderer.TABLE, reportEngine, null);
     return new FrameContent(true, false, shown.title(), rendered.report(), rendered.chart());
   }
 

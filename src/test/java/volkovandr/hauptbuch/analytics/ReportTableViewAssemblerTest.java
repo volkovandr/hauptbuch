@@ -129,4 +129,57 @@ class ReportTableViewAssemblerTest {
         END,
         null);
   }
+
+  // ── row-tree metadata and toggle enablement (plan stage e2) ─────────────────────────────────
+
+  @Test
+  void fourArgOverloadLeavesToggleDisabled() {
+    ReportGrid grid = gridOf(Cell.BLANK);
+
+    ReportTableView view = ReportTableViewAssembler.assemble("Title", spec(), grid, "EUR");
+
+    assertThat(view.toggleReportId()).isNull();
+  }
+
+  @Test
+  void fiveArgOverloadCarriesTheToggleReportIdOntoTheView() {
+    ReportGrid grid = gridOf(Cell.BLANK);
+
+    ReportTableView view = ReportTableViewAssembler.assemble("Title", spec(), grid, "EUR", 42L);
+
+    assertThat(view.toggleReportId()).isEqualTo(42L);
+  }
+
+  @Test
+  void eachRowCarriesItsOwnNodesKeyDepthExpandableAndExpanded() {
+    ReportGrid grid =
+        new ReportGrid(
+            List.of(
+                new AxisNode("1", "Food", 0, true, null, true),
+                new AxisNode("1|10", "Restaurants", 1, false, "1", false)),
+            List.of(new AxisNode("total", "Total")),
+            List.of(
+                List.of(new Cell.Value(new BigDecimal("35"), "EUR")),
+                List.of(new Cell.Value(new BigDecimal("30"), "EUR"))),
+            List.of(),
+            List.of(),
+            Cell.BLANK,
+            START,
+            END,
+            null);
+
+    ReportTableView view = ReportTableViewAssembler.assemble("Title", spec(), grid, "EUR");
+
+    ReportTableView.RowView parent = view.rows().get(0);
+    assertThat(parent.key()).isEqualTo("1");
+    assertThat(parent.depth()).isZero();
+    assertThat(parent.expandable()).isTrue();
+    assertThat(parent.expanded()).isTrue();
+
+    ReportTableView.RowView child = view.rows().get(1);
+    assertThat(child.key()).isEqualTo("1|10");
+    assertThat(child.depth()).isEqualTo(1);
+    assertThat(child.expandable()).isFalse();
+    assertThat(child.expanded()).isFalse();
+  }
 }

@@ -65,7 +65,8 @@ class ReportEditorController {
         reportEngine,
         filterViewAssembler,
         NEW_PATH,
-        hxRequest);
+        hxRequest,
+        null);
   }
 
   /**

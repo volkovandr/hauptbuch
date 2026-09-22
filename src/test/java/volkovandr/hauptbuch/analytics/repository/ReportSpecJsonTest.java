@@ -83,4 +83,29 @@ class ReportSpecJsonTest {
 
     assertThat(ReportSpecJson.fromJson(ReportSpecJson.toJson(spec))).isEqualTo(spec);
   }
+
+  // ── expanded node keys (plan stage e2) ──────────────────────────────────────────────────────
+
+  @Test
+  void nullExpandedNodeKeysStaysNullBothWays() {
+    assertThat(ReportSpecJson.toNodeKeysJson(null)).isNull();
+    assertThat(ReportSpecJson.fromNodeKeysJson(null)).isNull();
+  }
+
+  @Test
+  void roundTripsAnEmptyExpandedNodeKeySetAsDistinctFromNull() {
+    String json = ReportSpecJson.toNodeKeysJson(Set.of());
+
+    assertThat(json).isNotNull();
+    assertThat(ReportSpecJson.fromNodeKeysJson(json)).isEmpty();
+  }
+
+  @Test
+  void roundTripsPopulatedExpandedNodeKeys() {
+    Set<String> keys = Set.of("1", "1|10", "personal:EUR");
+
+    String json = ReportSpecJson.toNodeKeysJson(keys);
+
+    assertThat(ReportSpecJson.fromNodeKeysJson(json)).isEqualTo(keys);
+  }
 }

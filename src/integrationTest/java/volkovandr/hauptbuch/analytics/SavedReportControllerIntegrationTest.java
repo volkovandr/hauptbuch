@@ -9,11 +9,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.MultiValueMap;
@@ -36,6 +40,43 @@ class SavedReportControllerIntegrationTest {
   @Autowired MockMvc mockMvc;
   @Autowired ReportService reportService;
   @Autowired SettingsService settingsService;
+  @Autowired JdbcClient jdbcClient;
+
+  private long insertAccount(String name, String type, String currency, Long parentId) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code, parent_id) values (:n, :t, :c, :p) "
+                + "returning account_id")
+        .param("n", name)
+        .param("t", type)
+        .param("c", currency)
+        .param("p", parentId)
+        .query(Long.class)
+        .single();
+  }
+
+  private void postSingleCurrency(long from, long to, LocalDate date, String amount) {
+    long txn =
+        jdbcClient
+            .sql(
+                "insert into transaction (date, lifecycle) values (:d, 'confirmed') "
+                    + "returning transaction_id")
+            .param("d", date)
+            .query(Long.class)
+            .single();
+    jdbcClient
+        .sql("insert into posting (transaction_id, account_id, amount) values (:t, :a, :amt)")
+        .param("t", txn)
+        .param("a", from)
+        .param("amt", new BigDecimal(amount).negate())
+        .update();
+    jdbcClient
+        .sql("insert into posting (transaction_id, account_id, amount) values (:t, :a, :amt)")
+        .param("t", txn)
+        .param("a", to)
+        .param("amt", new BigDecimal(amount))
+        .update();
+  }
 
   @Test
   void savedReportShowsThePromptBeforeTheBaseCurrencyIsSet() throws Exception {
@@ -178,5 +219,104 @@ class SavedReportControllerIntegrationTest {
         .perform(get("/reports/" + saved.reportId()).params(draft))
         .andExpect(status().isOk())
         .andExpect(content().string(not(containsString("chart-trend"))));
+  }
+
+  // ── row-tree expand/collapse toggle (reporting.md §9.1/§9.2, plan stage e2) ─────────────────
+  //
+  // The filter panel lists every category leaf (Bakery included) regardless of the grid's own
+  // expansion state, so a bare "not(containsString("Bakery"))" on the full page is contaminated —
+  // the depth-1 child row's own indent style ("padding-left: 20px", report-table-body.html) is the
+  // grid-specific signal instead. The toggle endpoint's own response is just the table fragment
+  // (no filter panel), so "Bakery" alone is reliable there.
+
+  @Test
+  void collapsedByDefaultThenTogglingExpandsAndPersistsAcrossReload() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long food = insertAccount("Food", "expense", "EUR", null);
+    long bakery = insertAccount("Bakery", "expense", "EUR", food);
+    postSingleCurrency(cash, bakery, LocalDate.now(), "20.00");
+    SavedReport saved =
+        reportService.save("My matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()))
+        .andExpect(content().string(containsString("Food")))
+        .andExpect(content().string(not(containsString("padding-left: 20px"))));
+
+    String expanded =
+        mockMvc
+            .perform(
+                post("/reports/" + saved.reportId() + "/expand")
+                    .param("node", String.valueOf(food)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(expanded).contains("Bakery").contains("padding-left: 20px");
+
+    // Persisted: a fresh page load, no toggle involved, still shows the expanded child.
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()))
+        .andExpect(content().string(containsString("padding-left: 20px")));
+  }
+
+  @Test
+  void togglingTwiceCollapsesAgainAndPersists() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long food = insertAccount("Food", "expense", "EUR", null);
+    long bakery = insertAccount("Bakery", "expense", "EUR", food);
+    postSingleCurrency(cash, bakery, LocalDate.now(), "20.00");
+    SavedReport saved =
+        reportService.save("My matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+    mockMvc.perform(
+        post("/reports/" + saved.reportId() + "/expand").param("node", String.valueOf(food)));
+
+    String collapsedAgain =
+        mockMvc
+            .perform(
+                post("/reports/" + saved.reportId() + "/expand")
+                    .param("node", String.valueOf(food)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(collapsedAgain).doesNotContain("padding-left: 20px");
+
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()))
+        .andExpect(content().string(not(containsString("padding-left: 20px"))));
+  }
+
+  @Test
+  void autoExpandsOnFreshPageLoadWhenFilterSelectsExactlyOneCategory() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long food = insertAccount("Food", "expense", "EUR", null);
+    long bakery = insertAccount("Bakery", "expense", "EUR", food);
+    postSingleCurrency(cash, bakery, LocalDate.now(), "20.00");
+    ReportSpec filteredToFood =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("income", "expense"),
+            List.of(
+                new ReportFilter(
+                    FilterField.CATEGORY,
+                    FilterLevel.POSTING,
+                    FilterOperator.IS_ONE_OF,
+                    List.of(String.valueOf(food)))),
+            DateRange.yearToDate(),
+            true,
+            true,
+            true);
+    SavedReport saved = reportService.save("Just Food", filteredToFood, Renderer.TABLE, false);
+
+    // Never toggled — auto's one-node rule (§9.2) expands it on the very first load.
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()))
+        .andExpect(content().string(containsString("padding-left: 20px")));
   }
 }

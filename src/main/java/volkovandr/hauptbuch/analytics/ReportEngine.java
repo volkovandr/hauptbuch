@@ -27,8 +27,9 @@ import volkovandr.hauptbuch.ledger.SettingsService;
  * remains: at most one of the two axes may carry a non-Date dimension at all (a cross-axis
  * cartesian of two different dimensions, e.g. Category rows × Account columns, is out of scope).
  * Stage e adds nesting <em>within</em> that one axis — up to two dimensions, the second revealed by
- * expanding a node of the first (§3, §9) — via {@link #render(ReportSpec, LocalDate,
- * RowExpansion)}.
+ * expanding a node of the first (§3, §9). {@link #render(ReportSpec, LocalDate, Set)} takes a saved
+ * Report's remembered, hand-toggled expansion state (§9.1); {@link #render(ReportSpec, LocalDate,
+ * RowExpansion)} is the uniform-all-or-nothing form e1's own tests still use.
  */
 @Service
 public class ReportEngine {
@@ -58,10 +59,28 @@ public class ReportEngine {
 
   /**
    * {@link #render(ReportSpec, LocalDate)} taking an explicit row-expansion state (reporting.md
-   * §9.2) rather than always {@link RowExpansion#AUTO} — stage e1's engine-side hook; remembering
-   * the expansion against a saved Report is stage e2's job.
+   * §9.2) rather than always {@link RowExpansion#AUTO} — stage e1's engine-side hook, still used by
+   * its own tests; a saved Report's remembered per-node state uses {@link #render(ReportSpec,
+   * LocalDate, Set)} instead (stage e2).
    */
   ReportGrid render(ReportSpec spec, LocalDate today, RowExpansion expansion) {
+    return render(spec, today, expansion, null);
+  }
+
+  /**
+   * {@link #render(ReportSpec, LocalDate)} taking the remembered, hand-toggled set of expanded
+   * top-level keys (reporting.md §9.1) for a saved Report — {@code null} means no explicit state
+   * exists yet and {@code auto} (§9.2) decides, same as {@link #render(ReportSpec, LocalDate)}; a
+   * non-null set (possibly empty) is used literally, intersected with whichever candidates still
+   * exist. A Preset or an unsaved draft always renders with {@code null} — expansion state is
+   * remembered only against a saved Report (§9.1).
+   */
+  ReportGrid render(ReportSpec spec, LocalDate today, Set<String> explicitExpandedKeys) {
+    return render(spec, today, RowExpansion.AUTO, explicitExpandedKeys);
+  }
+
+  private ReportGrid render(
+      ReportSpec spec, LocalDate today, RowExpansion expansion, Set<String> explicitOverride) {
     AxisPlan axes = planAxes(spec);
     validateClosingBalanceHasBalance(spec, axes.nonDateDim(), axes.innerDim());
     String baseCurrency = requireBaseCurrency();
@@ -72,7 +91,7 @@ public class ReportEngine {
     Map<String, TopLevelNode> candidatesByKey =
         dataFetcher.candidatesFor(axes.nonDateDim(), types, spec.scope());
     Set<String> expandedOuterKeys =
-        expandedOuterKeys(expansion, axes.nonDateDim(), spec, candidatesByKey);
+        expandedOuterKeys(expansion, explicitOverride, axes.nonDateDim(), spec, candidatesByKey);
 
     // Only fetch what expansion actually needs — nothing when nothing is expanded, whichever of
     // the two child sources (§3's cross-dimension nesting or §9.1's same-dimension one) applies.
@@ -130,17 +149,20 @@ public class ReportEngine {
   }
 
   /**
-   * Which top-level nodes of {@code outerDim} start expanded (reporting.md §9.2), given {@code
-   * expansion}: {@link RowExpansion#COLLAPSED} expands none, {@link RowExpansion#EXPANDED} expands
-   * every candidate, {@link RowExpansion#AUTO} defers to {@link AutoExpansion#startsExpanded}.
-   * Never anything when {@code outerDim} cannot nest a second dimension at all (§9.1 — a
-   * hierarchical dimension only), whether that second dimension is a different one (§3's
-   * cross-dimension nesting) or {@code outerDim}'s own hierarchy one level deeper (§9.1) — and
-   * never the per-currency "personal debts" pseudo-bucket, which is not a single subtree a nesting
-   * filter can name (§3).
+   * Which top-level nodes of {@code outerDim} are expanded, given a stage e2 {@code
+   * explicitOverride} (reporting.md §9.1) when one exists — intersected with {@code
+   * outerCandidatesByKey} so a stale key (a since-deleted category, say) drops out silently — or
+   * else {@code expansion}'s uniform rule (§9.2): {@link RowExpansion#COLLAPSED} expands none,
+   * {@link RowExpansion#EXPANDED} expands every candidate, {@link RowExpansion#AUTO} defers to
+   * {@link AutoExpansion#startsExpanded}. Never anything when {@code outerDim} cannot nest a second
+   * dimension at all (§9.1 — a hierarchical dimension only), whether that second dimension is a
+   * different one (§3's cross-dimension nesting) or {@code outerDim}'s own hierarchy one level
+   * deeper (§9.1) — and never the per-currency "personal debts" pseudo-bucket, which is not a
+   * single subtree a nesting filter can name (§3).
    */
   private static Set<String> expandedOuterKeys(
       RowExpansion expansion,
+      Set<String> explicitOverride,
       Dimension outerDim,
       ReportSpec spec,
       Map<String, TopLevelNode> outerCandidatesByKey) {
@@ -151,11 +173,30 @@ public class ReportEngine {
         outerCandidatesByKey.keySet().stream()
             .filter(key -> !AutoExpansion.isPersonLeafBucket(key))
             .collect(Collectors.toSet());
+    if (explicitOverride != null) {
+      return allKeys.stream().filter(explicitOverride::contains).collect(Collectors.toSet());
+    }
     return switch (expansion) {
       case COLLAPSED -> Set.of();
       case EXPANDED -> allKeys;
       case AUTO -> AutoExpansion.startsExpanded(outerDim, spec) ? allKeys : Set.of();
     };
+  }
+
+  /**
+   * The expanded top-level key set a toggle handler sees just before flipping one key (stage e2):
+   * {@code explicitOverride} echoed back, intersected with the dimension's real current candidates,
+   * when it is not {@code null}; otherwise {@code auto}'s own uniform rule (§9.2), materialized
+   * against those same candidates. Fetches only what {@link #expandedOuterKeys} needs to decide —
+   * the outer dimension's candidates — never the axis's full data.
+   */
+  Set<String> effectiveExpandedKeys(ReportSpec spec, Set<String> explicitOverride) {
+    AxisPlan axes = planAxes(spec);
+    List<String> types = List.copyOf(spec.scope().accountTypes());
+    Map<String, TopLevelNode> candidatesByKey =
+        dataFetcher.candidatesFor(axes.nonDateDim(), types, spec.scope());
+    return expandedOuterKeys(
+        RowExpansion.AUTO, explicitOverride, axes.nonDateDim(), spec, candidatesByKey);
   }
 
   private AxisPlan planAxes(ReportSpec spec) {
