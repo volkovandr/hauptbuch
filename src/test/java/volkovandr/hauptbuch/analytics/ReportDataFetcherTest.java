@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import volkovandr.hauptbuch.analytics.repository.QueryConstraints;
 import volkovandr.hauptbuch.analytics.repository.RawBalanceCell;
@@ -93,7 +94,8 @@ class ReportDataFetcherTest {
         resolved(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)),
         List.of(),
         TODAY,
-        "EUR");
+        "EUR",
+        Set.of());
 
     verify(queryRepository)
         .accountTreeTurnover(
@@ -116,7 +118,8 @@ class ReportDataFetcherTest {
         resolved(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)),
         List.of(),
         TODAY,
-        "EUR");
+        "EUR",
+        Set.of());
 
     verify(queryRepository)
         .tagTurnover(
@@ -139,7 +142,8 @@ class ReportDataFetcherTest {
         resolved(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)),
         List.of(),
         TODAY,
-        "EUR");
+        "EUR",
+        Set.of());
 
     verify(queryRepository)
         .totalTurnover(
@@ -184,7 +188,8 @@ class ReportDataFetcherTest {
             resolved(LocalDate.of(2026, 1, 31), LocalDate.of(2026, 1, 31)),
             List.of(),
             TODAY,
-            "EUR");
+            "EUR",
+            Set.of());
 
     verify(queryRepository)
         .accountTreeClosingBalance(
@@ -203,7 +208,8 @@ class ReportDataFetcherTest {
         resolved(LocalDate.of(2026, 1, 31), LocalDate.of(2026, 1, 31)),
         List.of(),
         TODAY,
-        "EUR");
+        "EUR",
+        Set.of());
 
     verify(queryRepository)
         .accountTreeClosingBalance(
@@ -229,7 +235,8 @@ class ReportDataFetcherTest {
         resolved(LocalDate.of(2026, 1, 10), LocalDate.of(2026, 1, 20)),
         buckets,
         TODAY,
-        "EUR");
+        "EUR",
+        Set.of());
 
     verify(queryRepository)
         .accountTreeClosingBalance(
@@ -252,7 +259,8 @@ class ReportDataFetcherTest {
         resolved(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)),
         septemberBucket,
         TODAY,
-        "EUR");
+        "EUR",
+        Set.of());
 
     // The bucket runs through 30 Sep, but TODAY is only the 12th — the as-of date must not run
     // ahead of today (reporting.md §8.2).

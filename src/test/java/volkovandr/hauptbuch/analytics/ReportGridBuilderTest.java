@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import volkovandr.hauptbuch.analytics.repository.RawBalanceCell;
 import volkovandr.hauptbuch.analytics.repository.RawTurnoverCell;
@@ -144,6 +145,116 @@ class ReportGridBuilderTest {
     assertThat(builder.axisNodes(Dimension.CATEGORY, byKey, List.of()))
         .extracting(AxisNode::label)
         .containsExactly("Food");
+  }
+
+  // ── frontierNodes (stage e nesting, §3/§9) ──────────────────────────────────
+
+  @Test
+  void frontierNodesIsOneImplicitTotalWhenTheAxisHasNoDimension() {
+    assertThat(builder.frontierNodes(null, null, Map.of(), Map.of(), Map.of(), Set.of()))
+        .extracting(AxisNode::label)
+        .containsExactly("Total");
+  }
+
+  @Test
+  void frontierNodesMarksHierarchicalOuterNodeExpandableEvenWithNoSecondDimensionNamed() {
+    // A single hierarchical dimension is still expandable one level into its own hierarchy
+    // (reporting.md §9.1) — the actual children are fetched only once the node is expanded.
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+
+    List<AxisNode> frontier =
+        builder.frontierNodes(Dimension.CATEGORY, null, byKey, Map.of(), Map.of(), Set.of());
+
+    assertThat(frontier).extracting(AxisNode::label).containsExactly("Food");
+    assertThat(frontier.get(0).depth()).isZero();
+    assertThat(frontier.get(0).expandable()).isTrue();
+  }
+
+  @Test
+  void frontierNodesMarksHierarchicalOuterNodeExpandableWhenThereIsSecondDimension() {
+    Map<String, TopLevelNode> outer = candidates(new TopLevelNode("1", "Trips", null));
+
+    List<AxisNode> frontier =
+        builder.frontierNodes(
+            Dimension.TAG, Dimension.CATEGORY, outer, Map.of(), Map.of(), Set.of());
+
+    assertThat(frontier).hasSize(1);
+    assertThat(frontier.get(0).expandable()).isTrue();
+    assertThat(frontier.get(0).depth()).isZero();
+  }
+
+  @Test
+  void frontierNodesNeverMarksFlatOuterDimensionExpandable() {
+    Map<String, TopLevelNode> outer = candidates(new TopLevelNode("1", "Some payee", null));
+
+    List<AxisNode> frontier =
+        builder.frontierNodes(
+            Dimension.PAYEE, Dimension.CATEGORY, outer, Map.of(), Map.of(), Set.of());
+
+    assertThat(frontier.get(0).expandable()).isFalse();
+  }
+
+  @Test
+  void frontierNodesNeverMarksThePersonalDebtsPseudoBucketExpandable() {
+    Map<String, TopLevelNode> outer =
+        candidates(new TopLevelNode("personal:EUR", "Personal debts (EUR)", "asset"));
+
+    List<AxisNode> frontier =
+        builder.frontierNodes(
+            Dimension.ACCOUNT, Dimension.CATEGORY, outer, Map.of(), Map.of(), Set.of());
+
+    assertThat(frontier.get(0).expandable()).isFalse();
+  }
+
+  @Test
+  void frontierNodesFlattensAnExpandedOuterNodesCrossDimensionChildrenRightAfterIt() {
+    Map<String, TopLevelNode> outer =
+        candidates(new TopLevelNode("1", "Trips", null), new TopLevelNode("2", "Car", null));
+    Map<String, TopLevelNode> inner =
+        candidates(
+            new TopLevelNode("10", "Food", "expense"),
+            new TopLevelNode("11", "Lodging", "expense"));
+
+    List<AxisNode> frontier =
+        builder.frontierNodes(
+            Dimension.TAG, Dimension.CATEGORY, outer, inner, Map.of(), Set.of("1"));
+
+    assertThat(frontier).extracting(AxisNode::key).containsExactly("1", "1|10", "1|11", "2");
+    assertThat(frontier.get(1).depth()).isEqualTo(1);
+    assertThat(frontier.get(1).parentKey()).isEqualTo("1");
+    assertThat(frontier.get(1).label()).isEqualTo("Food");
+    assertThat(frontier.get(1).expandable()).isFalse();
+  }
+
+  @Test
+  void frontierNodesFlattensAnExpandedOuterNodesSameDimensionChildrenRightAfterIt() {
+    // §9.1's same-dimension case: a plain rows = [Category] report expanding "Food" into its own
+    // children, keyed by outer node rather than reused across every expanded node.
+    Map<String, TopLevelNode> outer =
+        candidates(
+            new TopLevelNode("1", "Food", "expense"), new TopLevelNode("2", "Fuel", "expense"));
+    Map<String, List<TopLevelNode>> sameDimensionChildren =
+        Map.of("1", List.of(new TopLevelNode("10", "Restaurants", "expense")));
+
+    List<AxisNode> frontier =
+        builder.frontierNodes(
+            Dimension.CATEGORY, null, outer, Map.of(), sameDimensionChildren, Set.of("1"));
+
+    assertThat(frontier).extracting(AxisNode::key).containsExactly("1", "1|10", "2");
+    assertThat(frontier.get(1).depth()).isEqualTo(1);
+    assertThat(frontier.get(1).parentKey()).isEqualTo("1");
+    assertThat(frontier.get(1).label()).isEqualTo("Restaurants");
+  }
+
+  @Test
+  void frontierNodesLeavesAnUnexpandedOuterNodeWithNoChildrenInTheFrontier() {
+    Map<String, TopLevelNode> outer = candidates(new TopLevelNode("1", "Trips", null));
+    Map<String, TopLevelNode> inner = candidates(new TopLevelNode("10", "Food", "expense"));
+
+    List<AxisNode> frontier =
+        builder.frontierNodes(Dimension.TAG, Dimension.CATEGORY, outer, inner, Map.of(), Set.of());
+
+    assertThat(frontier).extracting(AxisNode::key).containsExactly("1");
   }
 
   // ── category×month matrix shape ──────────────────────────────────────────
@@ -388,6 +499,105 @@ class ReportGridBuilderTest {
             new Cell.Value(new BigDecimal("10.00"), "EUR"));
     assertThat(grid.columnTotals()).containsExactly(new Cell.Value(new BigDecimal("30.00"), "EUR"));
     assertThat(grid.grandTotal()).isEqualTo(new Cell.Value(new BigDecimal("30.00"), "EUR"));
+  }
+
+  // ── stage e nesting: totals must not double-count an expanded node's children ──
+
+  @Test
+  void columnAndGrandTotalsSumOnlyTopLevelRowsNotAnExpandedNodesChildrenToo() {
+    // §9.1's same-dimension case: plain rows = [Category], "Food" expanded into its own children
+    // Restaurants (30) and Snacks (5). Food's own subtotal cell (35) already reflects both — a
+    // column/grand total that also walks the two depth-1 child rows would double it to 70. (Neither
+    // dimension here is Tag, so the pre-existing §7.2 "no total across tags" rule cannot mask this
+    // — it isolates the depth-blind summation bug on its own.)
+    AxisPlan axes = new AxisPlan(Dimension.CATEGORY, null, Dimension.CATEGORY, false, false);
+    List<AxisNode> rows =
+        List.of(
+            new AxisNode("1", "Food", 0, true, null),
+            new AxisNode("1|10", "Restaurants", 1, false, "1"),
+            new AxisNode("1|11", "Snacks", 1, false, "1"));
+    List<AxisNode> columns = List.of(new AxisNode("total", "Total"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    GridData data =
+        turnoverData(
+            turnover("1", "Food", "expense", "2026-01", "EUR", "35.00", "35.00"),
+            turnover("1|10", "Restaurants", "expense", "2026-01", "EUR", "30.00", "30.00"),
+            turnover("1|11", "Snacks", "expense", "2026-01", "EUR", "5.00", "5.00"));
+    ReportSpec spec = matrixSpecWithTotals(List.of(Dimension.CATEGORY), List.of());
+
+    ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.rowTotals())
+        .containsExactly(
+            new Cell.Value(new BigDecimal("35.00"), "EUR"),
+            new Cell.Value(new BigDecimal("30.00"), "EUR"),
+            new Cell.Value(new BigDecimal("5.00"), "EUR"));
+    assertThat(grid.columnTotals()).containsExactly(new Cell.Value(new BigDecimal("35.00"), "EUR"));
+    assertThat(grid.grandTotal()).isEqualTo(new Cell.Value(new BigDecimal("35.00"), "EUR"));
+  }
+
+  @Test
+  void nestedChildRowFlipsSignByItsOwnMatchedTypeNotTheOuterScopeGuess() {
+    // Scope spans both income and expense (a full P&L), so the scope-wide guess is ambiguous and
+    // leaves a cell unflipped (§4.1's fallback) — but a nested income category under an expanded
+    // Tag node must still flip by its OWN type, which the raw cell's own dimensionType carries even
+    // though candidatesByKey only ever holds the outer (Tag) dimension's nodes.
+    AxisPlan axes =
+        new AxisPlan(Dimension.TAG, null, Dimension.TAG, Dimension.CATEGORY, false, false);
+    List<AxisNode> rows =
+        List.of(
+            new AxisNode("1", "Trip", 0, true, null),
+            new AxisNode("1|10", "Rebate", 1, false, "1"));
+    List<AxisNode> columns = List.of(new AxisNode("total", "Total"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Trip", null));
+    // Stored as a credit (negative) — an income category must read positive regardless of the
+    // ambiguous outer scope (data-model §4.1).
+    GridData data =
+        turnoverData(
+            turnover("1", "Trip", null, "2026-01", "EUR", "-30.00", "-30.00"),
+            turnover("1|10", "Rebate", "income", "2026-01", "EUR", "-30.00", "-30.00"));
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(Dimension.TAG, Dimension.CATEGORY),
+            List.of(),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("income", "expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            false);
+
+    ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.cells().get(1).get(0))
+        .isEqualTo(new Cell.Value(new BigDecimal("30.00"), "EUR"));
+  }
+
+  @Test
+  void columnTotalIsForbiddenWhenTagIsTheNestedInnerDimensionNotJustTheOuterOne() {
+    // §7.2: overlapping tag rows/columns cannot legally sum. rows = [Category, Tag] nests Tag as
+    // the INNER dimension — axes.rowDim() is CATEGORY, not TAG, so a check that only compares
+    // rowDim/colDim against TAG would miss this and silently sum overlapping tag children.
+    AxisPlan axes =
+        new AxisPlan(Dimension.CATEGORY, null, Dimension.CATEGORY, Dimension.TAG, false, false);
+    List<AxisNode> rows =
+        List.of(
+            new AxisNode("1", "Fuel", 0, true, null), new AxisNode("1|10", "Trip", 1, false, "1"));
+    List<AxisNode> columns = List.of(new AxisNode("total", "Total"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Fuel", "expense"));
+    GridData data =
+        turnoverData(
+            turnover("1", "Fuel", "expense", "2026-01", "EUR", "50.00", "50.00"),
+            turnover("1|10", "Trip", null, "2026-01", "EUR", "20.00", "20.00"));
+    ReportSpec spec = matrixSpecWithTotals(List.of(Dimension.CATEGORY, Dimension.TAG), List.of());
+
+    ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.columnTotals()).containsExactly(new Cell.Illegal(Cell.Reason.CROSS_TAG_TOTAL));
   }
 
   // ── balance sheet shape (rows=Account, no column dimension, two measures) ──

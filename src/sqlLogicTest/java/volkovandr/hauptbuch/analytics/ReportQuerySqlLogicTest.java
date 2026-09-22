@@ -1345,4 +1345,289 @@ class ReportQuerySqlLogicTest {
     assertThat(cells).hasSize(1);
     amount(cells.get(0).nativeAmount(), "20.00");
   }
+
+  // ── childAccountTurnover / childAccountClosingBalance / childAccountCandidates ──
+  // (stage e nesting, reporting.md §9.1 — the same-dimension "expand one node" case)
+
+  @Test
+  void childAccountTurnoverGroupsByDirectChildOfTheExpandedNodeNotByFood() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+    long restaurants = insertAccount("Restaurants", "expense", EUR, food);
+    long snacks = insertAccount("Snacks", "expense", EUR, food);
+    long fuel = insertAccount("Fuel", "expense", EUR, null); // a sibling of Food — never a child
+
+    postSingleCurrency(cash, restaurants, LocalDate.of(2026, 1, 15), "30.00");
+    postSingleCurrency(cash, snacks, LocalDate.of(2026, 1, 20), "5.00");
+    postSingleCurrency(cash, fuel, LocalDate.of(2026, 1, 21), "40.00");
+
+    List<RawTurnoverCell> cells =
+        repository.childAccountTurnover(
+            food,
+            INCOME_EXPENSE,
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            NONE);
+
+    assertThat(cells)
+        .extracting(RawTurnoverCell::dimensionLabel)
+        .containsExactlyInAnyOrder("Restaurants", "Snacks");
+    amount(byLabelAndMonth(cells, "Restaurants", "2026-01").nativeAmount(), "30.00");
+    amount(byLabelAndMonth(cells, "Snacks", "2026-01").nativeAmount(), "5.00");
+  }
+
+  @Test
+  void childAccountTurnoverRollsUpGrandchildToDirectChildOfTheExpandedNode() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+    long restaurants = insertAccount("Restaurants", "expense", EUR, food);
+    long fastFood = insertAccount("Fast food", "expense", EUR, restaurants);
+
+    postSingleCurrency(cash, fastFood, LocalDate.of(2026, 1, 15), "12.00");
+
+    List<RawTurnoverCell> cells =
+        repository.childAccountTurnover(
+            food,
+            INCOME_EXPENSE,
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            NONE);
+
+    assertThat(cells).hasSize(1);
+    assertThat(cells.get(0).dimensionLabel()).isEqualTo("Restaurants");
+    amount(cells.get(0).nativeAmount(), "12.00");
+  }
+
+  @Test
+  void childAccountClosingBalanceGroupsByDirectChildOfTheExpandedNode() {
+    long opening = insertAccount("Opening Balances", "equity", EUR, null);
+    long savings = insertAccount("Savings", "asset", EUR, null);
+    long cashEur = insertAccount("Cash EUR", "asset", EUR, savings);
+    long cashChf = insertAccount("Cash CHF", "asset", CHF, savings);
+    postSingleCurrency(opening, cashEur, LocalDate.of(2026, 1, 1), "500.00");
+    postSingleCurrency(opening, cashChf, LocalDate.of(2026, 1, 1), "300.00");
+
+    List<RawBalanceCell> cells =
+        repository.childAccountClosingBalance(
+            savings, ASSET_LIABILITY, LocalDate.of(2026, 1, 31), true, false, NONE);
+
+    assertThat(cells)
+        .extracting(RawBalanceCell::dimensionLabel)
+        .containsExactlyInAnyOrder("Cash EUR", "Cash CHF");
+    amount(byLabel(cells, "Cash EUR").nativeBalance(), "500.00");
+    amount(byLabel(cells, "Cash CHF").nativeBalance(), "300.00");
+  }
+
+  @Test
+  void childAccountCandidatesListsLiveDirectChildrenIncludingZeroActivityOnes() {
+    long food = insertAccount("Food", "expense", EUR, null);
+    insertAccount("Restaurants", "expense", EUR, food); // has no postings at all
+    long snacks = insertAccount("Snacks", "expense", EUR, food);
+    long snacksEur = insertAccount("Snacks-EUR", "expense", EUR, snacks);
+    jdbcClient
+        .sql("update account set currency_leaf = true where account_id = :a")
+        .param("a", snacksEur)
+        .update();
+
+    assertThat(repository.childAccountCandidates(food, true))
+        .extracting(TopLevelNode::label)
+        .containsExactlyInAnyOrder("Restaurants", "Snacks");
+  }
+
+  // ── childTagTurnover / childTagCandidates (the unspecified bucket, §9.3) ────
+
+  @Test
+  void childTagTurnoverGroupsByDirectChildTagAndCarriesTheUnspecifiedBucket() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long fuel = insertAccount("Fuel", "expense", EUR, null);
+    long trip = insertTag("Trip", null);
+    long prague = insertTag("Prague", trip);
+
+    long pragueTxn = insertTransaction(LocalDate.of(2026, 1, 5), false, false);
+    insertPosting(pragueTxn, cash, "-50.00", null);
+    long pragueLeg = insertPosting(pragueTxn, fuel, "50.00", null);
+    tag(pragueLeg, prague);
+
+    // Tagged directly on Trip, with no sub-tag — the (unspecified) bucket (data-model §10.3).
+    long lodging = insertAccount("Lodging", "expense", EUR, null);
+    long directTxn = insertTransaction(LocalDate.of(2026, 1, 6), false, false);
+    insertPosting(directTxn, cash, "-80.00", null);
+    long directLeg = insertPosting(directTxn, lodging, "80.00", null);
+    tag(directLeg, trip);
+
+    List<RawTurnoverCell> cells =
+        repository.childTagTurnover(
+            trip,
+            List.of("expense"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            NONE);
+
+    assertThat(cells)
+        .extracting(RawTurnoverCell::dimensionLabel)
+        .containsExactlyInAnyOrder("Prague", "(unspecified)");
+    amount(byLabelAndMonth(cells, "Prague", "2026-01").nativeAmount(), "50.00");
+    amount(byLabelAndMonth(cells, "(unspecified)", "2026-01").nativeAmount(), "80.00");
+  }
+
+  @Test
+  void childTagTurnoverCountsPostingUnderBothDirectTagAndChildTagWhenItCarriesBoth() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long fuel = insertAccount("Fuel", "expense", EUR, null);
+    long trip = insertTag("Trip", null);
+    long prague = insertTag("Prague", trip);
+
+    long txn = insertTransaction(LocalDate.of(2026, 1, 5), false, false);
+    insertPosting(txn, cash, "-20.00", null);
+    long leg = insertPosting(txn, fuel, "20.00", null);
+    tag(leg, trip); // both the parent tag itself...
+    tag(leg, prague); // ...and a child tag together (tags are not leaves-only, data-model §10.3)
+
+    List<RawTurnoverCell> cells =
+        repository.childTagTurnover(
+            trip,
+            List.of("expense"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            NONE);
+
+    assertThat(cells)
+        .extracting(RawTurnoverCell::dimensionLabel)
+        .containsExactlyInAnyOrder("Prague", "(unspecified)");
+    amount(byLabelAndMonth(cells, "Prague", "2026-01").nativeAmount(), "20.00");
+    amount(byLabelAndMonth(cells, "(unspecified)", "2026-01").nativeAmount(), "20.00");
+  }
+
+  @Test
+  void childTagCandidatesListsTheUnspecifiedBucketFirstThenDirectChildTagsEvenWithNoActivity() {
+    long trip = insertTag("Trip", null);
+    insertTag("Prague", trip);
+    insertTag("Vienna", trip);
+    insertTag("Audi", insertTag("Car", null)); // an unrelated tree — never listed
+
+    // "(unspecified)" sits where a real catch-all child would — a synthetic *first* child, not an
+    // afterthought appended last (reporting.md §9.3).
+    assertThat(repository.childTagCandidates(trip))
+        .extracting(TopLevelNode::label)
+        .containsExactly("(unspecified)", "Prague", "Vienna");
+  }
+
+  // ── cross-dimension nesting (rows=[Tag, Category], §3/§9.2's worked example) ──
+
+  @Test
+  void tagIsOneOfTripsScopesTheCategoryBreakdownToThatSubtreeAcrossDimensions() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long fuel = insertAccount("Fuel", "expense", EUR, null);
+    long trip = insertTag("Trip", null);
+
+    long tripTxn = insertTransaction(LocalDate.of(2026, 1, 5), false, false);
+    insertPosting(tripTxn, cash, "-50.00", null);
+    long tripLeg = insertPosting(tripTxn, fuel, "50.00", null);
+    tag(tripLeg, trip);
+    postSingleCurrency(cash, fuel, LocalDate.of(2026, 1, 6), "20.00"); // ordinary, untagged fuel
+
+    ReportFilter tripFilter =
+        new ReportFilter(
+            FilterField.TAG,
+            FilterLevel.TRANSACTION,
+            FilterOperator.IS_ONE_OF,
+            List.of(String.valueOf(trip)));
+
+    List<RawTurnoverCell> cells =
+        repository.accountTreeTurnover(
+            List.of("expense"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            new QueryConstraints(List.of(tripFilter)));
+
+    assertThat(cells).hasSize(1);
+    assertThat(cells.get(0).dimensionLabel()).isEqualTo("Fuel");
+    amount(cells.get(0).nativeAmount(), "50.00");
+  }
+
+  @Test
+  void nestingRowsTagThenCategoryReusesTheExistingFilterCompilerForTheOwnersWorkedExample() {
+    // reporting.md §9.2's worked example: rows = [Tag, Category], Tag is one of {Trip} — Trip
+    // renders as a heading with one row per category spent on the trip beneath it. The category
+    // breakdown under the expanded Trip node is not a new query shape — it is the ordinary
+    // accountTreeTurnover call the Category dimension already uses at the top level, with one
+    // extra synthetic subtree filter naming Trip (ReportDataFetcher#mergeChildTurnover).
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long fuel = insertAccount("Fuel", "expense", EUR, null);
+    long trip = insertTag("Trip", null);
+
+    long fuelTxn = insertTransaction(LocalDate.of(2026, 1, 5), false, false);
+    insertPosting(fuelTxn, cash, "-50.00", null);
+    tag(insertPosting(fuelTxn, fuel, "50.00", null), trip);
+    long lodging = insertAccount("Lodging", "expense", EUR, null);
+    long lodgingTxn = insertTransaction(LocalDate.of(2026, 1, 6), false, false);
+    insertPosting(lodgingTxn, cash, "-80.00", null);
+    tag(insertPosting(lodgingTxn, lodging, "80.00", null), trip);
+    postSingleCurrency(cash, fuel, LocalDate.of(2026, 1, 7), "20.00"); // untagged, excluded
+
+    // The outer (Tag) level, exactly as rendered today with rows = [Tag] alone.
+    List<RawTurnoverCell> tripLevel =
+        repository.tagTurnover(
+            List.of("expense"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            NONE);
+    assertThat(tripLevel).hasSize(1);
+    assertThat(tripLevel.get(0).dimensionLabel()).isEqualTo("Trip");
+    amount(tripLevel.get(0).nativeAmount(), "130.00"); // 50.00 + 80.00
+
+    // The inner (Category) level, scoped to the expanded Trip node.
+    ReportFilter tripFilter =
+        new ReportFilter(
+            FilterField.TAG,
+            FilterLevel.TRANSACTION,
+            FilterOperator.IS_ONE_OF,
+            List.of(String.valueOf(trip)));
+    List<RawTurnoverCell> categoryLevel =
+        repository.accountTreeTurnover(
+            List.of("expense"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            new QueryConstraints(List.of(tripFilter)));
+
+    assertThat(categoryLevel)
+        .extracting(RawTurnoverCell::dimensionLabel)
+        .containsExactlyInAnyOrder("Fuel", "Lodging");
+    amount(byLabelAndMonth(categoryLevel, "Fuel", "2026-01").nativeAmount(), "50.00");
+    amount(byLabelAndMonth(categoryLevel, "Lodging", "2026-01").nativeAmount(), "80.00");
+    // The children sum back to the parent's own total — the subtotal reading of §9.2.
+    BigDecimal childrenSum =
+        categoryLevel.stream()
+            .map(RawTurnoverCell::nativeAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    amount(childrenSum, "130.00");
+  }
 }

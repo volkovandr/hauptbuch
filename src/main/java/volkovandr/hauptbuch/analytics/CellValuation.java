@@ -38,13 +38,12 @@ class CellValuation {
         nonDateDim == null
             ? AxisNode.TOTAL_KEY
             : (axes.rowDim() == nonDateDim ? rowNode.key() : columnBucketNode.key());
-    boolean creditNatural = isCreditNatural(context.candidatesByKey().get(dimKey), context.scope());
-
     String monthKey =
         axes.dateOnRows() ? rowNode.key() : axes.dateOnColumns() ? columnBucketNode.key() : null;
     if (measure.kind() == MeasureKind.TURNOVER) {
       List<RawTurnoverCell> matches =
           turnoverMatches(measure.leg(), dimKey, monthKey, context.data());
+      boolean creditNatural = isCreditNaturalType(turnoverDimensionType(matches), context.scope());
       return turnoverCellValue(matches, measure, context.baseCurrency(), creditNatural);
     }
     if (measure.kind() == MeasureKind.COUNT_POSTINGS
@@ -52,8 +51,7 @@ class CellValuation {
       List<RawTurnoverCell> matches = turnoverMatches(Leg.NET, dimKey, monthKey, context.data());
       return countCellValue(matches, measure.kind());
     }
-    return computeClosingBalanceCell(
-        measure, rowNode, columnBucketNode, dimKey, creditNatural, axes, context);
+    return computeClosingBalanceCell(measure, rowNode, columnBucketNode, dimKey, axes, context);
   }
 
   private Cell computeClosingBalanceCell(
@@ -61,7 +59,6 @@ class CellValuation {
       AxisNode rowNode,
       AxisNode columnBucketNode,
       String dimKey,
-      boolean creditNatural,
       AxisPlan axes,
       CellContext context) {
     String bucketKey =
@@ -73,19 +70,30 @@ class CellValuation {
     LocalDate asOf = context.data().asOfByBucketKey().get(bucketKey);
     List<RawBalanceCell> matches =
         raw.stream().filter(c -> c.dimensionKey().equals(dimKey)).toList();
+    boolean creditNatural = isCreditNaturalType(balanceDimensionType(matches), context.scope());
     return balanceCellValue(matches, measure, context.baseCurrency(), asOf, creditNatural);
   }
 
+  private static String turnoverDimensionType(List<RawTurnoverCell> matches) {
+    return matches.isEmpty() ? null : matches.get(0).dimensionType();
+  }
+
+  private static String balanceDimensionType(List<RawBalanceCell> matches) {
+    return matches.isEmpty() ? null : matches.get(0).dimensionType();
+  }
+
   /**
-   * The credit-natural flip for one cell: a node with a single known type (an account-tree row, or
-   * an {@link Dimension#ACCOUNT_TYPE}/{@link Dimension#PERSON} row, both unambiguous) flips by its
-   * own type; a node with none — no row/column dimension at all, or a dimension spanning more than
-   * one type ({@link Dimension#CURRENCY}, {@link Dimension#PAYEE}) — falls back to {@link
-   * #isCreditNaturalScope}.
+   * The credit-natural flip for one cell, read from the <strong>matched raw cell's own</strong>
+   * {@code dimensionType} — not a candidates-by-key lookup, which only ever covers the axis's
+   * top-level (depth-0) nodes and would silently miss a stage-e nested (depth-1) row's composite
+   * {@code "outerKey|innerKey"} key, falling back to the scope-wide guess below even when the raw
+   * data already carries the nested row's real account type. A known type flips by itself; {@code
+   * null} — no row/column dimension at all, or a dimension spanning more than one type ({@link
+   * Dimension#CURRENCY}, {@link Dimension#PAYEE}) — falls back to {@link #isCreditNaturalScope}.
    */
-  private static boolean isCreditNatural(TopLevelNode node, Scope scope) {
-    if (node != null && node.type() != null) {
-      return CREDIT_NATURAL_TYPES.contains(node.type());
+  private static boolean isCreditNaturalType(String type, Scope scope) {
+    if (type != null) {
+      return CREDIT_NATURAL_TYPES.contains(type);
     }
     return isCreditNaturalScope(scope);
   }
