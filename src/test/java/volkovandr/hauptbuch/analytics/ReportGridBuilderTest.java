@@ -227,6 +227,24 @@ class ReportGridBuilderTest {
   }
 
   @Test
+  void frontierNodesMarksAnExpandedOuterNodeExpandedButLeavesUnexpandedOnesNotAndChildrenNever() {
+    // Stage e2 (§9.1/§9.2): the UI needs to tell an expanded node from a collapsed one to draw the
+    // right toggle icon, per node — not just uniformly for the whole axis.
+    Map<String, TopLevelNode> outer =
+        candidates(new TopLevelNode("1", "Trips", null), new TopLevelNode("2", "Car", null));
+    Map<String, TopLevelNode> inner = candidates(new TopLevelNode("10", "Food", "expense"));
+
+    List<AxisNode> frontier =
+        builder.frontierNodes(
+            Dimension.TAG, Dimension.CATEGORY, outer, inner, Map.of(), Set.of("1"));
+
+    assertThat(frontier).extracting(AxisNode::key).containsExactly("1", "1|10", "2");
+    assertThat(frontier.get(0).expanded()).isTrue();
+    assertThat(frontier.get(1).expanded()).isFalse();
+    assertThat(frontier.get(2).expanded()).isFalse();
+  }
+
+  @Test
   void frontierNodesFlattensAnExpandedOuterNodesSameDimensionChildrenRightAfterIt() {
     // §9.1's same-dimension case: a plain rows = [Category] report expanding "Food" into its own
     // children, keyed by outer node rather than reused across every expanded node.

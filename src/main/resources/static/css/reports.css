@@ -47,6 +47,20 @@ table.report tfoot td {
   font-weight: 600;
 }
 
+/* The row-tree expand/collapse control (reporting.md §9.1/§9.2, plan stage e2). */
+.report__toggle {
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0 0.3rem 0 0;
+}
+
+.report__toggle--static {
+  cursor: default;
+}
+
 /* Chart renderer (reporting.md §10): small multiples stack; each panel's SVG is intrinsically
    sized by its viewBox, so it only needs a max-width to stay legible on a phone. */
 .chart-panels {

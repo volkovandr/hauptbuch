@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.analytics;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -13,6 +14,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
 import volkovandr.hauptbuch.ledger.SettingsService;
@@ -307,5 +309,150 @@ class ReportEngineTest {
 
     verify(dataFetcher).candidatesFor(Dimension.CATEGORY, List.of("expense"), s.scope());
     verify(dataFetcher, never()).childCandidatesFor(any(), any(), any());
+  }
+
+  // ── stage e2: a saved Report's remembered per-node expansion (reporting.md §9.1) ────────────
+
+  @Test
+  void explicitExpandedKeysFetchesChildrenOnlyForTheKeysNamed() {
+    baseIsEur();
+    TopLevelNode food = new TopLevelNode("1", "Food", "expense");
+    TopLevelNode fuel = new TopLevelNode("2", "Fuel", "expense");
+    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
+        .thenReturn(Map.of("1", food, "2", fuel));
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
+    ReportSpec s =
+        spec(
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            Measure.turnover(PresentationCurrency.BASE, Leg.NET),
+            Scope.ofTypes("expense"));
+
+    engine.render(s, TODAY, Set.of("1"));
+
+    verify(dataFetcher).childCandidatesFor(Dimension.CATEGORY, "1", s.scope());
+    verify(dataFetcher, never()).childCandidatesFor(eq(Dimension.CATEGORY), eq("2"), any());
+  }
+
+  @Test
+  void explicitlyEmptyExpandedKeysFetchesNoChildrenEvenWhenAutoWouldHaveExpanded() {
+    baseIsEur();
+    // A filter selecting exactly one node is auto's own "start expanded" trigger (§9.2) — an
+    // explicit (if empty) override must still win over it, since the owner hand-collapsed it.
+    TopLevelNode food = new TopLevelNode("1", "Food", "expense");
+    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
+        .thenReturn(Map.of("1", food));
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
+    ReportSpec s =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(
+                new ReportFilter(
+                    FilterField.CATEGORY,
+                    FilterLevel.TRANSACTION,
+                    FilterOperator.IS_ONE_OF,
+                    List.of("1"))),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            true);
+
+    engine.render(s, TODAY, Set.of());
+
+    verify(dataFetcher, never()).childCandidatesFor(any(), any(), any());
+  }
+
+  @Test
+  void nullExpandedKeysFallsBackToAutoJustLikeTheNoArgOverload() {
+    baseIsEur();
+    TopLevelNode food = new TopLevelNode("1", "Food", "expense");
+    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
+        .thenReturn(Map.of("1", food));
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
+    ReportSpec s =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(
+                new ReportFilter(
+                    FilterField.CATEGORY,
+                    FilterLevel.TRANSACTION,
+                    FilterOperator.IS_ONE_OF,
+                    List.of("1"))),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            true);
+
+    engine.render(s, TODAY, (Set<String>) null);
+
+    verify(dataFetcher).childCandidatesFor(Dimension.CATEGORY, "1", s.scope());
+  }
+
+  @Test
+  void effectiveExpandedKeysIntersectsTheExplicitOverrideWithRealCandidates() {
+    baseIsEur();
+    TopLevelNode food = new TopLevelNode("1", "Food", "expense");
+    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
+        .thenReturn(Map.of("1", food));
+    ReportSpec s =
+        spec(
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            Measure.turnover(PresentationCurrency.BASE, Leg.NET),
+            Scope.ofTypes("expense"));
+
+    // "99" no longer exists (a since-deleted category) — dropped silently rather than kept.
+    Set<String> effective = engine.effectiveExpandedKeys(s, Set.of("1", "99"));
+
+    assertThat(effective).containsExactly("1");
+  }
+
+  @Test
+  void effectiveExpandedKeysDefersToAutoWhenThereIsNoExplicitOverride() {
+    baseIsEur();
+    TopLevelNode food = new TopLevelNode("1", "Food", "expense");
+    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
+        .thenReturn(Map.of("1", food));
+    ReportSpec s =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(
+                new ReportFilter(
+                    FilterField.CATEGORY,
+                    FilterLevel.TRANSACTION,
+                    FilterOperator.IS_ONE_OF,
+                    List.of("1"))),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            true);
+
+    Set<String> effective = engine.effectiveExpandedKeys(s, null);
+
+    assertThat(effective).containsExactly("1");
   }
 }

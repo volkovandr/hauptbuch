@@ -82,8 +82,9 @@ class ReportGridBuilder {
     for (TopLevelNode outer : outerCandidatesByKey.values()) {
       boolean expandable =
           AutoExpansion.isNestable(outerDim) && !AutoExpansion.isPersonLeafBucket(outer.key());
-      frontier.add(new AxisNode(outer.key(), outer.label(), 0, expandable, null));
-      if (expandable && expandedOuterKeys.contains(outer.key())) {
+      boolean expanded = expandable && expandedOuterKeys.contains(outer.key());
+      frontier.add(new AxisNode(outer.key(), outer.label(), 0, expandable, null, expanded));
+      if (expanded) {
         List<TopLevelNode> children =
             innerDim != null
                 ? List.copyOf(innerCandidatesByKey.values())

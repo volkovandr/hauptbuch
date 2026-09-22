@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.analytics.repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.analytics.Renderer;
@@ -48,7 +49,8 @@ public class ReportRepository {
     return jdbcClient
         .sql(
             """
-            select report_id, name, renderer, trend_line, spec::text as spec
+            select report_id, name, renderer, trend_line, spec::text as spec,
+              expanded_node_keys::text as expandedNodeKeys
             from report where report_id = :id
             """)
         .param("id", reportId)
@@ -62,7 +64,8 @@ public class ReportRepository {
     return jdbcClient
         .sql(
             """
-            select report_id, name, renderer, trend_line, spec::text as spec
+            select report_id, name, renderer, trend_line, spec::text as spec,
+              expanded_node_keys::text as expandedNodeKeys
             from report order by name
             """)
         .query(RawRow.class)
@@ -98,15 +101,36 @@ public class ReportRepository {
     jdbcClient.sql("delete from report where report_id = :id").param("id", reportId).update();
   }
 
+  /**
+   * Overwrites a Report's remembered row-tree expansion state (reporting.md §9.1, plan stage e2) —
+   * the toggle endpoint's own write, separate from {@link #update} since toggling a node is not a
+   * Save. {@code keys} may be empty (everything hand-collapsed) but is never itself {@code null}
+   * here — {@code null} is only ever the "never touched" starting state {@link #insert} leaves it
+   * in.
+   */
+  public void updateExpandedNodeKeys(long reportId, Set<String> keys) {
+    jdbcClient
+        .sql("update report set expanded_node_keys = :keys::jsonb where report_id = :id")
+        .param("keys", ReportSpecJson.toNodeKeysJson(keys))
+        .param("id", reportId)
+        .update();
+  }
+
   private static SavedReport toSavedReport(RawRow row) {
     return new SavedReport(
         row.reportId(),
         row.name(),
         ReportSpecJson.fromJson(row.spec()),
         Renderer.valueOf(row.renderer()),
-        row.trendLine());
+        row.trendLine(),
+        ReportSpecJson.fromNodeKeysJson(row.expandedNodeKeys()));
   }
 
   private record RawRow(
-      long reportId, String name, String renderer, boolean trendLine, String spec) {}
+      long reportId,
+      String name,
+      String renderer,
+      boolean trendLine,
+      String spec,
+      String expandedNodeKeys) {}
 }

@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.analytics;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -61,6 +62,16 @@ class ReportService {
   void delete(long reportId) {
     reportRepository.delete(reportId);
     LOG.info("Report deleted: id={}", reportId);
+  }
+
+  /**
+   * Overwrites a saved Report's remembered row-tree expansion state (reporting.md §9.1, plan stage
+   * e2) — the toggle endpoint's own write. Not logged at INFO: unlike Save, a single node
+   * expand/collapse is routine UI state, not a structural event (CLAUDE.md's logging ladder).
+   */
+  void updateExpandedNodeKeys(long reportId, Set<String> keys) {
+    requireReport(reportId);
+    reportRepository.updateExpandedNodeKeys(reportId, keys);
   }
 
   private SavedReport requireReport(long reportId) {

@@ -115,4 +115,39 @@ class ReportRepositoryIntegrationTest {
     assertThat(found.renderer()).isEqualTo(Renderer.LINE);
     assertThat(found.trendLine()).isTrue();
   }
+
+  // ── expanded node keys (reporting.md §9.1, plan stage e2) ───────────────────────────────────
+
+  @Test
+  void newlyInsertedReportHasNoExplicitExpansionState() {
+    SavedReport inserted =
+        reportRepository.insert("Fresh", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+
+    assertThat(inserted.expandedNodeKeys()).isNull();
+    assertThat(reportRepository.findById(inserted.reportId()).orElseThrow().expandedNodeKeys())
+        .isNull();
+  }
+
+  @Test
+  void updateExpandedNodeKeysRoundTripsPopulatedKeys() {
+    SavedReport inserted =
+        reportRepository.insert("Toggled", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+
+    reportRepository.updateExpandedNodeKeys(inserted.reportId(), Set.of("1", "1|10"));
+
+    SavedReport found = reportRepository.findById(inserted.reportId()).orElseThrow();
+    assertThat(found.expandedNodeKeys()).containsExactlyInAnyOrder("1", "1|10");
+  }
+
+  @Test
+  void updateExpandedNodeKeysRoundTripsAnEmptySetDistinctFromNull() {
+    SavedReport inserted =
+        reportRepository.insert("Collapsed", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+    reportRepository.updateExpandedNodeKeys(inserted.reportId(), Set.of("1"));
+
+    reportRepository.updateExpandedNodeKeys(inserted.reportId(), Set.of());
+
+    SavedReport found = reportRepository.findById(inserted.reportId()).orElseThrow();
+    assertThat(found.expandedNodeKeys()).isNotNull().isEmpty();
+  }
 }

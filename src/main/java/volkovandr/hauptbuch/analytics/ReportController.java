@@ -69,7 +69,8 @@ class ReportController {
         reportEngine,
         filterViewAssembler,
         pagePath,
-        hxRequest);
+        hxRequest,
+        null);
   }
 
   private static PresetDef presetFor(String slug) {

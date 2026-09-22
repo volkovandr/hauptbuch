@@ -7,10 +7,17 @@
 
   Every cell is a ReportTableView.CellText: `text` is already display-formatted, `help` is non-null
   only for an illegal "—" (§7.2) and renders the help marker (§11a.7) naming which reason applies.
+
+  A row's expand/collapse control (reporting.md §9.1/§9.2, plan stage e2) only posts when
+  `report.toggleReportId()` is set — a Preset, a Frame's compact card, and a page currently showing
+  an unsaved draft never offer one (expansion state is remembered only against a saved Report's own
+  current spec, §9.1); those still render whatever tree `auto` (or the remembered state) produced,
+  just without a way to change it here. `id="report-table"` is this fragment's own htmx swap target,
+  so a toggle replaces only the table, leaving the settings strip and actions untouched.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
   <body>
-    <table class="report" th:fragment="body">
+    <table class="report" id="report-table" th:fragment="body">
       <thead>
         <tr>
           <th></th>
@@ -20,7 +27,23 @@
       </thead>
       <tbody>
         <tr th:each="row : ${report.rows()}">
-          <td th:text="${row.label()}">Row</td>
+          <td th:style="|padding-left: ${row.depth() * 20}px|">
+            <button
+              th:if="${row.expandable() and report.toggleReportId() != null}"
+              type="button"
+              class="report__toggle"
+              th:text="${row.expanded()} ? '▾' : '▸'"
+              hx-target="#report-table"
+              hx-swap="outerHTML"
+              th:attr="hx-post=@{/reports/{reportId}/expand(reportId=${report.toggleReportId()}, node=${row.key()})}"
+            >▸</button>
+            <span
+              th:if="${row.expandable() and report.toggleReportId() == null}"
+              class="report__toggle report__toggle--static"
+              th:text="${row.expanded()} ? '▾' : '▸'"
+            >▸</span>
+            <span th:text="${row.label()}">Row</span>
+          </td>
           <td class="num" th:each="cell : ${row.cells()}">
             <span th:text="${cell.text()}">0,00</span>
             <span th:if="${cell.help() != null}">

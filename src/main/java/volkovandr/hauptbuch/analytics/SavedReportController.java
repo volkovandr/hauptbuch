@@ -1,5 +1,8 @@
 package volkovandr.hauptbuch.analytics;
 
+import java.time.LocalDate;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.MultiValueMap;
@@ -74,7 +77,8 @@ class SavedReportController {
         reportEngine,
         filterViewAssembler,
         pagePath,
-        hxRequest);
+        hxRequest,
+        unsaved ? null : reportId);
   }
 
   /**
@@ -101,6 +105,37 @@ class SavedReportController {
   String delete(@PathVariable long reportId) {
     reportService.delete(reportId);
     return REDIRECT_TO_LIST;
+  }
+
+  /**
+   * Toggles one top-level row's expansion (reporting.md §9.1/§9.2, plan stage e2) and swaps just
+   * the table body — the settings-strip machinery ({@link ReportSettingsView}) is untouched, since
+   * expansion is deliberately not part of the URL (§9.1). Reads the current effective set (whatever
+   * {@code auto} would show, once the saved Report's own remembered state is {@code null}) rather
+   * than the raw stored column, so the very first toggle on an {@code auto}-only Report starts from
+   * what is actually on screen instead of an empty set.
+   */
+  @PostMapping(BASE_PATH + "/{reportId:\\d+}/expand")
+  String toggleExpansion(@PathVariable long reportId, @RequestParam String node, Model model) {
+    SavedReport saved = requireReport(reportId);
+    Set<String> updated =
+        new LinkedHashSet<>(
+            reportEngine.effectiveExpandedKeys(saved.spec(), saved.expandedNodeKeys()));
+    if (!updated.remove(node)) {
+      updated.add(node);
+    }
+    reportService.updateExpandedNodeKeys(reportId, updated);
+
+    String baseCurrency =
+        settingsService
+            .baseCurrency()
+            .orElseThrow(() -> new IllegalStateException("Base currency must be set to expand."));
+    ReportGrid grid = reportEngine.render(saved.spec(), LocalDate.now(), updated);
+    model.addAttribute(
+        "report",
+        ReportTableViewAssembler.assemble(
+            saved.name(), saved.spec(), grid, baseCurrency, reportId));
+    return "fragments/report-table-body :: body";
   }
 
   private SavedReport requireReport(long reportId) {
