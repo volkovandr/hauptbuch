@@ -9,9 +9,16 @@ import java.util.Set;
  * scope, filters, a date range, and the totals/suppression toggles. Not the output — the same spec
  * re-run tomorrow shows different figures (CONTEXT.md "Report").
  *
- * <p>Stage a caps rows and columns at one dimension each (reporting.md §3's two-dimensions-per-axis
- * nesting lands in stage e); a hierarchical dimension renders fully collapsed — one row per
- * top-level node, each summing its whole subtree — since expansion is stage e.
+ * <p>Stage e allows up to two dimensions on rows or columns — nesting, not a cartesian product
+ * (§3): {@code rows = [Tag, Category]} renders each tag as a group whose expansion reveals its
+ * category breakdown. A single dimension still renders fully collapsed by default — one row per
+ * top-level node, each summing its whole subtree — until expanded (§9). The constructor rejects the
+ * same dimension repeated on one axis (nesting a dimension under itself has no meaning here — a
+ * single hierarchical dimension's own subtree is walked by expanding one node, not by naming it
+ * twice) and rejects {@link Dimension#DATE} combined with another dimension on the same axis (the
+ * ladder, §8.2, is its own axis-filling mechanism). {@link ReportEngine} keeps stage a's remaining
+ * rule: only one of the two axes may carry a non-Date dimension at all — a cross-axis
+ * two-different- dimension cartesian (e.g. Category rows × Account columns) is out of scope.
  *
  * <p>Stage b adds {@code series} (§3: the chart legend / bar-group axis, 0–1 dimension). A spec may
  * carry {@code rows} <strong>or</strong> {@code series}, never both — combining a real small-
@@ -22,8 +29,8 @@ import java.util.Set;
  * renderer alone decides whether {@link ReportGrid#rows()} means "one small chart per row" or "one
  * legend entry per row" by asking which of the two the spec actually set.
  *
- * @param rows 0 or 1 row dimension
- * @param columns 0 or 1 column dimension
+ * @param rows 0, 1 or 2 row dimensions (§3 — two is nesting, not a cartesian product)
+ * @param columns 0, 1 or 2 column dimensions
  * @param series 0 or 1 series dimension — chart-only, unused by the table renderer (§3)
  * @param measures the report's columns-of-measures; at least one
  * @param scope which account types a flow measure counts (§6.1)
@@ -47,6 +54,9 @@ public record ReportSpec(
     boolean columnTotals,
     boolean suppressEmptyRows) {
 
+  /** §3's per-axis cap: rows or columns may nest at most this many dimensions. */
+  private static final int MAX_DIMENSIONS_PER_AXIS = 2;
+
   /** Defensively copies the lists and enforces stage a/b's axis caps. */
   public ReportSpec {
     rows = List.copyOf(rows);
@@ -54,12 +64,8 @@ public record ReportSpec(
     series = List.copyOf(series);
     measures = List.copyOf(measures);
     filters = List.copyOf(filters);
-    if (rows.size() > 1) {
-      throw new IllegalArgumentException("Stage a allows at most one row dimension.");
-    }
-    if (columns.size() > 1) {
-      throw new IllegalArgumentException("Stage a allows at most one column dimension.");
-    }
+    requireAxisShape(rows, "rows");
+    requireAxisShape(columns, "columns");
     if (series.size() > 1) {
       throw new IllegalArgumentException("A report allows at most one series dimension.");
     }
@@ -76,6 +82,27 @@ public record ReportSpec(
         throw new IllegalArgumentException(
             "A report carries at most one filter per field (§6.2): " + filter.field());
       }
+    }
+  }
+
+  /**
+   * One axis (rows or columns) allows 0–2 dimensions (§3), never the same dimension twice, and
+   * never {@link Dimension#DATE} alongside another dimension — the ladder fills an axis on its own
+   * (§8.2).
+   */
+  private static void requireAxisShape(List<Dimension> dimensions, String axisName) {
+    if (dimensions.size() > MAX_DIMENSIONS_PER_AXIS) {
+      throw new IllegalArgumentException(
+          "A report allows at most two " + axisName + " dimensions (§3).");
+    }
+    boolean nestsTwo = dimensions.size() == MAX_DIMENSIONS_PER_AXIS;
+    if (nestsTwo && dimensions.get(0) == dimensions.get(1)) {
+      throw new IllegalArgumentException(
+          "A report cannot repeat the same dimension on " + axisName + " (§3).");
+    }
+    if (nestsTwo && dimensions.contains(Dimension.DATE)) {
+      throw new IllegalArgumentException(
+          "Date cannot combine with another dimension on " + axisName + " (§8.2).");
     }
   }
 }

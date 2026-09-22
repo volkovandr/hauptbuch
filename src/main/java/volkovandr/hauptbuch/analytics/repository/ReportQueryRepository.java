@@ -42,6 +42,7 @@ public class ReportQueryRepository {
   private static final String INCLUDE_CLOSED = "includeClosedAccounts";
   private static final String INCLUDE_PENDING_REVIEW = "includePendingReview";
   private static final String AS_OF = "asOf";
+  private static final String PARENT_ID = "parentId";
   private static final String WHERE = "where ";
   private static final String AND = "  and ";
   private static final String ON = " on ";
@@ -97,6 +98,49 @@ public class ReportQueryRepository {
         where tg.deleted_at is null
       )
       """;
+
+  /**
+   * {@link #ACCOUNT_ANCESTOR_CTE} generalized to an arbitrary seed instead of the root: every
+   * descendant of {@code :parentId}, grouped by which of {@code :parentId}'s <em>direct</em>
+   * children it rolls up to — expanding one node one level (reporting.md §9.1). No person-leaf
+   * special case here (unlike {@link #ACCOUNT_ANCESTOR_CTE}): a debt leaf is always its own root
+   * (data-model §7), so it can never appear as a descendant of a real category/account node.
+   */
+  private static final String ACCOUNT_ANCESTOR_CTE_FROM_PARENT =
+      """
+      with recursive account_ancestor(account_id, top_id) as (
+        select account_id, account_id from account where parent_id = :parentId
+        union all
+        select a.account_id, anc.top_id
+        from account a
+        join account_ancestor anc on a.parent_id = anc.account_id
+      )
+      """;
+
+  /**
+   * {@link #TAG_ANCESTOR_CTE} generalized to an arbitrary seed instead of the root, mirroring
+   * {@link #ACCOUNT_ANCESTOR_CTE_FROM_PARENT} for the tag tree: every descendant of {@code
+   * :parentId}, grouped by which of {@code :parentId}'s direct children it rolls up to.
+   */
+  private static final String TAG_ANCESTOR_CTE_FROM_PARENT =
+      """
+      with recursive tag_ancestor(tag_id, top_id) as (
+        select tag_id, tag_id from tag where parent_id = :parentId and deleted_at is null
+        union all
+        select tg.tag_id, anc.top_id
+        from tag tg
+        join tag_ancestor anc on tg.parent_id = anc.tag_id
+        where tg.deleted_at is null
+      )
+      """;
+
+  /**
+   * A sentinel {@code top_id} for the "tagged directly on the expanded node itself" bucket (§9.3) —
+   * never a real {@code tag_id} (bigserial, always positive), so it can share {@link
+   * #childTagTurnover}'s grouping/labelling {@code case} with the real child rows without
+   * colliding.
+   */
+  private static final long UNSPECIFIED_TOP_ID = -1L;
 
   /**
    * The rate-as-of lookup (data-model §3.7) joined once per posting so both the base sum and the
@@ -303,6 +347,137 @@ public class ReportQueryRepository {
         .list();
   }
 
+  // ── childAccountTurnover / childAccountClosingBalance (stage e nesting, §9.1) ──
+
+  /**
+   * Turnover grouped by which direct child of {@code parentId} each posting's account rolls up to
+   * (reporting.md §9.1) — {@link #accountTreeTurnover} seeded at an arbitrary node instead of the
+   * root, for expanding one {@code CATEGORY}/{@code ACCOUNT} row into its own children.
+   */
+  public List<RawTurnoverCell> childAccountTurnover(
+      long parentId,
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      QueryConstraints constraints) {
+    CompiledExtra extra = compileExtra(constraints);
+    return jdbcClient
+        .sql(
+            ACCOUNT_ANCESTOR_CTE_FROM_PARENT
+                + """
+                select anc.top_id::text as dimension_key,
+                       top.name as dimension_label,
+                       top.type as dimension_type,
+                       to_char(date_trunc('month', t.date), 'YYYY-MM') as month_key,
+                       a.currency_code as currency_code,
+                       """
+                + TURNOVER_AGGREGATES
+                + """
+                from posting p
+                join transaction t on t.transaction_id = p.transaction_id
+                join account a on a.account_id = p.account_id
+                join account_ancestor anc on anc.account_id = a.account_id
+                join account top on top.account_id = anc.top_id
+                """
+                + RATE_LATERAL_JOIN
+                + WHERE
+                + SCOPE_PREDICATE
+                + AND
+                + LEG_PREDICATE
+                + "\n"
+                + extra.sql()
+                + """
+                group by dimension_key, dimension_label, dimension_type, month_key, a.currency_code
+                """)
+        .param(PARENT_ID, parentId)
+        .param(TYPES, types)
+        .param(START_DATE, startDate)
+        .param(END_DATE, endDate)
+        .param(BASE_CURRENCY, baseCurrency)
+        .param(LEG, leg)
+        .param(INCLUDE_CLOSED, includeClosedAccounts)
+        .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .params(extra.params())
+        .query(RawTurnoverCell.class)
+        .list();
+  }
+
+  /**
+   * {@link #accountTreeClosingBalance}, seeded at {@code parentId} — mirrors {@link
+   * #childAccountTurnover}.
+   */
+  public List<RawBalanceCell> childAccountClosingBalance(
+      long parentId,
+      List<String> types,
+      LocalDate asOf,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      QueryConstraints constraints) {
+    CompiledExtra extra = compileExtra(constraints);
+    return jdbcClient
+        .sql(
+            ACCOUNT_ANCESTOR_CTE_FROM_PARENT
+                + """
+                select anc.top_id::text as dimension_key,
+                       top.name as dimension_label,
+                       top.type as dimension_type,
+                       a.currency_code as currency_code,
+                       sum(p.amount) as native_balance
+                from posting p
+                join transaction t on t.transaction_id = p.transaction_id
+                join account a on a.account_id = p.account_id
+                join account_ancestor anc on anc.account_id = a.account_id
+                join account top on top.account_id = anc.top_id
+                where a.type in (:types)
+                  and a.deleted_at is null
+                  and (:includeClosedAccounts or a.closed_at is null)
+                  and t.deleted_at is null
+                  and (:includePendingReview or t.lifecycle = 'confirmed')
+                  and t.date <= :asOf
+                """
+                + extra.sql()
+                + """
+                group by dimension_key, dimension_label, dimension_type, a.currency_code
+                """)
+        .param(PARENT_ID, parentId)
+        .param(TYPES, types)
+        .param(AS_OF, asOf)
+        .param(INCLUDE_CLOSED, includeClosedAccounts)
+        .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .params(extra.params())
+        .query(RawBalanceCell.class)
+        .list();
+  }
+
+  /**
+   * Every live, non-currency-leaf direct child of {@code parentId} — the child-row candidates for
+   * expanding a {@code CATEGORY}/{@code ACCOUNT} row one level (see {@link #topLevelAccounts}),
+   * including ones with no activity this period (§7.3). Empty for a leaf category/account (whose
+   * only children, if any, are its own currency leaves — never listed as rows in their own right).
+   */
+  public List<TopLevelNode> childAccountCandidates(long parentId, boolean includeClosedAccounts) {
+    return jdbcClient
+        .sql(
+            """
+            select account_id::text as key, name as label, type
+            from account
+            where parent_id = :parentId
+              and currency_leaf = false
+              and person_leaf = false
+              and deleted_at is null
+              and (:includeClosedAccounts or closed_at is null)
+            order by name
+            """)
+        .param(PARENT_ID, parentId)
+        .param(INCLUDE_CLOSED, includeClosedAccounts)
+        .query(TopLevelNode.class)
+        .list();
+  }
+
   // ── tagTurnover (Tag has no closing balance — it is not an account) ────────
 
   /**
@@ -380,6 +555,108 @@ public class ReportQueryRepository {
             """)
         .query(TopLevelNode.class)
         .list();
+  }
+
+  // ── childTagTurnover (stage e nesting, §9.1) ────────────────────────────────
+
+  /**
+   * Turnover grouped by which direct child of {@code parentId} each posting's tag rolls up to,
+   * <strong>plus</strong> a synthetic {@code (unspecified)} row (data-model §10.3, reporting.md
+   * §9.3) for postings tagged directly on {@code parentId} with no child tag — tags are not
+   * leaves-only, so expanding a tag needs a row for those. A posting carrying both {@code parentId}
+   * directly and one of its child tags counts, correctly, in both rows (mirrors {@link
+   * #tagTurnover} counting a posting once per top-level tag family it touches).
+   */
+  public List<RawTurnoverCell> childTagTurnover(
+      long parentId,
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      QueryConstraints constraints) {
+    CompiledExtra extra = compileExtra(constraints);
+    return jdbcClient
+        .sql(
+            TAG_ANCESTOR_CTE_FROM_PARENT
+                + """
+                ,
+                tag_matches as (
+                  select distinct pt.posting_id, tanc.top_id
+                  from posting_tag pt
+                  join tag_ancestor tanc on tanc.tag_id = pt.tag_id
+                  union
+                  select distinct pt.posting_id, :unspecifiedTopId as top_id
+                  from posting_tag pt
+                  where pt.tag_id = :parentId
+                )
+                select case when tm.top_id = :unspecifiedTopId
+                            then :parentId::text || ':unspecified'
+                            else tm.top_id::text end as dimension_key,
+                       case when tm.top_id = :unspecifiedTopId then '(unspecified)'
+                            else tg.name end as dimension_label,
+                       cast(null as text) as dimension_type,
+                       to_char(date_trunc('month', t.date), 'YYYY-MM') as month_key,
+                       a.currency_code as currency_code,
+                       """
+                + TURNOVER_AGGREGATES
+                + """
+                from tag_matches tm
+                join posting p on p.posting_id = tm.posting_id
+                left join tag tg on tg.tag_id = tm.top_id
+                join transaction t on t.transaction_id = p.transaction_id
+                join account a on a.account_id = p.account_id
+                """
+                + RATE_LATERAL_JOIN
+                + WHERE
+                + SCOPE_PREDICATE
+                + AND
+                + LEG_PREDICATE
+                + "\n"
+                + extra.sql()
+                + """
+                group by dimension_key, dimension_label, month_key, a.currency_code
+                """)
+        .param(PARENT_ID, parentId)
+        .param("unspecifiedTopId", UNSPECIFIED_TOP_ID)
+        .param(TYPES, types)
+        .param(START_DATE, startDate)
+        .param(END_DATE, endDate)
+        .param(BASE_CURRENCY, baseCurrency)
+        .param(LEG, leg)
+        .param(INCLUDE_CLOSED, includeClosedAccounts)
+        .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .params(extra.params())
+        .query(RawTurnoverCell.class)
+        .list();
+  }
+
+  /**
+   * Every live direct child tag of {@code parentId}, plus the synthetic {@code (unspecified)}
+   * candidate (§9.3) — the child-row candidates for expanding a {@code TAG} row one level (see
+   * {@link #topLevelTags}), including ones with no activity this period (§7.3).
+   */
+  public List<TopLevelNode> childTagCandidates(long parentId) {
+    List<TopLevelNode> nodes = new ArrayList<>();
+    // "(unspecified)" sits where a real catch-all child would — a synthetic *first* child, not an
+    // afterthought appended last (reporting.md §9.3).
+    nodes.add(new TopLevelNode(parentId + ":unspecified", "(unspecified)", null));
+    nodes.addAll(
+        jdbcClient
+            .sql(
+                """
+                select tag_id::text as key, name as label, cast(null as text) as type
+                from tag
+                where parent_id = :parentId
+                  and deleted_at is null
+                order by name
+                """)
+            .param(PARENT_ID, parentId)
+            .query(TopLevelNode.class)
+            .list());
+    return nodes;
   }
 
   // ── payeeTurnover (Payee has no closing balance — it is a transaction attribute) ──

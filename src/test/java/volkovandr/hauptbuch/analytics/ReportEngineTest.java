@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
 import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
@@ -179,7 +181,8 @@ class ReportEngineTest {
     baseIsEur();
     when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any())).thenReturn(Map.of());
     when(gridBuilder.axisNodes(any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any()))
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         new ReportSpec(
@@ -208,7 +211,8 @@ class ReportEngineTest {
     baseIsEur();
     when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any())).thenReturn(Map.of());
     when(gridBuilder.axisNodes(any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any()))
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         spec(
@@ -221,5 +225,87 @@ class ReportEngineTest {
 
     verify(dataFetcher).candidatesFor(Dimension.CATEGORY, List.of("expense"), s.scope());
     verify(gridBuilder).build(eq(s), any(), any(), any(), any(), any(), eq("EUR"), any());
+  }
+
+  // ── stage e nesting (reporting.md §3, §9) ────────────────────────────────
+
+  @Test
+  void expandedFetchesSameDimensionChildCandidatesForEveryTopLevelNode() {
+    baseIsEur();
+    TopLevelNode food = new TopLevelNode("1", "Food", "expense");
+    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
+        .thenReturn(Map.of("1", food));
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
+    ReportSpec s =
+        spec(
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            Measure.turnover(PresentationCurrency.BASE, Leg.NET),
+            Scope.ofTypes("expense"));
+
+    engine.render(s, TODAY, RowExpansion.EXPANDED);
+
+    verify(dataFetcher).childCandidatesFor(Dimension.CATEGORY, "1", s.scope());
+  }
+
+  @Test
+  void collapsedNeverFetchesEitherChildSourceEvenWhenTheAxisNestsTwoDimensions() {
+    baseIsEur();
+    TopLevelNode trip = new TopLevelNode("1", "Trip", null);
+    when(dataFetcher.candidatesFor(eq(Dimension.TAG), any(), any())).thenReturn(Map.of("1", trip));
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
+    ReportSpec s =
+        new ReportSpec(
+            List.of(Dimension.TAG, Dimension.CATEGORY),
+            List.of(),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            true);
+
+    engine.render(s, TODAY, RowExpansion.COLLAPSED);
+
+    verify(dataFetcher, never()).candidatesFor(eq(Dimension.CATEGORY), any(), any());
+    verify(dataFetcher, never()).childCandidatesFor(any(), any(), any());
+  }
+
+  @Test
+  void expandedFetchesTheInnerDimensionsCandidatesForCrossDimensionNesting() {
+    baseIsEur();
+    TopLevelNode trip = new TopLevelNode("1", "Trip", null);
+    when(dataFetcher.candidatesFor(eq(Dimension.TAG), any(), any())).thenReturn(Map.of("1", trip));
+    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any())).thenReturn(Map.of());
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
+    ReportSpec s =
+        new ReportSpec(
+            List.of(Dimension.TAG, Dimension.CATEGORY),
+            List.of(),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            true);
+
+    engine.render(s, TODAY, RowExpansion.EXPANDED);
+
+    verify(dataFetcher).candidatesFor(Dimension.CATEGORY, List.of("expense"), s.scope());
+    verify(dataFetcher, never()).childCandidatesFor(any(), any(), any());
   }
 }

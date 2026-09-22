@@ -45,6 +45,58 @@ class ReportGridBuilder {
     return candidatesByKey.values().stream().map(n -> new AxisNode(n.key(), n.label())).toList();
   }
 
+  /**
+   * The axis labels for the axis that carries stage e's nesting (reporting.md §3, §9): a flat,
+   * order-preserving list — the currently-visible tree "frontier" given {@code expandedOuterKeys} —
+   * rather than a real tree, so {@link #build} needs no further change (cells stay a parallel array
+   * to rows). An expanded outer node's children come from one of two sources, mirroring {@link
+   * ReportDataFetcher}'s own split: when {@code innerDim} is set, {@code innerCandidatesByKey}'s
+   * own top-level breakdown, reused unscoped under every expanded outer node (§3's cross-dimension
+   * nesting — the scoping happens in the data fetch, not here); otherwise {@code
+   * sameDimensionChildrenByOuterKey}'s entry for that one node (§9.1's "expand one node within its
+   * own hierarchy" case, e.g. plain {@code rows = [Category]}). Either way a child node's key is
+   * {@code "<outerKey>|<innerKey>"} (never just the inner key, which the same "Food" category could
+   * repeat under two different expanded tags).
+   *
+   * @param outerDim the axis's own (outer, or only) dimension, or {@code null} for no dimension
+   * @param innerDim the second, nested dimension, or {@code null} when the axis carries only one
+   * @param sameDimensionChildrenByOuterKey each expanded outer node's own direct children (§9.1),
+   *     keyed by that node's key — only populated (and only consulted) when {@code innerDim} is
+   *     {@code null}
+   * @param expandedOuterKeys which outer nodes are expanded (reporting.md §9.2) — a node is {@link
+   *     AxisNode#expandable} only when {@code outerDim} can nest a second dimension at all (§9.1 —
+   *     a hierarchical dimension only) and it is not the per-currency "personal debts"
+   *     pseudo-bucket (not a single subtree, {@link AutoExpansion#isPersonLeafBucket})
+   */
+  List<AxisNode> frontierNodes(
+      Dimension outerDim,
+      Dimension innerDim,
+      Map<String, TopLevelNode> outerCandidatesByKey,
+      Map<String, TopLevelNode> innerCandidatesByKey,
+      Map<String, List<TopLevelNode>> sameDimensionChildrenByOuterKey,
+      Set<String> expandedOuterKeys) {
+    if (outerDim == null) {
+      return List.of(new AxisNode(AxisNode.TOTAL_KEY, "Total"));
+    }
+    List<AxisNode> frontier = new ArrayList<>();
+    for (TopLevelNode outer : outerCandidatesByKey.values()) {
+      boolean expandable =
+          AutoExpansion.isNestable(outerDim) && !AutoExpansion.isPersonLeafBucket(outer.key());
+      frontier.add(new AxisNode(outer.key(), outer.label(), 0, expandable, null));
+      if (expandable && expandedOuterKeys.contains(outer.key())) {
+        List<TopLevelNode> children =
+            innerDim != null
+                ? List.copyOf(innerCandidatesByKey.values())
+                : sameDimensionChildrenByOuterKey.getOrDefault(outer.key(), List.of());
+        for (TopLevelNode child : children) {
+          frontier.add(
+              new AxisNode(outer.key() + "|" + child.key(), child.label(), 1, false, outer.key()));
+        }
+      }
+    }
+    return frontier;
+  }
+
   /** Assemble the full grid: cells, row suppression, and both totals. */
   ReportGrid build(
       ReportSpec spec,
@@ -62,20 +114,25 @@ class ReportGridBuilder {
 
     boolean anyClosingBalance =
         spec.measures().stream().anyMatch(m -> m.kind() == MeasureKind.CLOSING_BALANCE);
-    boolean rowTotalsForbiddenByTag = axes.colDim() == Dimension.TAG;
-    boolean columnTotalsForbiddenByTag = axes.rowDim() == Dimension.TAG;
+    boolean rowTotalsForbiddenByTag = axisNestsTag(axes.colDim(), axes);
+    boolean columnTotalsForbiddenByTag = axisNestsTag(axes.rowDim(), axes);
 
     List<Cell> rowTotals =
         computeRowTotals(
             spec, suppressed.cells(), rowTotalsForbiddenByTag, axes, anyClosingBalance);
     List<AxisNode> columns = renderedColumns(spec.measures(), axes.colDim(), columnBucketNodes);
+    // A stage-e nested (depth-1) child row already contributes to its depth-0 parent's own
+    // subtotal cell (§9.2 — e1 assumes subtotal throughout); summing a column or the grand total
+    // over every row in the flattened frontier would therefore double-count it. Both totals sum
+    // down the row axis, so both restrict to depth-0 rows — unlike rowTotals above, which sums
+    // across columns *within* one row and needs no such restriction.
+    List<List<Cell>> topLevelCells = topLevelRowsOnly(suppressed.rows(), suppressed.cells());
     List<Cell> columnTotals =
-        computeColumnTotals(
-            spec, suppressed.cells(), columns.size(), columnTotalsForbiddenByTag, axes);
+        computeColumnTotals(spec, topLevelCells, columns.size(), columnTotalsForbiddenByTag, axes);
     Cell grandTotal =
         computeGrandTotal(
             spec,
-            rowTotals,
+            topLevelValuesOnly(suppressed.rows(), rowTotals),
             rowTotalsForbiddenByTag,
             columnTotalsForbiddenByTag,
             axes,
@@ -91,6 +148,46 @@ class ReportGridBuilder {
         resolved.start(),
         resolved.end(),
         ScopeDimensionMismatch.check(axes.nonDateDim(), spec.scope()));
+  }
+
+  /**
+   * Whether {@code axisDim} — the axis's own outer (or only) dimension — carries {@link
+   * Dimension#TAG} anywhere on it, including as stage e's nested inner dimension (§3): tags are not
+   * leaves-only (data-model §10.3), so a total summing across overlapping tag rows/columns is
+   * illegal (§7.2) whether Tag is the whole axis or just nested one level into it.
+   */
+  private static boolean axisNestsTag(Dimension axisDim, AxisPlan axes) {
+    boolean tagNestedOnThisAxis = axisDim != null && axisDim == axes.nonDateDim();
+    return axisDim == Dimension.TAG || (tagNestedOnThisAxis && axes.innerDim() == Dimension.TAG);
+  }
+
+  /** {@code rows}/{@code cells} restricted to the depth-0 (top-level, non-nested) rows. */
+  private static List<List<Cell>> topLevelRowsOnly(List<AxisNode> rows, List<List<Cell>> cells) {
+    List<List<Cell>> kept = new ArrayList<>();
+    for (int i = 0; i < rows.size(); i++) {
+      if (rows.get(i).depth() == 0) {
+        kept.add(cells.get(i));
+      }
+    }
+    return kept;
+  }
+
+  /**
+   * {@code rows}-aligned {@code perRowValues} restricted to the depth-0 (top-level) rows — empty,
+   * without indexing into {@code rows}, when {@code perRowValues} itself is empty ({@link
+   * ReportSpec#rowTotals()} off; {@link #computeGrandTotal} already renders blank in that case).
+   */
+  private static List<Cell> topLevelValuesOnly(List<AxisNode> rows, List<Cell> perRowValues) {
+    if (perRowValues.isEmpty()) {
+      return List.of();
+    }
+    List<Cell> kept = new ArrayList<>();
+    for (int i = 0; i < rows.size(); i++) {
+      if (rows.get(i).depth() == 0) {
+        kept.add(perRowValues.get(i));
+      }
+    }
+    return kept;
   }
 
   private List<List<Cell>> buildCells(

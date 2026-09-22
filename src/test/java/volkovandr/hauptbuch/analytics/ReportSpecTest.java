@@ -35,14 +35,63 @@ class ReportSpecTest {
   }
 
   @Test
-  void rejectsMoreThanOneRowDimension() {
-    assertThatThrownBy(() -> spec(List.of(Dimension.CATEGORY, Dimension.TAG), List.of(), List.of()))
+  void rejectsMoreThanTwoRowDimensions() {
+    assertThatThrownBy(
+            () ->
+                spec(
+                    List.of(Dimension.CATEGORY, Dimension.TAG, Dimension.CURRENCY),
+                    List.of(),
+                    List.of()))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
-  void rejectsMoreThanOneColumnDimension() {
-    assertThatThrownBy(() -> spec(List.of(), List.of(Dimension.CATEGORY, Dimension.TAG), List.of()))
+  void rejectsMoreThanTwoColumnDimensions() {
+    assertThatThrownBy(
+            () ->
+                spec(
+                    List.of(),
+                    List.of(Dimension.CATEGORY, Dimension.TAG, Dimension.CURRENCY),
+                    List.of()))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void acceptsTwoDifferentRowDimensionsAsNesting() {
+    assertThatCode(() -> spec(List.of(Dimension.TAG, Dimension.CATEGORY), List.of(), List.of()))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void acceptsTwoDifferentColumnDimensionsAsNesting() {
+    assertThatCode(() -> spec(List.of(), List.of(Dimension.TAG, Dimension.CATEGORY), List.of()))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void rejectsTheSameDimensionRepeatedOnRows() {
+    assertThatThrownBy(
+            () -> spec(List.of(Dimension.CATEGORY, Dimension.CATEGORY), List.of(), List.of()))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void rejectsTheSameDimensionRepeatedOnColumns() {
+    assertThatThrownBy(() -> spec(List.of(), List.of(Dimension.TAG, Dimension.TAG), List.of()))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void rejectsDateCombinedWithAnotherDimensionOnRows() {
+    assertThatThrownBy(
+            () -> spec(List.of(Dimension.DATE, Dimension.CATEGORY), List.of(), List.of()))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void rejectsDateCombinedWithAnotherDimensionOnColumns() {
+    assertThatThrownBy(
+            () -> spec(List.of(), List.of(Dimension.CATEGORY, Dimension.DATE), List.of()))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
