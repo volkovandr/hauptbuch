@@ -263,6 +263,64 @@ table.report tfoot td {
   margin-top: 0.5rem;
 }
 
+/* The Renderer's segmented control (report-settings.html): radios styled as one row of joined
+   buttons, the checked one filled. The radio itself stays in the DOM (visually hidden, still
+   focusable), so keyboard arrows move the choice and the form's change trigger fires as before. */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.segmented legend {
+  float: left;
+  margin-right: 0.6rem;
+}
+
+.segmented__option {
+  position: relative;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  padding: 0.3rem 0.8rem;
+  border: 1.5px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.segmented__option + .segmented__option {
+  margin-left: -1.5px;
+}
+
+.segmented__option input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+
+.segmented__option:hover {
+  border-color: var(--green-ink);
+  color: var(--green-ink);
+  z-index: 1;
+}
+
+.segmented__option:has(input:checked) {
+  border-color: var(--green-ink);
+  background: var(--green-ink);
+  color: var(--paper);
+  z-index: 1;
+}
+
+.segmented__option:has(input:focus-visible) {
+  outline: 2px solid var(--green-ink);
+  outline-offset: 2px;
+}
+
 /* The Filters group (reporting.md §11a.5, plan stage d3-4): one fixed section per field, each its
    own <form> (an Apply group, same reasoning as Measures/Scope's account types). */
 .report-settings__filter {
