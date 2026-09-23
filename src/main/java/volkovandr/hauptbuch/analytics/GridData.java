@@ -38,25 +38,12 @@ record GridData(
             (leg, cells) ->
                 turnover
                     .computeIfAbsent(leg, l -> new ArrayList<>())
-                    .addAll(cells.stream().map(c -> withBucketPrefix(c, prefix)).toList()));
+                    .addAll(
+                        cells.stream().map(c -> c.withBucketKey(prefix + c.bucketKey())).toList()));
     Map<String, List<RawBalanceCell>> balance = new LinkedHashMap<>(balanceByBucketKey);
     days.balanceByBucketKey().forEach((key, cells) -> balance.put(prefix + key, cells));
     Map<String, LocalDate> asOf = new LinkedHashMap<>(asOfByBucketKey);
     days.asOfByBucketKey().forEach((key, date) -> asOf.put(prefix + key, date));
     return new GridData(turnover, balance, asOf);
-  }
-
-  private static RawTurnoverCell withBucketPrefix(RawTurnoverCell cell, String prefix) {
-    return new RawTurnoverCell(
-        cell.dimensionKey(),
-        cell.dimensionLabel(),
-        cell.dimensionType(),
-        prefix + cell.bucketKey(),
-        cell.currencyCode(),
-        cell.nativeAmount(),
-        cell.baseAmount(),
-        cell.missingRateCount(),
-        cell.postingCount(),
-        cell.transactionCount());
   }
 }

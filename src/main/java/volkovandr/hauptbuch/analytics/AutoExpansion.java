@@ -66,7 +66,11 @@ final class AutoExpansion {
     return Set.of();
   }
 
-  private static FilterField toFilterField(Dimension dimension) {
+  /**
+   * The filter field that names a node of hierarchical {@code dimension} — also the field {@link
+   * ReportDataFetcher} scopes a nested breakdown to one outer node with (§3).
+   */
+  static FilterField toFilterField(Dimension dimension) {
     return switch (dimension) {
       case CATEGORY -> FilterField.CATEGORY;
       case ACCOUNT -> FilterField.ACCOUNT;

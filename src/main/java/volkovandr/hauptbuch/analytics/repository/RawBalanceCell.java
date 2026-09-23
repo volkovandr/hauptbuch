@@ -19,4 +19,10 @@ public record RawBalanceCell(
     String dimensionLabel,
     String dimensionType,
     String currencyCode,
-    BigDecimal nativeBalance) {}
+    BigDecimal nativeBalance) {
+
+  /** This cell re-keyed under {@code key} — a nested child row's composite key (§9.1). */
+  public RawBalanceCell withDimensionKey(String key) {
+    return new RawBalanceCell(key, dimensionLabel, dimensionType, currencyCode, nativeBalance);
+  }
+}

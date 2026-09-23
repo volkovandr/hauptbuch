@@ -253,7 +253,12 @@ class ReportDataFetcher {
                 granularity,
                 leg.name(),
                 spec);
-        byLeg.get(leg).addAll(childRows.stream().map(c -> prefixed(c, outerKey)).toList());
+        byLeg
+            .get(leg)
+            .addAll(
+                childRows.stream()
+                    .map(c -> c.withDimensionKey(outerKey + "|" + c.dimensionKey()))
+                    .toList());
       }
     }
   }
@@ -351,7 +356,10 @@ class ReportDataFetcher {
             childClosingBalance(outerDim, innerDim, outerKey, types, scope, asOf, spec);
         balanceByBucketKey
             .get(bucketKey)
-            .addAll(childRows.stream().map(c -> prefixed(c, outerKey)).toList());
+            .addAll(
+                childRows.stream()
+                    .map(c -> c.withDimensionKey(outerKey + "|" + c.dimensionKey()))
+                    .toList());
       }
     }
   }
@@ -395,15 +403,7 @@ class ReportDataFetcher {
    * half of stage e's nesting (§9.1), so no other dimension ever reaches this.
    */
   private static ReportFilter syntheticSubtreeFilter(Dimension dimension, String rawKey) {
-    FilterField field =
-        switch (dimension) {
-          case CATEGORY -> FilterField.CATEGORY;
-          case ACCOUNT -> FilterField.ACCOUNT;
-          case TAG -> FilterField.TAG;
-          default ->
-              throw new IllegalStateException(
-                  "Dimension " + dimension + " cannot nest another dimension beneath it.");
-        };
+    FilterField field = AutoExpansion.toFilterField(dimension);
     FilterLevel level =
         dimension == Dimension.CATEGORY ? FilterLevel.POSTING : FilterLevel.TRANSACTION;
     return new ReportFilter(field, level, FilterOperator.IS_ONE_OF, List.of(rawKey));
@@ -414,29 +414,6 @@ class ReportDataFetcher {
     List<ReportFilter> combined = new ArrayList<>(baseFilters);
     combined.add(syntheticSubtreeFilter(dimension, rawKey));
     return new QueryConstraints(combined);
-  }
-
-  private static RawTurnoverCell prefixed(RawTurnoverCell cell, String prefix) {
-    return new RawTurnoverCell(
-        prefix + "|" + cell.dimensionKey(),
-        cell.dimensionLabel(),
-        cell.dimensionType(),
-        cell.bucketKey(),
-        cell.currencyCode(),
-        cell.nativeAmount(),
-        cell.baseAmount(),
-        cell.missingRateCount(),
-        cell.postingCount(),
-        cell.transactionCount());
-  }
-
-  private static RawBalanceCell prefixed(RawBalanceCell cell, String prefix) {
-    return new RawBalanceCell(
-        prefix + "|" + cell.dimensionKey(),
-        cell.dimensionLabel(),
-        cell.dimensionType(),
-        cell.currencyCode(),
-        cell.nativeBalance());
   }
 
   /**

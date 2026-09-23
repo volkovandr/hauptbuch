@@ -35,4 +35,35 @@ public record RawTurnoverCell(
     BigDecimal baseAmount,
     long missingRateCount,
     long postingCount,
-    long transactionCount) {}
+    long transactionCount) {
+
+  /** This cell re-keyed under {@code key} — a nested child row's composite key (§9.1). */
+  public RawTurnoverCell withDimensionKey(String key) {
+    return new RawTurnoverCell(
+        key,
+        dimensionLabel,
+        dimensionType,
+        bucketKey,
+        currencyCode,
+        nativeAmount,
+        baseAmount,
+        missingRateCount,
+        postingCount,
+        transactionCount);
+  }
+
+  /** This cell moved to bucket {@code key} — an expanded Date row's own day (§9.1). */
+  public RawTurnoverCell withBucketKey(String key) {
+    return new RawTurnoverCell(
+        dimensionKey,
+        dimensionLabel,
+        dimensionType,
+        key,
+        currencyCode,
+        nativeAmount,
+        baseAmount,
+        missingRateCount,
+        postingCount,
+        transactionCount);
+  }
+}
