@@ -197,6 +197,78 @@ class ReportSpecQueryStringTest {
     assertThat(ReportSpecQueryString.isPresent(params)).isTrue();
   }
 
+  private static ReportSpec nestedSpec(List<Dimension> rows, List<Dimension> columns) {
+    return new ReportSpec(
+        rows,
+        columns,
+        List.of(),
+        List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+        Scope.ofTypes("expense"),
+        List.of(),
+        new DateRange(
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+        true,
+        true,
+        true);
+  }
+
+  @Test
+  void roundTripsNestedRowDimension() {
+    ReportSpec spec =
+        nestedSpec(List.of(Dimension.TAG, Dimension.CATEGORY), List.of(Dimension.DATE));
+
+    MultiValueMap<String, String> params = ReportSpecQueryString.toParams(spec);
+
+    assertThat(params.getFirst("rows")).isEqualTo("TAG");
+    assertThat(params.getFirst("rowsNested")).isEqualTo("CATEGORY");
+    assertThat(ReportSpecQueryString.fromParams(params)).isEqualTo(spec);
+  }
+
+  @Test
+  void roundTripsNestedColumnDimension() {
+    ReportSpec spec =
+        nestedSpec(List.of(Dimension.DATE), List.of(Dimension.CATEGORY, Dimension.TAG));
+
+    MultiValueMap<String, String> params = ReportSpecQueryString.toParams(spec);
+
+    assertThat(params.getFirst("columnsNested")).isEqualTo("TAG");
+    assertThat(ReportSpecQueryString.fromParams(params)).isEqualTo(spec);
+  }
+
+  @Test
+  void dropsNestedDimensionThatCannotNestUnderTheOuterOne() {
+    // The live form submits the nested <select>'s old value for one request when the operator
+    // changes the outer slot under it — decoding must drop it, not throw or promote it.
+    MultiValueMap<String, String> params =
+        ReportSpecQueryString.toParams(
+            nestedSpec(List.of(Dimension.TAG, Dimension.CATEGORY), List.of(Dimension.DATE)));
+
+    params.set("rows", "CATEGORY");
+    assertThat(ReportSpecQueryString.fromParams(params).rows()).containsExactly(Dimension.CATEGORY);
+
+    params.set("rows", "PAYEE");
+    assertThat(ReportSpecQueryString.fromParams(params).rows()).containsExactly(Dimension.PAYEE);
+
+    params.set("rows", "");
+    assertThat(ReportSpecQueryString.fromParams(params).rows()).isEmpty();
+
+    params.set("rows", "TAG");
+    params.set("rowsNested", "DATE");
+    params.set("columns", "");
+    assertThat(ReportSpecQueryString.fromParams(params).rows()).containsExactly(Dimension.TAG);
+  }
+
+  @Test
+  void decodesBlankNestedParamAsNoNestedDimension() {
+    MultiValueMap<String, String> params =
+        ReportSpecQueryString.toParams(
+            nestedSpec(List.of(Dimension.TAG, Dimension.CATEGORY), List.of(Dimension.DATE)));
+    params.set("rowsNested", "");
+
+    assertThat(ReportSpecQueryString.fromParams(params).rows()).containsExactly(Dimension.TAG);
+  }
+
   @Test
   void decodesBlankAxisParamAsNoDimension() {
     // The settings strip's "None" <select> option (plan stage d3) submits its own value, an empty

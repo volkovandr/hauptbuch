@@ -46,6 +46,16 @@ final class ReportSpecQueryString {
 
   private static final String RELATIVE = "RELATIVE";
 
+  /**
+   * Rows' second, nested dimension (§3, stage e5) — its own key rather than a repeated {@code
+   * rows}, so a stale nested value can never be read as the outer one (see {@link
+   * #nestedDimensionList}). Reused by {@link ReportSettingsView} for its own {@code <select>}.
+   */
+  static final String ROWS_NESTED = "rowsNested";
+
+  /** Columns' own mirror of {@link #ROWS_NESTED}. */
+  static final String COLUMNS_NESTED = "columnsNested";
+
   private ReportSpecQueryString() {}
 
   /** Whether {@code params} encodes a draft spec at all. */
@@ -56,8 +66,8 @@ final class ReportSpecQueryString {
   /** Encodes {@code spec} as query parameters, ready for a URL builder or {@code hx-get}. */
   static MultiValueMap<String, String> toParams(ReportSpec spec) {
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-    putDimension(params, "rows", spec.rows());
-    putDimension(params, "columns", spec.columns());
+    putDimensions(params, "rows", ROWS_NESTED, spec.rows());
+    putDimensions(params, "columns", COLUMNS_NESTED, spec.columns());
     putDimension(params, "series", spec.series());
     spec.measures().forEach(m -> params.add(MEASURE, measureToken(m)));
     spec.scope().accountTypes().forEach(t -> params.add("scopeType", t));
@@ -80,8 +90,8 @@ final class ReportSpecQueryString {
    */
   static ReportSpec fromParams(MultiValueMap<String, String> params) {
     return new ReportSpec(
-        dimensionList(params, "rows"),
-        dimensionList(params, "columns"),
+        nestedDimensionList(params, "rows", ROWS_NESTED),
+        nestedDimensionList(params, "columns", COLUMNS_NESTED),
         dimensionList(params, "series"),
         measuresList(params),
         scopeFrom(params),
@@ -109,6 +119,31 @@ final class ReportSpecQueryString {
     if (!dims.isEmpty()) {
       params.add(key, dims.get(0).name());
     }
+  }
+
+  private static void putDimensions(
+      MultiValueMap<String, String> params, String key, String nestedKey, List<Dimension> dims) {
+    putDimension(params, key, dims);
+    putDimension(params, nestedKey, dims.stream().skip(1).toList());
+  }
+
+  /**
+   * An axis's outer dimension plus, when {@link AutoExpansion#canNestUnder} allows it, its nested
+   * one (§3). The nested value is dropped rather than rejected otherwise: the live Rows &amp;
+   * columns form submits the nested {@code <select>}'s old value for the one request in which the
+   * operator changes the outer slot beneath it (e.g. Tag &gt; Category, then outer switched to
+   * Category or Payee) — the re-rendered form then shows the nested slot cleared or disabled.
+   */
+  private static List<Dimension> nestedDimensionList(
+      MultiValueMap<String, String> params, String key, String nestedKey) {
+    List<Dimension> outer = dimensionList(params, key);
+    List<Dimension> nested = dimensionList(params, nestedKey);
+    if (outer.isEmpty()
+        || nested.isEmpty()
+        || !AutoExpansion.canNestUnder(outer.get(0), nested.get(0))) {
+      return outer;
+    }
+    return List.of(outer.get(0), nested.get(0));
   }
 
   private static List<Dimension> dimensionList(MultiValueMap<String, String> params, String key) {

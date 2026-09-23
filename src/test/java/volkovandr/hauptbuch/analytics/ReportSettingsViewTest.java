@@ -88,13 +88,65 @@ class ReportSettingsViewTest {
         .containsExactlyInAnyOrder("", "DATE");
   }
 
+  private static ReportSpec withAxes(List<Dimension> rows, List<Dimension> columns) {
+    ReportSpec spec = Presets.categoryMonthMatrix();
+    return new ReportSpec(
+        rows,
+        columns,
+        List.of(),
+        spec.measures(),
+        spec.scope(),
+        spec.filters(),
+        spec.range(),
+        spec.rowTotals(),
+        spec.columnTotals(),
+        spec.suppressEmptyRows());
+  }
+
+  @Test
+  void nestedRowsOffersEveryOtherNonDateDimensionAndSelectsTheSpecsOwn() {
+    // §3: rows = [Tag, Category] — the second slot nests under the first, so it can be neither
+    // Date (the ladder fills an axis alone, §8.2) nor the outer dimension itself.
+    ReportSettingsView.View view =
+        build(
+            withAxes(List.of(Dimension.TAG, Dimension.CATEGORY), List.of(Dimension.DATE)),
+            Renderer.TABLE,
+            false);
+
+    assertThat(view.rowsColumns().rowsNestedDisabled()).isFalse();
+    assertThat(view.rowsColumns().rowsNested())
+        .extracting(ReportSettingsView.AxisOption::value)
+        .contains("", "CATEGORY", "ACCOUNT", "PAYEE")
+        .doesNotContain("TAG", "DATE");
+    assertThat(view.rowsColumns().rowsNested())
+        .filteredOn(ReportSettingsView.AxisOption::selected)
+        .extracting(ReportSettingsView.AxisOption::value)
+        .containsExactly("CATEGORY");
+  }
+
+  @Test
+  void nestedSlotIsDisabledUnlessItsOuterSlotHoldsHierarchicalDimension() {
+    // §9.1: only a hierarchy (Category, Account, Tag) expands to reveal a nested breakdown.
+    ReportSettingsView.View payeeRows =
+        build(withAxes(List.of(Dimension.PAYEE), List.of(Dimension.DATE)), Renderer.TABLE, false);
+    assertThat(payeeRows.rowsColumns().rowsNestedDisabled()).isTrue();
+    // Columns holds Date — the ladder never nests anything.
+    assertThat(payeeRows.rowsColumns().columnsNestedDisabled()).isTrue();
+
+    ReportSettingsView.View noRows =
+        build(withAxes(List.of(), List.of(Dimension.ACCOUNT)), Renderer.TABLE, false);
+    assertThat(noRows.rowsColumns().rowsNestedDisabled()).isTrue();
+    assertThat(noRows.rowsColumns().columnsNestedDisabled()).isFalse();
+  }
+
   @Test
   void rowsColumnsOtherParamsExcludesItsOwnThreeKeysButKeepsTheRest() {
     ReportSettingsView.View view = build(Presets.categoryMonthMatrix(), Renderer.TABLE, false);
 
     MultiValueMap<String, String> other = view.rowsColumns().otherParams();
 
-    assertThat(other).doesNotContainKeys("rows", "columns", "series");
+    assertThat(other)
+        .doesNotContainKeys("rows", "rowsNested", "columns", "columnsNested", "series");
     assertThat(other).containsKey("measure");
     assertThat(other.getFirst("renderer")).isEqualTo("TABLE");
   }

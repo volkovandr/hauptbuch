@@ -26,6 +26,15 @@ final class AutoExpansion {
   }
 
   /**
+   * Whether {@code nested} may sit beneath {@code outer} on one axis (§3): the outer one must be a
+   * hierarchy ({@link #isNestable}), and the nested one neither Date (the ladder fills an axis on
+   * its own, §8.2) nor the outer dimension repeated.
+   */
+  static boolean canNestUnder(Dimension outer, Dimension nested) {
+    return isNestable(outer) && nested != null && nested != Dimension.DATE && nested != outer;
+  }
+
+  /**
    * A cross-dimension nesting node's synthetic subtree-filter key (§3) is never a real hierarchy id
    * — it is the per-currency "personal debts" pseudo-bucket ({@code ACCOUNT_DIMENSION_KEY} in
    * {@code ReportQueryRepository}), an aggregate across every person's debt leaf in one currency,
