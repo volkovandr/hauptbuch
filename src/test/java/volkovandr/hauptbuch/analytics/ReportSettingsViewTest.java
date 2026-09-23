@@ -167,6 +167,7 @@ class ReportSettingsViewTest {
     assertThat(view.display().rowTotals()).isTrue();
     assertThat(view.display().columnTotals()).isTrue();
     assertThat(view.display().suppressEmptyRows()).isTrue();
+    assertThat(view.display().suppressEmptyColumns()).isFalse();
     assertThat(view.display().groupHeaderParents()).isFalse();
     assertThat(view.display().dateLadder()).isEqualTo("MONTH");
   }
@@ -190,6 +191,29 @@ class ReportSettingsViewTest {
     ReportSettingsView.View view = build(weekLadder, Renderer.TABLE, false);
 
     assertThat(view.display().dateLadder()).isEqualTo("WEEK");
+  }
+
+  @Test
+  void displayReflectsTheSpecsOwnSuppressEmptyColumnsChoice() {
+    ReportSpec spec = Presets.categoryMonthMatrix();
+    ReportSpec suppressColumns =
+        new ReportSpec(
+            spec.rows(),
+            spec.columns(),
+            spec.series(),
+            spec.measures(),
+            spec.scope(),
+            spec.filters(),
+            spec.range(),
+            spec.rowTotals(),
+            spec.columnTotals(),
+            spec.suppressEmptyRows(),
+            spec.groupHeaderParents(),
+            spec.dateLadder(),
+            true);
+    ReportSettingsView.View view = build(suppressColumns, Renderer.TABLE, false);
+
+    assertThat(view.display().suppressEmptyColumns()).isTrue();
   }
 
   @Test

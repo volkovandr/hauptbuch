@@ -125,6 +125,7 @@ final class ReportSettingsView {
       boolean rowTotals,
       boolean columnTotals,
       boolean suppressEmptyRows,
+      boolean suppressEmptyColumns,
       boolean groupHeaderParents,
       String dateLadder,
       MultiValueMap<String, String> otherParams) {}
@@ -330,6 +331,7 @@ final class ReportSettingsView {
         spec.rowTotals(),
         spec.columnTotals(),
         spec.suppressEmptyRows(),
+        spec.suppressEmptyColumns(),
         spec.groupHeaderParents(),
         spec.dateLadder().name(),
         without(
@@ -337,6 +339,7 @@ final class ReportSettingsView {
             "rowTotals",
             "columnTotals",
             "suppressEmptyRows",
+            "suppressEmptyColumns",
             "groupHeaderParents",
             "dateLadder"));
   }

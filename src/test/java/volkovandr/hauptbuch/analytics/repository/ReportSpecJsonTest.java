@@ -166,6 +166,58 @@ class ReportSpecJsonTest {
   }
 
   @Test
+  void roundTripsSuppressEmptyColumnsOn() {
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(),
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            true,
+            true,
+            true,
+            false,
+            DateLadder.MONTH,
+            true);
+
+    ReportSpec decoded = ReportSpecJson.fromJson(ReportSpecJson.toJson(spec));
+
+    assertThat(decoded.suppressEmptyColumns()).isTrue();
+    assertThat(decoded).isEqualTo(spec);
+  }
+
+  @Test
+  void fromJsonDefaultsSuppressEmptyColumnsToFalseWhenTheKeyIsMissingEntirely() {
+    // A report.spec row saved before the e4 follow-up has no "suppressEmptyColumns" key at all —
+    // decoding it must default to false (every such Report's own pre-follow-up rendering).
+    ReportSpec preFollowUp =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            true,
+            true,
+            true);
+    String jsonMissingTheNewKey =
+        ReportSpecJson.toJson(preFollowUp).replace(",\"suppressEmptyColumns\":false", "");
+
+    ReportSpec decoded = ReportSpecJson.fromJson(jsonMissingTheNewKey);
+
+    assertThat(decoded.suppressEmptyColumns()).isFalse();
+  }
+
+  @Test
   void nullExpandedNodeKeysStaysNullBothWays() {
     assertThat(ReportSpecJson.toNodeKeysJson(null)).isNull();
     assertThat(ReportSpecJson.fromNodeKeysJson(null)).isNull();

@@ -71,6 +71,7 @@ final class ReportSpecQueryString {
     params.add("suppressEmptyRows", String.valueOf(spec.suppressEmptyRows()));
     params.add("groupHeaderParents", String.valueOf(spec.groupHeaderParents()));
     params.add("dateLadder", spec.dateLadder().name());
+    params.add("suppressEmptyColumns", String.valueOf(spec.suppressEmptyColumns()));
     return params;
   }
 
@@ -90,7 +91,8 @@ final class ReportSpecQueryString {
         Boolean.parseBoolean(params.getFirst("columnTotals")),
         Boolean.parseBoolean(params.getFirst("suppressEmptyRows")),
         Boolean.parseBoolean(params.getFirst("groupHeaderParents")),
-        dateLadderFrom(params));
+        dateLadderFrom(params),
+        Boolean.parseBoolean(params.getFirst("suppressEmptyColumns")));
   }
 
   /**

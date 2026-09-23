@@ -57,6 +57,7 @@ final class ReportSpecJson {
     root.put("suppressEmptyRows", spec.suppressEmptyRows());
     root.put("groupHeaderParents", spec.groupHeaderParents());
     root.put("dateLadder", spec.dateLadder().name());
+    root.put("suppressEmptyColumns", spec.suppressEmptyColumns());
     try {
       return MAPPER.writeValueAsString(root);
     } catch (JsonProcessingException e) {
@@ -117,7 +118,9 @@ final class ReportSpecJson {
         // above — those predate the feature entirely and always exist in every saved spec's shape.
         root.path("groupHeaderParents").asBoolean(false),
         // Same .path() guard as groupHeaderParents, for a report.spec row saved before stage e4.
-        dateLadderFrom(root));
+        dateLadderFrom(root),
+        // Same .path() guard, for a report.spec row saved before the e4 follow-up.
+        root.path("suppressEmptyColumns").asBoolean(false));
   }
 
   /**
