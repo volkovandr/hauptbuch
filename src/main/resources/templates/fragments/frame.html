@@ -21,7 +21,7 @@
       </div>
 
       <div th:if="${frame.report() != null}" th:with="report=${frame.report()}">
-        <table th:replace="~{fragments/report-table-body :: body}"></table>
+        <table th:replace="~{fragments/report-table-body :: table}"></table>
       </div>
       <div th:if="${frame.chart() != null}" th:with="chart=${frame.chart()}">
         <div th:replace="~{fragments/chart-panels :: panels}"></div>

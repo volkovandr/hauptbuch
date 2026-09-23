@@ -36,7 +36,7 @@
           <span th:text="${#temporals.format(report.resolvedEnd(), 'dd.MM.yyyy')}">end</span>
         </p>
 
-        <table th:replace="~{fragments/report-table-body :: body}"></table>
+        <table th:replace="~{fragments/report-table-body :: table}"></table>
       </section>
 
       <div th:replace="~{fragments/report-actions :: actions}"></div>
