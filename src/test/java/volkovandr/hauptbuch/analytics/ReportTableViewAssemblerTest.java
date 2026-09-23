@@ -66,6 +66,34 @@ class ReportTableViewAssemblerTest {
   }
 
   @Test
+  void columnsCarryTheirDepthAndWhetherTheyAreAnExpandedParent() {
+    // Column headers show hierarchy (stage e5): an expanded parent column (a subtotal over the
+    // children right after it) and its children must be told apart in the rendered header.
+    ReportGrid grid =
+        new ReportGrid(
+            List.of(new AxisNode("total", "Total")),
+            List.of(
+                new AxisNode("1", "Cash", 0, true, null, true),
+                new AxisNode("1|10", "Cash (EUR)", 1, false, "1"),
+                new AxisNode("2", "Savings", 0, true, null, false)),
+            List.of(List.of(Cell.BLANK, Cell.BLANK, Cell.BLANK)),
+            List.of(),
+            List.of(),
+            Cell.BLANK,
+            START,
+            END,
+            null);
+
+    ReportTableView view = ReportTableViewAssembler.assemble("Title", spec(), grid, "EUR");
+
+    assertThat(view.columns())
+        .containsExactly(
+            new ReportTableView.ColumnView("Cash", 0, true),
+            new ReportTableView.ColumnView("Cash (EUR)", 1, false),
+            new ReportTableView.ColumnView("Savings", 0, false));
+  }
+
+  @Test
   void valueCellFormatsWithNoHelp() {
     ReportGrid grid = gridOf(new Cell.Value(new BigDecimal("50"), "EUR"));
 

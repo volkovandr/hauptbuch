@@ -433,10 +433,16 @@ class ReportGridBuilder {
     List<AxisNode> columns = new ArrayList<>();
     for (AxisNode bucket : columnBucketNodes) {
       for (Measure measure : measures) {
+        // Keeps the bucket's own depth and expanded flag, so the header still shows the
+        // hierarchy the bucket sits in (stage e5); totals read columnBucketNodes, not these.
         columns.add(
             new AxisNode(
                 bucket.key() + "|" + measureKey(measure),
-                bucket.label() + " — " + measureLabel(measure)));
+                bucket.label() + " — " + measureLabel(measure),
+                bucket.depth(),
+                bucket.expandable(),
+                bucket.parentKey(),
+                bucket.expanded()));
       }
     }
     return columns;

@@ -47,14 +47,46 @@ table.report tfoot td {
   font-weight: 600;
 }
 
+/* Column hierarchy (stage e5): an expanded parent column is a subtotal over the columns after it,
+   so it — header and figures — is bold; a nested column is muted and marked, since columns have no
+   room to indent. */
+table.report .report__col--parent {
+  font-weight: 700;
+}
+
+table.report thead th.report__col--parent {
+  color: var(--ink);
+}
+
+table.report thead th.report__col--child {
+  font-weight: 400;
+}
+
+table.report thead th.report__col--child::before {
+  content: "↳ ";
+  color: var(--rule);
+}
+
 /* The row-tree expand/collapse control (reporting.md §9.1/§9.2, plan stage e2). */
 .report__toggle {
   border: none;
   background: none;
   font: inherit;
+  /* Twice the text size: the glyph is a click target, and at text size it was too small to hit.
+     line-height 1 keeps it from making every expandable row taller than its neighbours. */
+  font-size: 2em;
+  line-height: 1;
+  vertical-align: middle;
   color: var(--ink-soft);
   cursor: pointer;
   padding: 0 0.3rem 0 0;
+}
+
+/* The row label's help marker sits in the table's leftmost column, where the default
+   right-anchored bubble (base.css) runs off the window's left edge — grow it rightward instead. */
+table.report td:first-child .help__text {
+  right: auto;
+  left: 0;
 }
 
 .report__toggle--static {
@@ -254,6 +286,11 @@ table.report tfoot td {
 .report-settings__endpoint:has(.endpoint-mode-relative:checked) .endpoint-relative {
   display: inline-flex;
   gap: 0.4rem;
+}
+
+/* A lone dropdown in a settings group (the Date ladder) sizes to its options, not the strip. */
+.report-settings__inline-field .input {
+  width: auto;
 }
 
 .report-settings__renderer {

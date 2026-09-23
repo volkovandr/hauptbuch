@@ -333,11 +333,15 @@ class SavedReportControllerIntegrationTest {
     // itself, a bare <th>Savings</th> (report-table-body.html has no other tag shaped that way), is
     // the grid-specific signal, mirroring how the expand/collapse tests below avoid the same
     // filter-panel contamination.
-    mockMvc
-        .perform(get("/reports/" + saved.reportId()).params(draft))
-        .andExpect(status().isOk())
-        .andExpect(content().string(containsString("<th>Cash</th>")))
-        .andExpect(content().string(not(containsString("<th>Savings</th>"))));
+    String page =
+        mockMvc
+            .perform(get("/reports/" + saved.reportId()).params(draft))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString()
+            .replaceAll("\\s+>", ">");
+    assertThat(page).contains("<th>Cash</th>").doesNotContain("<th>Savings</th>");
   }
 
   @Test
@@ -390,6 +394,54 @@ class SavedReportControllerIntegrationTest {
     assertThat(page).contains("padding-left: 20px").contains("ShopAaa");
     // Every other group's hidden fields carry the nested slot, so it survives their own submits.
     assertThat(page.replaceAll("\\s+", " ")).contains("name=\"rowsNested\" value=\"PAYEE\"");
+  }
+
+  @Test
+  void autoExpandedColumnHeadersMarkTheParentAndItsChildren() throws Exception {
+    // Owner finding (stage e): Account on columns filtered to one parent (Cash) auto-expands it
+    // (§9.2), and the headers read "Cash, Cash EUR, ..." all alike. The parent — a subtotal over
+    // the columns after it — and its children must be told apart.
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long cashEur = insertAccount("Wallet", "asset", "EUR", cash);
+    long groceries = insertAccount("Groceries", "expense", "EUR", null);
+    postSingleCurrency(cashEur, groceries, LocalDate.of(2026, 1, 10), "20.00");
+    SavedReport saved =
+        reportService.save("Cash activity", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(Dimension.DATE),
+            List.of(Dimension.ACCOUNT),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("asset"),
+            List.of(
+                new ReportFilter(
+                    FilterField.ACCOUNT,
+                    FilterLevel.TRANSACTION,
+                    FilterOperator.IS_ONE_OF,
+                    List.of(String.valueOf(cash)))),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            true);
+
+    String page =
+        mockMvc
+            .perform(
+                get("/reports/" + saved.reportId()).params(ReportSpecQueryString.toParams(spec)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString()
+            .replaceAll("\\s+", " ")
+            .replace(" >", ">");
+
+    assertThat(page)
+        .contains("<th class=\"report__col--parent\">Cash</th>")
+        .contains("<th class=\"report__col--child\">Wallet</th>");
   }
 
   @Test

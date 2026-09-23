@@ -12,7 +12,11 @@
   `report.toggleReportId()` is set — a Preset, a Frame's compact card, and a page currently showing
   an unsaved draft never offer one (expansion state is remembered only against a saved Report's own
   current spec, §9.1); those still render whatever tree `auto` (or the remembered state) produced,
-  just without a way to change it here. `id="report-table"` is this fragment's own htmx swap target,
+  just without a way to change it here.
+
+  Columns cannot be expanded by hand (§9.1), but `auto` can still expand a filtered node on the
+  column axis. An expanded parent column (a subtotal over the columns after it) renders bold, and a
+  nested column muted with a ↳ marker (reports.css), so the header shows the hierarchy. `id="report-table"` is this fragment's own htmx swap target,
   so a toggle replaces only the table, leaving the settings strip and actions untouched.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
@@ -21,7 +25,13 @@
       <thead>
         <tr>
           <th></th>
-          <th th:each="col : ${report.columnLabels()}" th:text="${col}">Column</th>
+          <!--/* \_\_ is Thymeleaf's escape for a literal "__": two unescaped BEM names in one
+                 attribute would read as a __...__ preprocessing expression. */-->
+          <th
+            th:each="col : ${report.columns()}"
+            th:text="${col.label()}"
+            th:classappend="${col.parent() ? 'report\_\_col--parent' : (col.depth() > 0 ? 'report\_\_col--child' : null)}"
+          >Column</th>
           <th th:if="${report.showRowTotals()}">Total</th>
         </tr>
       </thead>
@@ -48,7 +58,11 @@
             </th:block>
             <span th:text="${row.label()}">Row</span>
           </td>
-          <td class="num" th:each="cell : ${row.cells()}">
+          <td
+            class="num"
+            th:each="cell, cellStat : ${row.cells()}"
+            th:classappend="${report.columns()[cellStat.index].parent()} ? 'report__col--parent'"
+          >
             <span th:text="${cell.text()}">0,00</span>
             <span th:if="${cell.help() != null}">
               <span th:replace="~{fragments/help-marker :: marker(${cell.help()})}"></span>
