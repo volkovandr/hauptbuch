@@ -311,6 +311,46 @@ class ReportEngineTest {
     verify(dataFetcher, never()).childCandidatesFor(any(), any(), any());
   }
 
+  @Test
+  void autoExpandsOnlyTheFilteredTagNotEveryTopLevelCandidate() {
+    // reporting.md §9.2's own worked example (`Tag is one of {Trips}`) names exactly one node —
+    // Car, a second live top-level tag with no relation to the filter, must stay collapsed. An
+    // earlier implementation wrongly expanded every top-level candidate whenever auto's one-node
+    // rule fired at all (the owner's "tags always appear fully expanded" report).
+    baseIsEur();
+    TopLevelNode trip = new TopLevelNode("1", "Trip", null, true);
+    TopLevelNode car = new TopLevelNode("2", "Car", null, true);
+    when(dataFetcher.candidatesFor(eq(Dimension.TAG), any(), any()))
+        .thenReturn(Map.of("1", trip, "2", car));
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
+    ReportSpec s =
+        new ReportSpec(
+            List.of(Dimension.TAG),
+            List.of(),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(
+                new ReportFilter(
+                    FilterField.TAG,
+                    FilterLevel.TRANSACTION,
+                    FilterOperator.IS_ONE_OF,
+                    List.of("1"))),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            true);
+
+    engine.render(s, TODAY);
+
+    verify(dataFetcher).childCandidatesFor(Dimension.TAG, "1", s.scope());
+    verify(dataFetcher, never()).childCandidatesFor(eq(Dimension.TAG), eq("2"), any());
+  }
+
   // ── stage e2: a saved Report's remembered per-node expansion (reporting.md §9.1) ────────────
 
   @Test
@@ -370,6 +410,32 @@ class ReportEngineTest {
     engine.render(s, TODAY, Set.of());
 
     verify(dataFetcher, never()).childCandidatesFor(any(), any(), any());
+  }
+
+  @Test
+  void explicitExpandedKeysPassesThroughDepth1CompositeKeyUnvalidated() {
+    // reporting.md §9.1's same-dimension nesting recurses to arbitrary depth: a saved Report's
+    // remembered set can name a nested node ("<topLevelKey>|<childKey>") that never appears in the
+    // top-level candidates map this method validates depth-0 keys against — it must still reach
+    // ReportDataFetcher rather than being silently dropped as though it were a stale top-level key.
+    baseIsEur();
+    TopLevelNode food = new TopLevelNode("1", "Food", "expense");
+    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
+        .thenReturn(Map.of("1", food));
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
+    ReportSpec s =
+        spec(
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            Measure.turnover(PresentationCurrency.BASE, Leg.NET),
+            Scope.ofTypes("expense"));
+
+    engine.render(s, TODAY, Set.of("1", "1|10"));
+
+    verify(dataFetcher).childCandidatesFor(Dimension.CATEGORY, "1", s.scope());
+    verify(dataFetcher).childCandidatesFor(Dimension.CATEGORY, "1|10", s.scope());
   }
 
   @Test

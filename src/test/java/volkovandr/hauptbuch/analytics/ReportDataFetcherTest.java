@@ -267,4 +267,42 @@ class ReportDataFetcherTest {
     verify(queryRepository)
         .accountTreeClosingBalance(List.of("asset"), TODAY, true, false, QueryConstraints.NONE);
   }
+
+  // ── childCandidatesFor / realId (stage e's parent-key resolution) ──────────
+
+  @Test
+  void childCandidatesForUsesTheWholeKeyAsTheParentIdForTopLevelNode() {
+    fetcher.childCandidatesFor(Dimension.CATEGORY, "5", Scope.ofTypes("expense"));
+
+    verify(queryRepository).childAccountCandidates(5L, true);
+  }
+
+  @Test
+  void childCandidatesForUsesLastSegmentOfCompositeKeyAsTheParentId() {
+    fetcher.childCandidatesFor(Dimension.CATEGORY, "1|10", Scope.ofTypes("expense"));
+
+    verify(queryRepository).childAccountCandidates(10L, true);
+  }
+
+  @Test
+  void childCandidatesForDegradesToNoChildrenForMalformedTrailingSegmentInsteadOfThrowing() {
+    // A stage e2 toggle endpoint's `node` request param, or a persisted expandedNodeKeys entry, is
+    // hand-editable request input — a malformed one (or Tag's own non-numeric "<id>:unspecified"
+    // leaf key, which is never itself expandable and so should never legitimately arrive here as a
+    // parent) must degrade to "no children", not throw and crash the whole render.
+    List<TopLevelNode> children =
+        fetcher.childCandidatesFor(Dimension.CATEGORY, "1|abc", Scope.ofTypes("expense"));
+
+    assertThat(children).isEmpty();
+    verify(queryRepository).childAccountCandidates(-1L, true);
+  }
+
+  @Test
+  void childCandidatesForOnTagDimensionAlsoDegradesGracefullyForMalformedTrailingSegment() {
+    List<TopLevelNode> children =
+        fetcher.childCandidatesFor(Dimension.TAG, "5:unspecified", Scope.ofTypes("expense"));
+
+    assertThat(children).isEmpty();
+    verify(queryRepository).childTagCandidates(-1L);
+  }
 }

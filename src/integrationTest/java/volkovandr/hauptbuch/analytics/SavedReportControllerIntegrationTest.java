@@ -39,6 +39,7 @@ class SavedReportControllerIntegrationTest {
 
   @Autowired MockMvc mockMvc;
   @Autowired ReportService reportService;
+  @Autowired ReportEngine reportEngine;
   @Autowired SettingsService settingsService;
   @Autowired JdbcClient jdbcClient;
 
@@ -289,6 +290,76 @@ class SavedReportControllerIntegrationTest {
   }
 
   @Test
+  void multilevelExpandRevealsGrandchildOnceBothAncestorsAreToggled() throws Exception {
+    // reporting.md §9.1's own multilevel case: Bakery is itself a child of Food AND has its own
+    // child Sourdough — expanding Food then Bakery must reveal Sourdough at depth 2, not stop after
+    // one level (the owner's own "multilevel hierarchy" report).
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long food = insertAccount("Food", "expense", "EUR", null);
+    long bakery = insertAccount("Bakery", "expense", "EUR", food);
+    long sourdough = insertAccount("Sourdough", "expense", "EUR", bakery);
+    postSingleCurrency(cash, sourdough, LocalDate.now(), "5.00");
+    SavedReport saved =
+        reportService.save("My matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+
+    mockMvc.perform(
+        post("/reports/" + saved.reportId() + "/expand").param("node", String.valueOf(food)));
+    String expanded =
+        mockMvc
+            .perform(
+                post("/reports/" + saved.reportId() + "/expand").param("node", food + "|" + bakery))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    assertThat(expanded).contains("Sourdough").contains("padding-left: 40px");
+  }
+
+  @Test
+  void autoExpandsOnlyTheFilteredCategoryNotSiblingTopLevelCategory() {
+    // reporting.md §9.2's own worked example names exactly one node — a second, unrelated top-level
+    // category with its own child must stay collapsed (the owner's "tags always appear fully
+    // expanded" report, reproduced here for Category, end to end against the real repository —
+    // ReportEngineTest's own coverage of this mocks the repository out). Asserts on the grid
+    // directly rather than scraping the rendered page, whose filter panel lists every category leaf
+    // regardless of the grid's own expansion state (see this file's toggle tests above).
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long food = insertAccount("Food", "expense", "EUR", null);
+    long bakery = insertAccount("Bakery", "expense", "EUR", food);
+    long fuel = insertAccount("Fuel", "expense", "EUR", null);
+    long diesel = insertAccount("Diesel", "expense", "EUR", fuel);
+    postSingleCurrency(cash, bakery, LocalDate.now(), "20.00");
+    postSingleCurrency(cash, diesel, LocalDate.now(), "30.00");
+    ReportSpec filteredToFood =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("income", "expense"),
+            List.of(
+                new ReportFilter(
+                    FilterField.CATEGORY,
+                    FilterLevel.POSTING,
+                    FilterOperator.IS_ONE_OF,
+                    List.of(String.valueOf(food)))),
+            DateRange.yearToDate(),
+            true,
+            true,
+            false);
+
+    ReportGrid grid = reportEngine.render(filteredToFood);
+
+    assertThat(grid.rows())
+        .extracting(AxisNode::key)
+        .contains(food + "|" + bakery)
+        .doesNotContain(fuel + "|" + diesel);
+  }
+
+  @Test
   void autoExpandsOnFreshPageLoadWhenFilterSelectsExactlyOneCategory() throws Exception {
     settingsService.setBaseCurrency("EUR");
     long cash = insertAccount("Cash", "asset", "EUR", null);
@@ -318,5 +389,80 @@ class SavedReportControllerIntegrationTest {
     mockMvc
         .perform(get("/reports/" + saved.reportId()))
         .andExpect(content().string(containsString("padding-left: 20px")));
+  }
+
+  @Test
+  void groupHeaderParentsBlanksAnExpandedParentsOwnFigureButKeepsItsChildsOne() throws Exception {
+    // Stage e3 (reporting.md §9.2): a parent row is either a subtotal (default) or a bare group
+    // header. Food's own subtotal (20.00, the same figure Bakery alone contributes) must vanish
+    // from the rendered page once groupHeaderParents is on and Food is expanded — but Bakery's own
+    // figure, right beneath it, must still print.
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long food = insertAccount("Food", "expense", "EUR", null);
+    long bakery = insertAccount("Bakery", "expense", "EUR", food);
+    postSingleCurrency(cash, bakery, LocalDate.now(), "20.00");
+    ReportSpec base =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("income", "expense"),
+            List.of(),
+            DateRange.yearToDate(),
+            false,
+            false,
+            false,
+            true);
+    SavedReport headerOnly = reportService.save("Header-only", base, Renderer.TABLE, false);
+    SavedReport subtotal =
+        reportService.save(
+            "Subtotal",
+            new ReportSpec(
+                base.rows(),
+                base.columns(),
+                base.series(),
+                base.measures(),
+                base.scope(),
+                base.filters(),
+                base.range(),
+                base.rowTotals(),
+                base.columnTotals(),
+                base.suppressEmptyRows(),
+                false),
+            Renderer.TABLE,
+            false);
+    mockMvc.perform(
+        post("/reports/" + headerOnly.reportId() + "/expand").param("node", String.valueOf(food)));
+    mockMvc.perform(
+        post("/reports/" + subtotal.reportId() + "/expand").param("node", String.valueOf(food)));
+
+    String headerOnlyPage =
+        mockMvc
+            .perform(get("/reports/" + headerOnly.reportId()))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String subtotalPage =
+        mockMvc
+            .perform(get("/reports/" + subtotal.reportId()))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    assertThat(headerOnlyPage).contains("Bakery").containsOnlyOnce("20,00");
+    assertThat(subtotalPage).contains("Bakery");
+    assertThat(occurrences(subtotalPage, "20,00")).isEqualTo(2); // Food's own cell, and Bakery's
+  }
+
+  private static int occurrences(String haystack, String needle) {
+    int count = 0;
+    for (int index = haystack.indexOf(needle);
+        index >= 0;
+        index = haystack.indexOf(needle, index + 1)) {
+      count++;
+    }
+    return count;
   }
 }

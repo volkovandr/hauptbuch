@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.analytics;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -736,6 +737,55 @@ class ReportQuerySqlLogicTest {
   }
 
   @Test
+  void topLevelAccountsFlagsHasChildrenByWhetherTheAccountHasLiveNonLeafChildOfItsOwn() {
+    // reporting.md §9.1: the expand control only makes sense when there is something to reveal —
+    // Fuel is a real leaf, Food has a live child, so only Food should ever offer one.
+    long food = insertAccount("Food", "expense", EUR, null);
+    insertAccount("Restaurants", "expense", EUR, food);
+    insertAccount("Fuel", "expense", EUR, null);
+
+    assertThat(repository.topLevelAccounts(List.of("expense"), true))
+        .extracting(TopLevelNode::label, TopLevelNode::hasChildren)
+        .containsExactlyInAnyOrder(tuple("Food", true), tuple("Fuel", false));
+  }
+
+  @Test
+  void topLevelAccountsHasChildrenIgnoresChildThatIsOnlyItsOwnCurrencyLeaf() {
+    // A category whose only "children" are its own per-currency leaves (data-model §6.5) is still a
+    // real leaf category for expansion purposes — those leaves are never listed as rows in their
+    // own right (see childAccountCandidates).
+    long food = insertAccount("Food", "expense", EUR, null);
+    long foodEur = insertAccount("Food-EUR", "expense", EUR, food);
+    jdbcClient
+        .sql("update account set currency_leaf = true where account_id = :a")
+        .param("a", foodEur)
+        .update();
+
+    assertThat(repository.topLevelAccounts(List.of("expense"), true))
+        .extracting(TopLevelNode::hasChildren)
+        .containsExactly(false);
+  }
+
+  @Test
+  void topLevelAccountsHasChildrenRespectsIncludeClosedAccounts() {
+    // A category whose only child is closed must not offer an expand control that would then fetch
+    // zero rows once includeClosedAccounts is false — the two must agree.
+    long food = insertAccount("Food", "expense", EUR, null);
+    long restaurants = insertAccount("Restaurants", "expense", EUR, food);
+    jdbcClient
+        .sql("update account set closed_at = date '2026-01-01' where account_id = :a")
+        .param("a", restaurants)
+        .update();
+
+    assertThat(repository.topLevelAccounts(List.of("expense"), false))
+        .extracting(TopLevelNode::hasChildren)
+        .containsExactly(false);
+    assertThat(repository.topLevelAccounts(List.of("expense"), true))
+        .extracting(TopLevelNode::hasChildren)
+        .containsExactly(true);
+  }
+
+  @Test
   void topLevelTagsListsOnlyLiveTopLevelTags() {
     long car = insertTag("Car", null);
     insertTag("Audi", car); // not top-level — excluded
@@ -743,6 +793,17 @@ class ReportQuerySqlLogicTest {
     jdbcClient.sql("update tag set deleted_at = now() where tag_id = :t").param("t", trip).update();
 
     assertThat(repository.topLevelTags()).extracting(TopLevelNode::label).containsExactly("Car");
+  }
+
+  @Test
+  void topLevelTagsFlagsHasChildrenByWhetherTheTagHasLiveChildOfItsOwn() {
+    long car = insertTag("Car", null);
+    insertTag("Audi", car);
+    insertTag("Trip", null);
+
+    assertThat(repository.topLevelTags())
+        .extracting(TopLevelNode::label, TopLevelNode::hasChildren)
+        .containsExactlyInAnyOrder(tuple("Car", true), tuple("Trip", false));
   }
 
   // ── payeeTurnover / payeeCandidates ───────────────────────────────────────
@@ -1442,6 +1503,21 @@ class ReportQuerySqlLogicTest {
         .containsExactlyInAnyOrder("Restaurants", "Snacks");
   }
 
+  @Test
+  void childAccountCandidatesFlagsHasChildrenSoDepth1NodeCanItselfBeExpandedFurther() {
+    // reporting.md §9.1's own multilevel case: Restaurants (a depth-1 child of Food) has its own
+    // child Fast food — the tree must be able to say so, so the UI can offer a second expand step
+    // rather than stopping at one level (the owner's own "multilevel hierarchy" report).
+    long food = insertAccount("Food", "expense", EUR, null);
+    long restaurants = insertAccount("Restaurants", "expense", EUR, food);
+    insertAccount("Fast food", "expense", EUR, restaurants);
+    insertAccount("Snacks", "expense", EUR, food); // a sibling leaf — no children of its own
+
+    assertThat(repository.childAccountCandidates(food, true))
+        .extracting(TopLevelNode::label, TopLevelNode::hasChildren)
+        .containsExactlyInAnyOrder(tuple("Restaurants", true), tuple("Snacks", false));
+  }
+
   // ── childTagTurnover / childTagCandidates (the unspecified bucket, §9.3) ────
 
   @Test
@@ -1526,6 +1602,19 @@ class ReportQuerySqlLogicTest {
     assertThat(repository.childTagCandidates(trip))
         .extracting(TopLevelNode::label)
         .containsExactly("(unspecified)", "Prague", "Vienna");
+  }
+
+  @Test
+  void childTagCandidatesFlagsHasChildrenAndNeverOnTheSyntheticUnspecifiedBucket() {
+    long trip = insertTag("Trip", null);
+    long prague = insertTag("Prague", trip);
+    insertTag("Old town", prague);
+    insertTag("Vienna", trip); // a sibling leaf — no children of its own
+
+    assertThat(repository.childTagCandidates(trip))
+        .extracting(TopLevelNode::label, TopLevelNode::hasChildren)
+        .containsExactly(
+            tuple("(unspecified)", false), tuple("Prague", true), tuple("Vienna", false));
   }
 
   // ── cross-dimension nesting (rows=[Tag, Category], §3/§9.2's worked example) ──

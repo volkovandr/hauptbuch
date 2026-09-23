@@ -37,11 +37,15 @@
               hx-swap="outerHTML"
               th:attr="hx-post=@{/reports/{reportId}/expand(reportId=${report.toggleReportId()}, node=${row.key()})}"
             >▸</button>
-            <span
-              th:if="${row.expandable() and report.toggleReportId() == null}"
-              class="report__toggle report__toggle--static"
-              th:text="${row.expanded()} ? '▾' : '▸'"
-            >▸</span>
+            <th:block th:if="${row.expandable() and report.toggleReportId() == null}">
+              <span
+                class="report__toggle report__toggle--static"
+                th:text="${row.expanded()} ? '▾' : '▸'"
+              >▸</span>
+              <span
+                th:replace="~{fragments/help-marker :: marker('Save this report to expand or collapse rows by hand.')}"
+              ></span>
+            </th:block>
             <span th:text="${row.label()}">Row</span>
           </td>
           <td class="num" th:each="cell : ${row.cells()}">

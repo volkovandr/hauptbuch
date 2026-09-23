@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.analytics;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -161,6 +162,13 @@ class ReportSpecTest {
                     false,
                     true))
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void groupHeaderParentsDefaultsToFalseOnThePreStageE3Constructor() {
+    ReportSpec spec = spec(List.of(Dimension.CATEGORY), List.of(), List.of());
+
+    assertThat(spec.groupHeaderParents()).isFalse();
   }
 
   @Test

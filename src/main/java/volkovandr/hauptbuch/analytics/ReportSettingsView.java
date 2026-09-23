@@ -124,6 +124,7 @@ final class ReportSettingsView {
       boolean rowTotals,
       boolean columnTotals,
       boolean suppressEmptyRows,
+      boolean groupHeaderParents,
       MultiValueMap<String, String> otherParams) {}
 
   /** {@code showTrendLine} is true only for {@link Renderer#LINE} (reporting.md §11a.2). */
@@ -327,7 +328,8 @@ final class ReportSettingsView {
         spec.rowTotals(),
         spec.columnTotals(),
         spec.suppressEmptyRows(),
-        without(all, "rowTotals", "columnTotals", "suppressEmptyRows"));
+        spec.groupHeaderParents(),
+        without(all, "rowTotals", "columnTotals", "suppressEmptyRows", "groupHeaderParents"));
   }
 
   private static RendererGroup renderer(

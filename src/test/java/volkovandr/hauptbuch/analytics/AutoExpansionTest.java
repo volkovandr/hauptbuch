@@ -32,17 +32,26 @@ class AutoExpansionTest {
   }
 
   @Test
-  void startsExpandedWhenTheFilterOnThatDimensionSelectsExactlyOneNode() {
+  void autoExpandedKeysNamesOnlyTheOneFilteredNodeNotEveryCandidate() {
+    // reporting.md §9.2's "you asked about one thing; show its parts" names the one thing the
+    // filter selected — not, as an earlier implementation wrongly read it, every other top-level
+    // node of the same dimension too (the owner's "tags always appear fully expanded" report).
     List<ReportFilter> filters =
         List.of(
             new ReportFilter(
                 FilterField.TAG, FilterLevel.TRANSACTION, FilterOperator.IS_ONE_OF, List.of("1")));
 
-    assertThat(AutoExpansion.startsExpanded(Dimension.TAG, specWithFilters(filters))).isTrue();
+    assertThat(AutoExpansion.autoExpandedKeys(Dimension.TAG, specWithFilters(filters)))
+        .containsExactly("1");
   }
 
   @Test
-  void staysCollapsedWhenTheFilterSelectsTwoOrMoreNodes() {
+  void autoExpandedKeysIsEmptyWhenThereIsNoMatchingFilter() {
+    assertThat(AutoExpansion.autoExpandedKeys(Dimension.TAG, specWithFilters(List.of()))).isEmpty();
+  }
+
+  @Test
+  void autoExpandedKeysIsEmptyWhenTheFilterSelectsTwoOrMoreNodes() {
     List<ReportFilter> filters =
         List.of(
             new ReportFilter(
@@ -51,26 +60,21 @@ class AutoExpansionTest {
                 FilterOperator.IS_ONE_OF,
                 List.of("1", "2")));
 
-    assertThat(AutoExpansion.startsExpanded(Dimension.TAG, specWithFilters(filters))).isFalse();
+    assertThat(AutoExpansion.autoExpandedKeys(Dimension.TAG, specWithFilters(filters))).isEmpty();
   }
 
   @Test
-  void staysCollapsedWhenThereIsNoFilterOnThatDimension() {
-    assertThat(AutoExpansion.startsExpanded(Dimension.TAG, specWithFilters(List.of()))).isFalse();
-  }
-
-  @Test
-  void staysCollapsedWhenTheOnlyMatchingFilterIsOnDifferentField() {
+  void autoExpandedKeysIsEmptyWhenTheOnlyMatchingFilterIsOnDifferentField() {
     List<ReportFilter> filters =
         List.of(
             new ReportFilter(
                 FilterField.CATEGORY, FilterLevel.POSTING, FilterOperator.IS_ONE_OF, List.of("1")));
 
-    assertThat(AutoExpansion.startsExpanded(Dimension.TAG, specWithFilters(filters))).isFalse();
+    assertThat(AutoExpansion.autoExpandedKeys(Dimension.TAG, specWithFilters(filters))).isEmpty();
   }
 
   @Test
-  void neverExpandsFlatDimensionEvenWithOneNodeFilter() {
+  void autoExpandedKeysNeverExpandsFlatDimensionEvenWithOneNodeFilter() {
     List<ReportFilter> filters =
         List.of(
             new ReportFilter(
@@ -79,7 +83,7 @@ class AutoExpansionTest {
                 FilterOperator.IS_ONE_OF,
                 List.of("1")));
 
-    assertThat(AutoExpansion.startsExpanded(Dimension.PAYEE, specWithFilters(filters))).isFalse();
+    assertThat(AutoExpansion.autoExpandedKeys(Dimension.PAYEE, specWithFilters(filters))).isEmpty();
   }
 
   @Test

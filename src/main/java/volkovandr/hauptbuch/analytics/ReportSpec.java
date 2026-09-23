@@ -41,6 +41,9 @@ import java.util.Set;
  * @param rowTotals whether to add a totals column, summing each row across columns (§7.1)
  * @param columnTotals whether to add a totals row, summing each column across rows (§7.1)
  * @param suppressEmptyRows whether an all-blank row is hidden (§7.3); on by default
+ * @param groupHeaderParents whether a currently-expanded parent row (§9.2) renders as a bare group
+ *     header — its own aggregate cells blanked, since its children right beneath it already show
+ *     the breakdown — instead of a subtotal; off by default (stage e3)
  */
 public record ReportSpec(
     List<Dimension> rows,
@@ -52,10 +55,41 @@ public record ReportSpec(
     DateRange range,
     boolean rowTotals,
     boolean columnTotals,
-    boolean suppressEmptyRows) {
+    boolean suppressEmptyRows,
+    boolean groupHeaderParents) {
 
   /** §3's per-axis cap: rows or columns may nest at most this many dimensions. */
   private static final int MAX_DIMENSIONS_PER_AXIS = 2;
+
+  /** Every call site predating stage e3 — group-header parents off, subtotals as before. */
+  // ExcessiveParameterList: a delegating convenience constructor mirroring the canonical one
+  // (every field but the new groupHeaderParents, defaulted to false) — splitting it would just
+  // wrap this same field list in a context object, not reduce it.
+  @SuppressWarnings("PMD.ExcessiveParameterList")
+  public ReportSpec(
+      List<Dimension> rows,
+      List<Dimension> columns,
+      List<Dimension> series,
+      List<Measure> measures,
+      Scope scope,
+      List<ReportFilter> filters,
+      DateRange range,
+      boolean rowTotals,
+      boolean columnTotals,
+      boolean suppressEmptyRows) {
+    this(
+        rows,
+        columns,
+        series,
+        measures,
+        scope,
+        filters,
+        range,
+        rowTotals,
+        columnTotals,
+        suppressEmptyRows,
+        false);
+  }
 
   /** Defensively copies the lists and enforces stage a/b's axis caps. */
   public ReportSpec {

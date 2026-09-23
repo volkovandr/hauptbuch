@@ -47,6 +47,35 @@ public class ReportQueryRepository {
   private static final String AND = "  and ";
   private static final String ON = " on ";
 
+  /**
+   * Whether a candidate account has at least one live, non-leaf, expandable child of its own (stage
+   * e2's expand triangle, reporting.md §9.1) — shared verbatim by {@link #topLevelAccounts} and
+   * {@link #childAccountCandidates} so the child-eligibility rule cannot drift between them.
+   */
+  private static final String ACCOUNT_HAS_CHILDREN_EXISTS =
+      """
+      exists(
+        select 1 from account c
+        where c.parent_id = account.account_id
+          and c.currency_leaf = false
+          and c.person_leaf = false
+          and c.deleted_at is null
+          and (:includeClosedAccounts or c.closed_at is null)
+      ) as has_children
+      """;
+
+  /**
+   * {@link #ACCOUNT_HAS_CHILDREN_EXISTS}'s own mirror for a Tag candidate — shared by {@link
+   * #topLevelTags} and {@link #childTagCandidates}.
+   */
+  private static final String TAG_HAS_CHILDREN_EXISTS =
+      """
+      exists(
+        select 1 from tag c
+        where c.parent_id = tag.tag_id and c.deleted_at is null
+      ) as has_children
+      """;
+
   /** See {@link #orNoMatch}. */
   private static final List<Long> NO_MATCH = List.of(-1L);
 
@@ -321,8 +350,9 @@ public class ReportQueryRepository {
   public List<TopLevelNode> topLevelAccounts(List<String> types, boolean includeClosedAccounts) {
     return jdbcClient
         .sql(
-            """
-            select account_id::text as key, name as label, type
+            "select account_id::text as key, name as label, type,\n       "
+                + ACCOUNT_HAS_CHILDREN_EXISTS
+                + """
             from account
             where type in (:types)
               and parent_id is null
@@ -333,7 +363,8 @@ public class ReportQueryRepository {
             union all
             select distinct 'personal:' || currency_code as key,
                    'Personal debts (' || currency_code || ')' as label,
-                   type
+                   type,
+                   false as has_children
             from account
             where type in (:types)
               and person_leaf = true
@@ -462,8 +493,9 @@ public class ReportQueryRepository {
   public List<TopLevelNode> childAccountCandidates(long parentId, boolean includeClosedAccounts) {
     return jdbcClient
         .sql(
-            """
-            select account_id::text as key, name as label, type
+            "select account_id::text as key, name as label, type,\n       "
+                + ACCOUNT_HAS_CHILDREN_EXISTS
+                + """
             from account
             where parent_id = :parentId
               and currency_leaf = false
@@ -546,8 +578,9 @@ public class ReportQueryRepository {
   public List<TopLevelNode> topLevelTags() {
     return jdbcClient
         .sql(
-            """
-            select tag_id::text as key, name as label, cast(null as text) as type
+            "select tag_id::text as key, name as label, cast(null as text) as type,\n       "
+                + TAG_HAS_CHILDREN_EXISTS
+                + """
             from tag
             where parent_id is null
               and deleted_at is null
@@ -641,13 +674,14 @@ public class ReportQueryRepository {
   public List<TopLevelNode> childTagCandidates(long parentId) {
     List<TopLevelNode> nodes = new ArrayList<>();
     // "(unspecified)" sits where a real catch-all child would — a synthetic *first* child, not an
-    // afterthought appended last (reporting.md §9.3).
-    nodes.add(new TopLevelNode(parentId + ":unspecified", "(unspecified)", null));
+    // afterthought appended last (reporting.md §9.3). It is a data bucket, never itself expandable.
+    nodes.add(new TopLevelNode(parentId + ":unspecified", "(unspecified)", null, false));
     nodes.addAll(
         jdbcClient
             .sql(
-                """
-                select tag_id::text as key, name as label, cast(null as text) as type
+                "select tag_id::text as key, name as label, cast(null as text) as type,\n       "
+                    + TAG_HAS_CHILDREN_EXISTS
+                    + """
                 from tag
                 where parent_id = :parentId
                   and deleted_at is null
@@ -725,7 +759,8 @@ public class ReportQueryRepository {
         jdbcClient
             .sql(
                 """
-                select payee_id::text as key, name as label, cast(null as text) as type
+                select payee_id::text as key, name as label, cast(null as text) as type,
+                       false as has_children
                 from payee
                 where deleted_at is null
                 order by name
@@ -841,7 +876,8 @@ public class ReportQueryRepository {
     return jdbcClient
         .sql(
             """
-            select distinct per.person_id::text as key, per.name as label, 'asset' as type
+            select distinct per.person_id::text as key, per.name as label, 'asset' as type,
+                   false as has_children
             from person per
             join account_owner ao on ao.person_id = per.person_id
             where per.deleted_at is null
@@ -949,7 +985,8 @@ public class ReportQueryRepository {
     return jdbcClient
         .sql(
             """
-            select currency_code as key, currency_code as label, cast(null as text) as type
+            select currency_code as key, currency_code as label, cast(null as text) as type,
+                   false as has_children
             from currency
             order by currency_code
             """)
