@@ -1,6 +1,6 @@
 # Expand/collapse is unavailable while viewing an unsaved draft — inconvenient in practice
 
-Status: needs-triage
+Status: ready-for-agent
 Category: enhancement
 Severity: medium
 Area: Reporting (`analytics` module, stage e — row-tree expansion)
@@ -37,3 +37,19 @@ confirmed the three original fixes (multilevel expand, tags stuck fully-expanded
 work correctly — the remaining friction they hit was this pre-existing, spec-endorsed "throwaway"
 behavior, not a defect in that follow-up. See `.scratch/.workpackages-e` for the full diagnosis
 (session-local, untracked).
+
+Triaged 2026-09-23 (owner): **scheduled as its own slice directly after reporting stage e5**, not
+folded into e5. It is now more urgent, because e5's second dropdown per axis will have the operator
+exploring unsaved drafts much more often. Scope decisions for whoever picks it up:
+
+- **Amend `reporting.md` §9.1 in the same change.** Replace "falls back to its initial setting each
+  time, which is fine because it is throwaway" with: a draft's expansion state is ephemeral. It
+  survives toggles and settings changes on the same page, but not a reload, and is never persisted.
+- Where the draft's expanded keys live between requests is the open design point. The options are a
+  hidden form field carried along with the settings-strip resubmits (no JS, fits htmx), or a query
+  param. §9.1 currently says expansion state is "deliberately not in the URL", so choose the hidden
+  field unless there's a reason not to.
+- When a draft is saved, its current expansion state should become the saved Report's
+  `expanded_node_keys`.
+- Cover it in the integration tier: toggle on a draft (`/reports/new` and a saved Report with
+  unsaved edits), change a setting, and assert the expansion is still rendered.
