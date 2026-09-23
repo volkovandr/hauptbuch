@@ -528,9 +528,9 @@ shows the report first:
 | **Date range** | shortcuts and the two endpoints (§11a.6) |
 | **Display** | row totals, column totals, empty-row suppression |
 
-**Renderer** sits outside the groups, always visible: a dropdown, with the trend-line option beside
-it when Line is chosen and the pie's refusal (§7.4) beside it when it applies. Save, Discard and the
-Unsaved marker sit at the strip's right.
+**Renderer** sits outside the groups, always visible: one row of four radio-style buttons (Table,
+Line, Bar, Pie), with the trend-line option beside it when Line is chosen and the pie's refusal
+(§7.4) beside it when it applies. Save, Discard and the Unsaved marker sit at the strip's right.
 
 ### 11a.3 Live vs Apply
 

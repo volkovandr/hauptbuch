@@ -410,24 +410,48 @@
         th:attr="hx-get=@{${settings.pagePath()}},
                  hx-select-oob=${settings.refreshedRegions()}"
       >
-        <div class="field">
-          <label class="field__label" for="settings-renderer">Renderer</label>
-          <select id="settings-renderer" name="renderer" class="input">
-            <option
+        <!-- A four-way choice shown as one row of radio-style buttons (a CSS-only segmented control,
+             reports.css): each option is a real radio input, so the form's change trigger and the
+             plain-GET fallback work unchanged. -->
+        <fieldset class="segmented">
+          <legend class="field__label">Renderer</legend>
+          <label class="segmented__option">
+            <input
+              type="radio"
+              name="renderer"
               value="TABLE"
-              th:selected="${settings.renderer().renderer() == 'TABLE'}"
-            >Table</option>
-            <option value="LINE" th:selected="${settings.renderer().renderer() == 'LINE'}"
-              >Line</option
-            >
-            <option value="BAR" th:selected="${settings.renderer().renderer() == 'BAR'}"
-              >Bar</option
-            >
-            <option value="PIE" th:selected="${settings.renderer().renderer() == 'PIE'}"
-              >Pie</option
-            >
-          </select>
-        </div>
+              th:checked="${settings.renderer().renderer() == 'TABLE'}"
+            />
+            Table
+          </label>
+          <label class="segmented__option">
+            <input
+              type="radio"
+              name="renderer"
+              value="LINE"
+              th:checked="${settings.renderer().renderer() == 'LINE'}"
+            />
+            Line
+          </label>
+          <label class="segmented__option">
+            <input
+              type="radio"
+              name="renderer"
+              value="BAR"
+              th:checked="${settings.renderer().renderer() == 'BAR'}"
+            />
+            Bar
+          </label>
+          <label class="segmented__option">
+            <input
+              type="radio"
+              name="renderer"
+              value="PIE"
+              th:checked="${settings.renderer().renderer() == 'PIE'}"
+            />
+            Pie
+          </label>
+        </fieldset>
         <!-- The hidden fallback comes AFTER the checkbox, not before: an unchecked checkbox omits
              its own field entirely, and a browser serializes same-named fields in DOM order, so
              "checkbox then hidden" submits trendLine=true,false (first() -> true) when ticked and

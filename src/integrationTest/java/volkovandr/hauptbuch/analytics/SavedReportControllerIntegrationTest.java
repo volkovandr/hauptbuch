@@ -215,6 +215,30 @@ class SavedReportControllerIntegrationTest {
   }
 
   @Test
+  void rendererIsFourRadioButtonsWithTheSavedOneChecked() throws Exception {
+    // Owner finding (stage e): the Renderer is a four-way choice, shown as radio-style buttons
+    // rather than a dropdown (reporting.md §11a.2).
+    settingsService.setBaseCurrency("EUR");
+    SavedReport saved =
+        reportService.save("My chart", Presets.netWorthOverTime(), Renderer.LINE, true);
+
+    String page =
+        mockMvc
+            .perform(get("/reports/" + saved.reportId()))
+            .andReturn()
+            .getResponse()
+            .getContentAsString()
+            .replaceAll("\\s+", " ");
+
+    assertThat(page).doesNotContain("<select id=\"settings-renderer\"");
+    for (String renderer : List.of("TABLE", "BAR", "PIE")) {
+      assertThat(page).contains("type=\"radio\" name=\"renderer\" value=\"" + renderer + "\" />");
+    }
+    assertThat(page)
+        .contains("type=\"radio\" name=\"renderer\" value=\"LINE\" checked=\"checked\"");
+  }
+
+  @Test
   void switchingTheRendererToTableRendersTheTableInstead() throws Exception {
     settingsService.setBaseCurrency("EUR");
     SavedReport saved =
