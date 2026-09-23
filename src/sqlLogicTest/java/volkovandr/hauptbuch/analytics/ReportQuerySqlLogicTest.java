@@ -32,6 +32,11 @@ import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
  * than a hand-typed {@code "50.00"} literal — every amount assertion compares numerically ({@link
  * #amount}/{@code isEqualByComparingTo}), never by {@link BigDecimal#equals}.
  */
+// CyclomaticComplexity: a class-level total, not per-method (PMD reports "highest 2") — this is
+// many small, independent, crafted-data scenarios for one repository (the sqlLogicTest tier's own
+// shape, CLAUDE.md §6), not tangled per-method branching. Splitting it would just move the same
+// flat test list into more files, not reduce the real complexity.
+@SuppressWarnings("PMD.CyclomaticComplexity")
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @Transactional
@@ -196,7 +201,7 @@ class ReportQuerySqlLogicTest {
   private static RawTurnoverCell byLabelAndMonth(
       List<RawTurnoverCell> cells, String label, String month) {
     return cells.stream()
-        .filter(c -> c.dimensionLabel().equals(label) && c.monthKey().equals(month))
+        .filter(c -> c.dimensionLabel().equals(label) && c.bucketKey().equals(month))
         .findFirst()
         .orElseThrow(
             () -> new AssertionError("No cell for " + label + "/" + month + " in " + cells));
@@ -241,6 +246,60 @@ class ReportQuerySqlLogicTest {
     assertThat(cells).hasSize(2);
     amount(byLabelAndMonth(cells, "Food", "2026-01").nativeAmount(), "50.00");
     amount(byLabelAndMonth(cells, "Food", "2026-02").nativeAmount(), "5.00");
+  }
+
+  @Test
+  void groupsTurnoverByWeekWhenTheReportsLadderIsWeekBased() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+
+    // Monday 2026-01-05 through Sunday 2026-01-11 is one ISO week; Monday 2026-01-12 starts the
+    // next (reporting.md §8.2 — week starts Monday).
+    postSingleCurrency(cash, food, LocalDate.of(2026, 1, 6), "20.00");
+    postSingleCurrency(cash, food, LocalDate.of(2026, 1, 11), "5.00");
+    postSingleCurrency(cash, food, LocalDate.of(2026, 1, 12), "8.00");
+
+    List<RawTurnoverCell> cells =
+        repository.accountTreeTurnover(
+            INCOME_EXPENSE,
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            DateGranularity.WEEK,
+            NONE);
+
+    assertThat(cells).hasSize(2);
+    amount(byLabelAndMonth(cells, "Food", "2026-01-05").nativeAmount(), "25.00");
+    amount(byLabelAndMonth(cells, "Food", "2026-01-12").nativeAmount(), "8.00");
+  }
+
+  @Test
+  void groupsTurnoverByDayWhenTheEngineBucketsAtDayGranularity() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+
+    postSingleCurrency(cash, food, LocalDate.of(2026, 1, 15), "20.00");
+    postSingleCurrency(cash, food, LocalDate.of(2026, 1, 15), "5.00");
+    postSingleCurrency(cash, food, LocalDate.of(2026, 1, 16), "8.00");
+
+    List<RawTurnoverCell> cells =
+        repository.accountTreeTurnover(
+            INCOME_EXPENSE,
+            LocalDate.of(2026, 1, 15),
+            LocalDate.of(2026, 1, 16),
+            EUR,
+            "NET",
+            true,
+            false,
+            DateGranularity.DAY,
+            NONE);
+
+    assertThat(cells).hasSize(2);
+    amount(byLabelAndMonth(cells, "Food", "2026-01-15").nativeAmount(), "25.00");
+    amount(byLabelAndMonth(cells, "Food", "2026-01-16").nativeAmount(), "8.00");
   }
 
   @Test
@@ -555,6 +614,30 @@ class ReportQuerySqlLogicTest {
 
     assertThat(cells).hasSize(1);
     amount(cells.get(0).nativeAmount(), "35.00");
+  }
+
+  @Test
+  void totalTurnoverBucketsByDayWhenGivenDayGranularity() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+    postSingleCurrency(cash, food, LocalDate.of(2026, 6, 1), "20.00");
+    postSingleCurrency(cash, food, LocalDate.of(2026, 6, 2), "15.00");
+
+    List<RawTurnoverCell> cells =
+        repository.totalTurnover(
+            List.of("expense"),
+            LocalDate.of(2026, 6, 1),
+            LocalDate.of(2026, 6, 2),
+            EUR,
+            "NET",
+            true,
+            false,
+            DateGranularity.DAY,
+            NONE);
+
+    assertThat(cells).hasSize(2);
+    amount(byLabelAndMonth(cells, "Total", "2026-06-01").nativeAmount(), "20.00");
+    amount(byLabelAndMonth(cells, "Total", "2026-06-02").nativeAmount(), "15.00");
   }
 
   // ── accountTreeClosingBalance ─────────────────────────────────────────────

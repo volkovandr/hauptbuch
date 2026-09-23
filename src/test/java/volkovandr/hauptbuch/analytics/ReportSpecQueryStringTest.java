@@ -80,6 +80,43 @@ class ReportSpecQueryStringTest {
   }
 
   @Test
+  void roundTripsWeekLadderChoice() {
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            true,
+            true,
+            true,
+            false,
+            DateLadder.WEEK);
+
+    MultiValueMap<String, String> params = ReportSpecQueryString.toParams(spec);
+
+    assertThat(ReportSpecQueryString.fromParams(params)).isEqualTo(spec);
+  }
+
+  @Test
+  void missingDateLadderParamDecodesToMonth() {
+    // A draft URL from before stage e4 carries no dateLadder param at all — must default to
+    // DateLadder.MONTH rather than throwing.
+    MultiValueMap<String, String> params =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    params.remove("dateLadder");
+
+    ReportSpec decoded = ReportSpecQueryString.fromParams(params);
+
+    assertThat(decoded.dateLadder()).isEqualTo(DateLadder.MONTH);
+  }
+
+  @Test
   void preservesMeasureOrderSinceItDrivesColumnOrder() {
     ReportSpec spec =
         new ReportSpec(

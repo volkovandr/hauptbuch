@@ -44,6 +44,9 @@ import java.util.Set;
  * @param groupHeaderParents whether a currently-expanded parent row (§9.2) renders as a bare group
  *     header — its own aggregate cells blanked, since its children right beneath it already show
  *     the breakdown — instead of a subtotal; off by default (stage e3)
+ * @param dateLadder which granularity ladder the {@link Dimension#DATE} axis renders at (§8.2):
+ *     {@link DateLadder#MONTH}'s or {@link DateLadder#WEEK}'s own rung; defaults to {@link
+ *     DateLadder#MONTH}, matching every pre-e4 Report (stage e4)
  */
 public record ReportSpec(
     List<Dimension> rows,
@@ -56,15 +59,46 @@ public record ReportSpec(
     boolean rowTotals,
     boolean columnTotals,
     boolean suppressEmptyRows,
-    boolean groupHeaderParents) {
+    boolean groupHeaderParents,
+    DateLadder dateLadder) {
 
   /** §3's per-axis cap: rows or columns may nest at most this many dimensions. */
   private static final int MAX_DIMENSIONS_PER_AXIS = 2;
 
-  /** Every call site predating stage e3 — group-header parents off, subtotals as before. */
+  /** Every call site predating stage e4 — the month ladder, same rendering as before. */
   // ExcessiveParameterList: a delegating convenience constructor mirroring the canonical one
-  // (every field but the new groupHeaderParents, defaulted to false) — splitting it would just
+  // (every field but the new dateLadder, defaulted to DateLadder.MONTH) — splitting it would just
   // wrap this same field list in a context object, not reduce it.
+  @SuppressWarnings("PMD.ExcessiveParameterList")
+  public ReportSpec(
+      List<Dimension> rows,
+      List<Dimension> columns,
+      List<Dimension> series,
+      List<Measure> measures,
+      Scope scope,
+      List<ReportFilter> filters,
+      DateRange range,
+      boolean rowTotals,
+      boolean columnTotals,
+      boolean suppressEmptyRows,
+      boolean groupHeaderParents) {
+    this(
+        rows,
+        columns,
+        series,
+        measures,
+        scope,
+        filters,
+        range,
+        rowTotals,
+        columnTotals,
+        suppressEmptyRows,
+        groupHeaderParents,
+        DateLadder.MONTH);
+  }
+
+  /** Every call site predating stage e3 — group-header parents off, subtotals as before. */
+  // ExcessiveParameterList: see the other convenience constructor above.
   @SuppressWarnings("PMD.ExcessiveParameterList")
   public ReportSpec(
       List<Dimension> rows,

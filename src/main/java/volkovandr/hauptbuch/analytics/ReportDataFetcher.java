@@ -132,13 +132,15 @@ class ReportDataFetcher {
       AxisPlan axes,
       List<String> types,
       RangeResolver.ResolvedRange resolved,
-      List<MonthBucket> buckets,
+      List<DateBucket> buckets,
       LocalDate today,
       String baseCurrency,
       Set<String> expandedOuterKeys) {
     QueryConstraints constraints = new QueryConstraints(spec.filters());
+    DateGranularity granularity = spec.dateLadder().bucketGranularity();
     Map<Leg, List<RawTurnoverCell>> turnoverByLeg =
-        fetchTurnover(spec, axes.nonDateDim(), types, resolved, baseCurrency, constraints);
+        fetchTurnover(
+            spec, axes.nonDateDim(), types, resolved, baseCurrency, granularity, constraints);
     if (!expandedOuterKeys.isEmpty()) {
       mergeChildTurnover(
           spec,
@@ -147,6 +149,7 @@ class ReportDataFetcher {
           types,
           resolved,
           baseCurrency,
+          granularity,
           expandedOuterKeys,
           turnoverByLeg);
     }
@@ -157,7 +160,7 @@ class ReportDataFetcher {
         spec.measures().stream().anyMatch(m -> m.kind() == MeasureKind.CLOSING_BALANCE);
     if (anyClosingBalance) {
       boolean hasDateAxis = axes.dateOnRows() || axes.dateOnColumns();
-      List<MonthBucket> balanceBuckets = hasDateAxis ? buckets : List.of();
+      List<DateBucket> balanceBuckets = hasDateAxis ? buckets : List.of();
       fetchClosingBalance(
           axes.nonDateDim(),
           types,
@@ -200,6 +203,7 @@ class ReportDataFetcher {
       List<String> types,
       RangeResolver.ResolvedRange resolved,
       String baseCurrency,
+      DateGranularity granularity,
       Set<String> expandedOuterKeys,
       Map<Leg, List<RawTurnoverCell>> byLeg) {
     Set<Leg> legs = EnumSet.noneOf(Leg.class);
@@ -214,7 +218,15 @@ class ReportDataFetcher {
       for (Leg leg : legs) {
         List<RawTurnoverCell> childRows =
             childTurnover(
-                outerDim, innerDim, outerKey, types, resolved, baseCurrency, leg.name(), spec);
+                outerDim,
+                innerDim,
+                outerKey,
+                types,
+                resolved,
+                baseCurrency,
+                granularity,
+                leg.name(),
+                spec);
         byLeg.get(leg).addAll(childRows.stream().map(c -> prefixed(c, outerKey)).toList());
       }
     }
@@ -237,6 +249,7 @@ class ReportDataFetcher {
       List<String> types,
       RangeResolver.ResolvedRange resolved,
       String baseCurrency,
+      DateGranularity granularity,
       String legName,
       ReportSpec spec) {
     boolean includeClosed = spec.scope().includeClosedAccounts();
@@ -251,6 +264,7 @@ class ReportDataFetcher {
           legName,
           includeClosed,
           includePending,
+          granularity,
           childConstraints);
     }
     QueryConstraints constraints = new QueryConstraints(spec.filters());
@@ -265,6 +279,7 @@ class ReportDataFetcher {
           legName,
           includeClosed,
           includePending,
+          granularity,
           constraints);
     }
     return queryRepository.childAccountTurnover(
@@ -276,6 +291,7 @@ class ReportDataFetcher {
         legName,
         includeClosed,
         includePending,
+        granularity,
         constraints);
   }
 
@@ -293,14 +309,14 @@ class ReportDataFetcher {
       Dimension innerDim,
       List<String> types,
       Scope scope,
-      List<MonthBucket> dateAxisBuckets,
+      List<DateBucket> dateAxisBuckets,
       Set<String> expandedOuterKeys,
       Map<String, List<RawBalanceCell>> balanceByBucketKey,
       Map<String, LocalDate> asOfByBucketKey) {
     List<String> bucketKeys =
         dateAxisBuckets.isEmpty()
             ? List.of(TOTAL_KEY)
-            : dateAxisBuckets.stream().map(MonthBucket::key).toList();
+            : dateAxisBuckets.stream().map(DateBucket::key).toList();
     makeEveryListMutable(balanceByBucketKey, Set.copyOf(bucketKeys));
     for (String outerKey : expandedOuterKeys) {
       for (String bucketKey : bucketKeys) {
@@ -379,7 +395,7 @@ class ReportDataFetcher {
         prefix + "|" + cell.dimensionKey(),
         cell.dimensionLabel(),
         cell.dimensionType(),
-        cell.monthKey(),
+        cell.bucketKey(),
         cell.currencyCode(),
         cell.nativeAmount(),
         cell.baseAmount(),
@@ -408,6 +424,7 @@ class ReportDataFetcher {
       List<String> types,
       RangeResolver.ResolvedRange resolved,
       String baseCurrency,
+      DateGranularity granularity,
       QueryConstraints constraints) {
     Map<Leg, List<RawTurnoverCell>> byLeg = new EnumMap<>(Leg.class);
     for (Measure measure : spec.measures()) {
@@ -426,6 +443,7 @@ class ReportDataFetcher {
                   l.name(),
                   spec.scope().includeClosedAccounts(),
                   spec.scope().includePendingReview(),
+                  granularity,
                   constraints));
     }
     return byLeg;
@@ -439,6 +457,7 @@ class ReportDataFetcher {
       String legName,
       boolean includeClosed,
       boolean includePending,
+      DateGranularity granularity,
       QueryConstraints constraints) {
     if (nonDateDim == Dimension.CATEGORY || nonDateDim == Dimension.ACCOUNT) {
       return queryRepository.accountTreeTurnover(
@@ -449,6 +468,7 @@ class ReportDataFetcher {
           legName,
           includeClosed,
           includePending,
+          granularity,
           constraints);
     }
     if (nonDateDim == Dimension.TAG) {
@@ -460,6 +480,7 @@ class ReportDataFetcher {
           legName,
           includeClosed,
           includePending,
+          granularity,
           constraints);
     }
     if (nonDateDim == Dimension.PAYEE) {
@@ -471,6 +492,7 @@ class ReportDataFetcher {
           legName,
           includeClosed,
           includePending,
+          granularity,
           constraints);
     }
     if (nonDateDim == Dimension.PERSON) {
@@ -482,6 +504,7 @@ class ReportDataFetcher {
           legName,
           includeClosed,
           includePending,
+          granularity,
           constraints);
     }
     if (nonDateDim == Dimension.CURRENCY) {
@@ -493,6 +516,7 @@ class ReportDataFetcher {
           legName,
           includeClosed,
           includePending,
+          granularity,
           constraints);
     }
     if (nonDateDim == Dimension.ACCOUNT_TYPE) {
@@ -504,6 +528,7 @@ class ReportDataFetcher {
           legName,
           includeClosed,
           includePending,
+          granularity,
           constraints);
     }
     return queryRepository.totalTurnover(
@@ -514,6 +539,7 @@ class ReportDataFetcher {
         legName,
         includeClosed,
         includePending,
+        granularity,
         constraints);
   }
 
@@ -521,7 +547,7 @@ class ReportDataFetcher {
       Dimension nonDateDim,
       List<String> types,
       Scope scope,
-      List<MonthBucket> dateAxisBuckets,
+      List<DateBucket> dateAxisBuckets,
       RangeResolver.ResolvedRange resolved,
       LocalDate today,
       QueryConstraints constraints,
@@ -534,7 +560,7 @@ class ReportDataFetcher {
           TOTAL_KEY, closingBalanceAt(nonDateDim, types, scope, asOf, constraints));
       return;
     }
-    for (MonthBucket bucket : dateAxisBuckets) {
+    for (DateBucket bucket : dateAxisBuckets) {
       // Use the bucket's own effective end — clipped to the report's actual range, not the full
       // calendar month — then clamp to today (reporting.md §8.2).
       LocalDate asOf = clampToToday(bucket.effectiveEnd(), today);

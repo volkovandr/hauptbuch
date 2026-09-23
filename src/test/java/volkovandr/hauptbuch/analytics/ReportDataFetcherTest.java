@@ -106,6 +106,7 @@ class ReportDataFetcherTest {
             "NET",
             true,
             false,
+            DateGranularity.MONTH,
             QueryConstraints.NONE);
   }
 
@@ -130,6 +131,7 @@ class ReportDataFetcherTest {
             "NET",
             true,
             false,
+            DateGranularity.MONTH,
             QueryConstraints.NONE);
   }
 
@@ -154,6 +156,7 @@ class ReportDataFetcherTest {
             "NET",
             true,
             false,
+            DateGranularity.MONTH,
             QueryConstraints.NONE);
   }
 
@@ -224,8 +227,9 @@ class ReportDataFetcherTest {
     // The report's range ends mid-January (the 20th); the bucket's calendar month runs through the
     // 31st, but the as-of date must respect the report's own clipped range end (reporting.md §8.2),
     // not the full month.
-    List<MonthBucket> buckets =
-        MonthBucket.monthsBetween(LocalDate.of(2026, 1, 10), LocalDate.of(2026, 1, 20));
+    List<DateBucket> buckets =
+        DateBucket.bucketsBetween(
+            DateGranularity.MONTH, LocalDate.of(2026, 1, 10), LocalDate.of(2026, 1, 20));
     AxisPlan axes = new AxisPlan(Dimension.ACCOUNT, Dimension.DATE, Dimension.ACCOUNT, false, true);
 
     fetcher.fetchGridData(
@@ -248,8 +252,9 @@ class ReportDataFetcherTest {
     when(queryRepository.accountTreeClosingBalance(
             anyList(), any(), anyBoolean(), anyBoolean(), any()))
         .thenReturn(List.of(new RawBalanceCell("1", "Cash", "asset", "EUR", BigDecimal.TEN)));
-    List<MonthBucket> septemberBucket =
-        MonthBucket.monthsBetween(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
+    List<DateBucket> septemberBucket =
+        DateBucket.bucketsBetween(
+            DateGranularity.MONTH, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
     AxisPlan axes = new AxisPlan(Dimension.ACCOUNT, Dimension.DATE, Dimension.ACCOUNT, false, true);
 
     fetcher.fetchGridData(

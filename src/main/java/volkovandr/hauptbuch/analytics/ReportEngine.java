@@ -87,7 +87,9 @@ public class ReportEngine {
 
     List<String> types = List.copyOf(spec.scope().accountTypes());
     RangeResolver.ResolvedRange resolved = RangeResolver.resolve(spec.range(), today);
-    List<MonthBucket> buckets = MonthBucket.monthsBetween(resolved.start(), resolved.end());
+    List<DateBucket> buckets =
+        DateBucket.bucketsBetween(
+            spec.dateLadder().bucketGranularity(), resolved.start(), resolved.end());
     Map<String, TopLevelNode> candidatesByKey =
         dataFetcher.candidatesFor(axes.nonDateDim(), types, spec.scope());
     Set<String> expandedKeys =

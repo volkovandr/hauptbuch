@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import volkovandr.hauptbuch.analytics.DateGranularity;
 import volkovandr.hauptbuch.analytics.FilterLevel;
 import volkovandr.hauptbuch.analytics.FilterOperator;
 import volkovandr.hauptbuch.analytics.ReportFilter;
@@ -15,7 +16,7 @@ import volkovandr.hauptbuch.analytics.ReportFilter;
  * Native-SQL access for the report engine (reporting.md §14): grouped reads of {@code posting} /
  * {@code transaction} / {@code account} / {@code tag} / {@code payee} / {@code person} / {@code
  * currency}, dimension-agnostic per {@link RawTurnoverCell} — the query always returns both the
- * grouped dimension value and the month bucket, and {@code ReportEngine} decides which axis each
+ * grouped dimension value and the Date bucket, and {@code ReportEngine} decides which axis each
  * lands on.
  *
  * <p>Reads the {@code account}, {@code tag}, {@code payee}, {@code person}, {@code account_owner}
@@ -46,6 +47,27 @@ public class ReportQueryRepository {
   private static final String WHERE = "where ";
   private static final String AND = "  and ";
   private static final String ON = " on ";
+  private static final String BUCKET_UNIT = "bucketUnit";
+  private static final String BUCKET_FORMAT = "bucketFormat";
+
+  /**
+   * The Date bucket a turnover row groups by (reporting.md §8.2, stage e4) — {@link
+   * DateGranularity#sqlUnit()}/{@link DateGranularity#sqlFormat()} bound as parameters rather than
+   * spliced into the SQL text, so every turnover query shares one literal template regardless of
+   * which rung of the ladder it buckets at. {@code date_trunc}'s first argument accepts a bound
+   * text parameter the same way any other {@code text} argument does.
+   */
+  private static final String BUCKET_KEY_EXPR =
+      "to_char(date_trunc(:bucketUnit, t.date), :bucketFormat) as bucket_key";
+
+  /**
+   * {@link #BUCKET_KEY_EXPR} plus the {@code currency_code} column every turnover query selects
+   * right after it — shared so the two don't drift, and so the two literal fragments PMD's {@code
+   * AvoidDuplicateLiterals} would otherwise flag (repeated once per turnover method) live in one
+   * place instead.
+   */
+  private static final String BUCKET_KEY_AND_CURRENCY_COLUMNS =
+      BUCKET_KEY_EXPR + ",\n       a.currency_code as currency_code,\n       ";
 
   /**
    * Whether a candidate account has at least one live, non-leaf, expandable child of its own (stage
@@ -234,9 +256,10 @@ public class ReportQueryRepository {
   // ── accountTreeTurnover / accountTreeClosingBalance (Category/Account) ─────
 
   /**
-   * Turnover grouped by each posting's account's top-level ancestor and month bucket — the
+   * Turnover grouped by each posting's account's top-level ancestor and Date bucket — the
    * category×month matrix's query (reporting.md §16), and equally the {@code ACCOUNT} dimension
-   * when {@code types} is the asset/liability/equity set instead of income/expense.
+   * when {@code types} is the asset/liability/equity set instead of income/expense. Buckets at
+   * month granularity; every pre-e4 caller's own convenience overload.
    */
   public List<RawTurnoverCell> accountTreeTurnover(
       List<String> types,
@@ -246,6 +269,33 @@ public class ReportQueryRepository {
       String leg,
       boolean includeClosedAccounts,
       boolean includePendingReview,
+      QueryConstraints constraints) {
+    return accountTreeTurnover(
+        types,
+        startDate,
+        endDate,
+        baseCurrency,
+        leg,
+        includeClosedAccounts,
+        includePendingReview,
+        DateGranularity.MONTH,
+        constraints);
+  }
+
+  /**
+   * {@link #accountTreeTurnover(List, LocalDate, LocalDate, String, String, boolean, boolean,
+   * QueryConstraints) accountTreeTurnover}, bucketing at {@code granularity} instead of always
+   * month (reporting.md §8.2, stage e4).
+   */
+  public List<RawTurnoverCell> accountTreeTurnover(
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      DateGranularity granularity,
       QueryConstraints constraints) {
     CompiledExtra extra = compileExtra(constraints);
     return jdbcClient
@@ -257,11 +307,8 @@ public class ReportQueryRepository {
                 + ACCOUNT_DIMENSION_LABEL
                 + " as dimension_label,\n       "
                 + ACCOUNT_DIMENSION_TYPE
-                + " as dimension_type,\n"
-                + """
-                       to_char(date_trunc('month', t.date), 'YYYY-MM') as month_key,
-                       a.currency_code as currency_code,
-                       """
+                + " as dimension_type,\n       "
+                + BUCKET_KEY_AND_CURRENCY_COLUMNS
                 + TURNOVER_AGGREGATES
                 + """
                 from posting p
@@ -278,7 +325,7 @@ public class ReportQueryRepository {
                 + "\n"
                 + extra.sql()
                 + """
-                group by dimension_key, dimension_label, dimension_type, month_key, a.currency_code
+                group by dimension_key, dimension_label, dimension_type, bucket_key, a.currency_code
                 """)
         .param(TYPES, types)
         .param(START_DATE, startDate)
@@ -287,6 +334,8 @@ public class ReportQueryRepository {
         .param(LEG, leg)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .param(BUCKET_UNIT, granularity.sqlUnit())
+        .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
         .query(RawTurnoverCell.class)
         .list();
@@ -383,7 +432,8 @@ public class ReportQueryRepository {
   /**
    * Turnover grouped by which direct child of {@code parentId} each posting's account rolls up to
    * (reporting.md §9.1) — {@link #accountTreeTurnover} seeded at an arbitrary node instead of the
-   * root, for expanding one {@code CATEGORY}/{@code ACCOUNT} row into its own children.
+   * root, for expanding one {@code CATEGORY}/{@code ACCOUNT} row into its own children. Buckets at
+   * month granularity; every pre-e4 caller's own convenience overload.
    */
   public List<RawTurnoverCell> childAccountTurnover(
       long parentId,
@@ -395,6 +445,40 @@ public class ReportQueryRepository {
       boolean includeClosedAccounts,
       boolean includePendingReview,
       QueryConstraints constraints) {
+    return childAccountTurnover(
+        parentId,
+        types,
+        startDate,
+        endDate,
+        baseCurrency,
+        leg,
+        includeClosedAccounts,
+        includePendingReview,
+        DateGranularity.MONTH,
+        constraints);
+  }
+
+  /**
+   * {@link #childAccountTurnover(long, List, LocalDate, LocalDate, String, String, boolean,
+   * boolean, QueryConstraints) childAccountTurnover}, bucketing at {@code granularity} instead of
+   * always month (reporting.md §8.2, stage e4).
+   */
+  // ExcessiveParameterList: a flat list of scalar SQL bind params, the established shape every
+  // turnover method here takes — this is the one child-seeded overload that also carries parentId
+  // and granularity, pushing it past the threshold; splitting it would just wrap this same list in
+  // a context record, not reduce it.
+  @SuppressWarnings("PMD.ExcessiveParameterList")
+  public List<RawTurnoverCell> childAccountTurnover(
+      long parentId,
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      DateGranularity granularity,
+      QueryConstraints constraints) {
     CompiledExtra extra = compileExtra(constraints);
     return jdbcClient
         .sql(
@@ -403,9 +487,8 @@ public class ReportQueryRepository {
                 select anc.top_id::text as dimension_key,
                        top.name as dimension_label,
                        top.type as dimension_type,
-                       to_char(date_trunc('month', t.date), 'YYYY-MM') as month_key,
-                       a.currency_code as currency_code,
                        """
+                + BUCKET_KEY_AND_CURRENCY_COLUMNS
                 + TURNOVER_AGGREGATES
                 + """
                 from posting p
@@ -422,7 +505,7 @@ public class ReportQueryRepository {
                 + "\n"
                 + extra.sql()
                 + """
-                group by dimension_key, dimension_label, dimension_type, month_key, a.currency_code
+                group by dimension_key, dimension_label, dimension_type, bucket_key, a.currency_code
                 """)
         .param(PARENT_ID, parentId)
         .param(TYPES, types)
@@ -432,6 +515,8 @@ public class ReportQueryRepository {
         .param(LEG, leg)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .param(BUCKET_UNIT, granularity.sqlUnit())
+        .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
         .query(RawTurnoverCell.class)
         .list();
@@ -513,10 +598,11 @@ public class ReportQueryRepository {
   // ── tagTurnover (Tag has no closing balance — it is not an account) ────────
 
   /**
-   * Turnover grouped by each posting's top-level tag and month bucket. A posting distinctly carries
+   * Turnover grouped by each posting's top-level tag and Date bucket. A posting distinctly carries
    * one row per top-level tag family it touches ({@code distinct} on posting/top-tag before the
    * join to the measured posting), so a posting tagged both {@code Car:Audi} and {@code Car:Skoda}
-   * counts once under {@code Car} — never twice (data-model §10.3).
+   * counts once under {@code Car} — never twice (data-model §10.3). Buckets at month granularity;
+   * every pre-e4 caller's own convenience overload.
    */
   public List<RawTurnoverCell> tagTurnover(
       List<String> types,
@@ -526,6 +612,33 @@ public class ReportQueryRepository {
       String leg,
       boolean includeClosedAccounts,
       boolean includePendingReview,
+      QueryConstraints constraints) {
+    return tagTurnover(
+        types,
+        startDate,
+        endDate,
+        baseCurrency,
+        leg,
+        includeClosedAccounts,
+        includePendingReview,
+        DateGranularity.MONTH,
+        constraints);
+  }
+
+  /**
+   * {@link #tagTurnover(List, LocalDate, LocalDate, String, String, boolean, boolean,
+   * QueryConstraints) tagTurnover}, bucketing at {@code granularity} instead of always month
+   * (reporting.md §8.2, stage e4).
+   */
+  public List<RawTurnoverCell> tagTurnover(
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      DateGranularity granularity,
       QueryConstraints constraints) {
     CompiledExtra extra = compileExtra(constraints);
     return jdbcClient
@@ -541,9 +654,8 @@ public class ReportQueryRepository {
                 select tm.top_id::text as dimension_key,
                        tg.name as dimension_label,
                        cast(null as text) as dimension_type,
-                       to_char(date_trunc('month', t.date), 'YYYY-MM') as month_key,
-                       a.currency_code as currency_code,
                        """
+                + BUCKET_KEY_AND_CURRENCY_COLUMNS
                 + TURNOVER_AGGREGATES
                 + """
                 from tag_matches tm
@@ -560,7 +672,7 @@ public class ReportQueryRepository {
                 + "\n"
                 + extra.sql()
                 + """
-                group by tm.top_id, tg.name, month_key, a.currency_code
+                group by tm.top_id, tg.name, bucket_key, a.currency_code
                 """)
         .param(TYPES, types)
         .param(START_DATE, startDate)
@@ -569,6 +681,8 @@ public class ReportQueryRepository {
         .param(LEG, leg)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .param(BUCKET_UNIT, granularity.sqlUnit())
+        .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
         .query(RawTurnoverCell.class)
         .list();
@@ -598,7 +712,8 @@ public class ReportQueryRepository {
    * §9.3) for postings tagged directly on {@code parentId} with no child tag — tags are not
    * leaves-only, so expanding a tag needs a row for those. A posting carrying both {@code parentId}
    * directly and one of its child tags counts, correctly, in both rows (mirrors {@link
-   * #tagTurnover} counting a posting once per top-level tag family it touches).
+   * #tagTurnover} counting a posting once per top-level tag family it touches). Buckets at month
+   * granularity; every pre-e4 caller's own convenience overload.
    */
   public List<RawTurnoverCell> childTagTurnover(
       long parentId,
@@ -609,6 +724,38 @@ public class ReportQueryRepository {
       String leg,
       boolean includeClosedAccounts,
       boolean includePendingReview,
+      QueryConstraints constraints) {
+    return childTagTurnover(
+        parentId,
+        types,
+        startDate,
+        endDate,
+        baseCurrency,
+        leg,
+        includeClosedAccounts,
+        includePendingReview,
+        DateGranularity.MONTH,
+        constraints);
+  }
+
+  /**
+   * {@link #childTagTurnover(long, List, LocalDate, LocalDate, String, String, boolean, boolean,
+   * QueryConstraints) childTagTurnover}, bucketing at {@code granularity} instead of always month
+   * (reporting.md §8.2, stage e4).
+   */
+  // ExcessiveParameterList: see childAccountTurnover's own suppression above — the same shape,
+  // for the same reason.
+  @SuppressWarnings("PMD.ExcessiveParameterList")
+  public List<RawTurnoverCell> childTagTurnover(
+      long parentId,
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      DateGranularity granularity,
       QueryConstraints constraints) {
     CompiledExtra extra = compileExtra(constraints);
     return jdbcClient
@@ -631,9 +778,8 @@ public class ReportQueryRepository {
                        case when tm.top_id = :unspecifiedTopId then '(unspecified)'
                             else tg.name end as dimension_label,
                        cast(null as text) as dimension_type,
-                       to_char(date_trunc('month', t.date), 'YYYY-MM') as month_key,
-                       a.currency_code as currency_code,
                        """
+                + BUCKET_KEY_AND_CURRENCY_COLUMNS
                 + TURNOVER_AGGREGATES
                 + """
                 from tag_matches tm
@@ -650,7 +796,7 @@ public class ReportQueryRepository {
                 + "\n"
                 + extra.sql()
                 + """
-                group by dimension_key, dimension_label, month_key, a.currency_code
+                group by dimension_key, dimension_label, bucket_key, a.currency_code
                 """)
         .param(PARENT_ID, parentId)
         .param("unspecifiedTopId", UNSPECIFIED_TOP_ID)
@@ -661,6 +807,8 @@ public class ReportQueryRepository {
         .param(LEG, leg)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .param(BUCKET_UNIT, granularity.sqlUnit())
+        .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
         .query(RawTurnoverCell.class)
         .list();
@@ -696,9 +844,10 @@ public class ReportQueryRepository {
   // ── payeeTurnover (Payee has no closing balance — it is a transaction attribute) ──
 
   /**
-   * Turnover grouped by each transaction's payee and month bucket. {@code payee_id} is nullable
+   * Turnover grouped by each transaction's payee and Date bucket. {@code payee_id} is nullable
    * (transfers carry none, data-model §3.5); those postings group under the synthetic {@code "(No
-   * payee)"} row rather than being silently dropped from the total.
+   * payee)"} row rather than being silently dropped from the total. Buckets at month granularity;
+   * every pre-e4 caller's own convenience overload.
    */
   public List<RawTurnoverCell> payeeTurnover(
       List<String> types,
@@ -709,6 +858,33 @@ public class ReportQueryRepository {
       boolean includeClosedAccounts,
       boolean includePendingReview,
       QueryConstraints constraints) {
+    return payeeTurnover(
+        types,
+        startDate,
+        endDate,
+        baseCurrency,
+        leg,
+        includeClosedAccounts,
+        includePendingReview,
+        DateGranularity.MONTH,
+        constraints);
+  }
+
+  /**
+   * {@link #payeeTurnover(List, LocalDate, LocalDate, String, String, boolean, boolean,
+   * QueryConstraints) payeeTurnover}, bucketing at {@code granularity} instead of always month
+   * (reporting.md §8.2, stage e4).
+   */
+  public List<RawTurnoverCell> payeeTurnover(
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      DateGranularity granularity,
+      QueryConstraints constraints) {
     CompiledExtra extra = compileExtra(constraints);
     return jdbcClient
         .sql(
@@ -716,9 +892,8 @@ public class ReportQueryRepository {
             select coalesce(t.payee_id::text, 'none') as dimension_key,
                    coalesce(pay.name, '(No payee)') as dimension_label,
                    cast(null as text) as dimension_type,
-                   to_char(date_trunc('month', t.date), 'YYYY-MM') as month_key,
-                   a.currency_code as currency_code,
                    """
+                + BUCKET_KEY_AND_CURRENCY_COLUMNS
                 + TURNOVER_AGGREGATES
                 + """
                 from posting p
@@ -734,7 +909,7 @@ public class ReportQueryRepository {
                 + "\n"
                 + extra.sql()
                 + """
-                group by t.payee_id, pay.name, month_key, a.currency_code
+                group by t.payee_id, pay.name, bucket_key, a.currency_code
                 """)
         .param(TYPES, types)
         .param(START_DATE, startDate)
@@ -743,6 +918,8 @@ public class ReportQueryRepository {
         .param(LEG, leg)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .param(BUCKET_UNIT, granularity.sqlUnit())
+        .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
         .query(RawTurnoverCell.class)
         .list();
@@ -775,7 +952,8 @@ public class ReportQueryRepository {
   /**
    * Turnover grouped by the person who owns each per-person debt leaf (data-model §7), restricted
    * to postings on a {@code person_leaf} account. Always {@code asset}-natural (a debt leaf is
-   * never any other type).
+   * never any other type). Buckets at month granularity; every pre-e4 caller's own convenience
+   * overload.
    */
   public List<RawTurnoverCell> personTurnover(
       List<String> types,
@@ -786,6 +964,33 @@ public class ReportQueryRepository {
       boolean includeClosedAccounts,
       boolean includePendingReview,
       QueryConstraints constraints) {
+    return personTurnover(
+        types,
+        startDate,
+        endDate,
+        baseCurrency,
+        leg,
+        includeClosedAccounts,
+        includePendingReview,
+        DateGranularity.MONTH,
+        constraints);
+  }
+
+  /**
+   * {@link #personTurnover(List, LocalDate, LocalDate, String, String, boolean, boolean,
+   * QueryConstraints) personTurnover}, bucketing at {@code granularity} instead of always month
+   * (reporting.md §8.2, stage e4).
+   */
+  public List<RawTurnoverCell> personTurnover(
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      DateGranularity granularity,
+      QueryConstraints constraints) {
     CompiledExtra extra = compileExtra(constraints);
     return jdbcClient
         .sql(
@@ -793,9 +998,8 @@ public class ReportQueryRepository {
             select per.person_id::text as dimension_key,
                    per.name as dimension_label,
                    'asset' as dimension_type,
-                   to_char(date_trunc('month', t.date), 'YYYY-MM') as month_key,
-                   a.currency_code as currency_code,
                    """
+                + BUCKET_KEY_AND_CURRENCY_COLUMNS
                 + TURNOVER_AGGREGATES
                 + """
                 from posting p
@@ -813,7 +1017,7 @@ public class ReportQueryRepository {
                 + "a.person_leaf = true\n"
                 + extra.sql()
                 + """
-                group by per.person_id, per.name, month_key, a.currency_code
+                group by per.person_id, per.name, bucket_key, a.currency_code
                 """)
         .param(TYPES, types)
         .param(START_DATE, startDate)
@@ -822,6 +1026,8 @@ public class ReportQueryRepository {
         .param(LEG, leg)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .param(BUCKET_UNIT, granularity.sqlUnit())
+        .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
         .query(RawTurnoverCell.class)
         .list();
@@ -889,7 +1095,10 @@ public class ReportQueryRepository {
 
   // ── currencyTurnover / currencyClosingBalance ──────────────────────────────
 
-  /** Turnover grouped by each posting's account's currency and month bucket. */
+  /**
+   * Turnover grouped by each posting's account's currency and Date bucket. Buckets at month
+   * granularity; every pre-e4 caller's own convenience overload.
+   */
   public List<RawTurnoverCell> currencyTurnover(
       List<String> types,
       LocalDate startDate,
@@ -899,6 +1108,33 @@ public class ReportQueryRepository {
       boolean includeClosedAccounts,
       boolean includePendingReview,
       QueryConstraints constraints) {
+    return currencyTurnover(
+        types,
+        startDate,
+        endDate,
+        baseCurrency,
+        leg,
+        includeClosedAccounts,
+        includePendingReview,
+        DateGranularity.MONTH,
+        constraints);
+  }
+
+  /**
+   * {@link #currencyTurnover(List, LocalDate, LocalDate, String, String, boolean, boolean,
+   * QueryConstraints) currencyTurnover}, bucketing at {@code granularity} instead of always month
+   * (reporting.md §8.2, stage e4).
+   */
+  public List<RawTurnoverCell> currencyTurnover(
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      DateGranularity granularity,
+      QueryConstraints constraints) {
     CompiledExtra extra = compileExtra(constraints);
     return jdbcClient
         .sql(
@@ -906,9 +1142,8 @@ public class ReportQueryRepository {
             select a.currency_code as dimension_key,
                    a.currency_code as dimension_label,
                    cast(null as text) as dimension_type,
-                   to_char(date_trunc('month', t.date), 'YYYY-MM') as month_key,
-                   a.currency_code as currency_code,
                    """
+                + BUCKET_KEY_AND_CURRENCY_COLUMNS
                 + TURNOVER_AGGREGATES
                 + """
                 from posting p
@@ -923,7 +1158,7 @@ public class ReportQueryRepository {
                 + "\n"
                 + extra.sql()
                 + """
-                group by a.currency_code, month_key
+                group by a.currency_code, bucket_key
                 """)
         .param(TYPES, types)
         .param(START_DATE, startDate)
@@ -932,6 +1167,8 @@ public class ReportQueryRepository {
         .param(LEG, leg)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .param(BUCKET_UNIT, granularity.sqlUnit())
+        .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
         .query(RawTurnoverCell.class)
         .list();
@@ -996,7 +1233,10 @@ public class ReportQueryRepository {
 
   // ── accountTypeTurnover / accountTypeClosingBalance ────────────────────────
 
-  /** Turnover grouped by each posting's account's {@code type} and month bucket. */
+  /**
+   * Turnover grouped by each posting's account's {@code type} and Date bucket. Buckets at month
+   * granularity; every pre-e4 caller's own convenience overload.
+   */
   public List<RawTurnoverCell> accountTypeTurnover(
       List<String> types,
       LocalDate startDate,
@@ -1006,6 +1246,33 @@ public class ReportQueryRepository {
       boolean includeClosedAccounts,
       boolean includePendingReview,
       QueryConstraints constraints) {
+    return accountTypeTurnover(
+        types,
+        startDate,
+        endDate,
+        baseCurrency,
+        leg,
+        includeClosedAccounts,
+        includePendingReview,
+        DateGranularity.MONTH,
+        constraints);
+  }
+
+  /**
+   * {@link #accountTypeTurnover(List, LocalDate, LocalDate, String, String, boolean, boolean,
+   * QueryConstraints) accountTypeTurnover}, bucketing at {@code granularity} instead of always
+   * month (reporting.md §8.2, stage e4).
+   */
+  public List<RawTurnoverCell> accountTypeTurnover(
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      DateGranularity granularity,
+      QueryConstraints constraints) {
     CompiledExtra extra = compileExtra(constraints);
     return jdbcClient
         .sql(
@@ -1013,9 +1280,8 @@ public class ReportQueryRepository {
             select a.type as dimension_key,
                    a.type as dimension_label,
                    a.type as dimension_type,
-                   to_char(date_trunc('month', t.date), 'YYYY-MM') as month_key,
-                   a.currency_code as currency_code,
                    """
+                + BUCKET_KEY_AND_CURRENCY_COLUMNS
                 + TURNOVER_AGGREGATES
                 + """
                 from posting p
@@ -1030,7 +1296,7 @@ public class ReportQueryRepository {
                 + "\n"
                 + extra.sql()
                 + """
-                group by a.type, month_key, a.currency_code
+                group by a.type, bucket_key, a.currency_code
                 """)
         .param(TYPES, types)
         .param(START_DATE, startDate)
@@ -1039,6 +1305,8 @@ public class ReportQueryRepository {
         .param(LEG, leg)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .param(BUCKET_UNIT, granularity.sqlUnit())
+        .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
         .query(RawTurnoverCell.class)
         .list();
@@ -1090,8 +1358,9 @@ public class ReportQueryRepository {
 
   /**
    * Turnover with no dimension grouping at all — every in-scope posting collapsed into one bucket
-   * per month and currency. Used when neither report axis carries a wired dimension (§5.2 — sum is
-   * always legal over both axes for a flow measure, so this is never illegal, merely coarse).
+   * per Date bucket and currency. Used when neither report axis carries a wired dimension (§5.2 —
+   * sum is always legal over both axes for a flow measure, so this is never illegal, merely
+   * coarse). Buckets at month granularity; every pre-e4 caller's own convenience overload.
    */
   public List<RawTurnoverCell> totalTurnover(
       List<String> types,
@@ -1102,6 +1371,33 @@ public class ReportQueryRepository {
       boolean includeClosedAccounts,
       boolean includePendingReview,
       QueryConstraints constraints) {
+    return totalTurnover(
+        types,
+        startDate,
+        endDate,
+        baseCurrency,
+        leg,
+        includeClosedAccounts,
+        includePendingReview,
+        DateGranularity.MONTH,
+        constraints);
+  }
+
+  /**
+   * {@link #totalTurnover(List, LocalDate, LocalDate, String, String, boolean, boolean,
+   * QueryConstraints) totalTurnover}, bucketing at {@code granularity} instead of always month
+   * (reporting.md §8.2, stage e4).
+   */
+  public List<RawTurnoverCell> totalTurnover(
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      DateGranularity granularity,
+      QueryConstraints constraints) {
     CompiledExtra extra = compileExtra(constraints);
     return jdbcClient
         .sql(
@@ -1109,9 +1405,8 @@ public class ReportQueryRepository {
             select 'total' as dimension_key,
                    'Total' as dimension_label,
                    cast(null as text) as dimension_type,
-                   to_char(date_trunc('month', t.date), 'YYYY-MM') as month_key,
-                   a.currency_code as currency_code,
                    """
+                + BUCKET_KEY_AND_CURRENCY_COLUMNS
                 + TURNOVER_AGGREGATES
                 + """
                 from posting p
@@ -1126,7 +1421,7 @@ public class ReportQueryRepository {
                 + "\n"
                 + extra.sql()
                 + """
-                group by month_key, a.currency_code
+                group by bucket_key, a.currency_code
                 """)
         .param(TYPES, types)
         .param(START_DATE, startDate)
@@ -1135,6 +1430,8 @@ public class ReportQueryRepository {
         .param(LEG, leg)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .param(BUCKET_UNIT, granularity.sqlUnit())
+        .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
         .query(RawTurnoverCell.class)
         .list();

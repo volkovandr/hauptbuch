@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import volkovandr.hauptbuch.analytics.DateLadder;
 import volkovandr.hauptbuch.analytics.DateRange;
 import volkovandr.hauptbuch.analytics.Dimension;
 import volkovandr.hauptbuch.analytics.FilterField;
@@ -55,6 +56,7 @@ final class ReportSpecJson {
     root.put("columnTotals", spec.columnTotals());
     root.put("suppressEmptyRows", spec.suppressEmptyRows());
     root.put("groupHeaderParents", spec.groupHeaderParents());
+    root.put("dateLadder", spec.dateLadder().name());
     try {
       return MAPPER.writeValueAsString(root);
     } catch (JsonProcessingException e) {
@@ -113,7 +115,19 @@ final class ReportSpecJson {
         // .path(), not .get(): a report.spec row saved before stage e3 has no key at all here, and
         // .path() degrades to a MissingNode (false) instead of Java null, unlike every other field
         // above — those predate the feature entirely and always exist in every saved spec's shape.
-        root.path("groupHeaderParents").asBoolean(false));
+        root.path("groupHeaderParents").asBoolean(false),
+        // Same .path() guard as groupHeaderParents, for a report.spec row saved before stage e4.
+        dateLadderFrom(root));
+  }
+
+  /**
+   * A report.spec row saved before stage e4 has no {@code dateLadder} key at all — degrades to
+   * {@link DateLadder#MONTH}, the ladder every such Report already rendered at (mirrors {@link
+   * #fromJson}'s {@code groupHeaderParents} guard).
+   */
+  private static DateLadder dateLadderFrom(JsonNode root) {
+    JsonNode node = root.path("dateLadder");
+    return node.isMissingNode() ? DateLadder.MONTH : DateLadder.valueOf(node.asText());
   }
 
   private static JsonNode readTree(String json) {
