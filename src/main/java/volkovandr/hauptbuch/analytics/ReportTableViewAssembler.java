@@ -27,7 +27,13 @@ final class ReportTableViewAssembler {
    */
   static ReportTableView assemble(
       String title, ReportSpec spec, ReportGrid grid, String baseCurrency, Long toggleReportId) {
-    List<String> columnLabels = grid.columns().stream().map(AxisNode::label).toList();
+    List<ReportTableView.ColumnView> columns =
+        grid.columns().stream()
+            .map(
+                node ->
+                    new ReportTableView.ColumnView(
+                        node.label(), node.depth(), node.expandable() && node.expanded()))
+            .toList();
     List<ReportTableView.RowView> rows = new ArrayList<>();
     for (int i = 0; i < grid.rows().size(); i++) {
       AxisNode node = grid.rows().get(i);
@@ -58,7 +64,7 @@ final class ReportTableViewAssembler {
         grid.scopeMismatch(),
         grid.resolvedStart(),
         grid.resolvedEnd(),
-        columnLabels,
+        columns,
         rows,
         spec.rowTotals(),
         spec.columnTotals(),

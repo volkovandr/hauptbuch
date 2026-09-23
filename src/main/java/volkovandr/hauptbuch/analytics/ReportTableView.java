@@ -11,7 +11,7 @@ import java.util.List;
  * @param scopeLine the muted header line (§6.4)
  * @param scopeMismatch the "scope misses the dimension" message (§6.1, {@link
  *     ScopeDimensionMismatch}); {@code null} when scope and dimension agree
- * @param columnLabels the rendered column headers
+ * @param columns the rendered column headers, with the hierarchy each one sits in
  * @param rows one row per surviving (post-suppression) {@link AxisNode}
  * @param columnTotals the bottom totals row; empty when not shown
  * @param grandTotal blank when either totals axis is off
@@ -26,7 +26,7 @@ public record ReportTableView(
     String scopeMismatch,
     LocalDate resolvedStart,
     LocalDate resolvedEnd,
-    List<String> columnLabels,
+    List<ColumnView> columns,
     List<RowView> rows,
     boolean showRowTotals,
     boolean showColumnTotals,
@@ -36,10 +36,21 @@ public record ReportTableView(
 
   /** Defensively copies the lists to immutable ones. */
   public ReportTableView {
-    columnLabels = List.copyOf(columnLabels);
+    columns = List.copyOf(columns);
     rows = List.copyOf(rows);
     columnTotals = List.copyOf(columnTotals);
   }
+
+  /**
+   * One rendered column header (stage e5). Column-axis expansion is not in v1 (§9.1), but a column
+   * can still sit in a hierarchy — {@code auto} (§9.2) expands a filtered node on either axis — so
+   * the header says where it sits.
+   *
+   * @param depth 0 for a top-level column, otherwise how many levels it is nested
+   * @param parent whether this column is an expanded parent: a subtotal over the columns right
+   *     after it
+   */
+  public record ColumnView(String label, int depth, boolean parent) {}
 
   /**
    * One rendered row: its label, its formatted cells, and its row total (blank when not shown).

@@ -755,6 +755,47 @@ class ReportGridBuilderTest {
   }
 
   @Test
+  void perMeasureColumnsKeepTheirBucketsDepthAndExpandedFlag() {
+    // Column headers show hierarchy (stage e5): with two measures each bucket renders as two
+    // columns, and both must still say how deep the bucket sits and whether it is an expanded
+    // parent, rather than every per-measure column reading as a flat depth-0 one.
+    AxisPlan axes = new AxisPlan(null, Dimension.CATEGORY, Dimension.CATEGORY, false, false);
+    List<AxisNode> rows = List.of(new AxisNode("total", "Total"));
+    List<AxisNode> columns =
+        List.of(
+            new AxisNode("1", "Food", 0, true, null, true),
+            new AxisNode("1|10", "Restaurants", 1, false, "1"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    GridData data =
+        turnoverData(
+            turnover("1", "Food", "expense", "2026-01", "EUR", "30.00", "30.00"),
+            turnover("1|10", "Restaurants", "expense", "2026-01", "EUR", "30.00", "30.00"));
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(),
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            List.of(
+                Measure.turnover(PresentationCurrency.BASE, Leg.NET),
+                Measure.turnover(PresentationCurrency.ACCOUNT, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            false);
+
+    ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.columns()).extracting(AxisNode::depth).containsExactly(0, 0, 1, 1);
+    assertThat(grid.columns())
+        .extracting(AxisNode::expanded)
+        .containsExactly(true, true, false, false);
+  }
+
+  @Test
   void nestedChildRowFlipsSignByItsOwnMatchedTypeNotTheOuterScopeGuess() {
     // Scope spans both income and expense (a full P&L), so the scope-wide guess is ambiguous and
     // leaves a cell unflipped (§4.1's fallback) — but a nested income category under an expanded
