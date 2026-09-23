@@ -168,6 +168,28 @@ class ReportSettingsViewTest {
     assertThat(view.display().columnTotals()).isTrue();
     assertThat(view.display().suppressEmptyRows()).isTrue();
     assertThat(view.display().groupHeaderParents()).isFalse();
+    assertThat(view.display().dateLadder()).isEqualTo("MONTH");
+  }
+
+  @Test
+  void displayReflectsTheSpecsOwnWeekLadderChoice() {
+    ReportSpec weekLadder =
+        new ReportSpec(
+            Presets.categoryMonthMatrix().rows(),
+            Presets.categoryMonthMatrix().columns(),
+            Presets.categoryMonthMatrix().series(),
+            Presets.categoryMonthMatrix().measures(),
+            Presets.categoryMonthMatrix().scope(),
+            Presets.categoryMonthMatrix().filters(),
+            Presets.categoryMonthMatrix().range(),
+            Presets.categoryMonthMatrix().rowTotals(),
+            Presets.categoryMonthMatrix().columnTotals(),
+            Presets.categoryMonthMatrix().suppressEmptyRows(),
+            false,
+            DateLadder.WEEK);
+    ReportSettingsView.View view = build(weekLadder, Renderer.TABLE, false);
+
+    assertThat(view.display().dateLadder()).isEqualTo("WEEK");
   }
 
   @Test

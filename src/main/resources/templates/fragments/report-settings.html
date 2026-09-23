@@ -303,6 +303,21 @@
             />
             Group-header parents (blank an expanded row's own subtotal)
           </label>
+          <div
+            class="field"
+            th:with="help=${T(volkovandr.hauptbuch.analytics.ReportHelpText).DATE_LADDER}"
+          >
+            <label class="field__label" for="settings-date-ladder"
+              >Date ladder
+              <span th:replace="~{fragments/help-marker :: marker(${help})}"></span
+            ></label>
+            <select id="settings-date-ladder" name="dateLadder" class="input">
+              <option value="MONTH" th:selected="${settings.display().dateLadder() == 'MONTH'}"
+                >Month</option>
+              <option value="WEEK" th:selected="${settings.display().dateLadder() == 'WEEK'}"
+                >Week</option>
+            </select>
+          </div>
           <th:block
             th:replace="~{fragments/report-actions :: hidden-fields(${settings.display().otherParams()})}"
           ></th:block>

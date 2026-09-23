@@ -120,11 +120,13 @@ final class ReportSettingsView {
       EndpointFields end,
       MultiValueMap<String, String> otherParams) {}
 
+  /** {@code dateLadder} is {@link DateLadder#name()} — {@code "MONTH"} or {@code "WEEK"} (§8.2). */
   record Display(
       boolean rowTotals,
       boolean columnTotals,
       boolean suppressEmptyRows,
       boolean groupHeaderParents,
+      String dateLadder,
       MultiValueMap<String, String> otherParams) {}
 
   /** {@code showTrendLine} is true only for {@link Renderer#LINE} (reporting.md §11a.2). */
@@ -329,7 +331,14 @@ final class ReportSettingsView {
         spec.columnTotals(),
         spec.suppressEmptyRows(),
         spec.groupHeaderParents(),
-        without(all, "rowTotals", "columnTotals", "suppressEmptyRows", "groupHeaderParents"));
+        spec.dateLadder().name(),
+        without(
+            all,
+            "rowTotals",
+            "columnTotals",
+            "suppressEmptyRows",
+            "groupHeaderParents",
+            "dateLadder"));
   }
 
   private static RendererGroup renderer(

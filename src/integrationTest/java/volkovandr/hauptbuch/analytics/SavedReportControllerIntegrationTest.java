@@ -204,6 +204,39 @@ class SavedReportControllerIntegrationTest {
   }
 
   @Test
+  void dateLadderWeekQueryParamRendersWeekColumnHeaders() throws Exception {
+    // The settings strip's own Date ladder <select> (reporting.md §8.2, stage e4) submits exactly
+    // this "dateLadder" parameter — proves it reaches the engine end to end, not just that
+    // ReportEngine itself honors the spec field (ReportEngineTest's own job).
+    settingsService.setBaseCurrency("EUR");
+    SavedReport saved =
+        reportService.save("Weekly", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+    ReportSpec weekLadder =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("income", "expense"),
+            List.of(),
+            // A Monday-to-Sunday range (2026-01-05 is a Monday) — one full, unclipped week.
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 5)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 11))),
+            false,
+            false,
+            true,
+            false,
+            DateLadder.WEEK);
+    MultiValueMap<String, String> draft = ReportSpecQueryString.toParams(weekLadder);
+
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()).params(draft))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("w/c 5 Jan 2026")));
+  }
+
+  @Test
   void draftWithTrendLineExplicitlyFalseTurnsTheOverlayOff() throws Exception {
     // What the browser actually submits when the Trend line checkbox is unticked (report-settings
     // .html: a hidden trendLine=false fallback sits right after the checkbox so an unticked box's
