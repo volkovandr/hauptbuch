@@ -37,10 +37,12 @@
         class="report-settings__form"
         method="get"
         th:action="@{${settings.pagePath()}}"
-        hx-target="#report-page"
+        hx-target="#report-frame"
+        hx-select="#report-frame"
         hx-swap="outerHTML"
         hx-replace-url="true"
-        th:attr="hx-get=@{${settings.pagePath()}}"
+        th:attr="hx-get=@{${settings.pagePath()}},
+                 hx-select-oob=${settings.refreshedRegions()}"
       >
         <p
           class="report-settings__filter-switch"
@@ -104,10 +106,12 @@
         class="report-settings__form"
         method="get"
         th:action="@{${settings.pagePath()}}"
-        hx-target="#report-page"
+        hx-target="#report-frame"
+        hx-select="#report-frame"
         hx-swap="outerHTML"
         hx-replace-url="true"
-        th:attr="hx-get=@{${settings.pagePath()}}"
+        th:attr="hx-get=@{${settings.pagePath()}},
+                 hx-select-oob=${settings.refreshedRegions()}"
       >
         <p
           class="report-settings__filter-switch"
@@ -172,10 +176,12 @@
         class="report-settings__form"
         method="get"
         th:action="@{${settings.pagePath()}}"
-        hx-target="#report-page"
+        hx-target="#report-frame"
+        hx-select="#report-frame"
         hx-swap="outerHTML"
         hx-replace-url="true"
-        th:attr="hx-get=@{${settings.pagePath()}}"
+        th:attr="hx-get=@{${settings.pagePath()}},
+                 hx-select-oob=${settings.refreshedRegions()}"
       >
         <p class="report-settings__filter-switch">
           <label class="check">
@@ -238,10 +244,12 @@
         class="report-settings__form"
         method="get"
         th:action="@{${settings.pagePath()}}"
-        hx-target="#report-page"
+        hx-target="#report-frame"
+        hx-select="#report-frame"
         hx-swap="outerHTML"
         hx-replace-url="true"
-        th:attr="hx-get=@{${settings.pagePath()}}"
+        th:attr="hx-get=@{${settings.pagePath()}},
+                 hx-select-oob=${settings.refreshedRegions()}"
       >
         <input type="hidden" name="filterField" value="NOTE" />
         <input type="hidden" name="filter.NOTE.level" value="TRANSACTION" />
