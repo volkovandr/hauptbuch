@@ -70,6 +70,7 @@ final class ReportSpecQueryString {
     params.add("columnTotals", String.valueOf(spec.columnTotals()));
     params.add("suppressEmptyRows", String.valueOf(spec.suppressEmptyRows()));
     params.add("groupHeaderParents", String.valueOf(spec.groupHeaderParents()));
+    params.add("dateLadder", spec.dateLadder().name());
     return params;
   }
 
@@ -88,7 +89,17 @@ final class ReportSpecQueryString {
         Boolean.parseBoolean(params.getFirst("rowTotals")),
         Boolean.parseBoolean(params.getFirst("columnTotals")),
         Boolean.parseBoolean(params.getFirst("suppressEmptyRows")),
-        Boolean.parseBoolean(params.getFirst("groupHeaderParents")));
+        Boolean.parseBoolean(params.getFirst("groupHeaderParents")),
+        dateLadderFrom(params));
+  }
+
+  /**
+   * A draft with no {@code dateLadder} parameter at all (a link/form predating stage e4) degrades
+   * to {@link DateLadder#MONTH}, mirroring {@code groupHeaderParents}' own null-safe default above.
+   */
+  private static DateLadder dateLadderFrom(MultiValueMap<String, String> params) {
+    String value = params.getFirst("dateLadder");
+    return value == null ? DateLadder.MONTH : DateLadder.valueOf(value);
   }
 
   private static void putDimension(

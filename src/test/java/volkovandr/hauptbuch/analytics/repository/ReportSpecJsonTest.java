@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import volkovandr.hauptbuch.analytics.DateLadder;
 import volkovandr.hauptbuch.analytics.DateRange;
 import volkovandr.hauptbuch.analytics.Dimension;
 import volkovandr.hauptbuch.analytics.FilterField;
@@ -111,6 +112,57 @@ class ReportSpecJsonTest {
     ReportSpec decoded = ReportSpecJson.fromJson(jsonMissingTheNewKey);
 
     assertThat(decoded.groupHeaderParents()).isFalse();
+  }
+
+  @Test
+  void roundTripsWeekLadderChoice() {
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            true,
+            true,
+            true,
+            false,
+            DateLadder.WEEK);
+
+    ReportSpec decoded = ReportSpecJson.fromJson(ReportSpecJson.toJson(spec));
+
+    assertThat(decoded.dateLadder()).isEqualTo(DateLadder.WEEK);
+    assertThat(decoded).isEqualTo(spec);
+  }
+
+  @Test
+  void fromJsonDefaultsDateLadderToMonthWhenTheKeyIsMissingEntirely() {
+    // A report.spec row saved before stage e4 has no "dateLadder" key at all — decoding it must
+    // default to DateLadder.MONTH (every such Report's own pre-e4 rendering), not throw.
+    ReportSpec preStageE4 =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            true,
+            true,
+            true);
+    String jsonMissingTheNewKey =
+        ReportSpecJson.toJson(preStageE4).replace(",\"dateLadder\":\"MONTH\"", "");
+
+    ReportSpec decoded = ReportSpecJson.fromJson(jsonMissingTheNewKey);
+
+    assertThat(decoded.dateLadder()).isEqualTo(DateLadder.MONTH);
   }
 
   @Test

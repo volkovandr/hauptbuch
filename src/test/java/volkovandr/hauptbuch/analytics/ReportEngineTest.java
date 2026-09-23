@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
 import volkovandr.hauptbuch.ledger.SettingsService;
 
@@ -227,6 +228,41 @@ class ReportEngineTest {
 
     verify(dataFetcher).candidatesFor(Dimension.CATEGORY, List.of("expense"), s.scope());
     verify(gridBuilder).build(eq(s), any(), any(), any(), any(), any(), eq("EUR"), any());
+  }
+
+  @Test
+  void weekLadderChoiceProducesWeekGranularityBuckets() {
+    baseIsEur();
+    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any())).thenReturn(Map.of());
+    when(gridBuilder.axisNodes(any(), any(), any())).thenReturn(List.of());
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
+    ReportSpec s =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            true,
+            false,
+            DateLadder.WEEK);
+
+    engine.render(s, TODAY);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<List<DateBucket>> buckets = ArgumentCaptor.forClass(List.class);
+    verify(gridBuilder).axisNodes(eq(Dimension.DATE), any(), buckets.capture());
+    assertThat(buckets.getValue())
+        .isNotEmpty()
+        .allSatisfy(b -> assertThat(b.granularity()).isEqualTo(DateGranularity.WEEK));
   }
 
   // ── stage e nesting (reporting.md §3, §9) ────────────────────────────────

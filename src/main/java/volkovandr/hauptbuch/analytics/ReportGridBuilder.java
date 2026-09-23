@@ -35,7 +35,7 @@ class ReportGridBuilder {
    * row/column.
    */
   List<AxisNode> axisNodes(
-      Dimension axisDim, Map<String, TopLevelNode> candidatesByKey, List<MonthBucket> buckets) {
+      Dimension axisDim, Map<String, TopLevelNode> candidatesByKey, List<DateBucket> buckets) {
     if (axisDim == null) {
       return List.of(new AxisNode(AxisNode.TOTAL_KEY, "Total"));
     }

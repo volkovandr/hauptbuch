@@ -38,17 +38,17 @@ class CellValuation {
         nonDateDim == null
             ? AxisNode.TOTAL_KEY
             : (axes.rowDim() == nonDateDim ? rowNode.key() : columnBucketNode.key());
-    String monthKey =
+    String bucketKey =
         axes.dateOnRows() ? rowNode.key() : axes.dateOnColumns() ? columnBucketNode.key() : null;
     if (measure.kind() == MeasureKind.TURNOVER) {
       List<RawTurnoverCell> matches =
-          turnoverMatches(measure.leg(), dimKey, monthKey, context.data());
+          turnoverMatches(measure.leg(), dimKey, bucketKey, context.data());
       boolean creditNatural = isCreditNaturalType(turnoverDimensionType(matches), context.scope());
       return turnoverCellValue(matches, measure, context.baseCurrency(), creditNatural);
     }
     if (measure.kind() == MeasureKind.COUNT_POSTINGS
         || measure.kind() == MeasureKind.COUNT_TRANSACTIONS) {
-      List<RawTurnoverCell> matches = turnoverMatches(Leg.NET, dimKey, monthKey, context.data());
+      List<RawTurnoverCell> matches = turnoverMatches(Leg.NET, dimKey, bucketKey, context.data());
       return countCellValue(matches, measure.kind());
     }
     return computeClosingBalanceCell(measure, rowNode, columnBucketNode, dimKey, axes, context);
@@ -110,11 +110,11 @@ class CellValuation {
   }
 
   private static List<RawTurnoverCell> turnoverMatches(
-      Leg leg, String dimKey, String monthKey, GridData data) {
+      Leg leg, String dimKey, String bucketKey, GridData data) {
     List<RawTurnoverCell> raw = data.turnoverByLeg().getOrDefault(leg, List.of());
     return raw.stream()
         .filter(c -> c.dimensionKey().equals(dimKey))
-        .filter(c -> monthKey == null || c.monthKey().equals(monthKey))
+        .filter(c -> bucketKey == null || c.bucketKey().equals(bucketKey))
         .toList();
   }
 

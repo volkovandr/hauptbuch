@@ -132,8 +132,9 @@ class ReportGridBuilderTest {
 
   @Test
   void axisNodesIsMonthBucketsForDate() {
-    List<MonthBucket> buckets =
-        MonthBucket.monthsBetween(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31));
+    List<DateBucket> buckets =
+        DateBucket.bucketsBetween(
+            DateGranularity.MONTH, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31));
     assertThat(builder.axisNodes(Dimension.DATE, Map.of(), buckets))
         .extracting(AxisNode::label)
         .containsExactly("Jan 2026");
