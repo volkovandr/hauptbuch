@@ -51,10 +51,42 @@
               </select>
             </div>
             <div class="field">
+              <label class="field__label" for="settings-rows-nested">Nested rows</label>
+              <select
+                id="settings-rows-nested"
+                name="rowsNested"
+                class="input"
+                th:disabled="${settings.rowsColumns().rowsNestedDisabled()}"
+              >
+                <option
+                  th:each="opt : ${settings.rowsColumns().rowsNested()}"
+                  th:value="${opt.value()}"
+                  th:selected="${opt.selected()}"
+                  th:text="${opt.label()}"
+                ></option>
+              </select>
+            </div>
+            <div class="field">
               <label class="field__label" for="settings-columns">Columns</label>
               <select id="settings-columns" name="columns" class="input">
                 <option
                   th:each="opt : ${settings.rowsColumns().columns()}"
+                  th:value="${opt.value()}"
+                  th:selected="${opt.selected()}"
+                  th:text="${opt.label()}"
+                ></option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label" for="settings-columns-nested">Nested columns</label>
+              <select
+                id="settings-columns-nested"
+                name="columnsNested"
+                class="input"
+                th:disabled="${settings.rowsColumns().columnsNestedDisabled()}"
+              >
+                <option
+                  th:each="opt : ${settings.rowsColumns().columnsNested()}"
                   th:value="${opt.value()}"
                   th:selected="${opt.selected()}"
                   th:text="${opt.label()}"

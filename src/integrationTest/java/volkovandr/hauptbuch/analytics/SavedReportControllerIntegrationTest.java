@@ -289,6 +289,58 @@ class SavedReportControllerIntegrationTest {
   }
 
   @Test
+  void nestedRowsDraftRendersThePayeeBreakdownUnderTheFilteredCategory() throws Exception {
+    // The settings strip's "Nested rows" <select> (§3, stage e5) submits rowsNested — proves it
+    // reaches the engine end to end: auto (§9.2) expands the one filtered category, and its payee
+    // breakdown renders beneath it at depth 1.
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long food = insertAccount("Food", "expense", "EUR", null);
+    postSingleCurrency(cash, food, LocalDate.of(2026, 1, 10), "20.00");
+    long payee =
+        jdbcClient
+            .sql("insert into payee (name) values ('ShopAaa') returning payee_id")
+            .query(Long.class)
+            .single();
+    jdbcClient.sql("update transaction set payee_id = :p").param("p", payee).update();
+    SavedReport saved =
+        reportService.save("Food by shop", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY, Dimension.PAYEE),
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(
+                new ReportFilter(
+                    FilterField.CATEGORY,
+                    FilterLevel.POSTING,
+                    FilterOperator.IS_ONE_OF,
+                    List.of(String.valueOf(food)))),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            true);
+    MultiValueMap<String, String> draft = ReportSpecQueryString.toParams(spec);
+
+    String page =
+        mockMvc
+            .perform(get("/reports/" + saved.reportId()).params(draft))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    assertThat(draft.getFirst("rowsNested")).isEqualTo("PAYEE");
+    assertThat(page).contains("padding-left: 20px").contains("ShopAaa");
+    // Every other group's hidden fields carry the nested slot, so it survives their own submits.
+    assertThat(page.replaceAll("\\s+", " ")).contains("name=\"rowsNested\" value=\"PAYEE\"");
+  }
+
+  @Test
   void draftWithTrendLineExplicitlyFalseTurnsTheOverlayOff() throws Exception {
     // What the browser actually submits when the Trend line checkbox is unticked (report-settings
     // .html: a hidden trendLine=false fallback sits right after the checkbox so an unticked box's
@@ -318,7 +370,8 @@ class SavedReportControllerIntegrationTest {
   @Test
   void toggleResponseIsJustTheTableWithNoBodyWrapper() throws Exception {
     // reporting issue 01: the fragment used to be named "body", the same string as its enclosing
-    // <body> tag, and Thymeleaf's selector picked the tag — every caller got a stray <body> wrapper.
+    // <body> tag, and Thymeleaf's selector picked the tag — every caller got a stray <body>
+    // wrapper.
     settingsService.setBaseCurrency("EUR");
     long food = insertAccount("Food", "expense", "EUR", null);
     insertAccount("Bakery", "expense", "EUR", food);

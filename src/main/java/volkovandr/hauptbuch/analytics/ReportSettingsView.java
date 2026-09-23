@@ -63,14 +63,20 @@ final class ReportSettingsView {
 
   /**
    * Rows, columns and series share one form (reporting.md §11a.2's "one dropdown per axis slot"):
-   * none of the three needs its own Apply, and rows/series' mutual exclusion (§3, {@link
-   * ReportSpec}'s own constructor) is made unenterable by disabling whichever dropdown the other
-   * side has already claimed, rather than by a JS-driven auto-clear.
+   * none of them needs its own Apply, and rows/series' mutual exclusion (§3, {@link ReportSpec}'s
+   * own constructor) is made unenterable by disabling whichever dropdown the other side has already
+   * claimed, rather than by a JS-driven auto-clear. Rows and columns each carry a second, nested
+   * slot (§3, stage e5), disabled unless the axis's own outer slot holds a hierarchy ({@link
+   * AutoExpansion#canNestUnder}).
    */
   record RowsColumns(
       List<AxisOption> rows,
       boolean rowsDisabled,
+      List<AxisOption> rowsNested,
+      boolean rowsNestedDisabled,
       List<AxisOption> columns,
+      List<AxisOption> columnsNested,
+      boolean columnsNestedDisabled,
       List<AxisOption> series,
       boolean seriesDisabled,
       MultiValueMap<String, String> otherParams) {}
@@ -171,13 +177,42 @@ final class ReportSettingsView {
     // value, not rows directly — otherwise "rows empty, series = Category, columns = Payee" would
     // stay enterable even though it is exactly this same illegal combination.
     Dimension effectiveRowSlot = rowsSet ? row : series;
+    Dimension rowNested = spec.rows().size() == 2 ? spec.rows().get(1) : null;
+    Dimension columnNested = spec.columns().size() == 2 ? spec.columns().get(1) : null;
     return new RowsColumns(
         axisOptionsExcluding(row, column),
         seriesSet,
+        nestedOptions(row, rowNested),
+        !AutoExpansion.isNestable(row),
         axisOptionsExcluding(column, effectiveRowSlot),
+        nestedOptions(column, columnNested),
+        !AutoExpansion.isNestable(column),
         axisOptionsExcluding(series, column),
         rowsSet,
-        without(all, "rows", "columns", "series"));
+        without(
+            all,
+            "rows",
+            ReportSpecQueryString.ROWS_NESTED,
+            "columns",
+            ReportSpecQueryString.COLUMNS_NESTED,
+            "series"));
+  }
+
+  /**
+   * A nested slot's own options: None plus every dimension {@link AutoExpansion#canNestUnder} lets
+   * sit beneath {@code outer} — or just None when {@code outer} nests nothing (the slot then
+   * renders disabled anyway).
+   */
+  private static List<AxisOption> nestedOptions(Dimension outer, Dimension selected) {
+    List<AxisOption> options = new ArrayList<>();
+    options.add(new AxisOption("", "None", selected == null));
+    for (Dimension dimension : Dimension.values()) {
+      if (AutoExpansion.canNestUnder(outer, dimension)) {
+        options.add(
+            new AxisOption(dimension.name(), dimensionLabel(dimension), dimension == selected));
+      }
+    }
+    return options;
   }
 
   /**
