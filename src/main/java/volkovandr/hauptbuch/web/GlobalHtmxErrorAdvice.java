@@ -38,8 +38,10 @@ class GlobalHtmxErrorAdvice {
   private static final String HX_REQUEST = "HX-Request";
   private static final String HX_RETARGET = "HX-Retarget";
   private static final String HX_RESWAP = "HX-Reswap";
+  private static final String HX_RESELECT = "HX-Reselect";
   private static final String ERROR_SLOT = "#app-error";
   private static final String INNER_HTML = "innerHTML";
+  private static final String TOAST = ".app-error__toast";
 
   /** Shown to the user; carries no ledger or exception detail on purpose. */
   private static final String USER_MESSAGE =
@@ -72,6 +74,10 @@ class GlobalHtmxErrorAdvice {
         exception);
     response.setHeader(HX_RETARGET, ERROR_SLOT);
     response.setHeader(HX_RESWAP, INNER_HTML);
+    // The trigger's own hx-select (e.g. the report settings strip's #report-frame) would otherwise
+    // still apply to this response, select nothing from the toast fragment and swap in an empty
+    // one.
+    response.setHeader(HX_RESELECT, TOAST);
     // The view name carries no expression: Thymeleaf refuses an expression-bearing view name when
     // the request URL looks expression-like, and this boundary fires on any path. The fragment
     // reads `message` from the model instead.
