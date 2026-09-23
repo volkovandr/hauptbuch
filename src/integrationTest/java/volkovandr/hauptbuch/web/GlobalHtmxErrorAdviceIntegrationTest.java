@@ -51,6 +51,9 @@ class GlobalHtmxErrorAdviceIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(header().string("HX-Retarget", "#app-error"))
         .andExpect(header().string("HX-Reswap", "innerHTML"))
+        // Overrides any hx-select on the trigger (the report settings strip selects #report-frame),
+        // which would otherwise select nothing from this fragment and swap in an empty toast.
+        .andExpect(header().string("HX-Reselect", ".app-error__toast"))
         // A user-facing message is shown; the raw exception detail is not leaked.
         .andExpect(content().string(containsString("Something went wrong")))
         .andExpect(content().string(not(containsString(SECRET))));
