@@ -360,6 +360,60 @@ class ReportGridBuilderTest {
   }
 
   @Test
+  void columnsWithNoDataAreKeptByDefault() {
+    AxisPlan axes = new AxisPlan(null, Dimension.CATEGORY, Dimension.CATEGORY, false, false);
+    List<AxisNode> rows = List.of(new AxisNode(AxisNode.TOTAL_KEY, "Total"));
+    List<AxisNode> columns = List.of(new AxisNode("1", "Food"), new AxisNode("2", "Fuel"));
+    Map<String, TopLevelNode> byKey =
+        candidates(
+            new TopLevelNode("1", "Food", "expense"), new TopLevelNode("2", "Fuel", "expense"));
+    GridData data =
+        turnoverData(turnover("1", "Food", "expense", "2026-01", "EUR", "50.00", "50.00"));
+
+    ReportGrid grid =
+        builder.build(
+            matrixSpec(false, false, false), axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.columns()).extracting(AxisNode::label).containsExactly("Food", "Fuel");
+  }
+
+  @Test
+  void suppressesAnAllBlankColumnWhenEnabled() {
+    AxisPlan axes = new AxisPlan(null, Dimension.CATEGORY, Dimension.CATEGORY, false, false);
+    List<AxisNode> rows = List.of(new AxisNode(AxisNode.TOTAL_KEY, "Total"));
+    List<AxisNode> columns = List.of(new AxisNode("1", "Food"), new AxisNode("2", "Fuel"));
+    Map<String, TopLevelNode> byKey =
+        candidates(
+            new TopLevelNode("1", "Food", "expense"), new TopLevelNode("2", "Fuel", "expense"));
+    // "Fuel" has no turnover at all — e.g. the same gap an unfiltered account candidate list
+    // leaves for a "touching …" filter that excludes it entirely (reporting.md §6.2/§7.3).
+    GridData data =
+        turnoverData(turnover("1", "Food", "expense", "2026-01", "EUR", "50.00", "50.00"));
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(),
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            false,
+            false,
+            DateLadder.MONTH,
+            true);
+
+    ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.columns()).extracting(AxisNode::label).containsExactly("Food");
+    assertThat(grid.cells().get(0)).containsExactly(new Cell.Value(new BigDecimal("50.00"), "EUR"));
+  }
+
+  @Test
   void negatesCreditNaturalRowForDisplay() {
     AxisPlan axes =
         new AxisPlan(Dimension.CATEGORY, Dimension.DATE, Dimension.CATEGORY, false, true);

@@ -47,6 +47,9 @@ import java.util.Set;
  * @param dateLadder which granularity ladder the {@link Dimension#DATE} axis renders at (§8.2):
  *     {@link DateLadder#MONTH}'s or {@link DateLadder#WEEK}'s own rung; defaults to {@link
  *     DateLadder#MONTH}, matching every pre-e4 Report (stage e4)
+ * @param suppressEmptyColumns {@link #suppressEmptyRows}'s own mirror for the column axis (§7.3) —
+ *     a column whose every cell is blank is hidden, e.g. a filtered-out account candidate that
+ *     never touches a qualifying transaction; off by default (stage e4 follow-up)
  */
 public record ReportSpec(
     List<Dimension> rows,
@@ -60,10 +63,45 @@ public record ReportSpec(
     boolean columnTotals,
     boolean suppressEmptyRows,
     boolean groupHeaderParents,
-    DateLadder dateLadder) {
+    DateLadder dateLadder,
+    boolean suppressEmptyColumns) {
 
   /** §3's per-axis cap: rows or columns may nest at most this many dimensions. */
   private static final int MAX_DIMENSIONS_PER_AXIS = 2;
+
+  /** Every call site predating the e4 follow-up — column suppression off, same as before. */
+  // ExcessiveParameterList: a delegating convenience constructor mirroring the canonical one
+  // (every field but the new suppressEmptyColumns, defaulted to false) — splitting it would just
+  // wrap this same field list in a context object, not reduce it.
+  @SuppressWarnings("PMD.ExcessiveParameterList")
+  public ReportSpec(
+      List<Dimension> rows,
+      List<Dimension> columns,
+      List<Dimension> series,
+      List<Measure> measures,
+      Scope scope,
+      List<ReportFilter> filters,
+      DateRange range,
+      boolean rowTotals,
+      boolean columnTotals,
+      boolean suppressEmptyRows,
+      boolean groupHeaderParents,
+      DateLadder dateLadder) {
+    this(
+        rows,
+        columns,
+        series,
+        measures,
+        scope,
+        filters,
+        range,
+        rowTotals,
+        columnTotals,
+        suppressEmptyRows,
+        groupHeaderParents,
+        dateLadder,
+        false);
+  }
 
   /** Every call site predating stage e4 — the month ladder, same rendering as before. */
   // ExcessiveParameterList: a delegating convenience constructor mirroring the canonical one

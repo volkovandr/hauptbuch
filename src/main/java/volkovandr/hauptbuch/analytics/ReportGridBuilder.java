@@ -11,15 +11,17 @@ import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
 
 /**
- * Turns {@link ReportEngine}'s fetched raw data into a {@link ReportGrid}: axis assembly, row
- * suppression (§7.3) and totals (§7.1). Split from {@link ReportEngine} (which owns talking to the
- * repository and settings); per-cell valuation is {@link CellValuation}'s own job.
+ * Turns {@link ReportEngine}'s fetched raw data into a {@link ReportGrid}: axis assembly and totals
+ * (§7.1). Split from {@link ReportEngine} (which owns talking to the repository and settings);
+ * per-cell valuation is {@link CellValuation}'s own job, row/column suppression (§7.3) is {@link
+ * RowColumnSuppression}'s.
  */
 // CouplingBetweenObjects: this class's whole job is turning every axis/spec vocabulary type
 // (Cell, AxisNode, AxisPlan, GridData, TopLevelNode, Measure, MeasureKind, ReportSpec, ...) into a
 // ReportGrid — a mapping step, not a service with many behavioural collaborators. Per-cell
-// valuation is already split out to CellValuation, and total-legality branching to TotalReason;
-// what remains still touches this many small record types because it describes one grid.
+// valuation is already split out to CellValuation, total-legality branching to TotalReason, and
+// row/column suppression to RowColumnSuppression; what remains still touches this many small
+// record types because it describes one grid.
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 @Component
 class ReportGridBuilder {
@@ -148,7 +150,7 @@ class ReportGridBuilder {
     }
   }
 
-  /** Assemble the full grid: cells, row suppression, and both totals. */
+  /** Assemble the full grid: cells, row/column suppression, and both totals. */
   ReportGrid build(
       ReportSpec spec,
       AxisPlan axes,
@@ -161,7 +163,17 @@ class ReportGridBuilder {
     CellValuation.CellContext context =
         new CellValuation.CellContext(axes, candidatesByKey, data, baseCurrency, spec.scope());
     List<List<Cell>> cells = buildCells(spec, rowNodes, columnBucketNodes, context);
-    Suppressed suppressed = suppressBlankRows(spec, rowNodes, cells);
+    RowColumnSuppression.Rows suppressedRows =
+        RowColumnSuppression.suppressBlankRows(spec, rowNodes, cells);
+    // Column blankness never depends on which rows are visible: a suppressed row's every cell was
+    // already blank by construction (suppressBlankRows' own condition), so it can never be the one
+    // non-blank cell keeping a column alive — checking against the pruned row set here is
+    // equivalent to checking the full one, just cheaper.
+    RowColumnSuppression.Columns suppressedColumns =
+        RowColumnSuppression.suppressBlankColumns(
+            spec, columnBucketNodes, suppressedRows.cells(), spec.measures().size());
+    List<AxisNode> columnBuckets = suppressedColumns.columnBucketNodes();
+    List<List<Cell>> displayCells = suppressedColumns.cells();
 
     boolean anyClosingBalance =
         spec.measures().stream().anyMatch(m -> m.kind() == MeasureKind.CLOSING_BALANCE);
@@ -170,36 +182,31 @@ class ReportGridBuilder {
 
     List<Cell> rowTotals =
         computeRowTotals(
-            spec,
-            suppressed.cells(),
-            columnBucketNodes,
-            rowTotalsForbiddenByTag,
-            axes,
-            anyClosingBalance);
-    List<AxisNode> columns = renderedColumns(spec.measures(), axes.colDim(), columnBucketNodes);
+            spec, displayCells, columnBuckets, rowTotalsForbiddenByTag, axes, anyClosingBalance);
+    List<AxisNode> columns = renderedColumns(spec.measures(), axes.colDim(), columnBuckets);
     // A stage-e nested (depth-1) child row already contributes to its depth-0 parent's own
     // subtotal cell (§9.2 — e1 assumes subtotal throughout); summing a column or the grand total
     // over every row in the flattened frontier would therefore double-count it. Both totals sum
     // down the row axis, so both restrict to depth-0 rows here — the same double-counting hazard
     // computeRowTotals above guards against its own way, restricting to depth-0 *column buckets*
     // since it sums across columns within one row instead of down rows.
-    List<List<Cell>> topLevelCells = topLevelRowsOnly(suppressed.rows(), suppressed.cells());
+    List<List<Cell>> topLevelCells = topLevelRowsOnly(suppressedRows.rows(), displayCells);
     List<Cell> columnTotals =
         computeColumnTotals(spec, topLevelCells, columns.size(), columnTotalsForbiddenByTag, axes);
     Cell grandTotal =
         computeGrandTotal(
             spec,
-            topLevelValuesOnly(suppressed.rows(), rowTotals),
+            topLevelValuesOnly(suppressedRows.rows(), rowTotals),
             rowTotalsForbiddenByTag,
             columnTotalsForbiddenByTag,
             axes,
             anyClosingBalance);
 
     return new ReportGrid(
-        suppressed.rows(),
+        suppressedRows.rows(),
         columns,
-        blankGroupHeaderRows(spec, suppressed.rows(), suppressed.cells()),
-        blankGroupHeaderRowTotals(spec, suppressed.rows(), rowTotals),
+        blankGroupHeaderRows(spec, suppressedRows.rows(), displayCells),
+        blankGroupHeaderRowTotals(spec, suppressedRows.rows(), rowTotals),
         columnTotals,
         grandTotal,
         resolved.start(),
@@ -309,23 +316,6 @@ class ReportGridBuilder {
       }
     }
     return rowCells;
-  }
-
-  private Suppressed suppressBlankRows(
-      ReportSpec spec, List<AxisNode> rowNodes, List<List<Cell>> cells) {
-    if (!spec.suppressEmptyRows()) {
-      return new Suppressed(rowNodes, cells);
-    }
-    List<AxisNode> rows = new ArrayList<>();
-    List<List<Cell>> kept = new ArrayList<>();
-    for (int i = 0; i < cells.size(); i++) {
-      boolean allBlank = cells.get(i).stream().allMatch(c -> c instanceof Cell.Blank);
-      if (!allBlank) {
-        rows.add(rowNodes.get(i));
-        kept.add(cells.get(i));
-      }
-    }
-    return new Suppressed(rows, kept);
   }
 
   /**
@@ -488,7 +478,4 @@ class ReportGridBuilder {
         values.stream().map(Cell.Value::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
     return new Cell.Value(sum, currencies.iterator().next());
   }
-
-  /** The row axis and cells after {@link ReportSpec#suppressEmptyRows()} is applied. */
-  private record Suppressed(List<AxisNode> rows, List<List<Cell>> cells) {}
 }

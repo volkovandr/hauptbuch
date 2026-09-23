@@ -297,6 +297,15 @@
           <label class="check">
             <input
               type="checkbox"
+              name="suppressEmptyColumns"
+              value="true"
+              th:checked="${settings.display().suppressEmptyColumns()}"
+            />
+            Suppress empty columns
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
               name="groupHeaderParents"
               value="true"
               th:checked="${settings.display().groupHeaderParents()}"

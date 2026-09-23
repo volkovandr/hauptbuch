@@ -117,6 +117,42 @@ class ReportSpecQueryStringTest {
   }
 
   @Test
+  void roundTripsSuppressEmptyColumnsOn() {
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(),
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            true,
+            true,
+            true,
+            false,
+            DateLadder.MONTH,
+            true);
+
+    MultiValueMap<String, String> params = ReportSpecQueryString.toParams(spec);
+
+    assertThat(ReportSpecQueryString.fromParams(params)).isEqualTo(spec);
+  }
+
+  @Test
+  void missingSuppressEmptyColumnsParamDecodesToFalse() {
+    MultiValueMap<String, String> params =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    params.remove("suppressEmptyColumns");
+
+    ReportSpec decoded = ReportSpecQueryString.fromParams(params);
+
+    assertThat(decoded.suppressEmptyColumns()).isFalse();
+  }
+
+  @Test
   void preservesMeasureOrderSinceItDrivesColumnOrder() {
     ReportSpec spec =
         new ReportSpec(

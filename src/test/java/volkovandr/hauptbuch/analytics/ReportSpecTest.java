@@ -172,6 +172,20 @@ class ReportSpecTest {
   }
 
   @Test
+  void dateLadderDefaultsToMonthOnThePreStageE4Constructor() {
+    ReportSpec spec = spec(List.of(Dimension.CATEGORY), List.of(), List.of());
+
+    assertThat(spec.dateLadder()).isEqualTo(DateLadder.MONTH);
+  }
+
+  @Test
+  void suppressEmptyColumnsDefaultsToFalseOnThePreE4FollowUpConstructor() {
+    ReportSpec spec = spec(List.of(Dimension.CATEGORY), List.of(), List.of());
+
+    assertThat(spec.suppressEmptyColumns()).isFalse();
+  }
+
+  @Test
   void acceptsOneFilterPerDistinctField() {
     List<ReportFilter> filters =
         List.of(

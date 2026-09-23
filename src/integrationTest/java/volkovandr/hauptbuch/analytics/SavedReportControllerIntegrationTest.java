@@ -237,6 +237,58 @@ class SavedReportControllerIntegrationTest {
   }
 
   @Test
+  void suppressEmptyColumnsHidesAnAccountColumnTheFilterExcludesEntirely() throws Exception {
+    // Reproduces the owner's report: Date on rows, Account on columns, a "touching Cash" filter —
+    // Savings never shares a transaction with Cash, so its own column has no data at all and must
+    // be hidden once suppressEmptyColumns is on (reporting.md §7.3's column-axis mirror), even
+    // though topLevelAccounts lists it as a candidate regardless of the filter (by design, so it
+    // can be suppressed rather than never listed).
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long savings = insertAccount("Savings", "asset", "EUR", null);
+    long groceries = insertAccount("Groceries", "expense", "EUR", null);
+    long fuel = insertAccount("Fuel", "expense", "EUR", null);
+    postSingleCurrency(cash, groceries, LocalDate.of(2026, 1, 10), "20.00");
+    postSingleCurrency(savings, fuel, LocalDate.of(2026, 1, 12), "15.00");
+    SavedReport saved =
+        reportService.save("Cash activity", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(Dimension.DATE),
+            List.of(Dimension.ACCOUNT),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("asset"),
+            List.of(
+                new ReportFilter(
+                    FilterField.ACCOUNT,
+                    FilterLevel.TRANSACTION,
+                    FilterOperator.IS_ONE_OF,
+                    List.of(String.valueOf(cash)))),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            false,
+            false,
+            DateLadder.MONTH,
+            true);
+    MultiValueMap<String, String> draft = ReportSpecQueryString.toParams(spec);
+
+    // "Savings" still legitimately appears elsewhere on the page (the Filters group's own Account
+    // section lists every account as a candidate to tick, suppression aside) — the column header
+    // itself, a bare <th>Savings</th> (report-table-body.html has no other tag shaped that way), is
+    // the grid-specific signal, mirroring how the expand/collapse tests below avoid the same
+    // filter-panel contamination.
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()).params(draft))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("<th>Cash</th>")))
+        .andExpect(content().string(not(containsString("<th>Savings</th>"))));
+  }
+
+  @Test
   void draftWithTrendLineExplicitlyFalseTurnsTheOverlayOff() throws Exception {
     // What the browser actually submits when the Trend line checkbox is unticked (report-settings
     // .html: a hidden trendLine=false fallback sits right after the checkbox so an unticked box's

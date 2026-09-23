@@ -328,6 +328,14 @@ or did the refund land?".
 dozens of leaves and most are empty in any month; showing the whole taxonomy every time buries the
 signal.
 
+**Columns whose every cell is blank can be suppressed the same way** (toggleable, off by default —
+added after row suppression, so enabling it is an explicit opt-in rather than changing every
+existing Report's rendering). The two are independent settings: a candidate list (Category, Account,
+Tag, …) is built from every live member regardless of the Report's own filters, precisely so a
+filtered-out one — e.g. an Account column a "touching …" filter never matches — can be hidden by
+suppression rather than never listed at all; this applies whichever axis that candidate dimension
+lands on, not rows alone.
+
 ### 7.4 Renderer legality
 
 A **pie refuses a measure that can go negative** rather than drawing a nonsense wedge — a pie of net
