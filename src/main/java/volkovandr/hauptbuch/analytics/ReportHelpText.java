@@ -39,5 +39,8 @@ public final class ReportHelpText {
   public static final String INCLUDE_PENDING_REVIEW =
       "Recurring and unreviewed items aren’t facts yet, so they’re excluded by default.";
 
+  public static final String DATE_LADDER =
+      "Only affects the Date dimension, when it is on rows or columns — month or week buckets.";
+
   private ReportHelpText() {}
 }
