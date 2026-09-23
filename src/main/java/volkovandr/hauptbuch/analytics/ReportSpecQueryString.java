@@ -69,6 +69,7 @@ final class ReportSpecQueryString {
     params.add("rowTotals", String.valueOf(spec.rowTotals()));
     params.add("columnTotals", String.valueOf(spec.columnTotals()));
     params.add("suppressEmptyRows", String.valueOf(spec.suppressEmptyRows()));
+    params.add("groupHeaderParents", String.valueOf(spec.groupHeaderParents()));
     return params;
   }
 
@@ -86,7 +87,8 @@ final class ReportSpecQueryString {
         new DateRange(endpointFrom(params, RANGE_START), endpointFrom(params, RANGE_END)),
         Boolean.parseBoolean(params.getFirst("rowTotals")),
         Boolean.parseBoolean(params.getFirst("columnTotals")),
-        Boolean.parseBoolean(params.getFirst("suppressEmptyRows")));
+        Boolean.parseBoolean(params.getFirst("suppressEmptyRows")),
+        Boolean.parseBoolean(params.getFirst("groupHeaderParents")));
   }
 
   private static void putDimension(

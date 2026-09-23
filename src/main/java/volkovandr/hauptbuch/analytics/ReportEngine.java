@@ -90,19 +90,22 @@ public class ReportEngine {
     List<MonthBucket> buckets = MonthBucket.monthsBetween(resolved.start(), resolved.end());
     Map<String, TopLevelNode> candidatesByKey =
         dataFetcher.candidatesFor(axes.nonDateDim(), types, spec.scope());
-    Set<String> expandedOuterKeys =
+    Set<String> expandedKeys =
         expandedOuterKeys(expansion, explicitOverride, axes.nonDateDim(), spec, candidatesByKey);
 
     // Only fetch what expansion actually needs — nothing when nothing is expanded, whichever of
     // the two child sources (§3's cross-dimension nesting or §9.1's same-dimension one) applies.
+    // The same-dimension source is fetched for every expanded key regardless of its own depth
+    // (§9.1 recurses to arbitrary depth) — a depth-1+ key's real id is recovered from its own
+    // composite key by ReportDataFetcher itself.
     Map<String, TopLevelNode> innerCandidatesByKey = Map.of();
-    Map<String, List<TopLevelNode>> sameDimensionChildrenByOuterKey = Map.of();
-    if (!expandedOuterKeys.isEmpty()) {
+    Map<String, List<TopLevelNode>> sameDimensionChildrenByParentKey = Map.of();
+    if (!expandedKeys.isEmpty()) {
       if (axes.innerDim() != null) {
         innerCandidatesByKey = dataFetcher.candidatesFor(axes.innerDim(), types, spec.scope());
       } else {
-        sameDimensionChildrenByOuterKey =
-            childCandidatesByOuterKey(axes.nonDateDim(), expandedOuterKeys, spec.scope());
+        sameDimensionChildrenByParentKey =
+            childCandidatesByParentKey(axes.nonDateDim(), expandedKeys, spec.scope());
       }
     }
 
@@ -112,8 +115,8 @@ public class ReportEngine {
             axes.innerDim(),
             candidatesByKey,
             innerCandidatesByKey,
-            sameDimensionChildrenByOuterKey,
-            expandedOuterKeys);
+            sameDimensionChildrenByParentKey,
+            expandedKeys);
     List<AxisNode> rowNodes =
         onNonDateAxis(axes.rowDim(), axes.nonDateDim())
             ? nestedAxisNodes
@@ -125,20 +128,23 @@ public class ReportEngine {
 
     GridData data =
         dataFetcher.fetchGridData(
-            spec, axes, types, resolved, buckets, today, baseCurrency, expandedOuterKeys);
+            spec, axes, types, resolved, buckets, today, baseCurrency, expandedKeys);
 
     return gridBuilder.build(
         spec, axes, rowNodes, columnBucketNodes, candidatesByKey, data, baseCurrency, resolved);
   }
 
-  /** Each expanded outer node's own direct children (§9.1), keyed by that node's key. */
-  private Map<String, List<TopLevelNode>> childCandidatesByOuterKey(
-      Dimension outerDim, Set<String> expandedOuterKeys, Scope scope) {
-    Map<String, List<TopLevelNode>> byOuterKey = new LinkedHashMap<>();
-    for (String outerKey : expandedOuterKeys) {
-      byOuterKey.put(outerKey, dataFetcher.childCandidatesFor(outerDim, outerKey, scope));
+  /**
+   * Each expanded node's own direct children (§9.1), keyed by that node's own (possibly composite,
+   * any depth) key.
+   */
+  private Map<String, List<TopLevelNode>> childCandidatesByParentKey(
+      Dimension outerDim, Set<String> expandedKeys, Scope scope) {
+    Map<String, List<TopLevelNode>> byParentKey = new LinkedHashMap<>();
+    for (String key : expandedKeys) {
+      byParentKey.put(key, dataFetcher.childCandidatesFor(outerDim, key, scope));
     }
-    return byOuterKey;
+    return byParentKey;
   }
 
   /**
@@ -149,16 +155,22 @@ public class ReportEngine {
   }
 
   /**
-   * Which top-level nodes of {@code outerDim} are expanded, given a stage e2 {@code
-   * explicitOverride} (reporting.md §9.1) when one exists — intersected with {@code
-   * outerCandidatesByKey} so a stale key (a since-deleted category, say) drops out silently — or
-   * else {@code expansion}'s uniform rule (§9.2): {@link RowExpansion#COLLAPSED} expands none,
-   * {@link RowExpansion#EXPANDED} expands every candidate, {@link RowExpansion#AUTO} defers to
-   * {@link AutoExpansion#startsExpanded}. Never anything when {@code outerDim} cannot nest a second
-   * dimension at all (§9.1 — a hierarchical dimension only), whether that second dimension is a
-   * different one (§3's cross-dimension nesting) or {@code outerDim}'s own hierarchy one level
-   * deeper (§9.1) — and never the per-currency "personal debts" pseudo-bucket, which is not a
-   * single subtree a nesting filter can name (§3).
+   * Which nodes of {@code outerDim} are expanded, given a stage e2 {@code explicitOverride}
+   * (reporting.md §9.1) when one exists, or else {@code expansion}'s uniform rule (§9.2): {@link
+   * RowExpansion#COLLAPSED} expands none, {@link RowExpansion#EXPANDED} expands every top-level
+   * candidate, {@link RowExpansion#AUTO} expands exactly the one node {@link
+   * AutoExpansion#autoExpandedKeys} names (never "every top-level candidate", even when the filter
+   * happens to select one of several). Never anything when {@code outerDim} cannot nest a second
+   * dimension at all (§9.1 — a hierarchical dimension only), and never the per-currency "personal
+   * debts" pseudo-bucket, which is not a single subtree a nesting filter can name (§3).
+   *
+   * <p>The returned set can carry a nested (depth &gt; 0) node's own composite key too — same-
+   * dimension nesting recurses to arbitrary depth (§9.1), not just one level into the top-level
+   * candidates this method itself fetches. Such a key is never validated against {@code
+   * outerCandidatesByKey} (which only ever lists <em>top-level</em> nodes) — its own liveness is
+   * proven downstream, the moment its parent's own child-candidates fetch actually returns it;
+   * until then it is simply never referenced while walking the frontier (mirrors how a stale
+   * top-level key already degrades gracefully here).
    */
   private static Set<String> expandedOuterKeys(
       RowExpansion expansion,
@@ -169,18 +181,30 @@ public class ReportEngine {
     if (!AutoExpansion.isNestable(outerDim)) {
       return Set.of();
     }
-    Set<String> allKeys =
+    Set<String> topLevelKeys =
         outerCandidatesByKey.keySet().stream()
             .filter(key -> !AutoExpansion.isPersonLeafBucket(key))
             .collect(Collectors.toSet());
     if (explicitOverride != null) {
-      return allKeys.stream().filter(explicitOverride::contains).collect(Collectors.toSet());
+      return explicitOverride.stream()
+          .filter(key -> isNestedKey(key) || topLevelKeys.contains(key))
+          .collect(Collectors.toSet());
     }
     return switch (expansion) {
       case COLLAPSED -> Set.of();
-      case EXPANDED -> allKeys;
-      case AUTO -> AutoExpansion.startsExpanded(outerDim, spec) ? allKeys : Set.of();
+      case EXPANDED -> topLevelKeys;
+      case AUTO ->
+          AutoExpansion.autoExpandedKeys(outerDim, spec).stream()
+              .filter(topLevelKeys::contains)
+              .collect(Collectors.toSet());
     };
+  }
+
+  /**
+   * A depth &gt; 0 node's own composite frontier key (reporting.md §9.1) — see {@link AxisNode}.
+   */
+  private static boolean isNestedKey(String key) {
+    return key != null && key.indexOf('|') >= 0;
   }
 
   /**

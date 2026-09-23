@@ -158,9 +158,9 @@ class ReportGridBuilderTest {
 
   @Test
   void frontierNodesMarksHierarchicalOuterNodeExpandableEvenWithNoSecondDimensionNamed() {
-    // A single hierarchical dimension is still expandable one level into its own hierarchy
-    // (reporting.md §9.1) — the actual children are fetched only once the node is expanded.
-    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    // A single hierarchical dimension is still expandable into its own hierarchy (reporting.md
+    // §9.1) — the actual children are fetched only once the node is expanded.
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense", true));
 
     List<AxisNode> frontier =
         builder.frontierNodes(Dimension.CATEGORY, null, byKey, Map.of(), Map.of(), Set.of());
@@ -168,6 +168,18 @@ class ReportGridBuilderTest {
     assertThat(frontier).extracting(AxisNode::label).containsExactly("Food");
     assertThat(frontier.get(0).depth()).isZero();
     assertThat(frontier.get(0).expandable()).isTrue();
+  }
+
+  @Test
+  void frontierNodesNeverMarksSameDimensionNodeExpandableWhenItHasNoChildrenOfItsOwn() {
+    // reporting.md §9.1's own toggle only makes sense when there is something to reveal — a
+    // childless top-level category (a real leaf) must never draw an expand control.
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Fuel", "expense", false));
+
+    List<AxisNode> frontier =
+        builder.frontierNodes(Dimension.CATEGORY, null, byKey, Map.of(), Map.of(), Set.of());
+
+    assertThat(frontier.get(0).expandable()).isFalse();
   }
 
   @Test
@@ -250,7 +262,8 @@ class ReportGridBuilderTest {
     // children, keyed by outer node rather than reused across every expanded node.
     Map<String, TopLevelNode> outer =
         candidates(
-            new TopLevelNode("1", "Food", "expense"), new TopLevelNode("2", "Fuel", "expense"));
+            new TopLevelNode("1", "Food", "expense", true),
+            new TopLevelNode("2", "Fuel", "expense"));
     Map<String, List<TopLevelNode>> sameDimensionChildren =
         Map.of("1", List.of(new TopLevelNode("10", "Restaurants", "expense")));
 
@@ -262,6 +275,32 @@ class ReportGridBuilderTest {
     assertThat(frontier.get(1).depth()).isEqualTo(1);
     assertThat(frontier.get(1).parentKey()).isEqualTo("1");
     assertThat(frontier.get(1).label()).isEqualTo("Restaurants");
+  }
+
+  @Test
+  void frontierNodesRecursesIntoDepth1SameDimensionNodesOwnChildrenWhenBothAreExpanded() {
+    // reporting.md §9.1's multilevel case (the owner's own report): a plain rows = [Category]
+    // report where Food's child Restaurants is itself expanded into ITS own children — the tree
+    // must keep going, not stop at one level.
+    Map<String, TopLevelNode> outer = candidates(new TopLevelNode("1", "Food", "expense", true));
+    TopLevelNode restaurants = new TopLevelNode("10", "Restaurants", "expense", true);
+    TopLevelNode fastFood = new TopLevelNode("100", "Fast food", "expense", false);
+    Map<String, List<TopLevelNode>> sameDimensionChildren =
+        Map.of("1", List.of(restaurants), "1|10", List.of(fastFood));
+
+    List<AxisNode> frontier =
+        builder.frontierNodes(
+            Dimension.CATEGORY, null, outer, Map.of(), sameDimensionChildren, Set.of("1", "1|10"));
+
+    assertThat(frontier).extracting(AxisNode::key).containsExactly("1", "1|10", "1|10|100");
+    AxisNode restaurantsNode = frontier.get(1);
+    assertThat(restaurantsNode.depth()).isEqualTo(1);
+    assertThat(restaurantsNode.expandable()).isTrue();
+    assertThat(restaurantsNode.expanded()).isTrue();
+    AxisNode fastFoodNode = frontier.get(2);
+    assertThat(fastFoodNode.depth()).isEqualTo(2);
+    assertThat(fastFoodNode.parentKey()).isEqualTo("1|10");
+    assertThat(fastFoodNode.expandable()).isFalse();
   }
 
   @Test
@@ -555,6 +594,33 @@ class ReportGridBuilderTest {
   }
 
   @Test
+  void rowTotalSumsOnlyTopLevelColumnsNotAnExpandedNodesChildrenTooWhenNestingIsOnColumns() {
+    // Mirrors columnAndGrandTotalsSumOnlyTopLevelRowsNotAnExpandedNodesChildrenToo, but with the
+    // stage-e nested dimension on the COLUMN axis instead of rows — the e1 code-review finding: a
+    // row total summed blindly across every column would double-count Food's own subtotal (35)
+    // together with its already-included children Restaurants (30) and Snacks (5), reading 70
+    // instead of 35.
+    AxisPlan axes = new AxisPlan(null, Dimension.CATEGORY, Dimension.CATEGORY, false, false);
+    List<AxisNode> rows = List.of(new AxisNode("total", "Total"));
+    List<AxisNode> columns =
+        List.of(
+            new AxisNode("1", "Food", 0, true, null),
+            new AxisNode("1|10", "Restaurants", 1, false, "1"),
+            new AxisNode("1|11", "Snacks", 1, false, "1"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    GridData data =
+        turnoverData(
+            turnover("1", "Food", "expense", "2026-01", "EUR", "35.00", "35.00"),
+            turnover("1|10", "Restaurants", "expense", "2026-01", "EUR", "30.00", "30.00"),
+            turnover("1|11", "Snacks", "expense", "2026-01", "EUR", "5.00", "5.00"));
+    ReportSpec spec = matrixSpecWithTotals(List.of(), List.of(Dimension.CATEGORY));
+
+    ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.rowTotals()).containsExactly(new Cell.Value(new BigDecimal("35.00"), "EUR"));
+  }
+
+  @Test
   void nestedChildRowFlipsSignByItsOwnMatchedTypeNotTheOuterScopeGuess() {
     // Scope spans both income and expense (a full P&L), so the scope-wide guess is ambiguous and
     // leaves a cell unflipped (§4.1's fallback) — but a nested income category under an expanded
@@ -616,6 +682,127 @@ class ReportGridBuilderTest {
     ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
 
     assertThat(grid.columnTotals()).containsExactly(new Cell.Illegal(Cell.Reason.CROSS_TAG_TOTAL));
+  }
+
+  // ── stage e3: a parent row as a subtotal vs. a bare group header ──────────
+
+  private static ReportSpec matrixSpecWithGroupHeaderParents(List<Dimension> rows) {
+    return new ReportSpec(
+        rows,
+        List.of(),
+        List.of(),
+        List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+        Scope.ofTypes("expense"),
+        List.of(),
+        new DateRange(
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+        true,
+        true,
+        false,
+        true);
+  }
+
+  @Test
+  void groupHeaderParentsBlanksAnExpandedParentRowsOwnCellsAndRowTotalButNotItsChildren() {
+    // reporting.md §9.2: an expanded parent is either a subtotal or a bare group header — off by
+    // default (see the sibling test below), but with the toggle on, Food's own aggregate should
+    // disappear since Restaurants/Snacks right beneath it already show the breakdown.
+    AxisPlan axes = new AxisPlan(Dimension.CATEGORY, null, Dimension.CATEGORY, false, false);
+    List<AxisNode> rows =
+        List.of(
+            new AxisNode("1", "Food", 0, true, null, true),
+            new AxisNode("1|10", "Restaurants", 1, false, "1", false),
+            new AxisNode("1|11", "Snacks", 1, false, "1", false));
+    List<AxisNode> columns = List.of(new AxisNode("total", "Total"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    GridData data =
+        turnoverData(
+            turnover("1", "Food", "expense", "2026-01", "EUR", "35.00", "35.00"),
+            turnover("1|10", "Restaurants", "expense", "2026-01", "EUR", "30.00", "30.00"),
+            turnover("1|11", "Snacks", "expense", "2026-01", "EUR", "5.00", "5.00"));
+    ReportSpec spec = matrixSpecWithGroupHeaderParents(List.of(Dimension.CATEGORY));
+
+    ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.cells().get(0)).containsExactly(Cell.BLANK);
+    assertThat(grid.cells().get(1)).containsExactly(new Cell.Value(new BigDecimal("30.00"), "EUR"));
+    assertThat(grid.cells().get(2)).containsExactly(new Cell.Value(new BigDecimal("5.00"), "EUR"));
+    assertThat(grid.rowTotals())
+        .containsExactly(
+            Cell.BLANK,
+            new Cell.Value(new BigDecimal("30.00"), "EUR"),
+            new Cell.Value(new BigDecimal("5.00"), "EUR"));
+    // The real subtotal still backs the column/grand total — a header-only choice is display-only.
+    assertThat(grid.columnTotals()).containsExactly(new Cell.Value(new BigDecimal("35.00"), "EUR"));
+    assertThat(grid.grandTotal()).isEqualTo(new Cell.Value(new BigDecimal("35.00"), "EUR"));
+  }
+
+  @Test
+  void groupHeaderParentsLeavesCollapsedParentRowsAggregateAloneSinceNothingElseShowsIt() {
+    // A collapsed node is the only row standing in for its whole subtree — blanking it would lose
+    // the figure entirely, not just move it, so the toggle must not touch a collapsed parent.
+    AxisPlan axes = new AxisPlan(Dimension.CATEGORY, null, Dimension.CATEGORY, false, false);
+    List<AxisNode> rows = List.of(new AxisNode("1", "Food", 0, true, null, false));
+    List<AxisNode> columns = List.of(new AxisNode("total", "Total"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    GridData data =
+        turnoverData(turnover("1", "Food", "expense", "2026-01", "EUR", "35.00", "35.00"));
+    ReportSpec spec = matrixSpecWithGroupHeaderParents(List.of(Dimension.CATEGORY));
+
+    ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.cells().get(0)).containsExactly(new Cell.Value(new BigDecimal("35.00"), "EUR"));
+  }
+
+  @Test
+  void groupHeaderParentsOffKeepsTheExpandedParentsSubtotalTheDefaultBehavior() {
+    AxisPlan axes = new AxisPlan(Dimension.CATEGORY, null, Dimension.CATEGORY, false, false);
+    List<AxisNode> rows =
+        List.of(
+            new AxisNode("1", "Food", 0, true, null, true),
+            new AxisNode("1|10", "Restaurants", 1, false, "1", false));
+    List<AxisNode> columns = List.of(new AxisNode("total", "Total"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Food", "expense"));
+    GridData data =
+        turnoverData(
+            turnover("1", "Food", "expense", "2026-01", "EUR", "35.00", "35.00"),
+            turnover("1|10", "Restaurants", "expense", "2026-01", "EUR", "30.00", "30.00"));
+    ReportSpec spec = matrixSpecWithTotals(List.of(Dimension.CATEGORY), List.of());
+
+    ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.cells().get(0)).containsExactly(new Cell.Value(new BigDecimal("35.00"), "EUR"));
+  }
+
+  @Test
+  void groupHeaderParentsRendersCrossDimensionParentAsBareHeadingPerTheDocsWorkedExample() {
+    // reporting.md §9.2's own example: Tag is one of {Trips}, rows = [Tag, Category], auto
+    // expansion and group-header parents — Trips renders as a bare heading, one row per trip
+    // (here, per category) beneath it.
+    AxisPlan axes =
+        new AxisPlan(Dimension.TAG, null, Dimension.TAG, Dimension.CATEGORY, false, false);
+    List<AxisNode> rows =
+        List.of(
+            new AxisNode("1", "Trips", 0, true, null, true),
+            new AxisNode("1|10", "Food", 1, false, "1", false),
+            new AxisNode("1|11", "Lodging", 1, false, "1", false));
+    List<AxisNode> columns = List.of(new AxisNode("total", "Total"));
+    Map<String, TopLevelNode> byKey = candidates(new TopLevelNode("1", "Trips", null));
+    GridData data =
+        turnoverData(
+            turnover("1", "Trips", null, "2026-01", "EUR", "300.00", "300.00"),
+            turnover("1|10", "Food", "expense", "2026-01", "EUR", "120.00", "120.00"),
+            turnover("1|11", "Lodging", "expense", "2026-01", "EUR", "180.00", "180.00"));
+    ReportSpec spec = matrixSpecWithGroupHeaderParents(List.of(Dimension.TAG, Dimension.CATEGORY));
+
+    ReportGrid grid = builder.build(spec, axes, rows, columns, byKey, data, "EUR", JANUARY);
+
+    assertThat(grid.cells().get(0)).containsExactly(Cell.BLANK);
+    assertThat(grid.cells().get(1))
+        .containsExactly(new Cell.Value(new BigDecimal("120.00"), "EUR"));
+    assertThat(grid.cells().get(2))
+        .containsExactly(new Cell.Value(new BigDecimal("180.00"), "EUR"));
   }
 
   // ── balance sheet shape (rows=Account, no column dimension, two measures) ──

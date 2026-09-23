@@ -35,20 +35,26 @@ final class AutoExpansion {
     return key != null && key.startsWith("personal:");
   }
 
-  /** {@code auto}'s one-node rule (§9.2), for the given dimension against the whole spec. */
-  static boolean startsExpanded(Dimension dimension, ReportSpec spec) {
+  /**
+   * {@code auto}'s one-node rule (§9.2), naming the node it expands: the single hierarchy node the
+   * spec's own filter on {@code dimension} selects, or an empty set when the filter selects none or
+   * two-or-more (or there is no such filter). "You asked about one thing; show its parts" means
+   * <em>that one thing's</em> own row — not, as an earlier implementation wrongly took it, every
+   * other top-level candidate of the same dimension too.
+   */
+  static Set<String> autoExpandedKeys(Dimension dimension, ReportSpec spec) {
     if (!isNestable(dimension)) {
-      return false;
+      return Set.of();
     }
     FilterField field = toFilterField(dimension);
     for (ReportFilter filter : spec.filters()) {
       if (filter.field() == field
           && filter.operator() == FilterOperator.IS_ONE_OF
           && filter.values().size() == 1) {
-        return true;
+        return Set.copyOf(filter.values());
       }
     }
-    return false;
+    return Set.of();
   }
 
   private static FilterField toFilterField(Dimension dimension) {

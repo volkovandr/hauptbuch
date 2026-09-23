@@ -59,6 +59,7 @@ table.report tfoot td {
 
 .report__toggle--static {
   cursor: default;
+  opacity: 0.4;
 }
 
 /* Chart renderer (reporting.md §10): small multiples stack; each panel's SVG is intrinsically

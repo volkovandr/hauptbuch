@@ -56,6 +56,7 @@ class ReportSpecJsonTest {
                 new RangeEndpoint.Relative(RangeUnit.MONTH, -1, RangeEdge.END)),
             true,
             false,
+            true,
             true);
 
     String json = ReportSpecJson.toJson(spec);
@@ -85,6 +86,32 @@ class ReportSpecJsonTest {
   }
 
   // ── expanded node keys (plan stage e2) ──────────────────────────────────────────────────────
+
+  @Test
+  void fromJsonDefaultsGroupHeaderParentsToFalseWhenTheKeyIsMissingEntirely() {
+    // A report.spec row saved before stage e3 has no "groupHeaderParents" key at all — decoding it
+    // must default to false (subtotals, the pre-e3 behavior), not throw a NullPointerException.
+    ReportSpec preStageE3 =
+        new ReportSpec(
+            List.of(Dimension.CATEGORY),
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            true,
+            true,
+            true);
+    String jsonMissingTheNewKey =
+        ReportSpecJson.toJson(preStageE3).replace(",\"groupHeaderParents\":false", "");
+
+    ReportSpec decoded = ReportSpecJson.fromJson(jsonMissingTheNewKey);
+
+    assertThat(decoded.groupHeaderParents()).isFalse();
+  }
 
   @Test
   void nullExpandedNodeKeysStaysNullBothWays() {

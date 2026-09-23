@@ -54,6 +54,7 @@ final class ReportSpecJson {
     root.put("rowTotals", spec.rowTotals());
     root.put("columnTotals", spec.columnTotals());
     root.put("suppressEmptyRows", spec.suppressEmptyRows());
+    root.put("groupHeaderParents", spec.groupHeaderParents());
     try {
       return MAPPER.writeValueAsString(root);
     } catch (JsonProcessingException e) {
@@ -108,7 +109,11 @@ final class ReportSpecJson {
         rangeFrom(root.get("range")),
         root.get("rowTotals").asBoolean(),
         root.get("columnTotals").asBoolean(),
-        root.get("suppressEmptyRows").asBoolean());
+        root.get("suppressEmptyRows").asBoolean(),
+        // .path(), not .get(): a report.spec row saved before stage e3 has no key at all here, and
+        // .path() degrades to a MissingNode (false) instead of Java null, unlike every other field
+        // above — those predate the feature entirely and always exist in every saved spec's shape.
+        root.path("groupHeaderParents").asBoolean(false));
   }
 
   private static JsonNode readTree(String json) {

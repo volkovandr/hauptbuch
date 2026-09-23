@@ -48,6 +48,7 @@ class ReportSpecQueryStringTest {
                 new RangeEndpoint.Relative(RangeUnit.MONTH, -1, RangeEdge.END)),
             true,
             false,
+            true,
             true);
 
     MultiValueMap<String, String> params = ReportSpecQueryString.toParams(spec);

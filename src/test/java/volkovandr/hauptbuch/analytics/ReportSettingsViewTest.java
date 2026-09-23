@@ -167,6 +167,7 @@ class ReportSettingsViewTest {
     assertThat(view.display().rowTotals()).isTrue();
     assertThat(view.display().columnTotals()).isTrue();
     assertThat(view.display().suppressEmptyRows()).isTrue();
+    assertThat(view.display().groupHeaderParents()).isFalse();
   }
 
   @Test

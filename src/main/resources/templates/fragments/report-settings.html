@@ -294,6 +294,15 @@
             />
             Suppress empty rows
           </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              name="groupHeaderParents"
+              value="true"
+              th:checked="${settings.display().groupHeaderParents()}"
+            />
+            Group-header parents (blank an expanded row's own subtotal)
+          </label>
           <th:block
             th:replace="~{fragments/report-actions :: hidden-fields(${settings.display().otherParams()})}"
           ></th:block>

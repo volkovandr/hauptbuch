@@ -80,18 +80,43 @@ class ReportDataFetcher {
   }
 
   /**
-   * The child candidates for one expanded outer node — {@code innerDim}'s own top-level breakdown
-   * (stage e's cross-dimension nesting, §3) or, when there is no second dimension at all, {@code
-   * outerDim}'s own direct children (§9.1's same-dimension "expand one node" case). Split out so
-   * {@link ReportEngine} can determine each candidate's {@link AxisNode#expandable} flag before
-   * deciding what — if anything — to fetch data for.
+   * The child candidates for one expanded node — {@code innerDim}'s own top-level breakdown (stage
+   * e's cross-dimension nesting, §3) or, when there is no second dimension at all, {@code
+   * outerDim}'s own direct children (§9.1's same-dimension "expand one node" case, recursing to
+   * arbitrary depth — {@code parentKey} may itself be a depth &gt; 0 composite key, see {@link
+   * #realId}). Split out so {@link ReportEngine} can determine each candidate's {@link
+   * AxisNode#expandable} flag before deciding what — if anything — to fetch data for.
    */
   List<TopLevelNode> childCandidatesFor(Dimension outerDim, String parentKey, Scope scope) {
-    long parentId = Long.parseLong(parentKey);
+    long parentId = realId(parentKey);
     if (outerDim == Dimension.TAG) {
       return queryRepository.childTagCandidates(parentId);
     }
     return queryRepository.childAccountCandidates(parentId, scope.includeClosedAccounts());
+  }
+
+  /**
+   * A (possibly composite, §9.1) frontier key's own real database id — the segment after the last
+   * {@code "|"}, or the whole key when it names a depth-0 (top-level) node. Every account/tag id is
+   * globally unique (a strict single-parent tree), so this is always enough to seed the next
+   * level's "children of this node" query, regardless of how deep {@code key} nests.
+   *
+   * <p>{@code expandedNodeKeys} is a persisted, hand-edited-by-request set (stage e2's toggle
+   * endpoint) — a garbage or stale trailing segment (a malformed request, or a real non-numeric
+   * leaf key like Tag's own {@code "<id>:unspecified"} bucket, which is never itself expandable and
+   * so never legitimately reaches here as a parent) degrades to {@code -1}, an id no account/tag
+   * row ever has, rather than throwing: the same "simply never referenced" graceful handling {@link
+   * ReportEngine#expandedOuterKeys} already documents for a stale top-level key, extended to a
+   * malformed trailing segment instead of a missing one.
+   */
+  private static long realId(String key) {
+    int lastSeparator = key.lastIndexOf('|');
+    String segment = lastSeparator < 0 ? key : key.substring(lastSeparator + 1);
+    try {
+      return Long.parseLong(segment);
+    } catch (NumberFormatException malformed) {
+      return -1;
+    }
   }
 
   /**
@@ -229,7 +254,7 @@ class ReportDataFetcher {
           childConstraints);
     }
     QueryConstraints constraints = new QueryConstraints(spec.filters());
-    long parentId = Long.parseLong(outerKey);
+    long parentId = realId(outerKey);
     if (outerDim == Dimension.TAG) {
       return queryRepository.childTagTurnover(
           parentId,
@@ -302,7 +327,7 @@ class ReportDataFetcher {
       return closingBalanceAt(innerDim, types, scope, asOf, childConstraints);
     }
     QueryConstraints constraints = new QueryConstraints(spec.filters());
-    long parentId = Long.parseLong(outerKey);
+    long parentId = realId(outerKey);
     return queryRepository.childAccountClosingBalance(
         parentId,
         types,
