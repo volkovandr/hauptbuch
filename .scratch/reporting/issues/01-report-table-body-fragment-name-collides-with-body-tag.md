@@ -25,3 +25,9 @@ the existing, already-affected fragment).
 
 Filed 2026-09-14 while manually verifying reporting-stage-d2 (the Frame-fragment rework) against the
 dev server with `curl`.
+
+Implemented 2026-09-23 (branch `feat/reporting`, before stage e5): fragment renamed to
+`th:fragment="table"`, all three callers updated (`report-table.html`, `fragments/frame.html`,
+`SavedReportController`). New integration test
+`SavedReportControllerIntegrationTest.toggleResponseIsJustTheTableWithNoBodyWrapper` asserts the
+toggle response starts with `<table` and carries no `<body>`. Awaiting owner confirmation.

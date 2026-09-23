@@ -316,6 +316,29 @@ class SavedReportControllerIntegrationTest {
   // (no filter panel), so "Bakery" alone is reliable there.
 
   @Test
+  void toggleResponseIsJustTheTableWithNoBodyWrapper() throws Exception {
+    // reporting issue 01: the fragment used to be named "body", the same string as its enclosing
+    // <body> tag, and Thymeleaf's selector picked the tag — every caller got a stray <body> wrapper.
+    settingsService.setBaseCurrency("EUR");
+    long food = insertAccount("Food", "expense", "EUR", null);
+    insertAccount("Bakery", "expense", "EUR", food);
+    SavedReport saved =
+        reportService.save("My matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+
+    String fragment =
+        mockMvc
+            .perform(
+                post("/reports/" + saved.reportId() + "/expand")
+                    .param("node", String.valueOf(food)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    assertThat(fragment.strip()).startsWith("<table").doesNotContain("<body");
+  }
+
+  @Test
   void collapsedByDefaultThenTogglingExpandsAndPersistsAcrossReload() throws Exception {
     settingsService.setBaseCurrency("EUR");
     long cash = insertAccount("Cash", "asset", "EUR", null);

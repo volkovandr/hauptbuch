@@ -135,7 +135,7 @@ class SavedReportController {
         "report",
         ReportTableViewAssembler.assemble(
             saved.name(), saved.spec(), grid, baseCurrency, reportId));
-    return "fragments/report-table-body :: body";
+    return "fragments/report-table-body :: table";
   }
 
   private SavedReport requireReport(long reportId) {
