@@ -315,6 +315,85 @@ class ReportGridBuilderTest {
     assertThat(frontier).extracting(AxisNode::key).containsExactly("1");
   }
 
+  // ── dateFrontierNodes (Date's own expand-in-place tree, §9.1, stage e4b) ────────────────────
+
+  private static List<DateBucket> monthsJanToFeb() {
+    return DateBucket.bucketsBetween(
+        DateGranularity.MONTH, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 28));
+  }
+
+  @Test
+  void dateFrontierNodesIsOneExpandableCollapsedRowPerBucketWhenNothingIsExpanded() {
+    List<AxisNode> frontier = builder.dateFrontierNodes(monthsJanToFeb(), Set.of());
+
+    assertThat(frontier).extracting(AxisNode::key).containsExactly("2026-01", "2026-02");
+    assertThat(frontier).allMatch(n -> n.depth() == 0 && n.expandable() && !n.expanded());
+  }
+
+  @Test
+  void dateFrontierNodesListsAnExpandedBucketsDaysRightAfterIt() {
+    List<AxisNode> frontier = builder.dateFrontierNodes(monthsJanToFeb(), Set.of("2026-01"));
+
+    assertThat(frontier).hasSize(2 + 31);
+    assertThat(frontier.get(0).expanded()).isTrue();
+    AxisNode firstDay = frontier.get(1);
+    assertThat(firstDay.key()).isEqualTo("2026-01|2026-01-01");
+    assertThat(firstDay.label()).isEqualTo("1 Jan 2026");
+    assertThat(firstDay.depth()).isEqualTo(1);
+    assertThat(firstDay.parentKey()).isEqualTo("2026-01");
+    assertThat(firstDay.expandable()).isFalse();
+    assertThat(frontier.get(32).key()).isEqualTo("2026-02");
+    assertThat(frontier.get(32).expanded()).isFalse();
+  }
+
+  @Test
+  void expandedDateRowsDaysReadTheirOwnCompositeBucketKeysAndColumnTotalCountsTheMonthOnce() {
+    AxisPlan axes = new AxisPlan(Dimension.DATE, null, null, true, false);
+    ReportSpec spec =
+        new ReportSpec(
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 2))),
+            false,
+            true,
+            false);
+    List<DateBucket> january =
+        DateBucket.bucketsBetween(
+            DateGranularity.MONTH, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 2));
+    List<AxisNode> rows = builder.dateFrontierNodes(january, Set.of("2026-01"));
+    List<AxisNode> columns = builder.axisNodes(null, Map.of(), List.of());
+    GridData data =
+        turnoverData(
+            turnover("total", "Total", null, "2026-01", "EUR", "30.00", "30.00"),
+            turnover("total", "Total", null, "2026-01|2026-01-01", "EUR", "10.00", "10.00"),
+            turnover("total", "Total", null, "2026-01|2026-01-02", "EUR", "20.00", "20.00"));
+
+    ReportGrid grid =
+        builder.build(
+            spec,
+            axes,
+            rows,
+            columns,
+            Map.of(),
+            data,
+            "EUR",
+            new RangeResolver.ResolvedRange(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 2)));
+
+    assertThat(grid.cells())
+        .extracting(row -> row.get(0))
+        .containsExactly(
+            new Cell.Value(new BigDecimal("30.00"), "EUR"),
+            new Cell.Value(new BigDecimal("10.00"), "EUR"),
+            new Cell.Value(new BigDecimal("20.00"), "EUR"));
+    assertThat(grid.columnTotals()).containsExactly(new Cell.Value(new BigDecimal("30.00"), "EUR"));
+  }
+
   // ── category×month matrix shape ──────────────────────────────────────────
 
   @Test

@@ -348,6 +348,51 @@ class SavedReportControllerIntegrationTest {
   }
 
   @Test
+  void dateRowStartsCollapsedThenTogglingRevealsItsDaysAndPersists() throws Exception {
+    // Date's own expand-in-place tree (reporting.md §9.1, stage e4b): auto starts it collapsed
+    // (§9.2), expanding a month reveals its days, and each day carries its own figure.
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long food = insertAccount("Food", "expense", "EUR", null);
+    postSingleCurrency(cash, food, LocalDate.of(2026, 1, 15), "20.00");
+    ReportSpec dateRows =
+        new ReportSpec(
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            false,
+            false,
+            true);
+    SavedReport saved = reportService.save("By day", dateRows, Renderer.TABLE, false);
+
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()))
+        .andExpect(content().string(containsString("Jan 2026")))
+        .andExpect(content().string(not(containsString("15 Jan 2026"))));
+
+    String expanded =
+        mockMvc
+            .perform(post("/reports/" + saved.reportId() + "/expand").param("node", "2026-01"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    // Blank days are suppressed (suppressEmptyRows), leaving just the 15th under January.
+    assertThat(expanded).contains("15 Jan 2026").contains("padding-left: 20px");
+    assertThat(expanded).doesNotContain("14 Jan 2026");
+
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()))
+        .andExpect(content().string(containsString("15 Jan 2026")));
+  }
+
+  @Test
   void togglingTwiceCollapsesAgainAndPersists() throws Exception {
     settingsService.setBaseCurrency("EUR");
     long cash = insertAccount("Cash", "asset", "EUR", null);

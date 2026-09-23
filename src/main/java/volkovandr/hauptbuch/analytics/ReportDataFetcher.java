@@ -136,8 +136,34 @@ class ReportDataFetcher {
       LocalDate today,
       String baseCurrency,
       Set<String> expandedOuterKeys) {
+    return fetchGridData(
+        spec,
+        axes,
+        types,
+        resolved,
+        buckets,
+        today,
+        baseCurrency,
+        expandedOuterKeys,
+        spec.dateLadder().bucketGranularity());
+  }
+
+  /**
+   * {@link #fetchGridData(ReportSpec, AxisPlan, List, RangeResolver.ResolvedRange, List, LocalDate,
+   * String, Set)} at an explicit {@code granularity} rather than the ladder's own rung — {@link
+   * DateGranularity#DAY} for one expanded Date row's days (reporting.md §9.1).
+   */
+  GridData fetchGridData(
+      ReportSpec spec,
+      AxisPlan axes,
+      List<String> types,
+      RangeResolver.ResolvedRange resolved,
+      List<DateBucket> buckets,
+      LocalDate today,
+      String baseCurrency,
+      Set<String> expandedOuterKeys,
+      DateGranularity granularity) {
     QueryConstraints constraints = new QueryConstraints(spec.filters());
-    DateGranularity granularity = spec.dateLadder().bucketGranularity();
     Map<Leg, List<RawTurnoverCell>> turnoverByLeg =
         fetchTurnover(
             spec, axes.nonDateDim(), types, resolved, baseCurrency, granularity, constraints);

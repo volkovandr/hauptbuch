@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -556,5 +557,106 @@ class ReportEngineTest {
     Set<String> effective = engine.effectiveExpandedKeys(s, null);
 
     assertThat(effective).containsExactly("1");
+  }
+
+  // ── stage e4b: Date's own expand-in-place tree on rows (reporting.md §9.1/§9.2) ─────────────
+
+  private static ReportSpec dateRowsJanToFeb() {
+    return new ReportSpec(
+        List.of(Dimension.DATE),
+        List.of(),
+        List.of(),
+        List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+        Scope.ofTypes("expense"),
+        List.of(),
+        new DateRange(
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+            new RangeEndpoint.Literal(LocalDate.of(2026, 2, 28))),
+        false,
+        false,
+        true);
+  }
+
+  private void stubGridData() {
+    GridData empty = new GridData(Map.of(), Map.of(), Map.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(empty);
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(empty);
+  }
+
+  @Test
+  void dateRowsStartCollapsedUnderAutoAndFetchNoDays() {
+    baseIsEur();
+    stubGridData();
+
+    engine.render(dateRowsJanToFeb(), TODAY);
+
+    verify(gridBuilder).dateFrontierNodes(any(), eq(Set.of()));
+    verify(dataFetcher, never())
+        .fetchGridData(any(), any(), any(), any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void explicitDateKeysExpandOnlyRealBucketsAndFetchTheirDays() {
+    baseIsEur();
+    stubGridData();
+    ReportSpec s = dateRowsJanToFeb();
+
+    // "12" is a stale Category id left over from before the rows were switched to Date.
+    engine.render(s, TODAY, Set.of("2026-01", "12"));
+
+    verify(gridBuilder).dateFrontierNodes(any(), eq(Set.of("2026-01")));
+    // Only January's days, over January's own range, at day granularity.
+    verify(dataFetcher)
+        .fetchGridData(
+            eq(s),
+            any(),
+            any(),
+            eq(
+                new RangeResolver.ResolvedRange(
+                    LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31))),
+            any(),
+            eq(TODAY),
+            eq("EUR"),
+            any(),
+            eq(DateGranularity.DAY));
+    verify(dataFetcher, times(1))
+        .fetchGridData(any(), any(), any(), any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void withDateOnRowsTheRememberedKeysDoNotDriveTheColumnTree() {
+    // The remembered set belongs to the row tree (§9.1): with Date on rows it names Date buckets,
+    // so a column-axis Category keeps auto's own rule — here, no filter, so nothing expands —
+    // even when the set happens to hold a live Category id.
+    baseIsEur();
+    stubGridData();
+    TopLevelNode food = new TopLevelNode("1", "Food", "expense", true);
+    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
+        .thenReturn(Map.of("1", food));
+    ReportSpec dateRowsCategoryColumns =
+        spec(
+            List.of(Dimension.DATE),
+            List.of(Dimension.CATEGORY),
+            Measure.turnover(PresentationCurrency.BASE, Leg.NET),
+            Scope.ofTypes("expense"));
+
+    engine.render(dateRowsCategoryColumns, TODAY, Set.of("1"));
+
+    verify(dataFetcher, never()).childCandidatesFor(any(), any(), any());
+  }
+
+  @Test
+  void effectiveExpandedKeysForDateRowsIntersectsTheOverrideWithTheBuckets() {
+    Set<String> effective =
+        engine.effectiveExpandedKeys(dateRowsJanToFeb(), Set.of("2026-02", "2025-12"), TODAY);
+
+    assertThat(effective).containsExactly("2026-02");
+  }
+
+  @Test
+  void effectiveExpandedKeysForDateRowsIsEmptyUnderAuto() {
+    assertThat(engine.effectiveExpandedKeys(dateRowsJanToFeb(), null, TODAY)).isEmpty();
   }
 }

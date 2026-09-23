@@ -303,6 +303,50 @@ class ReportQuerySqlLogicTest {
   }
 
   @Test
+  void clippedWeeksDaysSumBackToTheWeeksOwnTurnover() {
+    // Expanding a Date row in place (reporting.md §9.1, stage e4b) re-runs the query over the
+    // bucket's own clipped range at day granularity. The week of 29 Dec 2025 clipped to a range
+    // starting 1 Jan must keep its 2025 key yet hold only the in-range days — and those days must
+    // add up to it exactly, the out-of-range 31 Dec never leaking into either.
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+    postSingleCurrency(cash, food, LocalDate.of(2025, 12, 31), "99.00");
+    postSingleCurrency(cash, food, LocalDate.of(2026, 1, 1), "10.00");
+    postSingleCurrency(cash, food, LocalDate.of(2026, 1, 4), "5.00");
+
+    List<RawTurnoverCell> week =
+        repository.accountTreeTurnover(
+            INCOME_EXPENSE,
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 4),
+            EUR,
+            "NET",
+            true,
+            false,
+            DateGranularity.WEEK,
+            NONE);
+    List<RawTurnoverCell> days =
+        repository.accountTreeTurnover(
+            INCOME_EXPENSE,
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 4),
+            EUR,
+            "NET",
+            true,
+            false,
+            DateGranularity.DAY,
+            NONE);
+
+    amount(byLabelAndMonth(week, "Food", "2025-12-29").nativeAmount(), "15.00");
+    assertThat(days)
+        .extracting(RawTurnoverCell::bucketKey)
+        .containsOnly("2026-01-01", "2026-01-04");
+    amount(
+        days.stream().map(RawTurnoverCell::baseAmount).reduce(BigDecimal.ZERO, BigDecimal::add),
+        "15.00");
+  }
+
+  @Test
   void groupsPersonDebtLeavesIntoOnePersonalDebtsBucketPerCurrencyNotTheCosmeticLeafName() {
     long cashEur = insertAccount("Cash", "asset", EUR, null);
     long cashChf = insertAccount("Cash CHF", "asset", CHF, null);

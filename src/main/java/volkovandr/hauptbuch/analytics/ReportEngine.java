@@ -87,13 +87,20 @@ public class ReportEngine {
 
     List<String> types = List.copyOf(spec.scope().accountTypes());
     RangeResolver.ResolvedRange resolved = RangeResolver.resolve(spec.range(), today);
-    List<DateBucket> buckets =
-        DateBucket.bucketsBetween(
-            spec.dateLadder().bucketGranularity(), resolved.start(), resolved.end());
+    List<DateBucket> buckets = bucketsFor(spec, resolved);
     Map<String, TopLevelNode> candidatesByKey =
         dataFetcher.candidatesFor(axes.nonDateDim(), types, spec.scope());
+    // A saved Report's remembered state belongs to its row tree (§9.1): with Date on rows it names
+    // Date buckets, so the non-Date dimension (then on columns) falls back to its own uniform rule.
     Set<String> expandedKeys =
-        expandedOuterKeys(expansion, explicitOverride, axes.nonDateDim(), spec, candidatesByKey);
+        expandedOuterKeys(
+            expansion,
+            axes.dateOnRows() ? null : explicitOverride,
+            axes.nonDateDim(),
+            spec,
+            candidatesByKey);
+    List<DateBucket> expandedDateBuckets =
+        axes.dateOnRows() ? expandedDateBuckets(expansion, explicitOverride, buckets) : List.of();
 
     // Only fetch what expansion actually needs — nothing when nothing is expanded, whichever of
     // the two child sources (§3's cross-dimension nesting or §9.1's same-dimension one) applies.
@@ -119,10 +126,14 @@ public class ReportEngine {
             innerCandidatesByKey,
             sameDimensionChildrenByParentKey,
             expandedKeys);
-    List<AxisNode> rowNodes =
-        onNonDateAxis(axes.rowDim(), axes.nonDateDim())
-            ? nestedAxisNodes
-            : gridBuilder.axisNodes(axes.rowDim(), candidatesByKey, buckets);
+    List<AxisNode> rowNodes;
+    if (axes.dateOnRows()) {
+      rowNodes = gridBuilder.dateFrontierNodes(buckets, keysOf(expandedDateBuckets));
+    } else if (onNonDateAxis(axes.rowDim(), axes.nonDateDim())) {
+      rowNodes = nestedAxisNodes;
+    } else {
+      rowNodes = gridBuilder.axisNodes(axes.rowDim(), candidatesByKey, buckets);
+    }
     List<AxisNode> columnBucketNodes =
         onNonDateAxis(axes.colDim(), axes.nonDateDim())
             ? nestedAxisNodes
@@ -131,6 +142,22 @@ public class ReportEngine {
     GridData data =
         dataFetcher.fetchGridData(
             spec, axes, types, resolved, buckets, today, baseCurrency, expandedKeys);
+    // An expanded Date row's days re-run the same fetch over just that bucket's range (§9.1), so
+    // every measure, filter and column nesting stays consistent and the days sum back to it.
+    for (DateBucket bucket : expandedDateBuckets) {
+      GridData days =
+          dataFetcher.fetchGridData(
+              spec,
+              axes,
+              types,
+              bucket.effectiveRange(),
+              bucket.days(),
+              today,
+              baseCurrency,
+              expandedKeys,
+              DateGranularity.DAY);
+      data = data.withDays(bucket.key(), days);
+    }
 
     return gridBuilder.build(
         spec, axes, rowNodes, columnBucketNodes, candidatesByKey, data, baseCurrency, resolved);
@@ -203,6 +230,31 @@ public class ReportEngine {
   }
 
   /**
+   * Which Date row buckets are expanded into their days (reporting.md §9.1): {@code
+   * explicitOverride} intersected with the buckets the range actually has, when it exists;
+   * otherwise every bucket for {@link RowExpansion#EXPANDED} and none for {@link
+   * RowExpansion#COLLAPSED}. {@link RowExpansion#AUTO} starts Date collapsed (§9.2) — a date range
+   * is not a filter, so there is never "exactly one node selected" to expand.
+   */
+  private static List<DateBucket> expandedDateBuckets(
+      RowExpansion expansion, Set<String> explicitOverride, List<DateBucket> buckets) {
+    if (explicitOverride != null) {
+      return buckets.stream().filter(b -> explicitOverride.contains(b.key())).toList();
+    }
+    return expansion == RowExpansion.EXPANDED ? buckets : List.of();
+  }
+
+  private static List<DateBucket> bucketsFor(
+      ReportSpec spec, RangeResolver.ResolvedRange resolved) {
+    return DateBucket.bucketsBetween(
+        spec.dateLadder().bucketGranularity(), resolved.start(), resolved.end());
+  }
+
+  private static Set<String> keysOf(List<DateBucket> buckets) {
+    return buckets.stream().map(DateBucket::key).collect(Collectors.toSet());
+  }
+
+  /**
    * A depth &gt; 0 node's own composite frontier key (reporting.md §9.1) — see {@link AxisNode}.
    */
   private static boolean isNestedKey(String key) {
@@ -217,7 +269,20 @@ public class ReportEngine {
    * the outer dimension's candidates — never the axis's full data.
    */
   Set<String> effectiveExpandedKeys(ReportSpec spec, Set<String> explicitOverride) {
+    return effectiveExpandedKeys(spec, explicitOverride, LocalDate.now());
+  }
+
+  /**
+   * {@link #effectiveExpandedKeys(ReportSpec, Set)} with an injectable "today" — with Date on rows
+   * the candidates are the range's own buckets, which depend on it.
+   */
+  Set<String> effectiveExpandedKeys(
+      ReportSpec spec, Set<String> explicitOverride, LocalDate today) {
     AxisPlan axes = planAxes(spec);
+    if (axes.dateOnRows()) {
+      List<DateBucket> buckets = bucketsFor(spec, RangeResolver.resolve(spec.range(), today));
+      return keysOf(expandedDateBuckets(RowExpansion.AUTO, explicitOverride, buckets));
+    }
     List<String> types = List.copyOf(spec.scope().accountTypes());
     Map<String, TopLevelNode> candidatesByKey =
         dataFetcher.candidatesFor(axes.nonDateDim(), types, spec.scope());

@@ -62,6 +62,19 @@ record DateBucket(
     };
   }
 
+  /**
+   * This bucket's own days, clipped to its effective range — what expanding it in place reveals
+   * (reporting.md §9.1, §15).
+   */
+  List<DateBucket> days() {
+    return bucketsBetween(DateGranularity.DAY, effectiveStart, effectiveEnd);
+  }
+
+  /** This bucket clipped to the Report's range, as a range of its own — what its days cover. */
+  RangeResolver.ResolvedRange effectiveRange() {
+    return new RangeResolver.ResolvedRange(effectiveStart, effectiveEnd);
+  }
+
   /** The bucket's own last day — the calendar day before {@link #nextBucketStart}. */
   LocalDate bucketEnd() {
     return bucketEndFor(granularity, bucketStart);

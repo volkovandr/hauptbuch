@@ -273,6 +273,64 @@ class ReportDataFetcherTest {
         .accountTreeClosingBalance(List.of("asset"), TODAY, true, false, QueryConstraints.NONE);
   }
 
+  // ── fetchGridData at an explicit granularity (a Date row's days, §9.1, stage e4b) ─────────
+
+  @Test
+  void explicitDayGranularityOverridesTheLaddersOwnRung() {
+    fetcher.fetchGridData(
+        turnoverSpec(Dimension.CATEGORY),
+        new AxisPlan(Dimension.DATE, Dimension.CATEGORY, Dimension.CATEGORY, true, false),
+        List.of("expense"),
+        resolved(LocalDate.of(2026, 1, 10), LocalDate.of(2026, 1, 31)),
+        List.of(),
+        TODAY,
+        "EUR",
+        Set.of(),
+        DateGranularity.DAY);
+
+    verify(queryRepository)
+        .accountTreeTurnover(
+            List.of("expense"),
+            LocalDate.of(2026, 1, 10),
+            LocalDate.of(2026, 1, 31),
+            "EUR",
+            "NET",
+            true,
+            false,
+            DateGranularity.DAY,
+            QueryConstraints.NONE);
+  }
+
+  @Test
+  void dayBucketsClosingBalanceIsOnePerDayClampedToToday() {
+    // An expanded September's days (§9.1): each day's balance is as of that day, and a day past
+    // TODAY (the 12th) is the balance as of today, not a balance that has not happened (§8.2).
+    when(queryRepository.accountTreeClosingBalance(
+            anyList(), any(), anyBoolean(), anyBoolean(), any()))
+        .thenReturn(List.of(new RawBalanceCell("1", "Cash", "asset", "EUR", BigDecimal.TEN)));
+    DateBucket september =
+        DateBucket.bucketsBetween(
+                DateGranularity.MONTH, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30))
+            .get(0);
+
+    GridData days =
+        fetcher.fetchGridData(
+            closingBalanceSpec(true, false),
+            new AxisPlan(Dimension.DATE, Dimension.ACCOUNT, Dimension.ACCOUNT, true, false),
+            List.of("asset"),
+            september.effectiveRange(),
+            september.days(),
+            TODAY,
+            "EUR",
+            Set.of(),
+            DateGranularity.DAY);
+
+    assertThat(days.balanceByBucketKey()).hasSize(30);
+    assertThat(days.asOfByBucketKey())
+        .containsEntry("2026-09-03", LocalDate.of(2026, 9, 3))
+        .containsEntry("2026-09-30", TODAY);
+  }
+
   // ── childCandidatesFor / realId (stage e's parent-key resolution) ──────────
 
   @Test
