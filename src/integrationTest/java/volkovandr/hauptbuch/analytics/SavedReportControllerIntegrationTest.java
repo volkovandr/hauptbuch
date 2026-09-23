@@ -187,6 +187,34 @@ class SavedReportControllerIntegrationTest {
   }
 
   @Test
+  void settingsStripSwapsOnlyTheFrameAndGroupBodiesSoOpenGroupsStayOpen() throws Exception {
+    // Owner finding (stage e): every settings change swapped the whole #report-page, re-rendering
+    // each <details> group closed. Now a change swaps #report-frame and refreshes each group's body
+    // out of band (hx-select-oob) — the <details> elements themselves, and so their open state, are
+    // never replaced.
+    settingsService.setBaseCurrency("EUR");
+    SavedReport saved =
+        reportService.save("My matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+
+    String page =
+        mockMvc
+            .perform(get("/reports/" + saved.reportId()))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    assertThat(page).doesNotContain("hx-target=\"#report-page\"");
+    assertThat(page).contains("hx-select=\"#report-frame\"");
+    assertThat(page).contains("hx-select-oob=\"" + ReportSettingsView.REFRESHED_REGIONS + "\"");
+    for (String region : ReportSettingsView.REFRESHED_REGIONS.split(",")) {
+      assertThat(page).contains("id=\"" + region.substring(1) + "\"");
+    }
+    // The date range's live endpoint-label requests must not inherit the form's hx-select.
+    assertThat(page).contains("hx-disinherit=\"*\"");
+  }
+
+  @Test
   void switchingTheRendererToTableRendersTheTableInstead() throws Exception {
     settingsService.setBaseCurrency("EUR");
     SavedReport saved =

@@ -43,6 +43,17 @@ final class ReportSettingsView {
   static final List<String> ACCOUNT_TYPES =
       List.of("asset", "equity", "expense", "income", "liability");
 
+  /**
+   * Every settings-strip region a settings request refreshes out of band ({@code hx-select-oob}),
+   * alongside its main {@code #report-frame} swap: each {@code <details>} group's own body, the
+   * Renderer form and the actions strip — never the {@code <details>} elements themselves, so their
+   * open state survives the swap. The ids live in {@code fragments/report-settings.html} and {@code
+   * fragments/report-actions.html}.
+   */
+  static final String REFRESHED_REGIONS =
+      "#settings-rows-columns,#settings-measures,#settings-scope,#settings-filters,"
+          + "#settings-date-range,#settings-display,#settings-renderer-group,#report-actions";
+
   private static final String[] RANGE_KEYS = {
     "rangeStart.type",
     "rangeStart.date",
@@ -150,7 +161,8 @@ final class ReportSettingsView {
       Scope scope,
       DateRangeGroup dateRange,
       Display display,
-      RendererGroup renderer) {}
+      RendererGroup renderer,
+      String refreshedRegions) {}
 
   static View build(PresetRendering.Presentation effective, String pagePath, LocalDate today) {
     ReportSpec spec = effective.spec();
@@ -162,7 +174,8 @@ final class ReportSettingsView {
         scope(spec.scope(), all),
         dateRange(spec.range(), pagePath, all, today),
         display(spec, all),
-        renderer(effective, all));
+        renderer(effective, all),
+        REFRESHED_REGIONS);
   }
 
   private static RowsColumns rowsColumns(ReportSpec spec, MultiValueMap<String, String> all) {

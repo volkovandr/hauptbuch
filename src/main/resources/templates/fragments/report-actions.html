@@ -25,7 +25,7 @@
       </th:block>
     </th:block>
 
-    <section class="panel report-actions" th:fragment="actions">
+    <section class="panel report-actions" id="report-actions" th:fragment="actions">
       <p th:if="${editor.unsaved()}" class="report-actions__unsaved">Unsaved changes</p>
 
       <form
