@@ -406,8 +406,10 @@ initial setting each time, which is fine because it is throwaway.
 
 Three states — **`auto`** (the default), `collapsed`, `expanded`. `auto` means: if the filter on that
 dimension selects **exactly one** hierarchy node, start **expanded** (you asked about one thing; show
-its parts); if it selects two or more, or none, start **collapsed**. Once expand/collapse is used by
-hand on a saved Report, the remembered state (§9.1) takes over from `auto` for that Report.
+its parts); if it selects two or more, or none, start **collapsed**. **Date** is never selected by
+a filter (the range is not one), so under `auto` it always starts collapsed at its ladder's chosen
+rung. Once expand/collapse is used by hand on a saved Report, the remembered state (§9.1) takes over
+from `auto` for that Report.
 
 A **parent row** is either a **subtotal** or a **group header only**, per Report. With `Tag is one of
 {Trips}`, `rows = [Tag, Category]`, `auto` expansion and group-header parents, `Trips` renders as a

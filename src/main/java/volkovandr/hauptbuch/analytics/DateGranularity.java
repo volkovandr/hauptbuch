@@ -7,8 +7,8 @@ import java.util.Locale;
  * range, and which Postgres {@code date_trunc} unit / {@code to_char} format {@link
  * volkovandr.hauptbuch.analytics.repository.ReportQueryRepository} groups turnover by. {@link
  * DateLadder} exposes only {@link #MONTH}/{@link #WEEK} as a per-Report choice today (stage e4);
- * {@link #DAY} and {@link #YEAR} exist for the ladder's other two rungs, reached by expanding a
- * node (§9.1, §15) — not yet wired to any render path.
+ * {@link #DAY} is reached by expanding a Date row in place (§9.1, §15); {@link #YEAR} exists for
+ * the ladder's top rung, not yet wired to any render path.
  */
 public enum DateGranularity {
   DAY,

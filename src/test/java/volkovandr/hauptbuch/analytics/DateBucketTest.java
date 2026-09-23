@@ -169,4 +169,34 @@ class DateBucketTest {
 
     assertThat(buckets).extracting(DateBucket::key).containsExactly("2025", "2026", "2027");
   }
+
+  // ── days: expanding a bucket in place (reporting.md §9.1, stage e4b) ────────────────────────
+
+  @Test
+  void daysOfPartialMonthStopAtTheRangesOwnEnd() {
+    DateBucket september =
+        DateBucket.bucketsBetween(
+                DateGranularity.MONTH, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 12))
+            .get(0);
+
+    List<DateBucket> days = september.days();
+
+    assertThat(days).hasSize(12);
+    assertThat(days).allMatch(d -> d.granularity() == DateGranularity.DAY);
+    assertThat(days.get(0).key()).isEqualTo("2026-09-01");
+    assertThat(days.get(11).key()).isEqualTo("2026-09-12");
+  }
+
+  @Test
+  void daysOfClippedWeekCoverOnlyItsEffectiveRange() {
+    // 2026-01-01 is a Thursday: the first week bucket (w/c 29 Dec 2025) is clipped to Thu–Sun.
+    DateBucket firstWeek =
+        DateBucket.bucketsBetween(
+                DateGranularity.WEEK, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31))
+            .get(0);
+
+    assertThat(firstWeek.days())
+        .extracting(DateBucket::key)
+        .containsExactly("2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04");
+  }
 }

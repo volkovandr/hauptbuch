@@ -105,6 +105,27 @@ class ReportGridBuilder {
     return frontier;
   }
 
+  /**
+   * The Date row axis as an expand-in-place tree (reporting.md §9.1, §15): one depth-0 row per
+   * ladder bucket (month or week), each expandable into its own days. A day row's key is {@code
+   * "<bucketKey>|<dayKey>"}, matching the composite bucket key {@link GridData#withDays} gives that
+   * day's data. The ladder's year rung is not part of the tree yet.
+   */
+  List<AxisNode> dateFrontierNodes(List<DateBucket> buckets, Set<String> expandedKeys) {
+    List<AxisNode> frontier = new ArrayList<>();
+    for (DateBucket bucket : buckets) {
+      boolean expanded = expandedKeys.contains(bucket.key());
+      frontier.add(new AxisNode(bucket.key(), bucket.label(), 0, true, null, expanded));
+      if (expanded) {
+        for (DateBucket day : bucket.days()) {
+          frontier.add(
+              new AxisNode(bucket.key() + "|" + day.key(), day.label(), 1, false, bucket.key()));
+        }
+      }
+    }
+    return frontier;
+  }
+
   // ExcessiveParameterList: one recursive walk of the frontier tree, carrying the same fixed
   // context (the two dimensions and their two child sources) down every level — splitting it would
   // just wrap this same parameter list in a context object, not reduce it.

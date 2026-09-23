@@ -180,6 +180,8 @@ parent rows as subtotal or header, and the Date ladder.
 - Parent rows as **subtotal** or **group header only**.
 - The **`(unspecified)`** row for tags (§9.3).
 - **Two dimensions per axis** (nesting), and the Date **ladder** with its two configurations (§8.2).
+  Date rows expand in place from month/week into days; the ladder's **year rung is deferred** to a
+  later slice (not yet planned in detail).
 
 **Tests.** `sqlLogicTest` for the nested-grouping and subtree-rollup queries, including the tag
 case where a parent row is *not* the sum of its children and the unspecified row carries the
@@ -219,6 +221,9 @@ transaction, a transfer, and a category-to-category correction; the CSV's shape.
 
 ## Changelog
 
+- **v0.9 (2026-09-23):** Scope change in slice e: the Date ladder's **year rung is deferred** out of
+  e (owner decision); Date rows expand month/week → day only. Also decided: Date's `auto` starts
+  collapsed (`reporting.md` §9.2).
 - **v0.8 (2026-09-20):** Slice d3 marked complete (owner-confirmed). No scope change (routine).
 - **v0.7 (2026-09-14):** Slice d2 marked complete (owner-confirmed). No scope change (routine).
 - **v0.6 (2026-09-13):** Scope change: **slices d2 and d3 inserted** before e. No slice had owned the
