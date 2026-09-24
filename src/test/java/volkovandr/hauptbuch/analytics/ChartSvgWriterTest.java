@@ -103,7 +103,68 @@ class ChartSvgWriterTest {
     Document doc = parse(svg);
     // Two positive slices (Food, Fuel); Rent is blank and contributes no wedge.
     assertThat(doc.getElementsByTagName("path").getLength()).isEqualTo(2);
-    assertThat(svg).contains("Food").contains("Fuel").contains("Rent");
+    assertThat(svg).contains("Food").contains("Fuel");
+  }
+
+  @Test
+  void pieLegendOmitsColumnsWithoutSlice() {
+    // Issue 13: a zero or blank column draws no wedge, so a legend entry for it names nothing.
+    List<String> columnLabels = List.of("Food", "Fuel", "Rent");
+    ChartLine line = new ChartLine("Total", List.of(value("100"), value("0"), Cell.BLANK));
+
+    String svg = ChartSvgWriter.pie(columnLabels, line);
+
+    assertThat(svg).contains("Food").doesNotContain("Fuel").doesNotContain("Rent");
+  }
+
+  @Test
+  void pieChartWithSingleNonZeroValueDrawsFullDisc()
+      throws ParserConfigurationException, SAXException, IOException {
+    // Issue 13: a 100% slice as an arc starts and ends on the same point, and SVG draws nothing
+    // for such an arc (SVG 1.1 §F.6.2) — it must be a full circle instead.
+    List<String> columnLabels = List.of("Cash", "Bank", "Card");
+    ChartLine line = new ChartLine("Total", List.of(Cell.BLANK, value("250"), value("0")));
+
+    String svg = ChartSvgWriter.pie(columnLabels, line);
+
+    Document doc = parse(svg);
+    assertThat(doc.getElementsByTagName("path").getLength()).isZero();
+    NodeList circles = doc.getElementsByTagName("circle");
+    assertThat(circles.getLength()).isEqualTo(1);
+    // The disc keeps its column's own colour, the same one its legend entry shows.
+    String discFill = circles.item(0).getAttributes().getNamedItem("fill").getNodeValue();
+    NodeList legendSwatches = doc.getElementsByTagName("rect");
+    assertThat(legendSwatches.getLength()).isEqualTo(1);
+    assertThat(legendSwatches.item(0).getAttributes().getNamedItem("fill").getNodeValue())
+        .isEqualTo(discFill);
+    assertThat(svg).contains("Bank").doesNotContain("Cash").doesNotContain("Card");
+  }
+
+  @Test
+  void pieSlicesKeepTheirColumnsColourWhenEarlierColumnIsEmpty()
+      throws ParserConfigurationException, SAXException, IOException {
+    List<String> columnLabels = List.of("Food", "Fuel", "Rent");
+    ChartLine withFood = new ChartLine("A", List.of(value("10"), value("20"), value("30")));
+    ChartLine withoutFood = new ChartLine("B", List.of(Cell.BLANK, value("20"), value("30")));
+
+    Document all = parse(ChartSvgWriter.pie(columnLabels, withFood));
+    Document noFood = parse(ChartSvgWriter.pie(columnLabels, withoutFood));
+
+    // Fuel is the second wedge in the first pie and the first in the second — same colour both.
+    String fuelInAll =
+        all.getElementsByTagName("path")
+            .item(1)
+            .getAttributes()
+            .getNamedItem("fill")
+            .getNodeValue();
+    String fuelInNoFood =
+        noFood
+            .getElementsByTagName("path")
+            .item(0)
+            .getAttributes()
+            .getNamedItem("fill")
+            .getNodeValue();
+    assertThat(fuelInNoFood).isEqualTo(fuelInAll);
   }
 
   @Test

@@ -96,13 +96,18 @@ final class ChartSvgWriter {
   /**
    * A pie chart over one line's values (reporting.md §10's "columns: the slices"). The caller must
    * have already refused a line carrying a negative value (§7.4) — this method assumes every value
-   * is non-negative and simply skips blanks/zero-sum.
+   * is non-negative and simply skips blanks/zero-sum. Each slice keeps its column's own colour, and
+   * the legend lists only the columns that have a slice. A lone slice is drawn as a full disc: as
+   * an arc it would start and end on the same point, which SVG draws as nothing (issue 13).
    */
   static String pie(List<String> columnLabels, ChartLine line) {
     List<Double> values = toDoubles(line.values());
+    List<Integer> sliceColumns = new ArrayList<>();
     double total = 0;
-    for (Double v : values) {
-      if (v != null) {
+    for (int i = 0; i < values.size(); i++) {
+      Double v = values.get(i);
+      if (v != null && v > 0) {
+        sliceColumns.add(i);
         total += v;
       }
     }
@@ -111,23 +116,18 @@ final class ChartSvgWriter {
     double radius = Math.min(WIDTH, HEIGHT) / 2.0 - 24;
 
     StringBuilder svg = openSvg();
-    if (total > 0) {
+    if (sliceColumns.size() == 1) {
+      svg.append(circle(cx, cy, radius, color(sliceColumns.get(0))));
+    } else {
       double angle = -Math.PI / 2;
-      for (int i = 0; i < values.size(); i++) {
-        Double v = values.get(i);
-        if (v == null || v <= 0) {
-          continue;
-        }
-        double sweep = (v / total) * 2 * Math.PI;
-        svg.append(pieSlice(cx, cy, radius, angle, angle + sweep, color(i)));
+      for (int column : sliceColumns) {
+        double sweep = (values.get(column) / total) * 2 * Math.PI;
+        svg.append(pieSlice(cx, cy, radius, angle, angle + sweep, color(column)));
         angle += sweep;
       }
     }
-    List<ChartLine> legendEntries = new ArrayList<>();
-    for (String label : columnLabels) {
-      legendEntries.add(new ChartLine(label, List.of()));
-    }
-    appendLegend(svg, new Plot(0, HEIGHT - LEGEND_HEIGHT, WIDTH, LEGEND_HEIGHT), legendEntries);
+    appendPieLegend(
+        svg, new Plot(0, HEIGHT - LEGEND_HEIGHT, WIDTH, LEGEND_HEIGHT), columnLabels, sliceColumns);
     return closeSvg(svg);
   }
 
@@ -242,11 +242,31 @@ final class ChartSvgWriter {
     if (lines.size() <= 1) {
       return;
     }
-    double entryWidth = Math.min(plot.width() / Math.max(lines.size(), 1), 140);
-    double y = 12;
+    List<Integer> colorIndexes = new ArrayList<>();
     for (int i = 0; i < lines.size(); i++) {
+      colorIndexes.add(i);
+    }
+    appendLegendEntries(svg, plot, colorIndexes, lines.stream().map(ChartLine::label).toList());
+  }
+
+  /**
+   * {@link #appendLegend}'s pie counterpart: one entry per slice, in its column's own colour — kept
+   * even for a single slice, since a lone full disc otherwise names nothing.
+   */
+  private static void appendPieLegend(
+      StringBuilder svg, Plot plot, List<String> columnLabels, List<Integer> sliceColumns) {
+    appendLegendEntries(
+        svg, plot, sliceColumns, sliceColumns.stream().map(columnLabels::get).toList());
+  }
+
+  /** The one legend layout: entry {@code i} shows {@code labels[i]} in {@code colorIndexes[i]}. */
+  private static void appendLegendEntries(
+      StringBuilder svg, Plot plot, List<Integer> colorIndexes, List<String> labels) {
+    double entryWidth = Math.min(plot.width() / Math.max(labels.size(), 1), 140);
+    double y = 12;
+    for (int i = 0; i < labels.size(); i++) {
       double x = plot.left() + i * entryWidth;
-      svg.append(legendEntry(x, y, color(i), lines.get(i).label()));
+      svg.append(legendEntry(x, y, color(colorIndexes.get(i)), labels.get(i)));
     }
   }
 

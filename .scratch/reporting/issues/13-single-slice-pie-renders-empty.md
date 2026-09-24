@@ -39,3 +39,10 @@ Filed 2026-09-23 from owner testing at the close of reporting stage e. The owner
 of `Cash` split per child account) is still blocked after this fix. Slices come from the column
 axis, which can't be expanded in v1 (`reporting.md` §9.1, Q-REP-2). See the comment on
 `08-unticked-hierarchy-nodes-still-render-as-rows.md`.
+
+Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation. A pie with exactly one
+positive value draws a full disc (`<circle>`, via `ChartSvgWriter`'s existing `circle` helper)
+instead of a 2π arc. The triage point is taken too: the pie legend lists only the columns that have
+a slice, each in its slice's own column colour, and it shows even for a single slice (the lone disc
+would otherwise name nothing). An all-zero pie is now an empty chart with no legend. Bar/line
+legends are unchanged; both legend kinds share one layout helper.
