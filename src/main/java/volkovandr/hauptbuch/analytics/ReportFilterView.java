@@ -43,11 +43,17 @@ final class ReportFilterView {
    */
   record OptionRow(String value, String label, boolean ticked) {}
 
-  /** A hierarchy section: Category, Account or Tag. */
+  /**
+   * A hierarchy section: Category, Account or Tag.
+   *
+   * <p>Every section's {@code filtered} says whether the spec has a filter on its field — the only
+   * time its Reset control shows (reporting issue 21), which resubmits {@code otherParams} alone.
+   */
   record HierarchySection(
       String label,
       List<NodeRow> nodes,
       boolean transactionLevel,
+      boolean filtered,
       MultiValueMap<String, String> otherParams) {}
 
   /**
@@ -59,6 +65,7 @@ final class ReportFilterView {
       List<OptionRow> options,
       boolean matchesOperator,
       String regex,
+      boolean filtered,
       MultiValueMap<String, String> otherParams) {}
 
   /**
@@ -70,12 +77,13 @@ final class ReportFilterView {
       List<OptionRow> options,
       boolean showLevelSwitch,
       boolean transactionLevel,
+      boolean filtered,
       MultiValueMap<String, String> otherParams) {}
 
   /**
    * Note text: a single {@code CONTAINS} substring, no reading switch (§6.2's second exception).
    */
-  record NoteSection(String value, MultiValueMap<String, String> otherParams) {}
+  record NoteSection(String value, boolean filtered, MultiValueMap<String, String> otherParams) {}
 
   record View(
       HierarchySection category,

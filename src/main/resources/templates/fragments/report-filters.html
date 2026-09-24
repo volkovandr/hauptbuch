@@ -12,6 +12,10 @@
   report-settings.html — GETting the page's own URL with the whole editable state as hidden fields
   (`section.otherParams()`, built server-side in ReportFilterView so a section never has to know
   another section's or another group's field names) alongside the section's own real inputs.
+
+  A section with a filter also gets a Reset control (reporting issue 21): its own small form carrying
+  `section.otherParams()` alone, so one click drops just this field's filter. Forms cannot nest, so
+  the form sits after the section's own and its button, beside Apply, reaches it by `form=`.
 -->
 <html xmlns:th="http://www.thymeleaf.org">
   <body>
@@ -93,8 +97,12 @@
         <th:block
           th:replace="~{fragments/report-actions :: hidden-fields(${section.otherParams()})}"
         ></th:block>
-        <p class="actions"><button type="submit" class="btn">Apply</button></p>
+        <p class="actions">
+          <button type="submit" class="btn">Apply</button>
+          <button th:replace="~{::reset-button(${section}, ${field})}"></button>
+        </p>
       </form>
+      <form th:replace="~{::reset(${section}, ${field})}"></form>
     </div>
 
     <!-- Person / Currency / Account type / reconciliation: a flat multi-select. Account type has no
@@ -162,8 +170,12 @@
         <th:block
           th:replace="~{fragments/report-actions :: hidden-fields(${section.otherParams()})}"
         ></th:block>
-        <p class="actions"><button type="submit" class="btn">Apply</button></p>
+        <p class="actions">
+          <button type="submit" class="btn">Apply</button>
+          <button th:replace="~{::reset-button(${section}, ${field})}"></button>
+        </p>
       </form>
+      <form th:replace="~{::reset(${section}, ${field})}"></form>
     </div>
 
     <!-- Payee: an id checklist (operator "is one of") or a case-insensitive regex (operator
@@ -233,8 +245,12 @@
         <th:block
           th:replace="~{fragments/report-actions :: hidden-fields(${section.otherParams()})}"
         ></th:block>
-        <p class="actions"><button type="submit" class="btn">Apply</button></p>
+        <p class="actions">
+          <button type="submit" class="btn">Apply</button>
+          <button th:replace="~{::reset-button(${section}, 'PAYEE')}"></button>
+        </p>
       </form>
+      <form th:replace="~{::reset(${section}, 'PAYEE')}"></form>
     </div>
 
     <!-- Note text: a single "contains" substring, no reading switch (§6.2's second exception). -->
@@ -267,8 +283,43 @@
         <th:block
           th:replace="~{fragments/report-actions :: hidden-fields(${section.otherParams()})}"
         ></th:block>
-        <p class="actions"><button type="submit" class="btn">Apply</button></p>
+        <p class="actions">
+          <button type="submit" class="btn">Apply</button>
+          <button th:replace="~{::reset-button(${section}, 'NOTE')}"></button>
+        </p>
       </form>
+      <form th:replace="~{::reset(${section}, 'NOTE')}"></form>
     </div>
+
+    <!-- A filtered section's Reset button, beside its Apply: submits the reset form below. -->
+    <button
+      th:fragment="reset-button(section, field)"
+      th:if="${section.filtered()}"
+      type="submit"
+      class="btn btn--ghost"
+      th:attr="form=${'filter-reset-' + field}"
+    >
+      Reset
+    </button>
+
+    <!-- A filtered section's Reset (reporting issue 21): the page re-GET with every other setting,
+         exactly as if the section were emptied and applied. -->
+    <form
+      th:fragment="reset(section, field)"
+      th:if="${section.filtered()}"
+      th:id="${'filter-reset-' + field}"
+      method="get"
+      th:action="@{${settings.pagePath()}}"
+      hx-target="#report-frame"
+      hx-select="#report-frame"
+      hx-swap="outerHTML"
+      hx-replace-url="true"
+      th:attr="hx-get=@{${settings.pagePath()}},
+               hx-select-oob=${settings.refreshedRegions()}"
+    >
+      <th:block
+        th:replace="~{fragments/report-actions :: hidden-fields(${section.otherParams()})}"
+      ></th:block>
+    </form>
   </body>
 </html>

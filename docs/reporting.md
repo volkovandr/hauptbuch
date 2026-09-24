@@ -605,9 +605,10 @@ At least one must be ticked. Reordering measures is not offered.
 ### 11a.5 Filters
 
 One **fixed section per field** — Category, Account, Tag, Payee, Person, Currency, Account type,
-reconciliation, note text; an empty section is no filter. Each carries the reading switch — **only
-transactions touching … / only amounts booked to …** — where §6.2 says the reading matters, and Payee
-its operator choice. No "add filter" rows, hence no dynamic form.
+reconciliation, note text; an empty section is no filter. A section with a filter offers **Reset**
+beside Apply, which drops that section's filter in one click and keeps everything else. Each carries
+the reading switch — **only transactions touching … / only amounts booked to …** — where §6.2 says
+the reading matters, and Payee its operator choice. No "add filter" rows, hence no dynamic form.
 
 **Ticking a hierarchy node stores the node**, per §6.3's subtree rule: ticking `Food` saves `Food`,
 so a `Food:Bakery` created next year is in every Report already filtering on Food. Its descendants
@@ -743,6 +744,7 @@ management screen.
   axis's top level, and Category/Account keep to their own types whatever the Scope (issue 08).
   **§4/§9.1**: debt leaves form one Personal debts → person → leaf tree on the Account axis, and one
   Personal debts entry in the Account filter, replacing the per-currency buckets (issues 06, 11).
+  **§11a.5**: a filtered section offers Reset (issue 21).
 - **v0.2 (2026-09-13):** From a grilling pass on the missing editor — v0.1 specified no UI for
   choosing dimensions, measures, scope, filters or renderer. New **§11a**: a Report's page is its
   editor (no separate viewer), drafts in the URL, live controls vs Apply groups, the measure grid,

@@ -159,7 +159,11 @@ class ReportFilterViewAssembler {
     nodes.add(
         new NodeRow(NodeKey.PERSONAL_DEBTS, NodeKey.PERSONAL_DEBTS_LABEL, 0, ticked, false, ""));
     return new HierarchySection(
-        section.label(), nodes, section.transactionLevel(), section.otherParams());
+        section.label(),
+        nodes,
+        section.transactionLevel(),
+        section.filtered(),
+        section.otherParams());
   }
 
   private static List<Candidate> tagCandidates(List<TagNode> nodes) {
@@ -181,6 +185,7 @@ class ReportFilterViewAssembler {
         dimensionLikeLabel(field),
         ReportFilterView.nodeRows(candidates, tickedValues),
         level == FilterLevel.TRANSACTION,
+        filter.isPresent(),
         ReportFilterView.withoutFilter(allParams, field));
   }
 
@@ -204,6 +209,7 @@ class ReportFilterViewAssembler {
         ticked,
         showLevelSwitch,
         level == FilterLevel.TRANSACTION,
+        filter.isPresent(),
         ReportFilterView.withoutFilter(allParams, field));
   }
 
@@ -224,14 +230,19 @@ class ReportFilterViewAssembler {
                         tickedIds.contains(String.valueOf(p.payeeId()))))
             .toList();
     return new PayeeSection(
-        options, matches, regex, ReportFilterView.withoutFilter(allParams, FilterField.PAYEE));
+        options,
+        matches,
+        regex,
+        filter.isPresent(),
+        ReportFilterView.withoutFilter(allParams, FilterField.PAYEE));
   }
 
   private NoteSection noteSection(
       List<ReportFilter> filters, MultiValueMap<String, String> allParams) {
     Optional<ReportFilter> filter = find(filters, FilterField.NOTE);
     String value = filter.map(f -> f.values().get(0)).orElse("");
-    return new NoteSection(value, ReportFilterView.withoutFilter(allParams, FilterField.NOTE));
+    return new NoteSection(
+        value, filter.isPresent(), ReportFilterView.withoutFilter(allParams, FilterField.NOTE));
   }
 
   private List<OptionRow> personOptions() {
