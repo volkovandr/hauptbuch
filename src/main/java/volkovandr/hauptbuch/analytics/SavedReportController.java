@@ -1,10 +1,10 @@
 package volkovandr.hauptbuch.analytics;
 
-import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -69,6 +69,9 @@ class SavedReportController {
         "editor",
         PresetRendering.editorView(
             effective, unsaved, reportId, saved.name(), pagePath, saved.name() + " copy"));
+    // Only an untouched page persists a toggle; a URL carrying its own expansion (a draft's, or a
+    // bookmark of one) toggles from what it shows, without writing to the Report (issue 02).
+    boolean persistsToggle = !unsaved && RowToggle.expandedKeysFrom(params).isEmpty();
     return PresetRendering.renderOwnPage(
         effective,
         effective.renderer() == Renderer.TABLE,
@@ -78,12 +81,15 @@ class SavedReportController {
         filterViewAssembler,
         pagePath,
         hxRequest,
-        unsaved ? null : reportId);
+        persistsToggle
+            ? RowToggle.persisted(reportId)
+            : PresetRendering.draftToggle(effective, unsaved, pagePath));
   }
 
   /**
    * Save (reporting.md §11a.1): overwrites the Report's name, spec, renderer and trend line with
-   * the actions strip's resubmitted current values — whatever was showing, draft or not.
+   * the actions strip's resubmitted current values — whatever was showing, draft or not — and its
+   * remembered expansion with the draft's own, when the page carries one (§9.1, issue 02).
    */
   @PostMapping(BASE_PATH + "/{reportId:\\d+}/save")
   String save(
@@ -98,6 +104,8 @@ class SavedReportController {
         ReportSpecQueryString.fromParams(params),
         Renderer.valueOf(renderer),
         trendLine);
+    RowToggle.expandedKeysFrom(params)
+        .ifPresent(keys -> reportService.updateExpandedNodeKeys(reportId, keys));
     return "redirect:" + BASE_PATH + "/" + reportId;
   }
 
@@ -108,12 +116,13 @@ class SavedReportController {
   }
 
   /**
-   * Toggles one top-level row's expansion (reporting.md §9.1/§9.2, plan stage e2) and swaps just
-   * the table body — the settings-strip machinery ({@link ReportSettingsView}) is untouched, since
-   * expansion is deliberately not part of the URL (§9.1). Reads the current effective set (whatever
+   * Toggles one row's expansion on a saved Report with no unsaved edits (reporting.md §9.1/§9.2,
+   * plan stage e2) and remembers it against the Report. Reads the current effective set (whatever
    * {@code auto} would show, once the saved Report's own remembered state is {@code null}) rather
    * than the raw stored column, so the very first toggle on an {@code auto}-only Report starts from
-   * what is actually on screen instead of an empty set.
+   * what is actually on screen instead of an empty set. Answers with the same page region a
+   * settings change does ({@link #show}), so the settings and actions strips' hidden fields pick up
+   * the new expansion too (issue 02).
    */
   @PostMapping(BASE_PATH + "/{reportId:\\d+}/expand")
   String toggleExpansion(@PathVariable long reportId, @RequestParam String node, Model model) {
@@ -125,17 +134,9 @@ class SavedReportController {
       updated.add(node);
     }
     reportService.updateExpandedNodeKeys(reportId, updated);
-
-    String baseCurrency =
-        settingsService
-            .baseCurrency()
-            .orElseThrow(() -> new IllegalStateException("Base currency must be set to expand."));
-    ReportGrid grid = reportEngine.render(saved.spec(), LocalDate.now(), updated);
-    model.addAttribute(
-        "report",
-        ReportTableViewAssembler.assemble(
-            saved.name(), saved.spec(), grid, baseCurrency, reportId));
-    return "fragments/report-table-body :: table";
+    // No params: the bare saved Report, now with its new expansion. "true" answers as the htmx
+    // request it is, with just the #report-page fragment.
+    return show(reportId, new LinkedMultiValueMap<>(), "true", model);
   }
 
   private SavedReport requireReport(long reportId) {

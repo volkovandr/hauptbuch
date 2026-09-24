@@ -8,20 +8,21 @@
   Every cell is a ReportTableView.CellText: `text` is already display-formatted, `help` is non-null
   only for an illegal "—" (§7.2) and renders the help marker (§11a.7) naming which reason applies.
 
-  A row's expand/collapse control (reporting.md §9.1/§9.2, plan stage e2) only posts when
-  `report.toggleReportId()` is set — a Preset, a Frame's compact card, and a page currently showing
-  an unsaved draft never offer one (expansion state is remembered only against a saved Report's own
-  current spec, §9.1); those still render whatever tree `auto` (or the remembered state) produced,
-  just without a way to change it here.
+  A row's expand/collapse control (reporting.md §9.1/§9.2, plan stage e2, issue 02) requests
+  `row.toggleUrl()` (RowToggle) and swaps the page region exactly like a settings change
+  (report-settings.html): #report-frame, plus every settings group and the actions strip out of band,
+  so their hidden fields carry the new expansion too. On a saved Report with no unsaved edits it
+  POSTs, and the Report remembers the new state; on any other editor page it re-GETs the page with
+  the toggled expansion and replaces the URL, keeping it only for as long as the draft lives. A
+  Frame's compact card has no toggle URL: it draws the triangle with a help marker instead.
 
   Columns cannot be expanded by hand (§9.1), but `auto` can still expand a filtered node on the
   column axis. An expanded parent column (a subtotal over the columns after it) renders bold, and a
-  nested column muted with a ↳ marker (reports.css), so the header shows the hierarchy. `id="report-table"` is this fragment's own htmx swap target,
-  so a toggle replaces only the table, leaving the settings strip and actions untouched.
+  nested column muted with a ↳ marker (reports.css), so the header shows the hierarchy.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
   <body>
-    <table class="report" id="report-table" th:fragment="table">
+    <table class="report" th:fragment="table">
       <thead>
         <tr>
           <th></th>
@@ -38,22 +39,27 @@
       <tbody>
         <tr th:each="row : ${report.rows()}">
           <td th:style="|padding-left: ${row.depth() * 20}px|">
+            <!--/* A null th:attr value drops the attribute: exactly one of hx-post/hx-get renders. */-->
             <button
-              th:if="${row.expandable() and report.toggleReportId() != null}"
+              th:if="${row.toggleUrl() != null}"
               type="button"
               class="report__toggle"
               th:text="${row.expanded()} ? '▾' : '▸'"
-              hx-target="#report-table"
+              hx-target="#report-frame"
+              hx-select="#report-frame"
               hx-swap="outerHTML"
-              th:attr="hx-post=@{/reports/{reportId}/expand(reportId=${report.toggleReportId()}, node=${row.key()})}"
+              th:attr="hx-post=${report.togglePersists()} ? ${row.toggleUrl()} : null,
+                       hx-get=${report.togglePersists()} ? null : ${row.toggleUrl()},
+                       hx-replace-url=${report.togglePersists()} ? null : 'true',
+                       hx-select-oob=${settings.refreshedRegions()}"
             >▸</button>
-            <th:block th:if="${row.expandable() and report.toggleReportId() == null}">
+            <th:block th:if="${row.expandable() and row.toggleUrl() == null}">
               <span
                 class="report__toggle report__toggle--static"
                 th:text="${row.expanded()} ? '▾' : '▸'"
               >▸</span>
               <span
-                th:replace="~{fragments/help-marker :: marker('Save this report to expand or collapse rows by hand.')}"
+                th:replace="~{fragments/help-marker :: marker('Open this report to expand or collapse rows.')}"
               ></span>
             </th:block>
             <span th:text="${row.label()}">Row</span>

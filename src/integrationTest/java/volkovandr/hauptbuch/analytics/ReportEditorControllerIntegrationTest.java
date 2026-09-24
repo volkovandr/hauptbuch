@@ -9,12 +9,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Objects;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.MultiValueMap;
@@ -36,6 +39,42 @@ class ReportEditorControllerIntegrationTest {
   @Autowired MockMvc mockMvc;
   @Autowired ReportService reportService;
   @Autowired SettingsService settingsService;
+  @Autowired JdbcClient jdbcClient;
+
+  private long insertAccount(String name, String type, Long parentId) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code, parent_id) values (:n, :t, 'EUR', :p) "
+                + "returning account_id")
+        .param("n", name)
+        .param("t", type)
+        .param("p", parentId)
+        .query(Long.class)
+        .single();
+  }
+
+  private void postToday(long from, long to, String amount) {
+    long txn =
+        jdbcClient
+            .sql(
+                "insert into transaction (date, lifecycle) values (:d, 'confirmed') "
+                    + "returning transaction_id")
+            .param("d", LocalDate.now())
+            .query(Long.class)
+            .single();
+    jdbcClient
+        .sql("insert into posting (transaction_id, account_id, amount) values (:t, :a, :amt)")
+        .param("t", txn)
+        .param("a", from)
+        .param("amt", new BigDecimal(amount).negate())
+        .update();
+    jdbcClient
+        .sql("insert into posting (transaction_id, account_id, amount) values (:t, :a, :amt)")
+        .param("t", txn)
+        .param("a", to)
+        .param("amt", new BigDecimal(amount))
+        .update();
+  }
 
   @Test
   void newReportShowsThePromptBeforeTheBaseCurrencyIsSet() throws Exception {
@@ -96,5 +135,67 @@ class ReportEditorControllerIntegrationTest {
     assertThat(saved.spec()).isEqualTo(Presets.balanceSheet());
     assertThat(saved.renderer()).isEqualTo(Renderer.TABLE);
     assertThat(saved.trendLine()).isFalse();
+  }
+
+  @Test
+  void newReportTogglesRowsWithoutBecomingAnUnsavedDraft() throws Exception {
+    // Issue 02: expanding a row on an untouched /reports/new carries only the expansion, so the
+    // page keeps its default spec and shows no Unsaved marker.
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", null);
+    long food = insertAccount("Food", "expense", null);
+    long bakery = insertAccount("Bakery", "expense", food);
+    postToday(cash, bakery, "20.00");
+
+    mockMvc
+        .perform(get("/reports/new"))
+        .andExpect(
+            content().string(containsString("hx-get=\"/reports/new?expanded=" + food + "\"")))
+        .andExpect(content().string(not(containsString("report__toggle--static"))));
+
+    mockMvc
+        .perform(get("/reports/new").param(RowToggle.EXPANDED, String.valueOf(food)))
+        .andExpect(content().string(containsString("padding-left: 20px")))
+        .andExpect(content().string(not(containsString("Unsaved changes"))));
+  }
+
+  @Test
+  void newReportDraftKeepsItsExpansionThroughSettingsChange() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", null);
+    long food = insertAccount("Food", "expense", null);
+    long bakery = insertAccount("Bakery", "expense", food);
+    postToday(cash, bakery, "20.00");
+    MultiValueMap<String, String> draft =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    draft.set("rowTotals", String.valueOf(!Presets.categoryMonthMatrix().rowTotals()));
+    draft.add(RowToggle.EXPANDED, String.valueOf(food));
+
+    mockMvc
+        .perform(get("/reports/new").params(draft))
+        .andExpect(content().string(containsString("Unsaved changes")))
+        .andExpect(content().string(containsString("padding-left: 20px")));
+  }
+
+  @Test
+  void saveAsNewKeepsTheDraftsExpansion() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    MultiValueMap<String, String> params =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    params.add(RowToggle.EXPANDED, "7");
+    params.add("name", "Expanded");
+    params.add("renderer", "TABLE");
+    params.add("trendLine", "false");
+
+    String redirect =
+        Objects.requireNonNull(
+            mockMvc
+                .perform(post("/reports/save-as-new").params(params))
+                .andReturn()
+                .getResponse()
+                .getRedirectedUrl());
+
+    long reportId = Long.parseLong(redirect.substring(redirect.lastIndexOf('/') + 1));
+    assertThat(reportService.find(reportId).orElseThrow().expandedNodeKeys()).containsExactly("7");
   }
 }

@@ -15,10 +15,9 @@ import java.util.List;
  * @param rows one row per surviving (post-suppression) {@link AxisNode}
  * @param columnTotals the bottom totals row; empty when not shown
  * @param grandTotal blank when either totals axis is off
- * @param toggleReportId the saved Report id the row-tree's expand/collapse links post to (plan
- *     stage e2) — {@code null} disables them (a Preset, a Frame's compact card, or a page currently
- *     showing an unsaved draft; reporting.md §9.1's expansion state is remembered only against a
- *     saved Report's own current spec)
+ * @param togglePersists whether the rows' expand/collapse controls post to a saved Report's own
+ *     persisting endpoint rather than re-GET the page with an ephemeral expansion ({@link
+ *     RowToggle}, issue 02); meaningless when no row has a {@link RowView#toggleUrl}
  */
 public record ReportTableView(
     String title,
@@ -32,7 +31,7 @@ public record ReportTableView(
     boolean showColumnTotals,
     List<CellText> columnTotals,
     CellText grandTotal,
-    Long toggleReportId) {
+    boolean togglePersists) {
 
   /** Defensively copies the lists to immutable ones. */
   public ReportTableView {
@@ -55,13 +54,14 @@ public record ReportTableView(
   /**
    * One rendered row: its label, its formatted cells, and its row total (blank when not shown).
    *
-   * @param key the row's own {@link AxisNode#key} — the toggle link's {@code node} value
+   * @param key the row's own {@link AxisNode#key}
    * @param depth 0 for a top-level row, 1 for a nested child (plan stage e), for the template's own
    *     indentation
-   * @param expandable whether this row has a second dimension nested beneath it (§9.1) — draws an
-   *     expand/collapse control when {@link ReportTableView#toggleReportId} is also non-{@code
-   *     null}
+   * @param expandable whether this row has a second dimension nested beneath it (§9.1)
    * @param expanded whether an {@link #expandable} row is currently showing its children
+   * @param toggleUrl the URL this row's expand/collapse control requests ({@link
+   *     RowToggle#urlFor}); {@code null} for a row that cannot expand, or a table with no toggle (a
+   *     Frame's compact card), which draws the triangle without a control
    */
   public record RowView(
       String key,
@@ -69,6 +69,7 @@ public record ReportTableView(
       int depth,
       boolean expandable,
       boolean expanded,
+      String toggleUrl,
       List<CellText> cells,
       CellText rowTotal) {
 

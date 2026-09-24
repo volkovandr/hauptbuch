@@ -53,3 +53,16 @@ exploring unsaved drafts much more often. Scope decisions for whoever picks it u
   `expanded_node_keys`.
 - Cover it in the integration tier: toggle on a draft (`/reports/new` and a saved Report with
   unsaved edits), change a setting, and assert the expansion is still rendered.
+
+Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation. A draft's expansion
+travels as an `expanded` parameter in the page's own state, and every settings form and both Save
+forms carry it. On a saved Report with no edits, the toggle still POSTs and persists. Everywhere else
+(a draft, a Preset, `/reports/new`) it re-GETs the page with the toggled set and replaces the URL.
+Toggling on an untouched page carries only the expansion, so the page does not become a draft. A
+draft starts from the saved Report's remembered expansion, and Save / Save as new store the draft's.
+`reporting.md` §9.1/§9.2 amended (v0.3).
+
+Deviation from the triage, for the owner to confirm: the hidden field lands in the address bar
+anyway, since every settings form uses `hx-replace-url`. So a draft's expansion also survives a
+reload or bookmark of the draft URL, like the rest of the draft (§11a.1). Keeping it out of the URL
+would need the server to rewrite the replaced URL on every response.

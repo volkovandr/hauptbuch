@@ -2,6 +2,8 @@ package volkovandr.hauptbuch.analytics;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import volkovandr.hauptbuch.shared.MoneyFactory;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 
@@ -12,7 +14,9 @@ final class ReportTableViewAssembler {
 
   private ReportTableViewAssembler() {}
 
-  /** {@link #assemble(String, ReportSpec, ReportGrid, String, Long)} with no toggle control. */
+  /**
+   * {@link #assemble(String, ReportSpec, ReportGrid, String, RowToggle)} with no toggle control.
+   */
   static ReportTableView assemble(
       String title, ReportSpec spec, ReportGrid grid, String baseCurrency) {
     return assemble(title, spec, grid, baseCurrency, null);
@@ -21,12 +25,11 @@ final class ReportTableViewAssembler {
   /**
    * Turns a {@link ReportGrid} into a display-ready {@link ReportTableView}.
    *
-   * @param toggleReportId the saved Report id the row-tree's expand/collapse links post to (plan
-   *     stage e2), carried straight onto {@link ReportTableView#toggleReportId} — see its own
-   *     javadoc for when this is {@code null}
+   * @param rowToggle what the row-tree's expand/collapse controls do (plan stage e2, issue 02), or
+   *     {@code null} for none — see {@link RowToggle}
    */
   static ReportTableView assemble(
-      String title, ReportSpec spec, ReportGrid grid, String baseCurrency, Long toggleReportId) {
+      String title, ReportSpec spec, ReportGrid grid, String baseCurrency, RowToggle rowToggle) {
     List<ReportTableView.ColumnView> columns =
         grid.columns().stream()
             .map(
@@ -34,6 +37,11 @@ final class ReportTableViewAssembler {
                     new ReportTableView.ColumnView(
                         node.label(), node.depth(), node.expandable() && node.expanded()))
             .toList();
+    Set<String> onScreen =
+        grid.rows().stream()
+            .filter(AxisNode::expanded)
+            .map(AxisNode::key)
+            .collect(Collectors.toSet());
     List<ReportTableView.RowView> rows = new ArrayList<>();
     for (int i = 0; i < grid.rows().size(); i++) {
       AxisNode node = grid.rows().get(i);
@@ -48,6 +56,9 @@ final class ReportTableViewAssembler {
               node.depth(),
               node.expandable(),
               node.expanded(),
+              rowToggle != null && node.expandable()
+                  ? rowToggle.urlFor(node.key(), onScreen)
+                  : null,
               cells,
               rowTotal));
     }
@@ -70,7 +81,7 @@ final class ReportTableViewAssembler {
         spec.columnTotals(),
         columnTotals,
         grandTotal,
-        toggleReportId);
+        rowToggle != null && rowToggle.persists());
   }
 
   private static ReportTableView.CellText format(Cell cell, String baseCurrency) {

@@ -19,6 +19,12 @@ import volkovandr.hauptbuch.ledger.SettingsService;
  * spirit; the settings strip's own view is {@link ReportSettingsView}, built inside {@link
  * #renderOwnPage}.
  */
+// CouplingBetweenObjects: this class's whole job is being the one shared middle of five controllers
+// (above) — resolving a Preset/Report/draft, rendering it through the engine to a table or chart
+// view, and wiring the settings strip, actions strip and row toggle around it — so it references
+// each of those pieces once. The same shape ReportSettingsView and ReportDataFetcher are
+// suppressed for; splitting it would move the references, not remove them.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 final class PresetRendering {
 
   private static final String NO_BASE_CURRENCY_VIEW = "report-unavailable";
@@ -53,8 +59,8 @@ final class PresetRendering {
       Set<String> expandedNodeKeys) {
 
     /**
-     * A Presentation with no remembered expansion state (a Preset, or any not-yet-saved draft) —
-     * every render of it falls back to {@code auto} (reporting.md §9.1/§9.2, plan stage e2).
+     * A Presentation with no expansion state yet (a Preset, or {@code /reports/new}) — it renders
+     * {@code auto} (reporting.md §9.1/§9.2, plan stage e2) until a row is toggled.
      */
     Presentation(String title, ReportSpec spec, Renderer renderer, boolean trendLine) {
       this(title, spec, renderer, trendLine, null);
@@ -87,7 +93,8 @@ final class PresetRendering {
    * @param discardUrl the page's own bare URL — no spec parameters, so it renders {@code base}
    * @param saveAsNewName the "Save as new report" field's prefilled value
    * @param specParams the effective spec, already encoded ({@link ReportSpecQueryString}) as the
-   *     hidden fields both the Save and Save-as-new forms resubmit
+   *     hidden fields both the Save and Save-as-new forms resubmit, plus the explicit expansion set
+   *     when there is one, so saving keeps the tree on screen (issue 02)
    */
   record ReportEditorView(
       Long reportId,
@@ -101,28 +108,22 @@ final class PresetRendering {
 
   /**
    * Renders {@code presentation} as its table or chart view, per {@code asTable}, using {@code
-   * presentation}'s own remembered expansion state (reporting.md §9.1, plan stage e2) — {@code
-   * null} for a Preset or an unsaved draft, which always render {@code auto}. {@code
-   * toggleExpansionReportId} enables the table's own expand/collapse controls (only a saved
-   * Report's full page does; a Frame's compact card does not, plan stage e2) — see {@link
-   * ReportTableViewAssembler#assemble}.
+   * presentation}'s own expansion state (reporting.md §9.1, plan stage e2) — {@code null} renders
+   * {@code auto}. {@code rowToggle} is what the table's own expand/collapse controls do (an editor
+   * page's; a Frame's compact card passes {@code null} and gets none) — see {@link RowToggle}.
    */
   static Rendered populate(
       Presentation presentation,
       String baseCurrency,
       boolean asTable,
       ReportEngine reportEngine,
-      Long toggleExpansionReportId) {
+      RowToggle rowToggle) {
     ReportGrid grid =
         reportEngine.render(presentation.spec(), LocalDate.now(), presentation.expandedNodeKeys());
     if (asTable) {
       return new Rendered(
           ReportTableViewAssembler.assemble(
-              presentation.title(),
-              presentation.spec(),
-              grid,
-              baseCurrency,
-              toggleExpansionReportId),
+              presentation.title(), presentation.spec(), grid, baseCurrency, rowToggle),
           null);
     }
     return new Rendered(
@@ -147,9 +148,8 @@ final class PresetRendering {
    * just their {@code :: page} fragment — every editor page made this choice the same way, so
    * settling it here keeps a fourth caller from having to redecide it.
    *
-   * @param toggleExpansionReportId the saved Report id to enable the table's own expand/collapse
-   *     controls for (plan stage e2), or {@code null} for a Preset or a page currently showing an
-   *     unsaved draft — see {@link #populate}
+   * @param rowToggle what the table's own expand/collapse controls do — {@link RowToggle#persisted}
+   *     for a saved Report with no unsaved edits, {@link #draftToggle} otherwise
    */
   static String renderOwnPage(
       Presentation presentation,
@@ -160,7 +160,7 @@ final class PresetRendering {
       ReportFilterViewAssembler filterViewAssembler,
       String pagePath,
       String hxRequestHeader,
-      Long toggleExpansionReportId) {
+      RowToggle rowToggle) {
     boolean fragment = isHtmxRequest(hxRequestHeader);
     String tableViewName = fragment ? "report-table :: page" : "report-table";
     String chartViewName = fragment ? "report-chart :: page" : "report-chart";
@@ -169,8 +169,7 @@ final class PresetRendering {
         .map(
             baseCurrency -> {
               Rendered rendered =
-                  populate(
-                      presentation, baseCurrency, asTable, reportEngine, toggleExpansionReportId);
+                  populate(presentation, baseCurrency, asTable, reportEngine, rowToggle);
               model.addAttribute(
                   "settings", ReportSettingsView.build(presentation, pagePath, LocalDate.now()));
               model.addAttribute(
@@ -193,11 +192,19 @@ final class PresetRendering {
    * control for it. The renderer and trend line (plan stage d3's own settings-strip controls) are
    * read independently, defaulting to {@code base}'s own when the draft's request happened not to
    * carry them — it always does in practice, since every settings-strip form resubmits {@link
-   * #allParams} whole, but a hand-typed spec-only URL should still resolve sensibly.
+   * #allParams} whole, but a hand-typed spec-only URL should still resolve sensibly. The expansion
+   * state (§9.1, issue 02) is read the same way, independently of whether a draft is present: an
+   * unedited Preset or {@code /reports/new} with a row toggled carries only {@link
+   * RowToggle#EXPANDED}.
    */
   static Presentation resolvePresentation(Presentation base, MultiValueMap<String, String> params) {
+    Optional<Set<String>> paramKeys = RowToggle.expandedKeysFrom(params);
+    Set<String> expandedKeys = paramKeys.orElse(base.expandedNodeKeys());
     if (!ReportSpecQueryString.isPresent(params)) {
-      return base;
+      return paramKeys.isEmpty()
+          ? base
+          : new Presentation(
+              base.title(), base.spec(), base.renderer(), base.trendLine(), expandedKeys);
     }
     String rendererParam = params.getFirst("renderer");
     String trendLineParam = params.getFirst("trendLine");
@@ -205,22 +212,44 @@ final class PresetRendering {
     boolean trendLine =
         trendLineParam == null ? base.trendLine() : Boolean.parseBoolean(trendLineParam);
     return new Presentation(
-        base.title(), ReportSpecQueryString.fromParams(params), renderer, trendLine);
+        base.title(), ReportSpecQueryString.fromParams(params), renderer, trendLine, expandedKeys);
   }
 
   /**
    * {@code effective}'s whole editable state as query parameters (plan stage d3): {@link
    * ReportSpecQueryString#toParams}'s spec fields plus {@code renderer}/{@code trendLine}, which
-   * are "promoted columns" (§14) rather than part of {@link ReportSpec} itself. The settings
-   * strip's own groups ({@link ReportSettingsView}) each resubmit this whole map, minus the
-   * field(s) the group itself owns, as hidden fields alongside its own real inputs.
+   * are "promoted columns" (§14) rather than part of {@link ReportSpec} itself, plus the explicit
+   * expansion set once there is one (issue 02). The settings strip's own groups ({@link
+   * ReportSettingsView}) each resubmit this whole map, minus the field(s) the group itself owns, as
+   * hidden fields alongside its own real inputs.
    */
   static MultiValueMap<String, String> allParams(Presentation effective) {
     MultiValueMap<String, String> params =
         new LinkedMultiValueMap<>(ReportSpecQueryString.toParams(effective.spec()));
     params.add("renderer", effective.renderer().name());
     params.add("trendLine", String.valueOf(effective.trendLine()));
+    addExpansion(params, effective.expandedNodeKeys());
     return params;
+  }
+
+  private static void addExpansion(MultiValueMap<String, String> params, Set<String> keys) {
+    if (keys != null) {
+      params.addAll(RowToggle.expansionParams(keys));
+    }
+  }
+
+  /**
+   * The ephemeral {@link RowToggle} an editor page's table gets whenever its toggle must not
+   * persist (reporting.md §9.1, issue 02): carrying the whole draft when {@code unsaved}, and
+   * nothing but the expansion otherwise, so toggling a row alone never makes a page a draft.
+   */
+  static RowToggle draftToggle(Presentation effective, boolean unsaved, String pagePath) {
+    MultiValueMap<String, String> carried = new LinkedMultiValueMap<>();
+    if (unsaved) {
+      carried.addAll(allParams(effective));
+      carried.remove(RowToggle.EXPANDED);
+    }
+    return RowToggle.ephemeral(pagePath, carried, effective.expandedNodeKeys());
   }
 
   /**
@@ -236,13 +265,16 @@ final class PresetRendering {
       String currentName,
       String pagePath,
       String saveAsNewName) {
+    MultiValueMap<String, String> specParams =
+        new LinkedMultiValueMap<>(ReportSpecQueryString.toParams(effective.spec()));
+    addExpansion(specParams, effective.expandedNodeKeys());
     return new ReportEditorView(
         reportId,
         currentName,
         unsaved,
         pagePath,
         saveAsNewName,
-        ReportSpecQueryString.toParams(effective.spec()),
+        specParams,
         effective.renderer().name(),
         effective.trendLine());
   }
@@ -282,7 +314,7 @@ final class PresetRendering {
       return new FrameContent(true, true, shown.title(), null, null);
     }
     // A Frame's compact card shows the same remembered tree as the full page but never offers its
-    // own toggle (plan stage e2) — reportId null disables ReportTableView's expand/collapse links.
+    // own toggle (plan stage e2) — a null RowToggle leaves ReportTableView's rows without one.
     Rendered rendered =
         populate(shown, baseCurrency.get(), shown.renderer() == Renderer.TABLE, reportEngine, null);
     return new FrameContent(true, false, shown.title(), rendered.report(), rendered.chart());

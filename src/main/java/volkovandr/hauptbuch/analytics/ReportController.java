@@ -70,7 +70,7 @@ class ReportController {
         filterViewAssembler,
         pagePath,
         hxRequest,
-        null);
+        PresetRendering.draftToggle(effective, unsaved, pagePath));
   }
 
   private static PresetDef presetFor(String slug) {
