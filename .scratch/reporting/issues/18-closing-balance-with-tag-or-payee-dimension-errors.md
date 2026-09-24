@@ -1,6 +1,6 @@
 # Closing balance with a Tag or Payee dimension is enterable in the settings strip, then fails with the generic error toast
 
-Status: needs-triage
+Status: resolved
 Category: bug
 Severity: medium
 Area: Reporting (`analytics` module: `ReportSettingsView`, `ReportEngine.validateClosingBalanceHasBalance`, `PresetRendering.populate`)
@@ -59,7 +59,7 @@ toast.
 Filed 2026-09-23 from an owner-supplied stack trace. Related:
 `15-rethink-which-dimension-combinations-are-allowed.md` (rule 7 there).
 
-Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation:
+Implemented 2026-09-24 (branch `feat/reporting`, 68260ea), owner-confirmed 2026-09-24:
 
 - **Form, both directions.** With a closing balance ticked, Tag and Payee are left out of every axis
   dropdown (rows, columns, series, and both nested slots). With Tag or Payee in any slot, the
