@@ -21,6 +21,13 @@
       </div>
 
       <div th:if="${frame.report() != null}" th:with="report=${frame.report()}">
+        <p
+          class="muted report__refusal"
+          th:if="${report.refusalMessage() != null}"
+          th:text="${report.refusalMessage()}"
+        >
+          Why the report is empty
+        </p>
         <table th:replace="~{fragments/report-table-body :: table}"></table>
       </div>
       <div th:if="${frame.chart() != null}" th:with="chart=${frame.chart()}">

@@ -191,6 +191,11 @@ public record ReportSpec(
     }
   }
 
+  /** Whether any of this Report's measures is a {@link MeasureKind#CLOSING_BALANCE}. */
+  public boolean hasClosingBalance() {
+    return measures.stream().anyMatch(m -> m.kind() == MeasureKind.CLOSING_BALANCE);
+  }
+
   /**
    * One axis (rows or columns) allows 0–2 dimensions (§3), never the same dimension twice, and
    * never {@link Dimension#DATE} alongside another dimension — the ladder fills an axis on its own

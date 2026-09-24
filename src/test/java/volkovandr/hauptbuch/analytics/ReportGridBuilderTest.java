@@ -1345,7 +1345,7 @@ class ReportGridBuilderTest {
     ReportGrid grid =
         builder.build(spec, axes, rows, columns, Map.of(), turnoverData(), "EUR", JANUARY);
 
-    assertThat(grid.scopeMismatch())
+    assertThat(grid.refusalMessage())
         .isEqualTo("Category covers income and expense accounts; neither is in scope.");
   }
 
@@ -1363,6 +1363,6 @@ class ReportGridBuilderTest {
         builder.build(
             matrixSpec(false, false, false), axes, rows, columns, byKey, data, "EUR", JANUARY);
 
-    assertThat(grid.scopeMismatch()).isNull();
+    assertThat(grid.refusalMessage()).isNull();
   }
 }

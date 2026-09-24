@@ -26,6 +26,10 @@ public final class ReportHelpText {
       "Turnover is a flow over the period. Closing balance is a stock at period’s end — it is"
           + " never summed across time.";
 
+  public static final String CLOSING_BALANCE_UNAVAILABLE =
+      "A tag or payee holds no balance, so Closing balance is unavailable while one is on an"
+          + " axis.";
+
   public static final String LEG =
       "Net, debits and credits apply only to Turnover, independent of account type.";
 

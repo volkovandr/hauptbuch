@@ -61,7 +61,7 @@ final class ReportTableViewAssembler {
     return new ReportTableView(
         title,
         ScopeHeaderText.render(spec.scope()),
-        grid.scopeMismatch(),
+        grid.refusalMessage(),
         grid.resolvedStart(),
         grid.resolvedEnd(),
         columns,

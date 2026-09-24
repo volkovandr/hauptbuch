@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -220,6 +221,36 @@ class ReportsLayoutControllerIntegrationTest {
         .perform(get(REPORTS_PATH))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("href=\"/reports/" + saved.reportId() + "\"")));
+  }
+
+  @Test
+  void frameShowingRefusedReportRendersTheReasonNotAnError() throws Exception {
+    // Issue 18: a saved spec the engine refuses (closing balance by Tag) renders its reason in
+    // the Frame, not a 500 and not a silent empty table.
+    settingsService.setBaseCurrency("EUR");
+    ReportSpec tagClosingBalance =
+        new ReportSpec(
+            List.of(Dimension.TAG),
+            List.of(),
+            List.of(),
+            List.of(Measure.closingBalance(PresentationCurrency.BASE)),
+            Scope.ofTypes("asset"),
+            List.of(),
+            DateRange.yearToDate(),
+            false,
+            false,
+            true);
+    SavedReport saved = reportService.save("By tag", tagClosingBalance, Renderer.TABLE, false);
+    mockMvc.perform(
+        post(LAYOUT_PATH)
+            .param("rowCount", "1")
+            .param("columnCount", "1")
+            .param("frame-0-0", "report:" + saved.reportId()));
+
+    mockMvc
+        .perform(get(REPORTS_PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("A tag has no closing balance")));
   }
 
   @Test

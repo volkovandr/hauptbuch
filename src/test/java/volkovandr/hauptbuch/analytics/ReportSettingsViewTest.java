@@ -15,6 +15,9 @@ import org.springframework.util.MultiValueMap;
  */
 class ReportSettingsViewTest {
 
+  private static final Measure CLOSING_BALANCE = Measure.closingBalance(PresentationCurrency.BASE);
+  private static final Measure NET_TURNOVER = Measure.turnover(PresentationCurrency.BASE, Leg.NET);
+
   private static ReportSettingsView.View build(
       ReportSpec spec, Renderer renderer, boolean trendLine) {
     PresetRendering.Presentation presentation =
@@ -56,7 +59,7 @@ class ReportSettingsViewTest {
 
   @Test
   void columnsOfferOnlyNoneAndDateWhileRowsHoldsNonDateDimension() {
-    // ReportEngine.validateOneNonDateDimension (§3): rows=Category, columns=Payee would throw at
+    // ReportEngine.refusal (§3): rows=Category, columns=Payee is refused at
     // render time — the columns dropdown must not be able to reach that state in the first place.
     ReportSettingsView.View view = build(Presets.categoryMonthMatrix(), Renderer.TABLE, false);
 
@@ -137,6 +140,149 @@ class ReportSettingsViewTest {
         build(withAxes(List.of(), List.of(Dimension.ACCOUNT)), Renderer.TABLE, false);
     assertThat(noRows.rowsColumns().rowsNestedDisabled()).isTrue();
     assertThat(noRows.rowsColumns().columnsNestedDisabled()).isFalse();
+  }
+
+  private static ReportSpec withAxesAndMeasure(
+      List<Dimension> rows, List<Dimension> columns, List<Dimension> series, Measure measure) {
+    ReportSpec spec = Presets.categoryMonthMatrix();
+    return new ReportSpec(
+        rows,
+        columns,
+        series,
+        List.of(measure),
+        spec.scope(),
+        spec.filters(),
+        spec.range(),
+        spec.rowTotals(),
+        spec.columnTotals(),
+        spec.suppressEmptyRows());
+  }
+
+  private static ReportSettingsView.MeasureRow closingBalanceRow(ReportSettingsView.View view) {
+    return view.measures().rows().stream()
+        .filter(row -> "Closing balance".equals(row.label()))
+        .findFirst()
+        .orElseThrow();
+  }
+
+  @Test
+  void closingBalanceKeepsTagAndPayeeOffEveryAxisSlot() {
+    // Issue 18: a tag or payee holds no balance (reporting.md §4) — the engine refuses the pair,
+    // so the form must not offer it in any slot, outer or nested.
+    ReportSettingsView.View rowsView =
+        build(
+            withAxesAndMeasure(
+                List.of(Dimension.ACCOUNT), List.of(Dimension.DATE), List.of(), CLOSING_BALANCE),
+            Renderer.TABLE,
+            false);
+    ReportSettingsView.View columnsView =
+        build(
+            withAxesAndMeasure(
+                List.of(Dimension.DATE), List.of(Dimension.ACCOUNT), List.of(), CLOSING_BALANCE),
+            Renderer.TABLE,
+            false);
+    ReportSettingsView.View seriesView =
+        build(
+            withAxesAndMeasure(
+                List.of(), List.of(Dimension.DATE), List.of(Dimension.ACCOUNT), CLOSING_BALANCE),
+            Renderer.LINE,
+            false);
+
+    for (List<ReportSettingsView.AxisOption> options :
+        List.of(
+            rowsView.rowsColumns().rows(),
+            rowsView.rowsColumns().rowsNested(),
+            columnsView.rowsColumns().columns(),
+            columnsView.rowsColumns().columnsNested(),
+            seriesView.rowsColumns().series())) {
+      assertThat(options)
+          .extracting(ReportSettingsView.AxisOption::value)
+          .contains("CATEGORY")
+          .doesNotContain("TAG", "PAYEE");
+    }
+  }
+
+  @Test
+  void turnoverStillOffersTagAndPayee() {
+    ReportSettingsView.View view =
+        build(
+            withAxesAndMeasure(
+                List.of(Dimension.ACCOUNT), List.of(Dimension.DATE), List.of(), NET_TURNOVER),
+            Renderer.TABLE,
+            false);
+
+    assertThat(view.rowsColumns().rows())
+        .extracting(ReportSettingsView.AxisOption::value)
+        .contains("TAG", "PAYEE");
+  }
+
+  @Test
+  void illegalTagAlreadyOnAxisStaysSelectableSoTheOperatorCanChangeIt() {
+    // A hand-typed URL can still arrive with the refused pair; the dropdown must show what is
+    // there, or the operator cannot see which choice to undo.
+    ReportSettingsView.View view =
+        build(
+            withAxesAndMeasure(
+                List.of(Dimension.TAG), List.of(Dimension.DATE), List.of(), CLOSING_BALANCE),
+            Renderer.TABLE,
+            false);
+
+    assertThat(view.rowsColumns().rows())
+        .filteredOn(ReportSettingsView.AxisOption::selected)
+        .extracting(ReportSettingsView.AxisOption::value)
+        .containsExactly("TAG");
+    assertThat(view.rowsColumns().rows())
+        .extracting(ReportSettingsView.AxisOption::value)
+        .doesNotContain("PAYEE");
+  }
+
+  @Test
+  void closingBalanceIsUnavailableWhileTagOrPayeeSitsInAnySlot() {
+    for (ReportSpec spec :
+        List.of(
+            withAxesAndMeasure(
+                List.of(Dimension.PAYEE), List.of(Dimension.DATE), List.of(), NET_TURNOVER),
+            withAxesAndMeasure(
+                List.of(Dimension.CATEGORY, Dimension.TAG),
+                List.of(Dimension.DATE),
+                List.of(),
+                NET_TURNOVER),
+            withAxesAndMeasure(
+                List.of(), List.of(Dimension.DATE), List.of(Dimension.TAG), NET_TURNOVER))) {
+      ReportSettingsView.View view = build(spec, Renderer.TABLE, false);
+
+      ReportSettingsView.MeasureRow closingBalance = closingBalanceRow(view);
+      assertThat(closingBalance.unavailableReason()).isNotBlank();
+      assertThat(closingBalance.base().disabled()).isTrue();
+      assertThat(closingBalance.account().disabled()).isTrue();
+      ReportSettingsView.MeasureRow netTurnover = view.measures().rows().get(0);
+      assertThat(netTurnover.unavailableReason()).isNull();
+      assertThat(netTurnover.base().disabled()).isFalse();
+    }
+  }
+
+  @Test
+  void tickedClosingBalanceStaysEnabledSoTheOperatorCanUntickIt() {
+    ReportSettingsView.View view =
+        build(
+            withAxesAndMeasure(
+                List.of(Dimension.TAG), List.of(Dimension.DATE), List.of(), CLOSING_BALANCE),
+            Renderer.TABLE,
+            false);
+
+    ReportSettingsView.MeasureRow closingBalance = closingBalanceRow(view);
+    assertThat(closingBalance.base().checked()).isTrue();
+    assertThat(closingBalance.base().disabled()).isFalse();
+    assertThat(closingBalance.account().disabled()).isTrue();
+  }
+
+  @Test
+  void closingBalanceIsAvailableWithoutTagOrPayee() {
+    ReportSettingsView.View view = build(Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+
+    ReportSettingsView.MeasureRow closingBalance = closingBalanceRow(view);
+    assertThat(closingBalance.unavailableReason()).isNull();
+    assertThat(closingBalance.base().disabled()).isFalse();
   }
 
   @Test

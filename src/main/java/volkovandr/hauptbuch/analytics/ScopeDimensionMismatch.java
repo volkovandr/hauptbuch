@@ -17,7 +17,7 @@ import java.util.Map;
  * <p>Takes the already-resolved {@link AxisPlan#nonDateDim()} rather than a {@link ReportSpec} — a
  * spec's own row/series-slot resolution is {@link ReportEngine}'s job alone; {@link
  * ReportGridBuilder#build} is this check's one caller, computed once and carried on {@link
- * ReportGrid#scopeMismatch()} for every renderer to read.
+ * ReportGrid#refusalMessage()} for every renderer to read.
  */
 final class ScopeDimensionMismatch {
 

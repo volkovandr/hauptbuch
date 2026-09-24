@@ -182,9 +182,7 @@ class ReportDataFetcher {
 
     Map<String, List<RawBalanceCell>> balanceByBucketKey = new LinkedHashMap<>();
     Map<String, LocalDate> asOfByBucketKey = new LinkedHashMap<>();
-    boolean anyClosingBalance =
-        spec.measures().stream().anyMatch(m -> m.kind() == MeasureKind.CLOSING_BALANCE);
-    if (anyClosingBalance) {
+    if (spec.hasClosingBalance()) {
       boolean hasDateAxis = axes.dateOnRows() || axes.dateOnColumns();
       List<DateBucket> balanceBuckets = hasDateAxis ? buckets : List.of();
       fetchClosingBalance(

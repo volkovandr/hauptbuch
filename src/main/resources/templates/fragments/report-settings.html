@@ -160,13 +160,21 @@
               </thead>
               <tbody>
                 <tr th:each="row : ${settings.measures().rows()}">
-                  <th scope="row" th:text="${row.label()}">Turnover — net</th>
+                  <th scope="row">
+                    <span th:text="${row.label()}">Turnover — net</span>
+                    <th:block th:if="${row.unavailableReason() != null}">
+                      <span
+                        th:replace="~{fragments/help-marker :: marker(${row.unavailableReason()})}"
+                      ></span>
+                    </th:block>
+                  </th>
                   <td>
                     <input
                       type="checkbox"
                       name="measure"
                       th:value="${row.base().value()}"
                       th:checked="${row.base().checked()}"
+                      th:disabled="${row.base().disabled()}"
                     />
                   </td>
                   <td th:if="${row.hasCurrencies()}">
@@ -175,6 +183,7 @@
                       name="measure"
                       th:value="${row.account().value()}"
                       th:checked="${row.account().checked()}"
+                      th:disabled="${row.account().disabled()}"
                     />
                   </td>
                   <td th:unless="${row.hasCurrencies()}" class="muted">(no currency)</td>
