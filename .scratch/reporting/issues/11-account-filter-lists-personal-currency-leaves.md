@@ -1,6 +1,6 @@
 # Account filter lists anonymous `personal.<CUR>` entries instead of one "Personal debts" entry
 
-Status: needs-triage
+Status: ready-for-agent
 Category: bug
 Severity: low
 Area: Reporting (`analytics` module: Account filter options, `fragments/report-filters.html`)
@@ -34,3 +34,11 @@ One entry, **Personal debts**, in the Account filter. Ticking it selects every p
 
 Filed 2026-09-23 from owner testing at the close of reporting stage e. Related:
 `06-personal-debts-as-one-expandable-node-person-then-currency.md`.
+
+Triaged 2026-09-24 (owner): **ready-for-agent, built together with issue 06**, before reporting
+slice f. The filter gets the **one-line** "Personal debts" entry, not a mirror of 06's
+person → currency tree: a per-person entry would duplicate the Person filter (two controls for one
+meaning, the thing `reporting.md` §6.1 cut scope subtrees for). The entry is a synthetic node that
+compiles to "all `person_leaf` accounts", the same predicate as 06's top-level row. Build it once.
+The label is "Personal debts", shared with 06. Under issue 08's rule, ticking it makes "Personal
+debts" a top-level axis node when Account is also a dimension.
