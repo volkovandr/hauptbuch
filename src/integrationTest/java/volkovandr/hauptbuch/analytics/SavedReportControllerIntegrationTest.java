@@ -255,6 +255,53 @@ class SavedReportControllerIntegrationTest {
         .andExpect(content().string(containsString("Unsaved changes")));
   }
 
+  private static ReportSpec tagRowsWithClosingBalance() {
+    return new ReportSpec(
+        List.of(Dimension.TAG),
+        List.of(Dimension.DATE),
+        List.of(),
+        List.of(Measure.closingBalance(PresentationCurrency.BASE)),
+        Scope.ofTypes("asset"),
+        List.of(),
+        DateRange.yearToDate(),
+        false,
+        false,
+        true);
+  }
+
+  @Test
+  void engineRefusalRendersItsReasonInPlaceOfTheTableNotAnError() throws Exception {
+    // Issue 18: a closing balance by Tag reached the engine by URL and 500'd into the generic
+    // error toast. The page now renders, the reason in place of the report.
+    settingsService.setBaseCurrency("EUR");
+    SavedReport saved =
+        reportService.save("My matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+
+    mockMvc
+        .perform(
+            get("/reports/" + saved.reportId())
+                .params(ReportSpecQueryString.toParams(tagRowsWithClosingBalance())))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("A tag has no closing balance")))
+        .andExpect(content().string(containsString("Unsaved changes")));
+  }
+
+  @Test
+  void engineRefusalRendersItsReasonInPlaceOfTheChartNotAnError() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    SavedReport saved =
+        reportService.save("My chart", Presets.netWorthOverTime(), Renderer.LINE, false);
+    MultiValueMap<String, String> draft =
+        PresetRendering.allParams(
+            new PresetRendering.Presentation(
+                "x", tagRowsWithClosingBalance(), Renderer.LINE, false));
+
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()).params(draft))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("A tag has no closing balance")));
+  }
+
   @Test
   void dateLadderWeekQueryParamRendersWeekColumnHeaders() throws Exception {
     // The settings strip's own Date ladder <select> (reporting.md §8.2, stage e4) submits exactly

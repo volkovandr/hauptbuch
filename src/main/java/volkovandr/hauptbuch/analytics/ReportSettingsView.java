@@ -6,6 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Stream;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -92,10 +93,23 @@ final class ReportSettingsView {
       boolean seriesDisabled,
       MultiValueMap<String, String> otherParams) {}
 
-  /** One checkbox of the Measures grid (§11a.4) — {@code null} where a cell has no currency. */
-  record MeasureCell(String value, boolean checked) {}
+  /**
+   * One checkbox of the Measures grid (§11a.4) — {@code null} where a cell has no currency. {@code
+   * disabled} keeps a measure the current axes cannot carry unenterable (issue 18); a ticked cell
+   * is never disabled, so an illegal combination that arrived by URL can still be unticked.
+   */
+  record MeasureCell(String value, boolean checked, boolean disabled) {}
 
-  record MeasureRow(String label, MeasureCell base, MeasureCell account, boolean hasCurrencies) {}
+  /**
+   * {@code unavailableReason} names why this row's unticked cells are disabled, for its help marker
+   * — {@code null} when the row is available.
+   */
+  record MeasureRow(
+      String label,
+      MeasureCell base,
+      MeasureCell account,
+      boolean hasCurrencies,
+      String unavailableReason) {}
 
   record Measures(List<MeasureRow> rows, MultiValueMap<String, String> otherParams) {}
 
@@ -184,23 +198,24 @@ final class ReportSettingsView {
     Dimension row = rowsSet ? spec.rows().get(0) : null;
     Dimension column = spec.columns().isEmpty() ? null : spec.columns().get(0);
     Dimension series = seriesSet ? spec.series().get(0) : null;
-    // ReportEngine.validateOneNonDateDimension (stage a/d3's own cap, §3): at most one axis may
-    // carry a non-Date dimension, and Date cannot sit on both. Series fills the row slot when rows
-    // is empty (ReportEngine.rowSlotDimension), so columns' own exclusions read that effective
-    // value, not rows directly — otherwise "rows empty, series = Category, columns = Payee" would
-    // stay enterable even though it is exactly this same illegal combination.
+    // ReportEngine.refusal (stage a/d3's own cap, §3): at most one axis may carry a non-Date
+    // dimension, and Date cannot sit on both. Series fills the row slot when rows is empty
+    // (ReportEngine.rowSlotDimension), so columns' own exclusions read that effective value, not
+    // rows directly — otherwise "rows empty, series = Category, columns = Payee" would stay
+    // enterable even though it is exactly this same illegal combination.
     Dimension effectiveRowSlot = rowsSet ? row : series;
     Dimension rowNested = spec.rows().size() == 2 ? spec.rows().get(1) : null;
     Dimension columnNested = spec.columns().size() == 2 ? spec.columns().get(1) : null;
+    boolean closingBalance = spec.hasClosingBalance();
     return new RowsColumns(
-        axisOptionsExcluding(row, column),
+        axisOptionsExcluding(row, column, closingBalance),
         seriesSet,
-        nestedOptions(row, rowNested),
+        nestedOptions(row, rowNested, closingBalance),
         !AutoExpansion.isNestable(row),
-        axisOptionsExcluding(column, effectiveRowSlot),
-        nestedOptions(column, columnNested),
+        axisOptionsExcluding(column, effectiveRowSlot, closingBalance),
+        nestedOptions(column, columnNested, closingBalance),
         !AutoExpansion.isNestable(column),
-        axisOptionsExcluding(series, column),
+        axisOptionsExcluding(series, column, closingBalance),
         rowsSet,
         without(
             all,
@@ -214,13 +229,16 @@ final class ReportSettingsView {
   /**
    * A nested slot's own options: None plus every dimension {@link AutoExpansion#canNestUnder} lets
    * sit beneath {@code outer} — or just None when {@code outer} nests nothing (the slot then
-   * renders disabled anyway).
+   * renders disabled anyway). Under a closing balance, Tag and Payee are left out as in {@link
+   * #axisOptionsExcluding}.
    */
-  private static List<AxisOption> nestedOptions(Dimension outer, Dimension selected) {
+  private static List<AxisOption> nestedOptions(
+      Dimension outer, Dimension selected, boolean closingBalance) {
     List<AxisOption> options = new ArrayList<>();
     options.add(new AxisOption("", "None", selected == null));
     for (Dimension dimension : Dimension.values()) {
-      if (AutoExpansion.canNestUnder(outer, dimension)) {
+      if (AutoExpansion.canNestUnder(outer, dimension)
+          && !balancelessUnder(dimension, selected, closingBalance)) {
         options.add(
             new AxisOption(dimension.name(), dimensionLabel(dimension), dimension == selected));
       }
@@ -231,13 +249,16 @@ final class ReportSettingsView {
   /**
    * This axis's own options, with every choice {@code other} has already made illegal removed — the
    * mechanism that keeps the rows/columns nesting cap (see {@link #rowsColumns}) unenterable rather
-   * than a server-side rejection after the fact.
+   * than a server-side rejection after the fact. Under a closing balance, Tag and Payee are left
+   * out too (issue 18: neither holds a balance, reporting.md §4), except when already selected —
+   * the operator must be able to see, and change, what a hand-typed URL put there.
    */
-  private static List<AxisOption> axisOptionsExcluding(Dimension selected, Dimension other) {
+  private static List<AxisOption> axisOptionsExcluding(
+      Dimension selected, Dimension other, boolean closingBalance) {
     List<AxisOption> options = new ArrayList<>();
     options.add(new AxisOption("", "None", selected == null));
     for (Dimension dimension : Dimension.values()) {
-      if (excludedBy(dimension, other)) {
+      if (excludedBy(dimension, other) || balancelessUnder(dimension, selected, closingBalance)) {
         continue;
       }
       options.add(
@@ -253,6 +274,22 @@ final class ReportSettingsView {
     // other already claimed Date: only Date itself is off-limits here. other already claimed a
     // non-Date dimension: only Date remains legal alongside it, so every non-Date choice is out.
     return other == Dimension.DATE ? candidate == Dimension.DATE : candidate != Dimension.DATE;
+  }
+
+  /**
+   * Whether {@code candidate} is a dimension with no balance (Tag, Payee) that a closing-balance
+   * measure rules out of a slot currently holding {@code selected}.
+   */
+  private static boolean balancelessUnder(
+      Dimension candidate, Dimension selected, boolean closingBalance) {
+    return closingBalance && candidate.isBalanceless() && candidate != selected;
+  }
+
+  /** Whether any axis slot — outer or nested, rows, columns or series — holds Tag or Payee. */
+  private static boolean anyBalancelessDimension(ReportSpec spec) {
+    return Stream.of(spec.rows(), spec.columns(), spec.series())
+        .flatMap(List::stream)
+        .anyMatch(Dimension::isBalanceless);
   }
 
   private static String dimensionLabel(Dimension dimension) {
@@ -275,7 +312,7 @@ final class ReportSettingsView {
             turnoverRow("Turnover — net", Leg.NET, ticked),
             turnoverRow("Turnover — debits", Leg.DEBITS, ticked),
             turnoverRow("Turnover — credits", Leg.CREDITS, ticked),
-            closingBalanceRow(ticked),
+            closingBalanceRow(ticked, anyBalancelessDimension(spec)),
             countRow("Count of postings", Measure.countPostings(), ticked),
             countRow("Count of transactions", Measure.countTransactions(), ticked));
     return new Measures(rows, without(all, "measure"));
@@ -284,22 +321,34 @@ final class ReportSettingsView {
   private static MeasureRow turnoverRow(String label, Leg leg, Set<Measure> ticked) {
     Measure base = Measure.turnover(PresentationCurrency.BASE, leg);
     Measure account = Measure.turnover(PresentationCurrency.ACCOUNT, leg);
-    return new MeasureRow(label, measureCell(base, ticked), measureCell(account, ticked), true);
+    return new MeasureRow(
+        label, measureCell(base, ticked, false), measureCell(account, ticked, false), true, null);
   }
 
-  private static MeasureRow closingBalanceRow(Set<Measure> ticked) {
+  /**
+   * The closing-balance row, unavailable while Tag or Payee sits on an axis (issue 18) — the other
+   * half of keeping that refused pair unenterable, alongside {@link #axisOptionsExcluding}.
+   */
+  private static MeasureRow closingBalanceRow(Set<Measure> ticked, boolean balancelessOnAxis) {
     Measure base = Measure.closingBalance(PresentationCurrency.BASE);
     Measure account = Measure.closingBalance(PresentationCurrency.ACCOUNT);
     return new MeasureRow(
-        "Closing balance", measureCell(base, ticked), measureCell(account, ticked), true);
+        "Closing balance",
+        measureCell(base, ticked, balancelessOnAxis),
+        measureCell(account, ticked, balancelessOnAxis),
+        true,
+        balancelessOnAxis ? ReportHelpText.CLOSING_BALANCE_UNAVAILABLE : null);
   }
 
   private static MeasureRow countRow(String label, Measure measure, Set<Measure> ticked) {
-    return new MeasureRow(label, measureCell(measure, ticked), null, false);
+    return new MeasureRow(label, measureCell(measure, ticked, false), null, false, null);
   }
 
-  private static MeasureCell measureCell(Measure measure, Set<Measure> ticked) {
-    return new MeasureCell(ReportSpecQueryString.measureToken(measure), ticked.contains(measure));
+  private static MeasureCell measureCell(
+      Measure measure, Set<Measure> ticked, boolean unavailable) {
+    boolean checked = ticked.contains(measure);
+    return new MeasureCell(
+        ReportSpecQueryString.measureToken(measure), checked, unavailable && !checked);
   }
 
   private static Scope scope(

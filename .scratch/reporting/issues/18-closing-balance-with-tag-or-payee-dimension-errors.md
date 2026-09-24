@@ -58,3 +58,21 @@ toast.
 
 Filed 2026-09-23 from an owner-supplied stack trace. Related:
 `15-rethink-which-dimension-combinations-are-allowed.md` (rule 7 there).
+
+Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation:
+
+- **Form, both directions.** With a closing balance ticked, Tag and Payee are left out of every axis
+  dropdown (rows, columns, series, and both nested slots). With Tag or Payee in any slot, the
+  Closing balance cells are disabled, with a `.help` marker saying why. A choice that is already
+  made stays selectable (a selected Tag stays in its dropdown; a ticked closing balance is never
+  disabled), so a state that arrived by URL can always be undone.
+- **Safety net.** `ReportEngine` no longer throws for its own refusals (Date on both axes, the
+  cross-axis cap, a closing balance by Tag/Payee). It returns an empty grid carrying the reason
+  (`ReportGrid.refusalMessage`, renamed from `scopeMismatch`, which it now shares). The reason
+  renders on the Report page (table and chart) and in table Frames (`fragments/frame.html` never
+  showed the grid's message before, so a scope mismatch there was silent too).
+- `reporting.md` §11a.3 records the rule.
+
+Not covered: refusals thrown by the `ReportSpec` constructor itself (rows plus series, a second
+series, a leg on a closing balance) still throw on a hand-typed URL. The form can't produce them.
+Left for issue 15, which owns the legality table.

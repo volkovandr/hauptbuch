@@ -31,14 +31,14 @@ final class ChartViewAssembler {
     if (spec.measures().size() != 1) {
       throw new IllegalArgumentException("A chart renderer needs exactly one measure.");
     }
-    if (grid.scopeMismatch() != null) {
+    if (grid.refusalMessage() != null) {
       return new ChartView(
           title,
           ScopeHeaderText.render(spec.scope()),
           grid.resolvedStart(),
           grid.resolvedEnd(),
           List.of(),
-          grid.scopeMismatch());
+          grid.refusalMessage());
     }
     List<String> columnLabels = grid.columns().stream().map(AxisNode::label).toList();
     List<ChartLine> lines = new ArrayList<>();

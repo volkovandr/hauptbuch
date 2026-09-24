@@ -9,8 +9,8 @@ import java.util.List;
  * template does no formatting of its own.
  *
  * @param scopeLine the muted header line (§6.4)
- * @param scopeMismatch the "scope misses the dimension" message (§6.1, {@link
- *     ScopeDimensionMismatch}); {@code null} when scope and dimension agree
+ * @param refusalMessage why the grid is empty — {@link ReportGrid#refusalMessage()}; {@code null}
+ *     when the Report renders normally
  * @param columns the rendered column headers, with the hierarchy each one sits in
  * @param rows one row per surviving (post-suppression) {@link AxisNode}
  * @param columnTotals the bottom totals row; empty when not shown
@@ -23,7 +23,7 @@ import java.util.List;
 public record ReportTableView(
     String title,
     String scopeLine,
-    String scopeMismatch,
+    String refusalMessage,
     LocalDate resolvedStart,
     LocalDate resolvedEnd,
     List<ColumnView> columns,

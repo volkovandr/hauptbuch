@@ -21,15 +21,16 @@ import volkovandr.hauptbuch.ledger.SettingsService;
  * for every dimension that names a standing balance ({@link Dimension#CATEGORY}/{@link
  * Dimension#ACCOUNT}/{@link Dimension#PERSON}/{@link Dimension#CURRENCY}/{@link
  * Dimension#ACCOUNT_TYPE}, plus no dimension at all) — {@link Dimension#TAG} and {@link
- * Dimension#PAYEE} have no closing balance (neither is an account) and are rejected for it with a
- * clear message. Filters (§6.2–§6.3) are applied by {@link
- * volkovandr.hauptbuch.analytics.repository.ReportQueryRepository}. Stage a's cross-axis cap
- * remains: at most one of the two axes may carry a non-Date dimension at all (a cross-axis
- * cartesian of two different dimensions, e.g. Category rows × Account columns, is out of scope).
- * Stage e adds nesting <em>within</em> that one axis — up to two dimensions, the second revealed by
- * expanding a node of the first (§3, §9). {@link #render(ReportSpec, LocalDate, Set)} takes a saved
- * Report's remembered, hand-toggled expansion state (§9.1); {@link #render(ReportSpec, LocalDate,
- * RowExpansion)} is the uniform-all-or-nothing form e1's own tests still use.
+ * Dimension#PAYEE} have no closing balance (neither is an account) and are refused for it: the grid
+ * comes back empty, carrying the reason ({@link ReportGrid#refusalMessage()}). Filters (§6.2–§6.3)
+ * are applied by {@link volkovandr.hauptbuch.analytics.repository.ReportQueryRepository}. Stage a's
+ * cross-axis cap remains: at most one of the two axes may carry a non-Date dimension at all (a
+ * cross-axis cartesian of two different dimensions, e.g. Category rows × Account columns, is out of
+ * scope). Stage e adds nesting <em>within</em> that one axis — up to two dimensions, the second
+ * revealed by expanding a node of the first (§3, §9). {@link #render(ReportSpec, LocalDate, Set)}
+ * takes a saved Report's remembered, hand-toggled expansion state (§9.1); {@link
+ * #render(ReportSpec, LocalDate, RowExpansion)} is the uniform-all-or-nothing form e1's own tests
+ * still use.
  */
 @Service
 public class ReportEngine {
@@ -81,12 +82,26 @@ public class ReportEngine {
 
   private ReportGrid render(
       ReportSpec spec, LocalDate today, RowExpansion expansion, Set<String> explicitOverride) {
+    RangeResolver.ResolvedRange resolved = RangeResolver.resolve(spec.range(), today);
     AxisPlan axes = planAxes(spec);
-    validateClosingBalanceHasBalance(spec, axes.nonDateDim(), axes.innerDim());
+    String refusal = refusal(spec, axes);
+    if (refusal != null) {
+      return refusedGrid(refusal, resolved);
+    }
+    return renderAccepted(spec, today, expansion, explicitOverride, resolved, axes);
+  }
+
+  /** {@link #render} for a spec {@link #refusal} accepted. */
+  private ReportGrid renderAccepted(
+      ReportSpec spec,
+      LocalDate today,
+      RowExpansion expansion,
+      Set<String> explicitOverride,
+      RangeResolver.ResolvedRange resolved,
+      AxisPlan axes) {
     String baseCurrency = requireBaseCurrency();
 
     List<String> types = List.copyOf(spec.scope().accountTypes());
-    RangeResolver.ResolvedRange resolved = RangeResolver.resolve(spec.range(), today);
     List<DateBucket> buckets = bucketsFor(spec, resolved);
     Map<String, TopLevelNode> candidatesByKey =
         dataFetcher.candidatesFor(axes.nonDateDim(), types, spec.scope());
@@ -293,7 +308,6 @@ public class ReportEngine {
   private AxisPlan planAxes(ReportSpec spec) {
     Dimension rowDim = rowSlotDimension(spec);
     Dimension colDim = spec.columns().isEmpty() ? null : spec.columns().get(0);
-    validateOneNonDateDimension(rowDim, colDim);
     Dimension rowInner = rowInnerSlotDimension(spec);
     Dimension colInner = spec.columns().size() == 2 ? spec.columns().get(1) : null;
     Dimension nonDateDim;
@@ -330,44 +344,56 @@ public class ReportEngine {
     return spec.rows().size() == 2 ? spec.rows().get(1) : null;
   }
 
-  private static void validateOneNonDateDimension(Dimension rowDim, Dimension colDim) {
-    if (rowDim == Dimension.DATE && colDim == Dimension.DATE) {
-      throw new UnsupportedOperationException("Date cannot be on both rows and columns.");
-    }
-    boolean rowIsNonDate = rowDim != null && rowDim != Dimension.DATE;
-    boolean colIsNonDate = colDim != null && colDim != Dimension.DATE;
-    if (rowIsNonDate && colIsNonDate) {
-      throw new UnsupportedOperationException(
-          "Two different non-Date dimensions on rows and columns — a cross-axis cartesian — is out"
-              + " of scope (reporting.md §3); nesting two dimensions on the same axis is stage e.");
-    }
-  }
-
   /**
-   * {@link Dimension#TAG} and {@link Dimension#PAYEE} name no standing balance — a tag is not an
-   * account, and a payee is a transaction attribute, not a thing that is held (reporting.md §4).
-   * Checked for both the outer and stage e's nested inner dimension, since either can carry one.
+   * Why the engine refuses to render {@code spec} at all, or {@code null} when it renders — decided
+   * from the spec alone, before any query. A refusal renders as an empty grid carrying this message
+   * (issue 18) rather than an exception, so a page, a Frame or a hand-typed URL shows the reason in
+   * place of the report instead of the generic error toast. The settings strip keeps each of these
+   * combinations unenterable ({@link ReportSettingsView}); this is the safety net.
+   *
+   * <p>Refused: Date on both axes; two different non-Date dimensions across rows and columns (stage
+   * a's cross-axis cap, see this class's javadoc); and a closing balance with a {@link
+   * Dimension#isBalanceless()} dimension (Tag, Payee) in either slot.
    */
-  private static void validateClosingBalanceHasBalance(
-      ReportSpec spec, Dimension nonDateDim, Dimension innerDim) {
-    boolean anyClosingBalance =
-        spec.measures().stream().anyMatch(m -> m.kind() == MeasureKind.CLOSING_BALANCE);
-    if (!anyClosingBalance) {
-      return;
+  private static String refusal(ReportSpec spec, AxisPlan axes) {
+    if (axes.dateOnRows() && axes.dateOnColumns()) {
+      return "Date cannot be on both rows and columns.";
     }
-    rejectIfBalanceless(nonDateDim);
-    rejectIfBalanceless(innerDim);
+    boolean rowIsNonDate = axes.rowDim() != null && !axes.dateOnRows();
+    boolean colIsNonDate = axes.colDim() != null && !axes.dateOnColumns();
+    if (rowIsNonDate && colIsNonDate) {
+      return "Rows and columns cannot carry two different dimensions other than Date — put the"
+          + " second one in the nested slot of the same axis instead.";
+    }
+    if (spec.hasClosingBalance()) {
+      String balanceless = balancelessReason(axes.nonDateDim());
+      return balanceless != null ? balanceless : balancelessReason(axes.innerDim());
+    }
+    return null;
   }
 
-  private static void rejectIfBalanceless(Dimension dimension) {
-    if (dimension == Dimension.TAG) {
-      throw new UnsupportedOperationException(
-          "A tag has no closing balance (it is not an account).");
+  private static String balancelessReason(Dimension dimension) {
+    if (dimension == null || !dimension.isBalanceless()) {
+      return null;
     }
-    if (dimension == Dimension.PAYEE) {
-      throw new UnsupportedOperationException(
-          "A payee has no closing balance (it is not an account).");
-    }
+    return dimension == Dimension.TAG
+        ? "A tag has no closing balance (it is not an account) — pick a turnover measure, or a"
+            + " dimension other than Tag."
+        : "A payee has no closing balance (it is not an account) — pick a turnover measure, or a"
+            + " dimension other than Payee.";
+  }
+
+  private static ReportGrid refusedGrid(String refusal, RangeResolver.ResolvedRange resolved) {
+    return new ReportGrid(
+        List.of(),
+        List.of(),
+        List.of(),
+        List.of(),
+        List.of(),
+        Cell.BLANK,
+        resolved.start(),
+        resolved.end(),
+        refusal);
   }
 
   private String requireBaseCurrency() {

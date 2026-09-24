@@ -196,8 +196,7 @@ class ReportGridBuilder {
     List<AxisNode> columnBuckets = suppressedColumns.columnBucketNodes();
     List<List<Cell>> displayCells = suppressedColumns.cells();
 
-    boolean anyClosingBalance =
-        spec.measures().stream().anyMatch(m -> m.kind() == MeasureKind.CLOSING_BALANCE);
+    boolean anyClosingBalance = spec.hasClosingBalance();
     boolean rowTotalsForbiddenByTag = axisNestsTag(axes.colDim(), axes);
     boolean columnTotalsForbiddenByTag = axisNestsTag(axes.rowDim(), axes);
 

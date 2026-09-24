@@ -24,11 +24,11 @@
         <p class="eyebrow" th:text="${report.title()}">Report</p>
         <p class="muted report__scope" th:text="${report.scopeLine()}">Scope</p>
         <p
-          class="muted report__scope-mismatch"
-          th:if="${report.scopeMismatch() != null}"
-          th:text="${report.scopeMismatch()}"
+          class="muted report__refusal"
+          th:if="${report.refusalMessage() != null}"
+          th:text="${report.refusalMessage()}"
         >
-          Scope mismatch
+          Why the report is empty
         </p>
         <p class="muted">
           <span th:text="${#temporals.format(report.resolvedStart(), 'dd.MM.yyyy')}">start</span>

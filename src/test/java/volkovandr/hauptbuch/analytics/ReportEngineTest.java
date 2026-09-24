@@ -123,7 +123,7 @@ class ReportEngineTest {
   }
 
   @Test
-  void rejectsClosingBalanceOnPayeeDimension() {
+  void refusesClosingBalanceOnPayeeDimension() {
     baseIsEur();
     ReportSpec s =
         spec(
@@ -132,12 +132,11 @@ class ReportEngineTest {
             Measure.closingBalance(PresentationCurrency.BASE),
             Scope.ofTypes("expense"));
 
-    assertThatThrownBy(() -> engine.render(s, TODAY))
-        .isInstanceOf(UnsupportedOperationException.class);
+    assertRefused(s, "A payee has no closing balance");
   }
 
   @Test
-  void rejectsTwoDifferentNonDateDimensionsOnRowsAndColumns() {
+  void refusesTwoDifferentNonDateDimensionsOnRowsAndColumns() {
     baseIsEur();
     ReportSpec s =
         spec(
@@ -146,12 +145,11 @@ class ReportEngineTest {
             Measure.turnover(PresentationCurrency.BASE, Leg.NET),
             Scope.ofTypes("expense"));
 
-    assertThatThrownBy(() -> engine.render(s, TODAY))
-        .isInstanceOf(UnsupportedOperationException.class);
+    assertRefused(s, "two different dimensions");
   }
 
   @Test
-  void rejectsDateOnBothRowsAndColumns() {
+  void refusesDateOnBothRowsAndColumns() {
     baseIsEur();
     ReportSpec s =
         spec(
@@ -160,12 +158,11 @@ class ReportEngineTest {
             Measure.turnover(PresentationCurrency.BASE, Leg.NET),
             Scope.ofTypes("expense"));
 
-    assertThatThrownBy(() -> engine.render(s, TODAY))
-        .isInstanceOf(UnsupportedOperationException.class);
+    assertRefused(s, "Date cannot be on both");
   }
 
   @Test
-  void rejectsClosingBalanceOnTagDimension() {
+  void refusesClosingBalanceOnTagDimension() {
     baseIsEur();
     ReportSpec s =
         spec(
@@ -174,8 +171,35 @@ class ReportEngineTest {
             Measure.closingBalance(PresentationCurrency.BASE),
             Scope.ofTypes("asset"));
 
-    assertThatThrownBy(() -> engine.render(s, TODAY))
-        .isInstanceOf(UnsupportedOperationException.class);
+    assertRefused(s, "A tag has no closing balance");
+  }
+
+  @Test
+  void refusesClosingBalanceOnNestedTagSlot() {
+    baseIsEur();
+    ReportSpec s =
+        spec(
+            List.of(Dimension.CATEGORY, Dimension.TAG),
+            List.of(),
+            Measure.closingBalance(PresentationCurrency.BASE),
+            Scope.ofTypes("expense"));
+
+    assertRefused(s, "A tag has no closing balance");
+  }
+
+  /**
+   * A refused spec renders as an empty grid carrying the reason (issue 18) — never an exception,
+   * and never a single query: the refusal is decided from the spec alone.
+   */
+  private void assertRefused(ReportSpec s, String reasonFragment) {
+    ReportGrid grid = engine.render(s, TODAY);
+
+    assertThat(grid.refusalMessage()).contains(reasonFragment);
+    assertThat(grid.rows()).isEmpty();
+    assertThat(grid.columns()).isEmpty();
+    assertThat(grid.resolvedStart()).isEqualTo(LocalDate.of(2026, 1, 1));
+    assertThat(grid.resolvedEnd()).isEqualTo(LocalDate.of(2026, 1, 31));
+    verify(dataFetcher, never()).candidatesFor(any(), any(), any());
   }
 
   // ── orchestration ─────────────────────────────────────────────────────────

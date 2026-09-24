@@ -18,5 +18,14 @@ public enum Dimension {
   PERSON,
   CURRENCY,
   ACCOUNT_TYPE,
-  DATE
+  DATE;
+
+  /**
+   * Whether this dimension names nothing that holds a balance, so a closing balance by it is
+   * meaningless (reporting.md §4): a tag is not an account, and a payee is a transaction attribute,
+   * not a thing that is held.
+   */
+  public boolean isBalanceless() {
+    return this == TAG || this == PAYEE;
+  }
 }

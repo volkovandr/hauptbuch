@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Unit tier (CLAUDE.md §6): {@link ReportTableViewAssembler}'s pass-through of the "scope misses
- * the dimension" message (reporting.md §6.1) from {@link ReportGrid#scopeMismatch()} — computed
+ * the dimension" message (reporting.md §6.1) from {@link ReportGrid#refusalMessage()} — computed
  * once by {@link ReportGridBuilder} ({@code ReportGridBuilderTest}'s job) into {@link
  * ReportTableView} — plus cell formatting itself: value/blank/illegal text, and the §11a.7
  * help-marker text an {@link Cell.Illegal} carries for every {@link Cell.Reason}.
@@ -43,7 +43,7 @@ class ReportTableViewAssemblerTest {
 
     ReportTableView view = ReportTableViewAssembler.assemble("Title", spec(), grid, "EUR");
 
-    assertThat(view.scopeMismatch()).isEqualTo(message);
+    assertThat(view.refusalMessage()).isEqualTo(message);
   }
 
   @Test
@@ -62,7 +62,7 @@ class ReportTableViewAssemblerTest {
 
     ReportTableView view = ReportTableViewAssembler.assemble("Title", spec(), grid, "EUR");
 
-    assertThat(view.scopeMismatch()).isNull();
+    assertThat(view.refusalMessage()).isNull();
   }
 
   @Test

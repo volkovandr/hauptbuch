@@ -545,7 +545,12 @@ its Apply button (a CSS state, no JS).
 **Illegal combinations:** structural ones (an operator a field does not offer, a leg on a closing
 balance, a second series) are made **unenterable** by the form's shape — the spec records already
 reject them. Data-dependent refusals (the pie, `—`) stay where §7 puts them, in the rendered report.
-Rows-plus-series, a temporary engine limit, is a message rather than a disabled control.
+Rows-plus-series, a temporary engine limit, is a message rather than a disabled control. A closing
+balance with Tag or Payee on any axis (§4, neither holds a balance) is unenterable from both sides:
+the axis dropdowns drop Tag and Payee while a closing balance is ticked, and the closing-balance row
+is disabled while either is on an axis — a choice already made stays selectable, so it can be
+undone. Should a spec the engine refuses still arrive (a hand-typed URL), the report renders the
+reason in its place, never an error page.
 
 ### 11a.4 Measures
 
