@@ -1,6 +1,6 @@
 # A wide report overflows its Frame and draws over the neighbouring Frame in the Layout
 
-Status: needs-triage
+Status: resolved
 Category: bug
 Severity: medium
 Area: Reporting (`static/css/reports.css` — `.layout-grid`, `.layout-frame`)
@@ -32,7 +32,7 @@ still looks right.
 
 Filed 2026-09-23 from owner testing at the close of reporting stage e.
 
-Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation: `.frame { overflow-x:
+Implemented 2026-09-24 (branch `feat/reporting`), owner-confirmed the same day: `.frame { overflow-x:
 auto; }` in `reports.css`, so a too-wide report scrolls inside its own Frame (the preferred option).
 The whole Frame scrolls, not just the table. A scroll box clips its content, including absolutely
 positioned `.help` tooltips, and the Frame's title/scope/date lines leave the first table rows'
