@@ -66,14 +66,15 @@ class ReportEditorController {
         filterViewAssembler,
         NEW_PATH,
         hxRequest,
-        null);
+        PresetRendering.draftToggle(effective, unsaved, NEW_PATH));
   }
 
   /**
    * "Save as new report" (reporting.md §11a.1): mints a new owned Report from whatever the caller's
    * actions strip resubmits — a Preset's own spec, a saved Report's (with or without unsaved
    * changes), or a not-yet-saved {@code /reports/new} draft; this endpoint does not need to know
-   * which.
+   * which. The page's explicit expansion set, when it carries one, becomes the new Report's
+   * remembered state (§9.1, issue 02).
    */
   @PostMapping(BASE_PATH + "/save-as-new")
   String saveAsNew(
@@ -83,6 +84,8 @@ class ReportEditorController {
       @RequestParam MultiValueMap<String, String> params) {
     ReportSpec spec = ReportSpecQueryString.fromParams(params);
     SavedReport saved = reportService.save(name, spec, Renderer.valueOf(renderer), trendLine);
+    RowToggle.expandedKeysFrom(params)
+        .ifPresent(keys -> reportService.updateExpandedNodeKeys(saved.reportId(), keys));
     return "redirect:" + BASE_PATH + "/" + saved.reportId();
   }
 }

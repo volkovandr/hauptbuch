@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.analytics;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -9,8 +10,9 @@ import org.springframework.util.MultiValueMap;
 /**
  * Unit tier (CLAUDE.md §6): {@link PresetRendering}'s editor-page helpers (reporting.md §11a.1,
  * plan stage d3) — resolving a draft (including its own renderer/trend line), building the actions
- * strip's view, and {@link PresetRendering#allParams}. Full-page rendering itself is each
- * controller's own integration coverage ({@code ReportControllerIntegrationTest}, {@code
+ * strip's view, {@link PresetRendering#allParams}, and carrying a draft's ephemeral row-tree
+ * expansion (reporting.md §9.1, issue 02). Full-page rendering itself is each controller's own
+ * integration coverage ({@code ReportControllerIntegrationTest}, {@code
  * SavedReportControllerIntegrationTest}, {@code ReportEditorControllerIntegrationTest}).
  */
 class PresetRenderingTest {
@@ -18,6 +20,10 @@ class PresetRenderingTest {
   private static final PresetRendering.Presentation BASE =
       new PresetRendering.Presentation(
           "Category × month matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+
+  private static final PresetRendering.Presentation SAVED_WITH_FOOD_EXPANDED =
+      new PresetRendering.Presentation(
+          "My matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false, Set.of("1"));
 
   @Test
   void resolvePresentationReturnsBaseUnchangedWithNoDraftParams() {
@@ -79,5 +85,81 @@ class PresetRenderingTest {
     assertThat(view.renderer()).isEqualTo("TABLE");
     assertThat(view.trendLine()).isFalse();
     assertThat(ReportSpecQueryString.fromParams(view.specParams())).isEqualTo(BASE.spec());
+  }
+
+  // ── a draft's ephemeral expansion state (reporting.md §9.1, issue 02) ───────────────────────
+
+  @Test
+  void resolvePresentationTakesExpansionFromParamsWithoutMakingDraft() {
+    // A Preset or /reports/new toggled before any setting changed: only the expansion is in the
+    // URL, so the spec stays the base's own and the page is not an unsaved draft.
+    MultiValueMap<String, String> params = RowToggle.expansionParams(Set.of("7"));
+
+    PresetRendering.Presentation effective = PresetRendering.resolvePresentation(BASE, params);
+
+    assertThat(ReportSpecQueryString.isPresent(params)).isFalse();
+    assertThat(effective.spec()).isEqualTo(BASE.spec());
+    assertThat(effective.expandedNodeKeys()).containsExactly("7");
+  }
+
+  @Test
+  void draftWithNoExpansionParamStartsFromTheSavedReportsOwnExpansion() {
+    MultiValueMap<String, String> params = ReportSpecQueryString.toParams(Presets.balanceSheet());
+
+    PresetRendering.Presentation effective =
+        PresetRendering.resolvePresentation(SAVED_WITH_FOOD_EXPANDED, params);
+
+    assertThat(effective.expandedNodeKeys()).containsExactly("1");
+  }
+
+  @Test
+  void draftsOwnExpansionOverridesTheSavedReportsOne() {
+    MultiValueMap<String, String> params = ReportSpecQueryString.toParams(Presets.balanceSheet());
+    params.addAll(RowToggle.expansionParams(Set.of("2")));
+
+    PresetRendering.Presentation effective =
+        PresetRendering.resolvePresentation(SAVED_WITH_FOOD_EXPANDED, params);
+
+    assertThat(effective.expandedNodeKeys()).containsExactly("2");
+  }
+
+  @Test
+  void allParamsCarriesTheExpansionOnlyOnceItIsExplicit() {
+    assertThat(RowToggle.expandedKeysFrom(PresetRendering.allParams(BASE))).isEmpty();
+    assertThat(
+            RowToggle.expandedKeysFrom(PresetRendering.allParams(SAVED_WITH_FOOD_EXPANDED))
+                .orElseThrow())
+        .containsExactly("1");
+  }
+
+  @Test
+  void editorViewCarriesTheExpansionSoSavingKeepsIt() {
+    PresetRendering.ReportEditorView view =
+        PresetRendering.editorView(
+            SAVED_WITH_FOOD_EXPANDED, true, 42L, "My matrix", "/reports/42", "My matrix copy");
+
+    assertThat(RowToggle.expandedKeysFrom(view.specParams()).orElseThrow()).containsExactly("1");
+  }
+
+  @Test
+  void draftToggleCarriesTheWholeStateButNotTheOldExpansion() {
+    PresetRendering.Presentation draft =
+        new PresetRendering.Presentation(
+            "My matrix", Presets.balanceSheet(), Renderer.TABLE, false, Set.of("1"));
+
+    RowToggle toggle = PresetRendering.draftToggle(draft, true, "/reports/42");
+
+    assertThat(toggle.persists()).isFalse();
+    assertThat(ReportSpecQueryString.fromParams(toggle.carriedParams()))
+        .isEqualTo(Presets.balanceSheet());
+    assertThat(toggle.carriedParams()).doesNotContainKey(RowToggle.EXPANDED);
+    assertThat(toggle.expandedKeys()).containsExactly("1");
+  }
+
+  @Test
+  void toggleOnUneditedPageCarriesNoSpecSoItDoesNotBecomeDraft() {
+    RowToggle toggle = PresetRendering.draftToggle(BASE, false, "/reports/new");
+
+    assertThat(toggle.carriedParams()).isEmpty();
   }
 }

@@ -1,8 +1,8 @@
 # Hauptbuch — Reporting: the Report Engine, Renderers & Layouts
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.2
-**Date:** 2026-09-13
+**Status:** Draft v0.3
+**Date:** 2026-09-24
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (§5.9, FR-ANA-01–10, FR-REP-01–14),
 `data-model.md` (§4 signs, §5 leaves-only, §6.1 the two valuation rules, §10 tags),
@@ -397,10 +397,18 @@ Every hierarchical dimension (Category, Account, Tag) and the Date ladder render
 tree on the row axis**, expanded in place via htmx fragment swaps. **Column-axis expansion is not in
 v1** — expanding a column reshapes the grid rather than adding a line.
 
-Expansion state is **remembered against the saved Report** (not per browser, not in the URL): it is a
-property of "my Food matrix", not of this session. It is deliberately the *one* piece of view state
-that persists; sort order and the current range live in the URL. An unsaved Report falls back to its
-initial setting each time, which is fine because it is throwaway.
+Expansion state is **remembered against the saved Report** (not per browser): it is a property of
+"my Food matrix", not of this session. It is deliberately the *one* piece of view state that
+persists; sort order and the current range live in the URL. A toggle on a saved Report with no
+unsaved edits writes it straight to the Report.
+
+**A draft's expansion is ephemeral** (a Preset, `/reports/new`, or a saved Report with unsaved
+edits): it is never persisted, but it travels with the draft's own state (§11a.1), so it survives
+toggles and settings changes on the page. Because the draft lives in the URL, a reload or bookmark of
+it keeps the expansion too. A draft starts from the saved Report's remembered expansion (or `auto`),
+and **saving it**, by Save or Save as new report, makes its current expansion the Report's
+remembered state. Toggling a row on a page with no other edits carries only the expansion, so it
+does not make the page an unsaved draft.
 
 ### 9.2 The initial state is `auto`
 
@@ -408,8 +416,8 @@ Three states — **`auto`** (the default), `collapsed`, `expanded`. `auto` means
 dimension selects **exactly one** hierarchy node, start **expanded** (you asked about one thing; show
 its parts); if it selects two or more, or none, start **collapsed**. **Date** is never selected by
 a filter (the range is not one), so under `auto` it always starts collapsed at its ladder's chosen
-rung. Once expand/collapse is used by hand on a saved Report, the remembered state (§9.1) takes over
-from `auto` for that Report.
+rung. Once expand/collapse is used by hand, the explicit state (§9.1) takes over from `auto`: for good
+on a saved Report, for as long as the draft lives otherwise.
 
 A **parent row** is either a **subtotal** or a **group header only**, per Report. With `Tag is one of
 {Trips}`, `rows = [Tag, Category]`, `auto` expansion and group-header parents, `Trips` renders as a
@@ -703,6 +711,8 @@ management screen.
 
 ## Changelog
 
+- **v0.3 (2026-09-24):** **§9.1/§9.2**: a draft's expansion is no longer thrown away; it is
+  ephemeral state that travels with the draft and becomes the Report's on save (reporting issue 02).
 - **v0.2 (2026-09-13):** From a grilling pass on the missing editor — v0.1 specified no UI for
   choosing dimensions, measures, scope, filters or renderer. New **§11a**: a Report's page is its
   editor (no separate viewer), drafts in the URL, live controls vs Apply groups, the measure grid,

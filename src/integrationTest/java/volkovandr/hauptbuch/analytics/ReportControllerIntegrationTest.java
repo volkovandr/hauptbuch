@@ -117,6 +117,31 @@ class ReportControllerIntegrationTest {
   }
 
   @Test
+  void presetTogglesRowsWithoutPersistingOrBecomingDraft() throws Exception {
+    // Issue 02: a Preset can never be saved over, so its expansion lives only in the URL.
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long food = insertAccount("Food", "expense", "EUR", null);
+    long bakery = insertAccount("Bakery", "expense", "EUR", food);
+    postSingleCurrency(cash, bakery, LocalDate.now(), "20.00");
+
+    mockMvc
+        .perform(get("/reports/preset/category-month-matrix"))
+        .andExpect(
+            content()
+                .string(
+                    containsString(
+                        "hx-get=\"/reports/preset/category-month-matrix?expanded=" + food + "\"")));
+
+    mockMvc
+        .perform(
+            get("/reports/preset/category-month-matrix")
+                .param(RowToggle.EXPANDED, String.valueOf(food)))
+        .andExpect(content().string(containsString("padding-left: 20px")))
+        .andExpect(content().string(not(containsString("Unsaved changes"))));
+  }
+
+  @Test
   void balanceSheetRendersTheAccountsCurrentClosingBalance() throws Exception {
     settingsService.setBaseCurrency("EUR");
     long opening = insertAccount("Opening Balances", "equity", "EUR", null);

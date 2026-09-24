@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.springframework.util.LinkedMultiValueMap;
 
 /**
  * Unit tier (CLAUDE.md §6): {@link ReportTableViewAssembler}'s pass-through of the "scope misses
@@ -158,43 +159,45 @@ class ReportTableViewAssemblerTest {
         null);
   }
 
-  // ── row-tree metadata and toggle enablement (plan stage e2) ─────────────────────────────────
+  // ── row-tree metadata and toggle URLs (plan stage e2, issue 02) ────────────────────────────────
 
   @Test
-  void fourArgOverloadLeavesToggleDisabled() {
-    ReportGrid grid = gridOf(Cell.BLANK);
+  void fourArgOverloadOffersNoToggle() {
+    ReportTableView view =
+        ReportTableViewAssembler.assemble("Title", spec(), foodWithRestaurants(), "EUR");
 
-    ReportTableView view = ReportTableViewAssembler.assemble("Title", spec(), grid, "EUR");
-
-    assertThat(view.toggleReportId()).isNull();
+    assertThat(view.rows()).extracting(ReportTableView.RowView::toggleUrl).containsOnlyNulls();
   }
 
   @Test
-  void fiveArgOverloadCarriesTheToggleReportIdOntoTheView() {
-    ReportGrid grid = gridOf(Cell.BLANK);
+  void onlyExpandableRowsGetTheToggleUrl() {
+    ReportTableView view =
+        ReportTableViewAssembler.assemble(
+            "Title", spec(), foodWithRestaurants(), "EUR", RowToggle.persisted(42L));
 
-    ReportTableView view = ReportTableViewAssembler.assemble("Title", spec(), grid, "EUR", 42L);
+    assertThat(view.togglePersists()).isTrue();
+    assertThat(view.rows().get(0).toggleUrl()).isEqualTo("/reports/42/expand?node=1");
+    assertThat(view.rows().get(1).toggleUrl()).isNull();
+  }
 
-    assertThat(view.toggleReportId()).isEqualTo(42L);
+  @Test
+  void ephemeralToggleStartsFromTheRowsAutoExpanded() {
+    // Food is expanded on screen (auto) with no explicit set yet: its toggle collapses it.
+    ReportTableView view =
+        ReportTableViewAssembler.assemble(
+            "Title",
+            spec(),
+            foodWithRestaurants(),
+            "EUR",
+            RowToggle.ephemeral("/reports/new", new LinkedMultiValueMap<>(), null));
+
+    assertThat(view.togglePersists()).isFalse();
+    assertThat(view.rows().get(0).toggleUrl()).isEqualTo("/reports/new?expanded=");
   }
 
   @Test
   void eachRowCarriesItsOwnNodesKeyDepthExpandableAndExpanded() {
-    ReportGrid grid =
-        new ReportGrid(
-            List.of(
-                new AxisNode("1", "Food", 0, true, null, true),
-                new AxisNode("1|10", "Restaurants", 1, false, "1", false)),
-            List.of(new AxisNode("total", "Total")),
-            List.of(
-                List.of(new Cell.Value(new BigDecimal("35"), "EUR")),
-                List.of(new Cell.Value(new BigDecimal("30"), "EUR"))),
-            List.of(),
-            List.of(),
-            Cell.BLANK,
-            START,
-            END,
-            null);
+    ReportGrid grid = foodWithRestaurants();
 
     ReportTableView view = ReportTableViewAssembler.assemble("Title", spec(), grid, "EUR");
 
@@ -209,5 +212,22 @@ class ReportTableViewAssemblerTest {
     assertThat(child.depth()).isEqualTo(1);
     assertThat(child.expandable()).isFalse();
     assertThat(child.expanded()).isFalse();
+  }
+
+  private static ReportGrid foodWithRestaurants() {
+    return new ReportGrid(
+        List.of(
+            new AxisNode("1", "Food", 0, true, null, true),
+            new AxisNode("1|10", "Restaurants", 1, false, "1", false)),
+        List.of(new AxisNode("total", "Total")),
+        List.of(
+            List.of(new Cell.Value(new BigDecimal("35"), "EUR")),
+            List.of(new Cell.Value(new BigDecimal("30"), "EUR"))),
+        List.of(),
+        List.of(),
+        Cell.BLANK,
+        START,
+        END,
+        null);
   }
 }

@@ -519,10 +519,10 @@ class SavedReportControllerIntegrationTest {
   // (no filter panel), so "Bakery" alone is reliable there.
 
   @Test
-  void toggleResponseIsJustTheTableWithNoBodyWrapper() throws Exception {
-    // reporting issue 01: the fragment used to be named "body", the same string as its enclosing
-    // <body> tag, and Thymeleaf's selector picked the tag — every caller got a stray <body>
-    // wrapper.
+  void toggleResponseIsThePageFragmentWithNoBodyWrapper() throws Exception {
+    // Issue 02: the toggle re-renders the page region, like a settings change, so the settings
+    // strip's and actions strip's hidden fields carry the new expansion too. Reporting issue 01's
+    // concern still holds: no stray <body> wrapper around the fragment.
     settingsService.setBaseCurrency("EUR");
     long food = insertAccount("Food", "expense", "EUR", null);
     insertAccount("Bakery", "expense", "EUR", food);
@@ -539,7 +539,7 @@ class SavedReportControllerIntegrationTest {
             .getResponse()
             .getContentAsString();
 
-    assertThat(fragment.strip()).startsWith("<table").doesNotContain("<body");
+    assertThat(fragment.strip()).startsWith("<div id=\"report-page\"").doesNotContain("<body");
   }
 
   @Test
@@ -811,6 +811,88 @@ class SavedReportControllerIntegrationTest {
     assertThat(headerOnlyPage).contains("Bakery").containsOnlyOnce("20,00");
     assertThat(subtotalPage).contains("Bakery");
     assertThat(occurrences(subtotalPage, "20,00")).isEqualTo(2); // Food's own cell, and Bakery's
+  }
+
+  // ── a draft's ephemeral expansion (reporting.md §9.1, issue 02) ─────────────────────────────
+
+  @Test
+  void draftOffersToggleThatReGetsThePageRatherThanPersisting() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long food = insertAccount("Food", "expense", "EUR", null);
+    long bakery = insertAccount("Bakery", "expense", "EUR", food);
+    postSingleCurrency(cash, bakery, LocalDate.now(), "20.00");
+    SavedReport saved =
+        reportService.save("My matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+    MultiValueMap<String, String> draft =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()).params(draft))
+        .andExpect(content().string(containsString("hx-get=\"/reports/" + saved.reportId() + "?")))
+        .andExpect(content().string(not(containsString("report__toggle--static"))));
+
+    draft.add(RowToggle.EXPANDED, String.valueOf(food));
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()).params(draft))
+        .andExpect(content().string(containsString("padding-left: 20px")))
+        .andExpect(content().string(containsString("Unsaved changes")));
+
+    // Ephemeral: the saved Report's own remembered state is untouched.
+    assertThat(reportService.find(saved.reportId()).orElseThrow().expandedNodeKeys()).isNull();
+  }
+
+  @Test
+  void draftsExpansionRidesAlongInEverySettingsFormSoItSurvivesTheNextChange() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long food = insertAccount("Food", "expense", "EUR", null);
+    long bakery = insertAccount("Bakery", "expense", "EUR", food);
+    postSingleCurrency(cash, bakery, LocalDate.now(), "20.00");
+    SavedReport saved =
+        reportService.save("My matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+    MultiValueMap<String, String> draft =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    draft.add(RowToggle.EXPANDED, String.valueOf(food));
+
+    String page =
+        mockMvc
+            .perform(get("/reports/" + saved.reportId()).params(draft))
+            .andReturn()
+            .getResponse()
+            .getContentAsString()
+            .replaceAll("\\s+", " ");
+
+    String hiddenExpansion = "<input type=\"hidden\" name=\"expanded\" value=\"" + food + "\" />";
+    // Rows & columns, Measures, Scope (x2), Filters, Date range, Display, Renderer, and both
+    // Save forms all resubmit it.
+    assertThat(occurrences(page, hiddenExpansion)).isGreaterThanOrEqualTo(8);
+
+    // The next change (Display: row totals flipped) resubmits it, and Food is still expanded.
+    draft.set("rowTotals", String.valueOf(!Presets.categoryMonthMatrix().rowTotals()));
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()).params(draft))
+        .andExpect(content().string(containsString("padding-left: 20px")));
+  }
+
+  @Test
+  void savingDraftKeepsItsExpansionAsTheReportsRememberedState() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    MultiValueMap<String, String> draft =
+        ReportSpecQueryString.toParams(Presets.categoryMonthMatrix());
+    draft.add(RowToggle.EXPANDED, "7");
+    draft.add("name", "My matrix");
+    draft.add("renderer", "TABLE");
+    draft.add("trendLine", "false");
+    SavedReport saved =
+        reportService.save("My matrix", Presets.categoryMonthMatrix(), Renderer.TABLE, false);
+
+    mockMvc
+        .perform(post("/reports/" + saved.reportId() + "/save").params(draft))
+        .andExpect(status().is3xxRedirection());
+
+    assertThat(reportService.find(saved.reportId()).orElseThrow().expandedNodeKeys())
+        .containsExactly("7");
   }
 
   private static int occurrences(String haystack, String needle) {
