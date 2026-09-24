@@ -1,6 +1,6 @@
 # Category/Account filter: unticked nodes and their untouched parents still render as rows
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: medium
 Area: Reporting (`analytics` module: `ReportQueryRepository` candidate queries, `ReportDataFetcher`, `ReportGridBuilder`, `RowColumnSuppression`, `ReportEngine`; `docs/reporting.md` §4, §6.3, §7.3, §9)
@@ -98,7 +98,7 @@ reporting slice f (f's "a cell's postings match the list it opens" guarantee nee
 first). The grilling also produced `19-counterpart-report-account-by-category.md` (deferred until
 after f) and `20-sign-presentation-of-spending-and-income.md`.
 
-Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation. How each decided rule
+Implemented 2026-09-24 (branch `feat/reporting`), owner-confirmed the same day. How each decided rule
 is met:
 
 - **Rules 1 and 3 (grouping).** The account and tag "top ancestor" CTEs take the ticked ids as extra
