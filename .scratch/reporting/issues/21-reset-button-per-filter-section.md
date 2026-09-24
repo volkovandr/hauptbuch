@@ -1,6 +1,6 @@
 # Each filter section needs a Reset button to clear its own filter in one click
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: low
 Area: Reporting (`analytics` module, `fragments/report-filters.html`, `ReportFilterView`)
@@ -43,7 +43,7 @@ Filed 2026-09-24 from owner testing, right after issues 06/11 were confirmed. Th
 **before reporting slice f**. Related: `03-filters-panel-sections-stacked-with-cramped-scroll-boxes.md`
 (the cramped lists that make unticking painful).
 
-Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation. Each section record
+Implemented 2026-09-24 (branch `feat/reporting`), owner-confirmed the same day. Each section record
 gains `filtered`. A filtered section renders a hidden `filter-reset-<FIELD>` form carrying its
 `otherParams()` alone (expansion included), plus a ghost **Reset** button beside Apply that submits
 that form via `form=`. It re-GETs the page exactly as Apply does, with no JS and no new endpoint.
