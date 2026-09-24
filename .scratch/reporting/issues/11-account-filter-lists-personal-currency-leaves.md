@@ -1,6 +1,6 @@
 # Account filter lists anonymous `personal.<CUR>` entries instead of one "Personal debts" entry
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: low
 Area: Reporting (`analytics` module: Account filter options, `fragments/report-filters.html`)
@@ -43,7 +43,7 @@ compiles to "all `person_leaf` accounts", the same predicate as 06's top-level r
 The label is "Personal debts", shared with 06. Under issue 08's rule, ticking it makes "Personal
 debts" a top-level axis node when Account is also a dimension.
 
-Implemented 2026-09-24 with issue 06 (branch `feat/reporting`), awaiting owner confirmation. The
+Implemented 2026-09-24 with issue 06 (branch `feat/reporting`), owner-confirmed the same day. The
 Account filter no longer lists debt leaves. One "Personal debts" entry stores `personal`, which
 compiles to every debt leaf, and under issue 08's rule makes "Personal debts" a top-level node when
 Account is also a dimension.
