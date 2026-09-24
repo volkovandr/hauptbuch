@@ -1,6 +1,6 @@
 # A pie with a single non-zero slice renders empty (legend only)
 
-Status: needs-triage
+Status: resolved
 Category: bug
 Severity: medium
 Area: Reporting (`analytics` module: `ChartSvgWriter.pie`/`pieSlice`)
@@ -40,7 +40,7 @@ of `Cash` split per child account) is still blocked after this fix. Slices come 
 axis, which can't be expanded in v1 (`reporting.md` §9.1, Q-REP-2). See the comment on
 `08-unticked-hierarchy-nodes-still-render-as-rows.md`.
 
-Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation. A pie with exactly one
+Implemented 2026-09-24 (branch `feat/reporting`, 5775440), owner-confirmed 2026-09-24, legend changes included. A pie with exactly one
 positive value draws a full disc (`<circle>`, via `ChartSvgWriter`'s existing `circle` helper)
 instead of a 2π arc. The triage point is taken too: the pie legend lists only the columns that have
 a slice, each in its slice's own column colour, and it shows even for a single slice (the lone disc
