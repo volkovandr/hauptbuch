@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -1625,7 +1626,7 @@ class ReportQuerySqlLogicTest {
         .param("a", snacksEur)
         .update();
 
-    assertThat(repository.childAccountCandidates(food, true))
+    assertThat(repository.childAccountCandidates(food, true, List.of()))
         .extracting(TopLevelNode::label)
         .containsExactlyInAnyOrder("Restaurants", "Snacks");
   }
@@ -1640,7 +1641,7 @@ class ReportQuerySqlLogicTest {
     insertAccount("Fast food", "expense", EUR, restaurants);
     insertAccount("Snacks", "expense", EUR, food); // a sibling leaf — no children of its own
 
-    assertThat(repository.childAccountCandidates(food, true))
+    assertThat(repository.childAccountCandidates(food, true, List.of()))
         .extracting(TopLevelNode::label, TopLevelNode::hasChildren)
         .containsExactlyInAnyOrder(tuple("Restaurants", true), tuple("Snacks", false));
   }
@@ -1726,7 +1727,7 @@ class ReportQuerySqlLogicTest {
 
     // "(unspecified)" sits where a real catch-all child would — a synthetic *first* child, not an
     // afterthought appended last (reporting.md §9.3).
-    assertThat(repository.childTagCandidates(trip))
+    assertThat(repository.childTagCandidates(trip, List.of()))
         .extracting(TopLevelNode::label)
         .containsExactly("(unspecified)", "Prague", "Vienna");
   }
@@ -1738,7 +1739,7 @@ class ReportQuerySqlLogicTest {
     insertTag("Old town", prague);
     insertTag("Vienna", trip); // a sibling leaf — no children of its own
 
-    assertThat(repository.childTagCandidates(trip))
+    assertThat(repository.childTagCandidates(trip, List.of()))
         .extracting(TopLevelNode::label, TopLevelNode::hasChildren)
         .containsExactly(
             tuple("(unspecified)", false), tuple("Prague", true), tuple("Vienna", false));
@@ -1845,5 +1846,273 @@ class ReportQuerySqlLogicTest {
             .map(RawTurnoverCell::nativeAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     amount(childrenSum, "130.00");
+  }
+
+  // ── promoted nodes: ticked hierarchy nodes as the axis's top level (reporting issue 08) ────
+  //
+  // A filter on the axis dimension's own field promotes its ticked nodes to the top level: each
+  // is its own root, and the walk from a real root stops at it, so nothing is counted twice.
+
+  private static QueryConstraints promotingAccounts(ReportFilter filter, long... accountIds) {
+    return new QueryConstraints(
+        List.of(filter), Arrays.stream(accountIds).boxed().toList(), List.of());
+  }
+
+  private static ReportFilter accountFilter(FilterLevel level, long... accountIds) {
+    return new ReportFilter(
+        FilterField.ACCOUNT,
+        level,
+        FilterOperator.IS_ONE_OF,
+        Arrays.stream(accountIds).mapToObj(String::valueOf).toList());
+  }
+
+  @Test
+  void promotedAccountCandidatesAreTheTickedNodesLabelledWithTheirFullPath() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long cashEur = insertAccount("Cash-EUR", "asset", EUR, cash);
+    long bankAaa = insertAccount("BankAaa", "asset", EUR, null);
+    insertAccount("Checking", "asset", EUR, bankAaa);
+    long food = insertAccount("Food", "expense", EUR, null);
+    long restaurants = insertAccount("Restaurants", "expense", EUR, food);
+    long italian = insertAccount("Italian", "expense", EUR, restaurants);
+
+    assertThat(
+            repository.promotedAccountCandidates(
+                List.of(cashEur, bankAaa, italian), List.of("asset", "expense"), true))
+        .extracting(TopLevelNode::key, TopLevelNode::label, TopLevelNode::hasChildren)
+        .containsExactly(
+            tuple(String.valueOf(bankAaa), "BankAaa", true),
+            tuple(String.valueOf(cashEur), "Cash:Cash-EUR", false),
+            tuple(String.valueOf(italian), "Food:Restaurants:Italian", false));
+  }
+
+  @Test
+  void promotedAccountCandidatesKeepOnlyTheGivenTypes() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+
+    assertThat(repository.promotedAccountCandidates(List.of(cash, food), List.of("asset"), true))
+        .extracting(TopLevelNode::label)
+        .containsExactly("Cash");
+  }
+
+  @Test
+  void accountTreeTurnoverGroupsUnderThePromotedNodeAndItsRealRootNoLongerCountsIt() {
+    long opening = insertAccount("Opening Balances", "equity", EUR, null);
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long cashEur = insertAccount("Cash-EUR", "asset", EUR, cash);
+    long wallet = insertAccount("Wallet", "asset", EUR, cashEur); // under the promoted node
+    long cashUsd = insertAccount("Cash-USD", "asset", EUR, cash);
+    postSingleCurrency(opening, wallet, LocalDate.of(2026, 1, 5), "20.00");
+    postSingleCurrency(opening, cashUsd, LocalDate.of(2026, 1, 6), "7.00");
+
+    List<RawTurnoverCell> cells =
+        repository.accountTreeTurnover(
+            List.of("asset"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            promotingAccounts(accountFilter(FilterLevel.TRANSACTION, cashEur, cashUsd), cashEur));
+
+    assertThat(cells)
+        .extracting(RawTurnoverCell::dimensionKey)
+        .containsExactlyInAnyOrder(String.valueOf(cashEur), String.valueOf(cash));
+    amount(byLabelAndMonth(cells, "Cash-EUR", "2026-01").nativeAmount(), "20.00");
+    amount(byLabelAndMonth(cells, "Cash", "2026-01").nativeAmount(), "7.00");
+  }
+
+  @Test
+  void touchingReadingGroupsTheOtherLegOfTickedTransactionUnderItsOwnRealRoot() {
+    // "transactions touching Cash-EUR": a split paid partly from Cash-EUR and partly from
+    // BankBbb's checking account shows the BankBbb leg under BankBbb; an untouched account never
+    // appears.
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long cashEur = insertAccount("Cash-EUR", "asset", EUR, cash);
+    long bankBbb = insertAccount("BankBbb", "asset", EUR, null);
+    long checking = insertAccount("Checking", "asset", EUR, bankBbb);
+    long food = insertAccount("Food", "expense", EUR, null);
+    long split = insertTransaction(LocalDate.of(2026, 1, 5), false, false);
+    insertPosting(split, cashEur, "-10.00", null);
+    insertPosting(split, checking, "-30.00", null);
+    insertPosting(split, food, "40.00", null);
+    long bankCcc = insertAccount("BankCcc", "asset", EUR, null);
+    postSingleCurrency(bankCcc, food, LocalDate.of(2026, 1, 6), "99.00");
+
+    List<RawTurnoverCell> cells =
+        repository.accountTreeTurnover(
+            List.of("asset"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            promotingAccounts(accountFilter(FilterLevel.TRANSACTION, cashEur), cashEur));
+
+    assertThat(cells)
+        .extracting(RawTurnoverCell::dimensionKey)
+        .containsExactlyInAnyOrder(String.valueOf(cashEur), String.valueOf(bankBbb));
+    amount(byLabelAndMonth(cells, "Cash-EUR", "2026-01").nativeAmount(), "-10.00");
+    amount(byLabelAndMonth(cells, "BankBbb", "2026-01").nativeAmount(), "-30.00");
+  }
+
+  @Test
+  void accountTreeClosingBalanceGroupsUnderThePromotedNode() {
+    long opening = insertAccount("Opening Balances", "equity", EUR, null);
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long cashEur = insertAccount("Cash-EUR", "asset", EUR, cash);
+    long cashUsd = insertAccount("Cash-USD", "asset", EUR, cash);
+    postSingleCurrency(opening, cashEur, LocalDate.of(2026, 1, 5), "20.00");
+    postSingleCurrency(opening, cashUsd, LocalDate.of(2026, 1, 6), "7.00");
+
+    List<RawBalanceCell> cells =
+        repository.accountTreeClosingBalance(
+            List.of("asset"),
+            LocalDate.of(2026, 1, 31),
+            true,
+            false,
+            promotingAccounts(
+                accountFilter(FilterLevel.POSTING, cashEur, cashUsd), cashEur, cashUsd));
+
+    assertThat(cells)
+        .extracting(RawBalanceCell::dimensionLabel)
+        .containsExactlyInAnyOrder("Cash-EUR", "Cash-USD");
+    amount(byLabel(cells, "Cash-EUR").nativeBalance(), "20.00");
+    amount(byLabel(cells, "Cash-USD").nativeBalance(), "7.00");
+  }
+
+  @Test
+  void childAccountQueriesUnderRealRootSkipThePromotedDescendant() {
+    // Cash is on the axis only as a touched root: expanding it must not list Cash-EUR a second
+    // time, since Cash-EUR is already a top-level node of its own.
+    long opening = insertAccount("Opening Balances", "equity", EUR, null);
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long cashEur = insertAccount("Cash-EUR", "asset", EUR, cash);
+    long cashUsd = insertAccount("Cash-USD", "asset", EUR, cash);
+    postSingleCurrency(opening, cashEur, LocalDate.of(2026, 1, 5), "20.00");
+    postSingleCurrency(opening, cashUsd, LocalDate.of(2026, 1, 6), "7.00");
+    // No filter needed here: the promotion alone is what the child queries must respect.
+    QueryConstraints promotedOnly = new QueryConstraints(List.of(), List.of(cashEur), List.of());
+
+    List<RawTurnoverCell> cells =
+        repository.childAccountTurnover(
+            cash,
+            List.of("asset"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            promotedOnly);
+
+    assertThat(cells).extracting(RawTurnoverCell::dimensionLabel).containsExactly("Cash-USD");
+    assertThat(repository.childAccountCandidates(cash, true, List.of(cashEur)))
+        .extracting(TopLevelNode::label)
+        .containsExactly("Cash-USD");
+  }
+
+  @Test
+  void tagTurnoverGroupsUnderThePromotedTag() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+    long trips = insertTag("Trips", null);
+    long italy = insertTag("Italy", trips);
+    long italyTxn = insertTransaction(LocalDate.of(2026, 1, 5), false, false);
+    insertPosting(italyTxn, cash, "-20.00", null);
+    tag(insertPosting(italyTxn, food, "20.00", null), italy);
+    long spain = insertTag("Spain", trips);
+    long spainTxn = insertTransaction(LocalDate.of(2026, 1, 6), false, false);
+    insertPosting(spainTxn, cash, "-7.00", null);
+    tag(insertPosting(spainTxn, food, "7.00", null), spain);
+    ReportFilter filter =
+        new ReportFilter(
+            FilterField.TAG,
+            FilterLevel.POSTING,
+            FilterOperator.IS_ONE_OF,
+            List.of(String.valueOf(italy)));
+
+    List<RawTurnoverCell> cells =
+        repository.tagTurnover(
+            List.of("expense"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            new QueryConstraints(List.of(filter), List.of(), List.of(italy)));
+
+    assertThat(cells).extracting(RawTurnoverCell::dimensionLabel).containsExactly("Italy");
+    amount(cells.get(0).nativeAmount(), "20.00");
+    assertThat(repository.promotedTagCandidates(List.of(italy)))
+        .extracting(TopLevelNode::key, TopLevelNode::label)
+        .containsExactly(tuple(String.valueOf(italy), "Trips:Italy"));
+    assertThat(repository.childTagCandidates(trips, List.of(italy)))
+        .extracting(TopLevelNode::label)
+        .containsExactly("(unspecified)", "Spain");
+  }
+
+  @Test
+  void subtreeFilterOfRealRootStopsAtThePromotedDescendant() {
+    // Expanding a touched real root on a nested axis scopes the inner breakdown with a synthetic
+    // filter on that root's subtree: it must leave out the promoted descendant, or the children
+    // would count it a second time and no longer sum to the root's own row.
+    long opening = insertAccount("Opening Balances", "equity", EUR, null);
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long cashEur = insertAccount("Cash-EUR", "asset", EUR, cash);
+    long cashUsd = insertAccount("Cash-USD", "asset", EUR, cash);
+    postSingleCurrency(opening, cashEur, LocalDate.of(2026, 1, 5), "20.00");
+    postSingleCurrency(opening, cashUsd, LocalDate.of(2026, 1, 6), "7.00");
+    ReportFilter underCash = accountFilter(FilterLevel.POSTING, cash);
+
+    List<RawTurnoverCell> cells =
+        repository.totalTurnover(
+            List.of("asset"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            new QueryConstraints(List.of(underCash), List.of(cashEur), List.of()));
+
+    assertThat(cells).hasSize(1);
+    amount(cells.get(0).nativeAmount(), "7.00");
+  }
+
+  @Test
+  void unspecifiedBucketStillWorksUnderPromotedTag() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+    long trips = insertTag("Trips", null);
+    long italy = insertTag("Italy", trips);
+    long direct = insertTransaction(LocalDate.of(2026, 1, 5), false, false);
+    insertPosting(direct, cash, "-20.00", null);
+    tag(insertPosting(direct, food, "20.00", null), italy);
+    long rome = insertTag("Rome", italy);
+    long inRome = insertTransaction(LocalDate.of(2026, 1, 6), false, false);
+    insertPosting(inRome, cash, "-7.00", null);
+    tag(insertPosting(inRome, food, "7.00", null), rome);
+
+    List<RawTurnoverCell> cells =
+        repository.childTagTurnover(
+            italy,
+            List.of("expense"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            new QueryConstraints(List.of(), List.of(), List.of(italy)));
+
+    assertThat(cells)
+        .extracting(RawTurnoverCell::dimensionLabel)
+        .containsExactlyInAnyOrder("(unspecified)", "Rome");
+    amount(byLabelAndMonth(cells, "(unspecified)", "2026-01").nativeAmount(), "20.00");
   }
 }

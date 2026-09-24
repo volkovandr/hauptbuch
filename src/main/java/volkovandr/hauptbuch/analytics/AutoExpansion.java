@@ -52,18 +52,10 @@ final class AutoExpansion {
    * other top-level candidate of the same dimension too.
    */
   static Set<String> autoExpandedKeys(Dimension dimension, ReportSpec spec) {
-    if (!isNestable(dimension)) {
-      return Set.of();
-    }
-    FilterField field = toFilterField(dimension);
-    for (ReportFilter filter : spec.filters()) {
-      if (filter.field() == field
-          && filter.operator() == FilterOperator.IS_ONE_OF
-          && filter.values().size() == 1) {
-        return Set.copyOf(filter.values());
-      }
-    }
-    return Set.of();
+    return PromotedNodes.ownFilter(dimension, spec)
+        .filter(filter -> filter.values().size() == 1)
+        .map(filter -> Set.copyOf(filter.values()))
+        .orElse(Set.of());
   }
 
   /**

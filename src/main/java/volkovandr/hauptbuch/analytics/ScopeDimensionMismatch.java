@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The "scope misses the dimension" message (reporting.md §6.1): {@link Dimension#CATEGORY} and
@@ -35,6 +36,18 @@ final class ScopeDimensionMismatch {
    */
   static List<String> accountTypesFor(Dimension dimension) {
     return EXPECTED_TYPES.get(dimension);
+  }
+
+  /**
+   * The account types a Category or Account query walks (reporting.md §4, whatever else the scope
+   * holds): the dimension's own types that are in scope — all of them for an every-type (empty)
+   * scope. Empty when the scope has none of them, and then nothing is queried at all.
+   */
+  static Optional<List<String>> ownAccountTypes(Dimension dimension, List<String> scopeTypes) {
+    List<String> own = accountTypesFor(dimension);
+    List<String> inScope =
+        scopeTypes.isEmpty() ? own : own.stream().filter(scopeTypes::contains).toList();
+    return inScope.isEmpty() ? Optional.empty() : Optional.of(inScope);
   }
 
   /**

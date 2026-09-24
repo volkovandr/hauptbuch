@@ -11,30 +11,43 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import volkovandr.hauptbuch.analytics.repository.RawTurnoverCell;
 import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
 import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
  * Unit tier (CLAUDE.md §6): {@link ReportEngine}'s own orchestration and validation — the
- * unsupported-feature guards, axis planning, and that it wires {@link ReportDataFetcher} and {@link
- * ReportGridBuilder} together — with both mocked. Which repository query a dimension maps to is
- * {@link ReportDataFetcherTest}'s job; grid assembly is {@link ReportGridBuilderTest}'s.
+ * unsupported-feature guards, axis planning, and that it wires {@link AxisCandidates}, {@link
+ * ReportDataFetcher} and {@link ReportGridBuilder} together — all mocked. Which repository query a
+ * dimension maps to is {@link AxisCandidatesTest}'s and {@link ReportDataFetcherTest}'s job; grid
+ * assembly is {@link ReportGridBuilderTest}'s.
  */
 class ReportEngineTest {
 
   private static final LocalDate TODAY = LocalDate.of(2026, 9, 12);
 
   private final SettingsService settingsService = mock();
+  private final AxisCandidates axisCandidates = mock();
   private final ReportDataFetcher dataFetcher = mock();
   private final ReportGridBuilder gridBuilder = mock();
-  private final ReportEngine engine = new ReportEngine(settingsService, dataFetcher, gridBuilder);
+  private final ReportEngine engine =
+      new ReportEngine(settingsService, axisCandidates, dataFetcher, gridBuilder);
+
+  /** A fetch no test cares about returns no data, never {@code null}. */
+  @BeforeEach
+  void fetchReturnsNoDataByDefault() {
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
+  }
 
   private void baseIsEur() {
     when(settingsService.baseCurrency()).thenReturn(Optional.of("EUR"));
@@ -199,7 +212,7 @@ class ReportEngineTest {
     assertThat(grid.columns()).isEmpty();
     assertThat(grid.resolvedStart()).isEqualTo(LocalDate.of(2026, 1, 1));
     assertThat(grid.resolvedEnd()).isEqualTo(LocalDate.of(2026, 1, 31));
-    verify(dataFetcher, never()).candidatesFor(any(), any(), any());
+    verify(axisCandidates, never()).candidatesFor(any(), any());
   }
 
   // ── orchestration ─────────────────────────────────────────────────────────
@@ -207,7 +220,7 @@ class ReportEngineTest {
   @Test
   void seriesFillsTheRowSlotWhenRowsIsEmpty() {
     baseIsEur();
-    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any())).thenReturn(Map.of());
+    when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of());
     when(gridBuilder.axisNodes(any(), any(), any())).thenReturn(List.of());
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
     when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
@@ -231,13 +244,13 @@ class ReportEngineTest {
 
     // The series dimension (Date) resolves candidates/data exactly as a rows dimension would —
     // ReportEngine's axis planning treats the two identically (ReportSpec's own javadoc).
-    verify(dataFetcher).candidatesFor(Dimension.CATEGORY, List.of("expense"), s.scope());
+    verify(axisCandidates).candidatesFor(Dimension.CATEGORY, s);
   }
 
   @Test
   void resolvesAxesFetchesDataAndDelegatesToTheGridBuilder() {
     baseIsEur();
-    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any())).thenReturn(Map.of());
+    when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of());
     when(gridBuilder.axisNodes(any(), any(), any())).thenReturn(List.of());
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
     when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
@@ -251,14 +264,14 @@ class ReportEngineTest {
 
     engine.render(s, TODAY);
 
-    verify(dataFetcher).candidatesFor(Dimension.CATEGORY, List.of("expense"), s.scope());
+    verify(axisCandidates).candidatesFor(Dimension.CATEGORY, s);
     verify(gridBuilder).build(eq(s), any(), any(), any(), any(), any(), eq("EUR"), any());
   }
 
   @Test
   void weekLadderChoiceProducesWeekGranularityBuckets() {
     baseIsEur();
-    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any())).thenReturn(Map.of());
+    when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of());
     when(gridBuilder.axisNodes(any(), any(), any())).thenReturn(List.of());
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
     when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
@@ -296,8 +309,7 @@ class ReportEngineTest {
   void expandedFetchesSameDimensionChildCandidatesForEveryTopLevelNode() {
     baseIsEur();
     TopLevelNode food = new TopLevelNode("1", "Food", "expense");
-    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
-        .thenReturn(Map.of("1", food));
+    when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of("1", food));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
     when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
@@ -310,14 +322,14 @@ class ReportEngineTest {
 
     engine.render(s, TODAY, RowExpansion.EXPANDED);
 
-    verify(dataFetcher).childCandidatesFor(Dimension.CATEGORY, "1", s.scope());
+    verify(axisCandidates).childCandidatesFor(Dimension.CATEGORY, "1", s);
   }
 
   @Test
   void collapsedNeverFetchesEitherChildSourceEvenWhenTheAxisNestsTwoDimensions() {
     baseIsEur();
     TopLevelNode trip = new TopLevelNode("1", "Trip", null);
-    when(dataFetcher.candidatesFor(eq(Dimension.TAG), any(), any())).thenReturn(Map.of("1", trip));
+    when(axisCandidates.candidatesFor(eq(Dimension.TAG), any())).thenReturn(Map.of("1", trip));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
     when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
@@ -338,16 +350,16 @@ class ReportEngineTest {
 
     engine.render(s, TODAY, RowExpansion.COLLAPSED);
 
-    verify(dataFetcher, never()).candidatesFor(eq(Dimension.CATEGORY), any(), any());
-    verify(dataFetcher, never()).childCandidatesFor(any(), any(), any());
+    verify(axisCandidates, never()).candidatesFor(eq(Dimension.CATEGORY), any());
+    verify(axisCandidates, never()).childCandidatesFor(any(), any(), any());
   }
 
   @Test
   void expandedFetchesTheInnerDimensionsCandidatesForCrossDimensionNesting() {
     baseIsEur();
     TopLevelNode trip = new TopLevelNode("1", "Trip", null);
-    when(dataFetcher.candidatesFor(eq(Dimension.TAG), any(), any())).thenReturn(Map.of("1", trip));
-    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any())).thenReturn(Map.of());
+    when(axisCandidates.candidatesFor(eq(Dimension.TAG), any())).thenReturn(Map.of("1", trip));
+    when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of());
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
     when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
@@ -368,8 +380,8 @@ class ReportEngineTest {
 
     engine.render(s, TODAY, RowExpansion.EXPANDED);
 
-    verify(dataFetcher).candidatesFor(Dimension.CATEGORY, List.of("expense"), s.scope());
-    verify(dataFetcher, never()).childCandidatesFor(any(), any(), any());
+    verify(axisCandidates).candidatesFor(Dimension.CATEGORY, s);
+    verify(axisCandidates, never()).childCandidatesFor(any(), any(), any());
   }
 
   @Test
@@ -381,7 +393,7 @@ class ReportEngineTest {
     baseIsEur();
     TopLevelNode trip = new TopLevelNode("1", "Trip", null, true);
     TopLevelNode car = new TopLevelNode("2", "Car", null, true);
-    when(dataFetcher.candidatesFor(eq(Dimension.TAG), any(), any()))
+    when(axisCandidates.candidatesFor(eq(Dimension.TAG), any()))
         .thenReturn(Map.of("1", trip, "2", car));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
     when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
@@ -408,8 +420,8 @@ class ReportEngineTest {
 
     engine.render(s, TODAY);
 
-    verify(dataFetcher).childCandidatesFor(Dimension.TAG, "1", s.scope());
-    verify(dataFetcher, never()).childCandidatesFor(eq(Dimension.TAG), eq("2"), any());
+    verify(axisCandidates).childCandidatesFor(Dimension.TAG, "1", s);
+    verify(axisCandidates, never()).childCandidatesFor(eq(Dimension.TAG), eq("2"), any());
   }
 
   // ── stage e2: a saved Report's remembered per-node expansion (reporting.md §9.1) ────────────
@@ -419,7 +431,7 @@ class ReportEngineTest {
     baseIsEur();
     TopLevelNode food = new TopLevelNode("1", "Food", "expense");
     TopLevelNode fuel = new TopLevelNode("2", "Fuel", "expense");
-    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
+    when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any()))
         .thenReturn(Map.of("1", food, "2", fuel));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
     when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
@@ -433,8 +445,8 @@ class ReportEngineTest {
 
     engine.render(s, TODAY, Set.of("1"));
 
-    verify(dataFetcher).childCandidatesFor(Dimension.CATEGORY, "1", s.scope());
-    verify(dataFetcher, never()).childCandidatesFor(eq(Dimension.CATEGORY), eq("2"), any());
+    verify(axisCandidates).childCandidatesFor(Dimension.CATEGORY, "1", s);
+    verify(axisCandidates, never()).childCandidatesFor(eq(Dimension.CATEGORY), eq("2"), any());
   }
 
   @Test
@@ -443,8 +455,7 @@ class ReportEngineTest {
     // A filter selecting exactly one node is auto's own "start expanded" trigger (§9.2) — an
     // explicit (if empty) override must still win over it, since the owner hand-collapsed it.
     TopLevelNode food = new TopLevelNode("1", "Food", "expense");
-    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
-        .thenReturn(Map.of("1", food));
+    when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of("1", food));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
     when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
@@ -470,7 +481,7 @@ class ReportEngineTest {
 
     engine.render(s, TODAY, Set.of());
 
-    verify(dataFetcher, never()).childCandidatesFor(any(), any(), any());
+    verify(axisCandidates, never()).childCandidatesFor(any(), any(), any());
   }
 
   @Test
@@ -481,8 +492,7 @@ class ReportEngineTest {
     // ReportDataFetcher rather than being silently dropped as though it were a stale top-level key.
     baseIsEur();
     TopLevelNode food = new TopLevelNode("1", "Food", "expense");
-    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
-        .thenReturn(Map.of("1", food));
+    when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of("1", food));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
     when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
@@ -495,16 +505,15 @@ class ReportEngineTest {
 
     engine.render(s, TODAY, Set.of("1", "1|10"));
 
-    verify(dataFetcher).childCandidatesFor(Dimension.CATEGORY, "1", s.scope());
-    verify(dataFetcher).childCandidatesFor(Dimension.CATEGORY, "1|10", s.scope());
+    verify(axisCandidates).childCandidatesFor(Dimension.CATEGORY, "1", s);
+    verify(axisCandidates).childCandidatesFor(Dimension.CATEGORY, "1|10", s);
   }
 
   @Test
   void nullExpandedKeysFallsBackToAutoJustLikeTheNoArgOverload() {
     baseIsEur();
     TopLevelNode food = new TopLevelNode("1", "Food", "expense");
-    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
-        .thenReturn(Map.of("1", food));
+    when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of("1", food));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
     when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
@@ -530,15 +539,14 @@ class ReportEngineTest {
 
     engine.render(s, TODAY, (Set<String>) null);
 
-    verify(dataFetcher).childCandidatesFor(Dimension.CATEGORY, "1", s.scope());
+    verify(axisCandidates).childCandidatesFor(Dimension.CATEGORY, "1", s);
   }
 
   @Test
   void effectiveExpandedKeysIntersectsTheExplicitOverrideWithRealCandidates() {
     baseIsEur();
     TopLevelNode food = new TopLevelNode("1", "Food", "expense");
-    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
-        .thenReturn(Map.of("1", food));
+    when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of("1", food));
     ReportSpec s =
         spec(
             List.of(Dimension.CATEGORY),
@@ -556,8 +564,7 @@ class ReportEngineTest {
   void effectiveExpandedKeysDefersToAutoWhenThereIsNoExplicitOverride() {
     baseIsEur();
     TopLevelNode food = new TopLevelNode("1", "Food", "expense");
-    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
-        .thenReturn(Map.of("1", food));
+    when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of("1", food));
     ReportSpec s =
         new ReportSpec(
             List.of(Dimension.CATEGORY),
@@ -657,8 +664,7 @@ class ReportEngineTest {
     baseIsEur();
     stubGridData();
     TopLevelNode food = new TopLevelNode("1", "Food", "expense", true);
-    when(dataFetcher.candidatesFor(eq(Dimension.CATEGORY), any(), any()))
-        .thenReturn(Map.of("1", food));
+    when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of("1", food));
     ReportSpec dateRowsCategoryColumns =
         spec(
             List.of(Dimension.DATE),
@@ -668,7 +674,7 @@ class ReportEngineTest {
 
     engine.render(dateRowsCategoryColumns, TODAY, Set.of("1"));
 
-    verify(dataFetcher, never()).childCandidatesFor(any(), any(), any());
+    verify(axisCandidates, never()).childCandidatesFor(any(), any(), any());
   }
 
   @Test
@@ -682,5 +688,76 @@ class ReportEngineTest {
   @Test
   void effectiveExpandedKeysForDateRowsIsEmptyUnderAuto() {
     assertThat(engine.effectiveExpandedKeys(dateRowsJanToFeb(), null, TODAY)).isEmpty();
+  }
+
+  // ── ticked nodes as the axis's top level (reporting issue 08) ───────────────────────────────
+
+  private static ReportSpec accountRowsFilteredTo(FilterLevel level, String... ids) {
+    return new ReportSpec(
+        List.of(Dimension.ACCOUNT),
+        List.of(Dimension.DATE),
+        List.of(),
+        List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+        Scope.ofTypes("asset"),
+        List.of(
+            new ReportFilter(FilterField.ACCOUNT, level, FilterOperator.IS_ONE_OF, List.of(ids))),
+        new DateRange(
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+        false,
+        false,
+        true);
+  }
+
+  private static RawTurnoverCell turnoverOf(String key) {
+    return new RawTurnoverCell(
+        key, "x", "asset", "2026-01", "EUR", BigDecimal.TEN, BigDecimal.TEN, 0, 1, 1);
+  }
+
+  @Test
+  void touchingKeepsEveryTickedNodeButOnlyTheRealRootsTheDataTouches() {
+    // Cash-EUR is ticked and empty; BankBbb is touched; BankCcc is untouched and must not appear.
+    baseIsEur();
+    when(axisCandidates.candidatesFor(eq(Dimension.ACCOUNT), any()))
+        .thenReturn(
+            Map.of(
+                "12", new TopLevelNode("12", "Cash:Cash-EUR", "asset"),
+                "20", new TopLevelNode("20", "BankBbb", "asset"),
+                "30", new TopLevelNode("30", "BankCcc", "asset")));
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(Leg.NET, List.of(turnoverOf("20"))), Map.of(), Map.of()));
+
+    engine.render(accountRowsFilteredTo(FilterLevel.TRANSACTION, "12"), TODAY);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, TopLevelNode>> candidates = ArgumentCaptor.forClass(Map.class);
+    verify(gridBuilder)
+        .frontierNodes(eq(Dimension.ACCOUNT), any(), candidates.capture(), any(), any(), any());
+    assertThat(candidates.getValue()).containsOnlyKeys("12", "20");
+  }
+
+  @Test
+  void withoutFilterOnTheDimensionsOwnFieldNoCandidateIsDropped() {
+    baseIsEur();
+    when(axisCandidates.candidatesFor(eq(Dimension.ACCOUNT), any()))
+        .thenReturn(Map.of("30", new TopLevelNode("30", "BankCcc", "asset")));
+    when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
+    ReportSpec s =
+        spec(
+            List.of(Dimension.ACCOUNT),
+            List.of(Dimension.DATE),
+            Measure.turnover(PresentationCurrency.BASE, Leg.NET),
+            Scope.ofTypes("asset"));
+
+    engine.render(s, TODAY);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, TopLevelNode>> candidates = ArgumentCaptor.forClass(Map.class);
+    verify(gridBuilder)
+        .frontierNodes(eq(Dimension.ACCOUNT), any(), candidates.capture(), any(), any(), any());
+    assertThat(candidates.getValue()).containsOnlyKeys("30");
   }
 }

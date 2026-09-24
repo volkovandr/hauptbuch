@@ -11,19 +11,18 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import volkovandr.hauptbuch.analytics.repository.QueryConstraints;
 import volkovandr.hauptbuch.analytics.repository.RawBalanceCell;
 import volkovandr.hauptbuch.analytics.repository.ReportQueryRepository;
-import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
 
 /**
  * Unit tier (CLAUDE.md §6): {@link ReportDataFetcher} — which {@link ReportQueryRepository} method
- * a dimension and measure combination maps to, and the closing-balance as-of-date resolution (the
- * range clip and the today clamp, reporting.md §8.2) — with the repository mocked. The SQL itself
- * is {@code ReportQuerySqlLogicTest}'s job.
+ * a dimension and measure combination maps to (with the promoted nodes and the dimension's own
+ * types, reporting issue 08), and the closing-balance as-of-date resolution (the range clip and the
+ * today clamp, reporting.md §8.2) — with the repository mocked. The SQL itself is {@code
+ * ReportQuerySqlLogicTest}'s job.
  */
 class ReportDataFetcherTest {
 
@@ -57,30 +56,24 @@ class ReportDataFetcherTest {
     return new RangeResolver.ResolvedRange(start, end);
   }
 
-  // ── candidatesFor ─────────────────────────────────────────────────────────
-
-  @Test
-  void categoryAndAccountDimensionsFetchTopLevelAccounts() {
-    when(queryRepository.topLevelAccounts(List.of("expense"), true))
-        .thenReturn(List.of(new TopLevelNode("1", "Food", "expense")));
-
-    Map<String, TopLevelNode> candidates =
-        fetcher.candidatesFor(Dimension.CATEGORY, List.of("expense"), Scope.ofTypes("expense"));
-
-    assertThat(candidates).containsOnlyKeys("1");
+  private static ReportSpec filteredSpec(Dimension dim, Scope scope, ReportFilter filter) {
+    return new ReportSpec(
+        dim == null ? List.of() : List.of(dim),
+        List.of(Dimension.DATE),
+        List.of(),
+        List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+        scope,
+        filter == null ? List.of() : List.of(filter),
+        new DateRange(
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+            new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+        false,
+        false,
+        true);
   }
 
-  @Test
-  void tagDimensionFetchesTopLevelTags() {
-    when(queryRepository.topLevelTags()).thenReturn(List.of(new TopLevelNode("1", "Car", null)));
-
-    assertThat(fetcher.candidatesFor(Dimension.TAG, List.of("expense"), Scope.ofTypes("expense")))
-        .containsOnlyKeys("1");
-  }
-
-  @Test
-  void noDimensionFetchesNoCandidates() {
-    assertThat(fetcher.candidatesFor(null, List.of("expense"), Scope.ofTypes("expense"))).isEmpty();
+  private static ReportFilter ownFilter(FilterField field, FilterLevel level, String... ids) {
+    return new ReportFilter(field, level, FilterOperator.IS_ONE_OF, List.of(ids));
   }
 
   // ── fetchGridData: turnover ───────────────────────────────────────────────
@@ -158,6 +151,37 @@ class ReportDataFetcherTest {
             false,
             DateGranularity.MONTH,
             QueryConstraints.NONE);
+  }
+
+  @Test
+  void turnoverQueriesCarryThePromotedNodesAndTheDimensionsOwnTypes() {
+    ReportSpec spec =
+        filteredSpec(
+            Dimension.CATEGORY,
+            Scope.ofTypes("asset", "expense"),
+            ownFilter(FilterField.CATEGORY, FilterLevel.POSTING, "7"));
+
+    fetcher.fetchGridData(
+        spec,
+        axesFor(Dimension.CATEGORY),
+        List.of("asset", "expense"),
+        resolved(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)),
+        List.of(),
+        TODAY,
+        "EUR",
+        Set.of());
+
+    verify(queryRepository)
+        .accountTreeTurnover(
+            List.of("expense"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            "EUR",
+            "NET",
+            true,
+            false,
+            DateGranularity.MONTH,
+            new QueryConstraints(spec.filters(), List.of(7L), List.of()));
   }
 
   // ── fetchGridData: closing balance ────────────────────────────────────────
@@ -329,43 +353,5 @@ class ReportDataFetcherTest {
     assertThat(days.asOfByBucketKey())
         .containsEntry("2026-09-03", LocalDate.of(2026, 9, 3))
         .containsEntry("2026-09-30", TODAY);
-  }
-
-  // ── childCandidatesFor / realId (stage e's parent-key resolution) ──────────
-
-  @Test
-  void childCandidatesForUsesTheWholeKeyAsTheParentIdForTopLevelNode() {
-    fetcher.childCandidatesFor(Dimension.CATEGORY, "5", Scope.ofTypes("expense"));
-
-    verify(queryRepository).childAccountCandidates(5L, true);
-  }
-
-  @Test
-  void childCandidatesForUsesLastSegmentOfCompositeKeyAsTheParentId() {
-    fetcher.childCandidatesFor(Dimension.CATEGORY, "1|10", Scope.ofTypes("expense"));
-
-    verify(queryRepository).childAccountCandidates(10L, true);
-  }
-
-  @Test
-  void childCandidatesForDegradesToNoChildrenForMalformedTrailingSegmentInsteadOfThrowing() {
-    // A stage e2 toggle endpoint's `node` request param, or a persisted expandedNodeKeys entry, is
-    // hand-editable request input — a malformed one (or Tag's own non-numeric "<id>:unspecified"
-    // leaf key, which is never itself expandable and so should never legitimately arrive here as a
-    // parent) must degrade to "no children", not throw and crash the whole render.
-    List<TopLevelNode> children =
-        fetcher.childCandidatesFor(Dimension.CATEGORY, "1|abc", Scope.ofTypes("expense"));
-
-    assertThat(children).isEmpty();
-    verify(queryRepository).childAccountCandidates(-1L, true);
-  }
-
-  @Test
-  void childCandidatesForOnTagDimensionAlsoDegradesGracefullyForMalformedTrailingSegment() {
-    List<TopLevelNode> children =
-        fetcher.childCandidatesFor(Dimension.TAG, "5:unspecified", Scope.ofTypes("expense"));
-
-    assertThat(children).isEmpty();
-    verify(queryRepository).childTagCandidates(-1L);
   }
 }

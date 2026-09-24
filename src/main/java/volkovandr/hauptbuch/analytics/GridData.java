@@ -46,4 +46,31 @@ record GridData(
     days.asOfByBucketKey().forEach((key, date) -> asOf.put(prefix + key, date));
     return new GridData(turnover, balance, asOf);
   }
+
+  /**
+   * Whether any fetched turnover or closing-balance row belongs to the top-level node {@code key} —
+   * a qualifying transaction touched it (reporting issue 08).
+   */
+  boolean hasDataFor(String key) {
+    return turnoverByLeg.values().stream()
+            .flatMap(List::stream)
+            .anyMatch(c -> c.dimensionKey().equals(key))
+        || balanceByBucketKey.values().stream()
+            .flatMap(List::stream)
+            .anyMatch(c -> c.dimensionKey().equals(key));
+  }
+
+  /**
+   * {@link #hasDataFor}'s own mirror for a nested axis's inner node {@code key}: whether any row
+   * belongs to it under any expanded outer node ({@code "<outerKey>|<key>"}).
+   */
+  boolean hasNestedDataFor(String key) {
+    String suffix = "|" + key;
+    return turnoverByLeg.values().stream()
+            .flatMap(List::stream)
+            .anyMatch(c -> c.dimensionKey().endsWith(suffix))
+        || balanceByBucketKey.values().stream()
+            .flatMap(List::stream)
+            .anyMatch(c -> c.dimensionKey().endsWith(suffix));
+  }
 }

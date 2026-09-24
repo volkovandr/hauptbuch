@@ -49,6 +49,8 @@ public class ReportQueryRepository {
   private static final String ON = " on ";
   private static final String BUCKET_UNIT = "bucketUnit";
   private static final String BUCKET_FORMAT = "bucketFormat";
+  private static final String PROMOTED_ACCOUNT_IDS = "promotedAccountIds";
+  private static final String PROMOTED_TAG_IDS = "promotedTagIds";
 
   /**
    * The Date bucket a turnover row groups by (reporting.md §8.2, stage e4) — {@link
@@ -103,18 +105,26 @@ public class ReportQueryRepository {
 
   /**
    * Every account's top-level ancestor (data-model §5's hierarchy walked to the root, not just one
-   * level) — shared by every account-tree query so row grouping and labelling cannot drift apart.
+   * level) — shared by every account-tree query so row grouping and labelling cannot drift apart. A
+   * promoted node ({@link QueryConstraints#promotedAccountIds()}, reporting issue 08) is a
+   * top-level ancestor of its own, and the walk down from a real root stops at it, so each account
+   * still rolls up to exactly one top-level node.
    */
   private static final String ACCOUNT_ANCESTOR_CTE =
       """
       with recursive account_ancestor(account_id, top_id) as (
-        select account_id, account_id from account where parent_id is null
+        select account_id, account_id from account
+        where parent_id is null or account_id in (:promotedAccountIds)
         union all
         select a.account_id, anc.top_id
         from account a
         join account_ancestor anc on a.parent_id = anc.account_id
+        where a.account_id not in (:promotedAccountIds)
       )
       """;
+
+  private static final String PERSONAL_DEBTS_BUCKET =
+      "a.person_leaf and a.account_id not in (:promotedAccountIds)";
 
   /**
    * A per-person debt leaf (data-model §7) is its own root in {@link #ACCOUNT_ANCESTOR_CTE} —
@@ -123,30 +133,36 @@ public class ReportQueryRepository {
    * cosmetic, non-owner name ({@code personal.<CUR>}, data-model §7). Collapse every leaf sharing a
    * currency into one {@code "Personal debts (<CUR>)"} bucket instead; per-person expansion is
    * deferred (reporting.md Q-REP-1) to the {@code PERSON} dimension, which already labels correctly
-   * via {@link #personCandidates}.
+   * via {@link #personCandidates}. A debt leaf ticked in its own right (reporting issue 08) is a
+   * promoted node like any other, and keeps its own key.
    */
   private static final String ACCOUNT_DIMENSION_KEY =
-      "case when a.person_leaf then 'personal:' || a.currency_code else anc.top_id::text end";
+      "case when "
+          + PERSONAL_DEBTS_BUCKET
+          + " then 'personal:' || a.currency_code else anc.top_id::text end";
 
   private static final String ACCOUNT_DIMENSION_LABEL =
-      "case when a.person_leaf then 'Personal debts (' || a.currency_code || ')' else top.name end";
+      "case when "
+          + PERSONAL_DEBTS_BUCKET
+          + " then 'Personal debts (' || a.currency_code || ')' else top.name end";
 
   private static final String ACCOUNT_DIMENSION_TYPE =
-      "case when a.person_leaf then a.type else top.type end";
+      "case when " + PERSONAL_DEBTS_BUCKET + " then a.type else top.type end";
 
   /**
    * Every tag's top-level ancestor, mirroring {@link #ACCOUNT_ANCESTOR_CTE} for the tag tree
-   * (data-model §10.3).
+   * (data-model §10.3), promoted tags included.
    */
   private static final String TAG_ANCESTOR_CTE =
       """
       with recursive tag_ancestor(tag_id, top_id) as (
-        select tag_id, tag_id from tag where parent_id is null and deleted_at is null
+        select tag_id, tag_id from tag
+        where (parent_id is null or tag_id in (:promotedTagIds)) and deleted_at is null
         union all
         select tg.tag_id, anc.top_id
         from tag tg
         join tag_ancestor anc on tg.parent_id = anc.tag_id
-        where tg.deleted_at is null
+        where tg.deleted_at is null and tg.tag_id not in (:promotedTagIds)
       )
       """;
 
@@ -155,33 +171,39 @@ public class ReportQueryRepository {
    * descendant of {@code :parentId}, grouped by which of {@code :parentId}'s <em>direct</em>
    * children it rolls up to — expanding one node one level (reporting.md §9.1). No person-leaf
    * special case here (unlike {@link #ACCOUNT_ANCESTOR_CTE}): a debt leaf is always its own root
-   * (data-model §7), so it can never appear as a descendant of a real category/account node.
+   * (data-model §7), so it can never appear as a descendant of a real category/account node. A
+   * promoted node is skipped, like {@link #ACCOUNT_ANCESTOR_CTE} skips it: it is a top-level node
+   * of its own, not part of the expanded node's children.
    */
   private static final String ACCOUNT_ANCESTOR_CTE_FROM_PARENT =
       """
       with recursive account_ancestor(account_id, top_id) as (
-        select account_id, account_id from account where parent_id = :parentId
+        select account_id, account_id from account
+        where parent_id = :parentId and account_id not in (:promotedAccountIds)
         union all
         select a.account_id, anc.top_id
         from account a
         join account_ancestor anc on a.parent_id = anc.account_id
+        where a.account_id not in (:promotedAccountIds)
       )
       """;
 
   /**
    * {@link #TAG_ANCESTOR_CTE} generalized to an arbitrary seed instead of the root, mirroring
    * {@link #ACCOUNT_ANCESTOR_CTE_FROM_PARENT} for the tag tree: every descendant of {@code
-   * :parentId}, grouped by which of {@code :parentId}'s direct children it rolls up to.
+   * :parentId}, grouped by which of {@code :parentId}'s direct children it rolls up to, promoted
+   * tags skipped.
    */
   private static final String TAG_ANCESTOR_CTE_FROM_PARENT =
       """
       with recursive tag_ancestor(tag_id, top_id) as (
-        select tag_id, tag_id from tag where parent_id = :parentId and deleted_at is null
+        select tag_id, tag_id from tag
+        where parent_id = :parentId and deleted_at is null and tag_id not in (:promotedTagIds)
         union all
         select tg.tag_id, anc.top_id
         from tag tg
         join tag_ancestor anc on tg.parent_id = anc.tag_id
-        where tg.deleted_at is null
+        where tg.deleted_at is null and tg.tag_id not in (:promotedTagIds)
       )
       """;
 
@@ -574,8 +596,11 @@ public class ReportQueryRepository {
    * expanding a {@code CATEGORY}/{@code ACCOUNT} row one level (see {@link #topLevelAccounts}),
    * including ones with no activity this period (§7.3). Empty for a leaf category/account (whose
    * only children, if any, are its own currency leaves — never listed as rows in their own right).
+   * Leaves out {@code promotedIds} (reporting issue 08): a promoted node is a top-level node of its
+   * own, so it is never also listed under its real parent.
    */
-  public List<TopLevelNode> childAccountCandidates(long parentId, boolean includeClosedAccounts) {
+  public List<TopLevelNode> childAccountCandidates(
+      long parentId, boolean includeClosedAccounts, List<Long> promotedIds) {
     return jdbcClient
         .sql(
             "select account_id::text as key, name as label, type,\n       "
@@ -587,9 +612,47 @@ public class ReportQueryRepository {
               and person_leaf = false
               and deleted_at is null
               and (:includeClosedAccounts or closed_at is null)
+              and account_id not in (:promotedAccountIds)
             order by name
             """)
         .param(PARENT_ID, parentId)
+        .param(INCLUDE_CLOSED, includeClosedAccounts)
+        .param(PROMOTED_ACCOUNT_IDS, orNoMatch(promotedIds))
+        .query(TopLevelNode.class)
+        .list();
+  }
+
+  /**
+   * The ticked nodes of a Category/Account filter on the axis dimension's own field, as that axis's
+   * top level (reporting issue 08) — listed even with no activity this period (§7.3), each labelled
+   * with its full path ({@code Food:Restaurants}) since its parent is not on the axis to say where
+   * it sits. Only nodes of the given {@code types} (the dimension's own, reporting.md §4).
+   */
+  public List<TopLevelNode> promotedAccountCandidates(
+      List<Long> ids, List<String> types, boolean includeClosedAccounts) {
+    return jdbcClient
+        .sql(
+            """
+            with recursive path(account_id, ancestor_id, label) as (
+              select account_id, parent_id, name::text from account where account_id in (:ids)
+              union all
+              select path.account_id, a.parent_id, a.name || ':' || path.label
+              from path
+              join account a on a.account_id = path.ancestor_id
+            )
+            select account.account_id::text as key, path.label as label, account.type,
+            """
+                + ACCOUNT_HAS_CHILDREN_EXISTS
+                + """
+            from account
+            join path on path.account_id = account.account_id and path.ancestor_id is null
+            where account.type in (:types)
+              and account.deleted_at is null
+              and (:includeClosedAccounts or account.closed_at is null)
+            order by label
+            """)
+        .param("ids", orNoMatch(ids))
+        .param(TYPES, types)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .query(TopLevelNode.class)
         .list();
@@ -817,9 +880,10 @@ public class ReportQueryRepository {
   /**
    * Every live direct child tag of {@code parentId}, plus the synthetic {@code (unspecified)}
    * candidate (§9.3) — the child-row candidates for expanding a {@code TAG} row one level (see
-   * {@link #topLevelTags}), including ones with no activity this period (§7.3).
+   * {@link #topLevelTags}), including ones with no activity this period (§7.3), leaving out {@code
+   * promotedIds} like {@link #childAccountCandidates} does.
    */
-  public List<TopLevelNode> childTagCandidates(long parentId) {
+  public List<TopLevelNode> childTagCandidates(long parentId, List<Long> promotedIds) {
     List<TopLevelNode> nodes = new ArrayList<>();
     // "(unspecified)" sits where a real catch-all child would — a synthetic *first* child, not an
     // afterthought appended last (reporting.md §9.3). It is a data bucket, never itself expandable.
@@ -833,12 +897,43 @@ public class ReportQueryRepository {
                 from tag
                 where parent_id = :parentId
                   and deleted_at is null
+                  and tag_id not in (:promotedTagIds)
                 order by name
                 """)
             .param(PARENT_ID, parentId)
+            .param(PROMOTED_TAG_IDS, orNoMatch(promotedIds))
             .query(TopLevelNode.class)
             .list());
     return nodes;
+  }
+
+  /**
+   * {@link #promotedAccountCandidates}' own mirror for a Tag filter on the Tag axis: the ticked
+   * tags, full-path labelled.
+   */
+  public List<TopLevelNode> promotedTagCandidates(List<Long> ids) {
+    return jdbcClient
+        .sql(
+            """
+            with recursive path(tag_id, ancestor_id, label) as (
+              select tag_id, parent_id, name::text from tag where tag_id in (:ids)
+              union all
+              select path.tag_id, tg.parent_id, tg.name || ':' || path.label
+              from path
+              join tag tg on tg.tag_id = path.ancestor_id
+            )
+            select tag.tag_id::text as key, path.label as label, cast(null as text) as type,
+            """
+                + TAG_HAS_CHILDREN_EXISTS
+                + """
+            from tag
+            join path on path.tag_id = tag.tag_id and path.ancestor_id is null
+            where tag.deleted_at is null
+            order by label
+            """)
+        .param("ids", orNoMatch(ids))
+        .query(TopLevelNode.class)
+        .list();
   }
 
   // ── payeeTurnover (Payee has no closing balance — it is a transaction attribute) ──
@@ -1485,9 +1580,12 @@ public class ReportQueryRepository {
   /**
    * The live subtree of {@code roots}: the roots themselves and every live descendant, walked to
    * arbitrary depth via {@code parent_id} (data-model §5) — a {@code CATEGORY}/{@code ACCOUNT}
-   * filter's {@code IS_ONE_OF} subtree semantics (§6.3).
+   * filter's {@code IS_ONE_OF} subtree semantics (§6.3). The walk stops at a promoted node
+   * (reporting issue 08) below a root, like {@link #ACCOUNT_ANCESTOR_CTE} does, so a nested axis's
+   * synthetic filter on a real root never reaches into a node that is a top-level row of its own. A
+   * user's own ticked nodes are never below one another, so their subtrees are unaffected.
    */
-  private List<Long> subtreeAccountIds(List<Long> roots) {
+  private List<Long> subtreeAccountIds(List<Long> roots, List<Long> promotedIds) {
     if (roots.isEmpty()) {
       return List.of();
     }
@@ -1499,17 +1597,18 @@ public class ReportQueryRepository {
               union all
               select a.account_id from account a
               join subtree s on a.parent_id = s.account_id
-              where a.deleted_at is null
+              where a.deleted_at is null and a.account_id not in (:promotedAccountIds)
             )
             select account_id from subtree
             """)
         .param("roots", roots)
+        .param(PROMOTED_ACCOUNT_IDS, orNoMatch(promotedIds))
         .query(Long.class)
         .list();
   }
 
   /** Mirrors {@link #subtreeAccountIds} for the tag tree (data-model §10.3). */
-  private List<Long> subtreeTagIds(List<Long> roots) {
+  private List<Long> subtreeTagIds(List<Long> roots, List<Long> promotedIds) {
     if (roots.isEmpty()) {
       return List.of();
     }
@@ -1521,11 +1620,12 @@ public class ReportQueryRepository {
               union all
               select tg.tag_id from tag tg
               join subtree s on tg.parent_id = s.tag_id
-              where tg.deleted_at is null
+              where tg.deleted_at is null and tg.tag_id not in (:promotedTagIds)
             )
             select tag_id from subtree
             """)
         .param("roots", roots)
+        .param(PROMOTED_TAG_IDS, orNoMatch(promotedIds))
         .query(Long.class)
         .list();
   }
@@ -1534,13 +1634,18 @@ public class ReportQueryRepository {
    * Compiles a {@link QueryConstraints} into one extra {@code and}-prefixed SQL fragment plus its
    * bind params. Every turnover/closing-balance method appends {@link CompiledExtra#sql()} to its
    * own WHERE clause (right before {@code group by}) and merges {@link CompiledExtra#params()} in.
+   * The params always carry the promoted node ids too (bound to a never-matching id when there are
+   * none), which the account/tag ancestor CTEs read; a query that does not reference them ignores
+   * them.
    */
   private CompiledExtra compileExtra(QueryConstraints constraints) {
     StringBuilder sql = new StringBuilder(128);
     Map<String, Object> params = new LinkedHashMap<>();
+    params.put(PROMOTED_ACCOUNT_IDS, orNoMatch(constraints.promotedAccountIds()));
+    params.put(PROMOTED_TAG_IDS, orNoMatch(constraints.promotedTagIds()));
     List<ReportFilter> filters = constraints.filters();
     for (int i = 0; i < filters.size(); i++) {
-      sql.append(AND).append(filterPredicate(filters.get(i), i, params)).append('\n');
+      sql.append(AND).append(filterPredicate(filters.get(i), i, params, constraints)).append('\n');
     }
     return new CompiledExtra(sql.toString(), params);
   }
@@ -1549,11 +1654,13 @@ public class ReportQueryRepository {
    * One predicate per {@link FilterField} (§6.3) — a flat enum dispatch, not decision complexity.
    */
   @SuppressWarnings("PMD.CyclomaticComplexity")
-  private String filterPredicate(ReportFilter filter, int index, Map<String, Object> params) {
+  private String filterPredicate(
+      ReportFilter filter, int index, Map<String, Object> params, QueryConstraints constraints) {
     String key = "filter" + index;
     return switch (filter.field()) {
-      case CATEGORY, ACCOUNT -> accountHierarchyPredicate(filter, key, params);
-      case TAG -> tagPredicate(filter, key, params);
+      case CATEGORY, ACCOUNT ->
+          accountHierarchyPredicate(filter, key, params, constraints.promotedAccountIds());
+      case TAG -> tagPredicate(filter, key, params, constraints.promotedTagIds());
       case PAYEE -> payeePredicate(filter, key, params);
       case PERSON -> personPredicate(filter, key, params);
       case CURRENCY -> currencyFilterPredicate(filter, key, params);
@@ -1608,9 +1715,9 @@ public class ReportQueryRepository {
 
   /** {@code CATEGORY}/{@code ACCOUNT}: {@code IS_ONE_OF} expands to subtree membership (§6.3). */
   private String accountHierarchyPredicate(
-      ReportFilter filter, String key, Map<String, Object> params) {
+      ReportFilter filter, String key, Map<String, Object> params, List<Long> promotedIds) {
     List<Long> roots = filter.values().stream().map(Long::parseLong).toList();
-    params.put(key, orNoMatch(subtreeAccountIds(roots)));
+    params.put(key, orNoMatch(subtreeAccountIds(roots, promotedIds)));
     return postingOrTransaction(
         filter.level(),
         key,
@@ -1620,9 +1727,10 @@ public class ReportQueryRepository {
   }
 
   /** {@code TAG}: {@code IS_ONE_OF} expands to subtree membership, same as a hierarchy account. */
-  private String tagPredicate(ReportFilter filter, String key, Map<String, Object> params) {
+  private String tagPredicate(
+      ReportFilter filter, String key, Map<String, Object> params, List<Long> promotedIds) {
     List<Long> roots = filter.values().stream().map(Long::parseLong).toList();
-    params.put(key, orNoMatch(subtreeTagIds(roots)));
+    params.put(key, orNoMatch(subtreeTagIds(roots, promotedIds)));
     String alias = "fpt_" + key;
     String join =
         " join posting_tag " + alias + ON + alias + ".posting_id = fp_" + key + ".posting_id";

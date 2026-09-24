@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +41,7 @@ class ReportEditorControllerIntegrationTest {
   @Autowired ReportService reportService;
   @Autowired SettingsService settingsService;
   @Autowired JdbcClient jdbcClient;
+  @Autowired ReportEngine reportEngine;
 
   private long insertAccount(String name, String type, Long parentId) {
     return jdbcClient
@@ -197,5 +199,68 @@ class ReportEditorControllerIntegrationTest {
 
     long reportId = Long.parseLong(redirect.substring(redirect.lastIndexOf('/') + 1));
     assertThat(reportService.find(reportId).orElseThrow().expandedNodeKeys()).containsExactly("7");
+  }
+
+  // ── ticked nodes as the axis's top level (reporting issue 08) ───────────────────────────────
+
+  private static ReportSpec accountRows(Scope scope, List<ReportFilter> filters) {
+    return new ReportSpec(
+        List.of(Dimension.ACCOUNT),
+        List.of(),
+        List.of(),
+        List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+        scope,
+        filters,
+        DateRange.yearToDate(),
+        false,
+        false,
+        true);
+  }
+
+  @Test
+  void tickedAccountsAreTheAxisTopLevelWithoutTheirParents() throws Exception {
+    // The owner's example: tick Cash-EUR and BankAaa (a parent) under "amounts booked to" — the
+    // rows are exactly those two, Cash-EUR under its full path, and no Cash row.
+    settingsService.setBaseCurrency("EUR");
+    long opening = insertAccount("Opening Balances", "equity", null);
+    long cash = insertAccount("Cash", "asset", null);
+    long cashEur = insertAccount("Cash-EUR", "asset", cash);
+    long cashUsd = insertAccount("Cash-USD", "asset", cash);
+    long bankAaa = insertAccount("BankAaa", "asset", null);
+    long checking = insertAccount("Checking", "asset", bankAaa);
+    postToday(opening, cashEur, "20.00");
+    postToday(opening, cashUsd, "7.00");
+    postToday(opening, checking, "30.00");
+    ReportSpec spec =
+        accountRows(
+            Scope.ofTypes("asset"),
+            List.of(
+                new ReportFilter(
+                    FilterField.ACCOUNT,
+                    FilterLevel.POSTING,
+                    FilterOperator.IS_ONE_OF,
+                    List.of(String.valueOf(cashEur), String.valueOf(bankAaa)))));
+
+    assertThat(reportEngine.render(spec).rows())
+        .extracting(AxisNode::label)
+        .containsExactly("BankAaa", "Cash:Cash-EUR");
+    mockMvc
+        .perform(get("/reports/new").params(ReportSpecQueryString.toParams(spec)))
+        .andExpect(content().string(containsString("Cash:Cash-EUR")));
+  }
+
+  @Test
+  void accountRowsNeverListCategoriesWhateverTheScope() {
+    // reporting.md §4: an expense-only scope with Account rows explains the mismatch rather than
+    // listing categories as accounts.
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", null);
+    long food = insertAccount("Food", "expense", null);
+    postToday(cash, food, "20.00");
+
+    ReportGrid grid = reportEngine.render(accountRows(Scope.ofTypes("expense"), List.of()));
+
+    assertThat(grid.rows()).isEmpty();
+    assertThat(grid.refusalMessage()).contains("Account covers asset");
   }
 }
