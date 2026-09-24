@@ -61,3 +61,10 @@ look like design decisions from the outside.
 
 Filed 2026-09-23 from owner testing at the close of reporting stage e. `needs-info` until the
 grilling above produces a legality table. Likely a candidate for its own stage after f.
+
+2026-09-24: the owner's motivating report for lifting rule 1 is now specified as
+`19-counterpart-report-account-by-category.md` (Account × Category / Account × Account via the
+transaction's counterpart legs, proportional split allocation, a built-in Transfers node). Its cell
+semantics are not the "row node filter AND column node filter" generalisation sketched above. Do the
+two together, after slice f. Issue 08 also settled that the Account and Category dimensions follow
+§4's type split regardless of Scope.
