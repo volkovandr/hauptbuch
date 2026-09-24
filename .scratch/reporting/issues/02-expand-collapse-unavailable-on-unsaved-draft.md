@@ -1,6 +1,6 @@
 # Expand/collapse is unavailable while viewing an unsaved draft — inconvenient in practice
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: medium
 Area: Reporting (`analytics` module, stage e — row-tree expansion)
@@ -54,7 +54,7 @@ exploring unsaved drafts much more often. Scope decisions for whoever picks it u
 - Cover it in the integration tier: toggle on a draft (`/reports/new` and a saved Report with
   unsaved edits), change a setting, and assert the expansion is still rendered.
 
-Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation. A draft's expansion
+Implemented 2026-09-24 (branch `feat/reporting`), owner-confirmed the same day, including the reload deviation below. A draft's expansion
 travels as an `expanded` parameter in the page's own state, and every settings form and both Save
 forms carry it. On a saved Report with no edits, the toggle still POSTs and persists. Everywhere else
 (a draft, a Preset, `/reports/new`) it re-GETs the page with the toggled set and replaces the URL.
