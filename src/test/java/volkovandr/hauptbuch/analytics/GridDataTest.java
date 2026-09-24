@@ -12,7 +12,9 @@ import volkovandr.hauptbuch.analytics.repository.RawTurnoverCell;
 
 /**
  * Unit tier (CLAUDE.md §6): {@link GridData#withDays} — merging one expanded Date row's own days
- * (reporting.md §9.1, stage e4b) under the composite keys the grid's day rows look them up by.
+ * (reporting.md §9.1, stage e4b) under the composite keys the grid's day rows look them up by — and
+ * {@link GridData#hasDataFor}, which tells a touched node from an untouched one (reporting issue
+ * 08).
  */
 class GridDataTest {
 
@@ -56,5 +58,30 @@ class GridDataTest {
     assertThat(merged.asOfByBucketKey())
         .containsEntry("2026-09|2026-09-03", LocalDate.of(2026, 9, 3))
         .containsEntry("2026-09", LocalDate.of(2026, 9, 12));
+  }
+
+  @Test
+  void hasDataForAnyTurnoverOrBalanceRowOfThatNodeOnly() {
+    RawBalanceCell cash = new RawBalanceCell("2", "Cash", "asset", "EUR", BigDecimal.TEN);
+    GridData data =
+        new GridData(
+            Map.of(Leg.NET, List.of(turnover("2026-01"))),
+            Map.of("total", List.of(cash)),
+            Map.of("total", LocalDate.of(2026, 1, 31)));
+
+    assertThat(data.hasDataFor("1")).isTrue();
+    assertThat(data.hasDataFor("2")).isTrue();
+    assertThat(data.hasDataFor("3")).isFalse();
+  }
+
+  @Test
+  void hasNestedDataForMatchesTheInnerKeyUnderAnyOuterNode() {
+    RawTurnoverCell nested =
+        new RawTurnoverCell(
+            "1|7", "Bakery", "expense", "2026-01", "EUR", BigDecimal.TEN, BigDecimal.TEN, 0, 1, 1);
+    GridData data = new GridData(Map.of(Leg.NET, List.of(nested)), Map.of(), Map.of());
+
+    assertThat(data.hasNestedDataFor("7")).isTrue();
+    assertThat(data.hasNestedDataFor("1")).isFalse();
   }
 }

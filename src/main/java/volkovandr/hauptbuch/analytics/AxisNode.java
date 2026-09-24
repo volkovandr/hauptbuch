@@ -46,4 +46,28 @@ public record AxisNode(
   public AxisNode(String key, String label, int depth, boolean expandable, String parentKey) {
     this(key, label, depth, expandable, parentKey, false);
   }
+
+  /**
+   * A (possibly composite, §9.1) frontier key's own real database id — the segment after the last
+   * {@code "|"}, or the whole key when it names a depth-0 (top-level) node. Every account/tag id is
+   * globally unique (a strict single-parent tree), so this is always enough to seed the next
+   * level's "children of this node" query, regardless of how deep {@code key} nests.
+   *
+   * <p>{@code expandedNodeKeys} is a persisted, hand-edited-by-request set (stage e2's toggle
+   * endpoint) — a garbage or stale trailing segment (a malformed request, or a real non-numeric
+   * leaf key like Tag's own {@code "<id>:unspecified"} bucket, which is never itself expandable and
+   * so never legitimately reaches here as a parent) degrades to {@code -1}, an id no account/tag
+   * row ever has, rather than throwing: the same "simply never referenced" graceful handling {@code
+   * ReportEngine#expandedOuterKeys} already documents for a stale top-level key, extended to a
+   * malformed trailing segment instead of a missing one.
+   */
+  static long realId(String key) {
+    int lastSeparator = key.lastIndexOf('|');
+    String segment = lastSeparator < 0 ? key : key.substring(lastSeparator + 1);
+    try {
+      return Long.parseLong(segment);
+    } catch (NumberFormatException malformed) {
+      return -1;
+    }
+  }
 }

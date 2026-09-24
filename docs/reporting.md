@@ -92,6 +92,10 @@ series takes exactly one.
 | **Account type** | no | posting | the five `account.type` values |
 | **Date** | yes (the ladder, §8.2) | transaction | `transaction.date`, the only date the model carries |
 
+Category and Account keep to their own account types **whatever the Scope holds**: Account never
+lists an `expense` account, and Category never lists an `asset`. A Scope with none of the dimension's
+types leaves its axis empty and says so (§6.1's "scope misses the dimension" line).
+
 Filters or scope toggles only, never dimensions: `lifecycle` (§6.4), `reconciliation`, note text. They partition nothing the
 owner wants to read down a page, and as dimensions they would invite a "reconciled vs unreconciled"
 grid that is a reconciliation tool, not a report.
@@ -269,6 +273,15 @@ operator: selecting `Food` means Food and everything beneath it, and selecting o
 `Food:Restaurants` is how you ask for just that. For tags this also includes postings carrying the
 selected tag **directly** (data-model §10.3), which is what the unspecified row (§9.3) surfaces.
 
+**Ticked nodes become the axis's top level** when the same hierarchy is also a dimension on an axis
+(a Category filter with Category rows, and likewise Account and Tag). Their ancestors do not
+render: tick `Cash-EUR` and `BankAaa` and the rows are exactly those two, with no `Cash` row. A
+promoted node shows its **full path** (`Food:Restaurants`), since its parent is not there to say
+where it sits. A ticked node always appears, even with nothing in range (blank, and suppressible
+like any empty row). Under **"amounts booked to …"** the ticked nodes are all there is. Under
+**"transactions touching …"**, every other node those transactions touch also appears, under its
+normal root (`BankBbb`, collapsed), and untouched nodes do not appear.
+
 Filters combine with **AND** across dimensions; the multi-select inside one filter is the OR. Cross-
 dimension OR ("Food *or* tagged Prague") is not offered — it is a query-builder rabbit hole for a
 question answerable with two Reports.
@@ -331,10 +344,12 @@ signal.
 **Columns whose every cell is blank can be suppressed the same way** (toggleable, off by default —
 added after row suppression, so enabling it is an explicit opt-in rather than changing every
 existing Report's rendering). The two are independent settings: a candidate list (Category, Account,
-Tag, …) is built from every live member regardless of the Report's own filters, precisely so a
-filtered-out one — e.g. an Account column a "touching …" filter never matches — can be hidden by
-suppression rather than never listed at all; this applies whichever axis that candidate dimension
-lands on, not rows alone.
+Tag, …) is built from every live member regardless of the Report's own filters on *other* fields,
+precisely so a filtered-out one — e.g. an Account column a "touching …" Category filter never
+matches — can be hidden by suppression rather than never listed at all; this applies whichever axis
+that candidate dimension lands on, not rows alone. A filter on the dimension's **own** field is
+different: its ticked nodes are the candidates (§6.3), plus, under "touching", only the nodes the
+data shows touched.
 
 ### 7.4 Renderer legality
 
@@ -416,7 +431,8 @@ Three states — **`auto`** (the default), `collapsed`, `expanded`. `auto` means
 dimension selects **exactly one** hierarchy node, start **expanded** (you asked about one thing; show
 its parts); if it selects two or more, or none, start **collapsed**. **Date** is never selected by
 a filter (the range is not one), so under `auto` it always starts collapsed at its ladder's chosen
-rung. Once expand/collapse is used by hand, the explicit state (§9.1) takes over from `auto`: for good
+rung. The one ticked node is itself a top-level row (§6.3), labelled with its full path, so that row
+is the one that starts expanded. Once expand/collapse is used by hand, the explicit state (§9.1) takes over from `auto`: for good
 on a saved Report, for as long as the draft lives otherwise.
 
 A **parent row** is either a **subtotal** or a **group header only**, per Report. With `Tag is one of
@@ -713,6 +729,8 @@ management screen.
 
 - **v0.3 (2026-09-24):** **§9.1/§9.2**: a draft's expansion is no longer thrown away; it is
   ephemeral state that travels with the draft and becomes the Report's on save (reporting issue 02).
+  **§4/§6.3/§7.3/§9.2**: a filter on an axis dimension's own field makes its ticked nodes that
+  axis's top level, and Category/Account keep to their own types whatever the Scope (issue 08).
 - **v0.2 (2026-09-13):** From a grilling pass on the missing editor — v0.1 specified no UI for
   choosing dimensions, measures, scope, filters or renderer. New **§11a**: a Report's page is its
   editor (no separate viewer), drafts in the URL, live controls vs Apply groups, the measure grid,

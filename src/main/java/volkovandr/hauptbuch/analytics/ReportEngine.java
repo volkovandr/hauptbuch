@@ -12,9 +12,9 @@ import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
  * The report engine's public API: {@code spec in -> grid out} (reporting.md §14). Validates the
- * spec and resolves its axes and date range; {@link ReportDataFetcher} fetches the grouped data and
- * {@link ReportGridBuilder} turns it into the {@link ReportGrid} (the two valuation rules,
- * legality, suppression and totals).
+ * spec and resolves its axes and date range; {@link AxisCandidates} lists each axis's nodes, {@link
+ * ReportDataFetcher} fetches the grouped data and {@link ReportGridBuilder} turns it into the
+ * {@link ReportGrid} (the two valuation rules, legality, suppression and totals).
  *
  * <p>Every dimension in the catalogue (reporting.md §4) is wired, on either rows or columns, for
  * {@link MeasureKind#TURNOVER} and the count measures; {@link MeasureKind#CLOSING_BALANCE} is wired
@@ -36,14 +36,17 @@ import volkovandr.hauptbuch.ledger.SettingsService;
 public class ReportEngine {
 
   private final SettingsService settingsService;
+  private final AxisCandidates axisCandidates;
   private final ReportDataFetcher dataFetcher;
   private final ReportGridBuilder gridBuilder;
 
   ReportEngine(
       SettingsService settingsService,
+      AxisCandidates axisCandidates,
       ReportDataFetcher dataFetcher,
       ReportGridBuilder gridBuilder) {
     this.settingsService = settingsService;
+    this.axisCandidates = axisCandidates;
     this.dataFetcher = dataFetcher;
     this.gridBuilder = gridBuilder;
   }
@@ -104,7 +107,7 @@ public class ReportEngine {
     List<String> types = List.copyOf(spec.scope().accountTypes());
     List<DateBucket> buckets = bucketsFor(spec, resolved);
     Map<String, TopLevelNode> candidatesByKey =
-        dataFetcher.candidatesFor(axes.nonDateDim(), types, spec.scope());
+        axisCandidates.candidatesFor(axes.nonDateDim(), spec);
     // A saved Report's remembered state belongs to its row tree (§9.1): with Date on rows it names
     // Date buckets, so the non-Date dimension (then on columns) falls back to its own uniform rule.
     Set<String> expandedKeys =
@@ -126,12 +129,38 @@ public class ReportEngine {
     Map<String, List<TopLevelNode>> sameDimensionChildrenByParentKey = Map.of();
     if (!expandedKeys.isEmpty()) {
       if (axes.innerDim() != null) {
-        innerCandidatesByKey = dataFetcher.candidatesFor(axes.innerDim(), types, spec.scope());
+        innerCandidatesByKey = axisCandidates.candidatesFor(axes.innerDim(), spec);
       } else {
         sameDimensionChildrenByParentKey =
-            childCandidatesByParentKey(axes.nonDateDim(), expandedKeys, spec.scope());
+            childCandidatesByParentKey(axes.nonDateDim(), expandedKeys, spec);
       }
     }
+
+    GridData data =
+        dataFetcher.fetchGridData(
+            spec, axes, types, resolved, buckets, today, baseCurrency, expandedKeys);
+    // An expanded Date row's days re-run the same fetch over just that bucket's range (§9.1), so
+    // every measure, filter and column nesting stays consistent and the days sum back to it.
+    for (DateBucket bucket : expandedDateBuckets) {
+      GridData days =
+          dataFetcher.fetchGridData(
+              spec,
+              axes,
+              types,
+              bucket.effectiveRange(),
+              bucket.days(),
+              today,
+              baseCurrency,
+              expandedKeys,
+              DateGranularity.DAY);
+      data = data.withDays(bucket.key(), days);
+    }
+    candidatesByKey =
+        PromotedNodes.withoutUntouchedRoots(
+            axes.nonDateDim(), spec, candidatesByKey, data::hasDataFor);
+    innerCandidatesByKey =
+        PromotedNodes.withoutUntouchedRoots(
+            axes.innerDim(), spec, innerCandidatesByKey, data::hasNestedDataFor);
 
     List<AxisNode> nestedAxisNodes =
         gridBuilder.frontierNodes(
@@ -154,26 +183,6 @@ public class ReportEngine {
             ? nestedAxisNodes
             : gridBuilder.axisNodes(axes.colDim(), candidatesByKey, buckets);
 
-    GridData data =
-        dataFetcher.fetchGridData(
-            spec, axes, types, resolved, buckets, today, baseCurrency, expandedKeys);
-    // An expanded Date row's days re-run the same fetch over just that bucket's range (§9.1), so
-    // every measure, filter and column nesting stays consistent and the days sum back to it.
-    for (DateBucket bucket : expandedDateBuckets) {
-      GridData days =
-          dataFetcher.fetchGridData(
-              spec,
-              axes,
-              types,
-              bucket.effectiveRange(),
-              bucket.days(),
-              today,
-              baseCurrency,
-              expandedKeys,
-              DateGranularity.DAY);
-      data = data.withDays(bucket.key(), days);
-    }
-
     return gridBuilder.build(
         spec, axes, rowNodes, columnBucketNodes, candidatesByKey, data, baseCurrency, resolved);
   }
@@ -183,10 +192,10 @@ public class ReportEngine {
    * any depth) key.
    */
   private Map<String, List<TopLevelNode>> childCandidatesByParentKey(
-      Dimension outerDim, Set<String> expandedKeys, Scope scope) {
+      Dimension outerDim, Set<String> expandedKeys, ReportSpec spec) {
     Map<String, List<TopLevelNode>> byParentKey = new LinkedHashMap<>();
     for (String key : expandedKeys) {
-      byParentKey.put(key, dataFetcher.childCandidatesFor(outerDim, key, scope));
+      byParentKey.put(key, axisCandidates.childCandidatesFor(outerDim, key, spec));
     }
     return byParentKey;
   }
@@ -298,9 +307,8 @@ public class ReportEngine {
       List<DateBucket> buckets = bucketsFor(spec, RangeResolver.resolve(spec.range(), today));
       return keysOf(expandedDateBuckets(RowExpansion.AUTO, explicitOverride, buckets));
     }
-    List<String> types = List.copyOf(spec.scope().accountTypes());
     Map<String, TopLevelNode> candidatesByKey =
-        dataFetcher.candidatesFor(axes.nonDateDim(), types, spec.scope());
+        axisCandidates.candidatesFor(axes.nonDateDim(), spec);
     return expandedOuterKeys(
         RowExpansion.AUTO, explicitOverride, axes.nonDateDim(), spec, candidatesByKey);
   }

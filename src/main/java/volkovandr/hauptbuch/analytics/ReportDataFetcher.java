@@ -8,20 +8,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.analytics.repository.QueryConstraints;
 import volkovandr.hauptbuch.analytics.repository.RawBalanceCell;
 import volkovandr.hauptbuch.analytics.repository.RawTurnoverCell;
 import volkovandr.hauptbuch.analytics.repository.ReportQueryRepository;
-import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
 
 /**
- * The {@link ReportQueryRepository} calls a Report needs: the row/column candidates (§7.3 —
- * including ones with no activity, so an all-blank row can be suppressed rather than never listed)
- * and the raw turnover/closing-balance data ({@link GridData}). Split out from {@link ReportEngine}
- * so that class stays focused on validating and orchestrating, not on which repository method a
- * dimension maps to.
+ * The {@link ReportQueryRepository} calls that fetch a Report's raw turnover/closing-balance data
+ * ({@link GridData}); the row/column candidates that data fills are {@link AxisCandidates}' job.
+ * Split out from {@link ReportEngine} so that class stays focused on validating and orchestrating,
+ * not on which repository method a dimension maps to.
  */
 // CouplingBetweenObjects: this class's whole job is dispatching every Dimension in the catalogue
 // (reporting.md §4) to its own ReportQueryRepository method — one dimension, one query shape, no
@@ -39,84 +36,6 @@ class ReportDataFetcher {
 
   ReportDataFetcher(ReportQueryRepository queryRepository) {
     this.queryRepository = queryRepository;
-  }
-
-  /**
-   * The row/column candidates for a dimension, keyed by their stable key. {@link
-   * Dimension#ACCOUNT_TYPE} needs no query — its candidates are exactly {@code types} themselves,
-   * capitalized for display.
-   */
-  Map<String, TopLevelNode> candidatesFor(Dimension nonDateDim, List<String> types, Scope scope) {
-    List<TopLevelNode> nodes;
-    if (nonDateDim == Dimension.CATEGORY || nonDateDim == Dimension.ACCOUNT) {
-      nodes = queryRepository.topLevelAccounts(types, scope.includeClosedAccounts());
-    } else if (nonDateDim == Dimension.TAG) {
-      nodes = queryRepository.topLevelTags();
-    } else if (nonDateDim == Dimension.PAYEE) {
-      nodes = queryRepository.payeeCandidates();
-    } else if (nonDateDim == Dimension.PERSON) {
-      nodes = queryRepository.personCandidates();
-    } else if (nonDateDim == Dimension.CURRENCY) {
-      nodes = queryRepository.currencyCandidates();
-    } else if (nonDateDim == Dimension.ACCOUNT_TYPE) {
-      nodes = accountTypeCandidates(types);
-    } else {
-      nodes = List.of();
-    }
-    return nodes.stream()
-        .collect(Collectors.toMap(TopLevelNode::key, n -> n, (a, b) -> a, LinkedHashMap::new));
-  }
-
-  private static List<TopLevelNode> accountTypeCandidates(List<String> types) {
-    List<TopLevelNode> nodes = new ArrayList<>();
-    for (String type : types) {
-      nodes.add(new TopLevelNode(type, capitalize(type), type));
-    }
-    return nodes;
-  }
-
-  private static String capitalize(String s) {
-    return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
-  }
-
-  /**
-   * The child candidates for one expanded node — {@code innerDim}'s own top-level breakdown (stage
-   * e's cross-dimension nesting, §3) or, when there is no second dimension at all, {@code
-   * outerDim}'s own direct children (§9.1's same-dimension "expand one node" case, recursing to
-   * arbitrary depth — {@code parentKey} may itself be a depth &gt; 0 composite key, see {@link
-   * #realId}). Split out so {@link ReportEngine} can determine each candidate's {@link
-   * AxisNode#expandable} flag before deciding what — if anything — to fetch data for.
-   */
-  List<TopLevelNode> childCandidatesFor(Dimension outerDim, String parentKey, Scope scope) {
-    long parentId = realId(parentKey);
-    if (outerDim == Dimension.TAG) {
-      return queryRepository.childTagCandidates(parentId);
-    }
-    return queryRepository.childAccountCandidates(parentId, scope.includeClosedAccounts());
-  }
-
-  /**
-   * A (possibly composite, §9.1) frontier key's own real database id — the segment after the last
-   * {@code "|"}, or the whole key when it names a depth-0 (top-level) node. Every account/tag id is
-   * globally unique (a strict single-parent tree), so this is always enough to seed the next
-   * level's "children of this node" query, regardless of how deep {@code key} nests.
-   *
-   * <p>{@code expandedNodeKeys} is a persisted, hand-edited-by-request set (stage e2's toggle
-   * endpoint) — a garbage or stale trailing segment (a malformed request, or a real non-numeric
-   * leaf key like Tag's own {@code "<id>:unspecified"} bucket, which is never itself expandable and
-   * so never legitimately reaches here as a parent) degrades to {@code -1}, an id no account/tag
-   * row ever has, rather than throwing: the same "simply never referenced" graceful handling {@link
-   * ReportEngine#expandedOuterKeys} already documents for a stale top-level key, extended to a
-   * malformed trailing segment instead of a missing one.
-   */
-  private static long realId(String key) {
-    int lastSeparator = key.lastIndexOf('|');
-    String segment = lastSeparator < 0 ? key : key.substring(lastSeparator + 1);
-    try {
-      return Long.parseLong(segment);
-    } catch (NumberFormatException malformed) {
-      return -1;
-    }
   }
 
   /**
@@ -163,7 +82,8 @@ class ReportDataFetcher {
       String baseCurrency,
       Set<String> expandedOuterKeys,
       DateGranularity granularity) {
-    QueryConstraints constraints = new QueryConstraints(spec.filters());
+    QueryConstraints constraints =
+        PromotedNodes.constraints(spec.filters(), spec, axes.nonDateDim(), axes.innerDim());
     Map<Leg, List<RawTurnoverCell>> turnoverByLeg =
         fetchTurnover(
             spec, axes.nonDateDim(), types, resolved, baseCurrency, granularity, constraints);
@@ -284,7 +204,7 @@ class ReportDataFetcher {
     boolean includeClosed = spec.scope().includeClosedAccounts();
     boolean includePending = spec.scope().includePendingReview();
     if (innerDim != null) {
-      QueryConstraints childConstraints = withSyntheticFilter(spec.filters(), outerDim, outerKey);
+      QueryConstraints childConstraints = withSyntheticFilter(spec, outerDim, innerDim, outerKey);
       return queryTurnover(
           innerDim,
           types,
@@ -296,8 +216,8 @@ class ReportDataFetcher {
           granularity,
           childConstraints);
     }
-    QueryConstraints constraints = new QueryConstraints(spec.filters());
-    long parentId = realId(outerKey);
+    QueryConstraints constraints = PromotedNodes.constraints(spec.filters(), spec, outerDim, null);
+    long parentId = AxisNode.realId(outerKey);
     if (outerDim == Dimension.TAG) {
       return queryRepository.childTagTurnover(
           parentId,
@@ -311,17 +231,21 @@ class ReportDataFetcher {
           granularity,
           constraints);
     }
-    return queryRepository.childAccountTurnover(
-        parentId,
-        types,
-        resolved.start(),
-        resolved.end(),
-        baseCurrency,
-        legName,
-        includeClosed,
-        includePending,
-        granularity,
-        constraints);
+    return ScopeDimensionMismatch.ownAccountTypes(outerDim, types)
+        .map(
+            ownTypes ->
+                queryRepository.childAccountTurnover(
+                    parentId,
+                    ownTypes,
+                    resolved.start(),
+                    resolved.end(),
+                    baseCurrency,
+                    legName,
+                    includeClosed,
+                    includePending,
+                    granularity,
+                    constraints))
+        .orElse(List.of());
   }
 
   /**
@@ -371,18 +295,22 @@ class ReportDataFetcher {
       LocalDate asOf,
       ReportSpec spec) {
     if (innerDim != null) {
-      QueryConstraints childConstraints = withSyntheticFilter(spec.filters(), outerDim, outerKey);
+      QueryConstraints childConstraints = withSyntheticFilter(spec, outerDim, innerDim, outerKey);
       return closingBalanceAt(innerDim, types, scope, asOf, childConstraints);
     }
-    QueryConstraints constraints = new QueryConstraints(spec.filters());
-    long parentId = realId(outerKey);
-    return queryRepository.childAccountClosingBalance(
-        parentId,
-        types,
-        asOf,
-        scope.includeClosedAccounts(),
-        scope.includePendingReview(),
-        constraints);
+    QueryConstraints constraints = PromotedNodes.constraints(spec.filters(), spec, outerDim, null);
+    long parentId = AxisNode.realId(outerKey);
+    return ScopeDimensionMismatch.ownAccountTypes(outerDim, types)
+        .map(
+            ownTypes ->
+                queryRepository.childAccountClosingBalance(
+                    parentId,
+                    ownTypes,
+                    asOf,
+                    scope.includeClosedAccounts(),
+                    scope.includePendingReview(),
+                    constraints))
+        .orElse(List.of());
   }
 
   private static Leg legFor(Measure measure) {
@@ -408,10 +336,10 @@ class ReportDataFetcher {
   }
 
   private static QueryConstraints withSyntheticFilter(
-      List<ReportFilter> baseFilters, Dimension dimension, String rawKey) {
-    List<ReportFilter> combined = new ArrayList<>(baseFilters);
-    combined.add(syntheticSubtreeFilter(dimension, rawKey));
-    return new QueryConstraints(combined);
+      ReportSpec spec, Dimension outerDim, Dimension innerDim, String rawKey) {
+    List<ReportFilter> combined = new ArrayList<>(spec.filters());
+    combined.add(syntheticSubtreeFilter(outerDim, rawKey));
+    return PromotedNodes.constraints(combined, spec, outerDim, innerDim);
   }
 
   /**
@@ -461,16 +389,20 @@ class ReportDataFetcher {
       DateGranularity granularity,
       QueryConstraints constraints) {
     if (nonDateDim == Dimension.CATEGORY || nonDateDim == Dimension.ACCOUNT) {
-      return queryRepository.accountTreeTurnover(
-          types,
-          resolved.start(),
-          resolved.end(),
-          baseCurrency,
-          legName,
-          includeClosed,
-          includePending,
-          granularity,
-          constraints);
+      return ScopeDimensionMismatch.ownAccountTypes(nonDateDim, types)
+          .map(
+              ownTypes ->
+                  queryRepository.accountTreeTurnover(
+                      ownTypes,
+                      resolved.start(),
+                      resolved.end(),
+                      baseCurrency,
+                      legName,
+                      includeClosed,
+                      includePending,
+                      granularity,
+                      constraints))
+          .orElse(List.of());
     }
     if (nonDateDim == Dimension.TAG) {
       return queryRepository.tagTurnover(
@@ -580,8 +512,12 @@ class ReportDataFetcher {
     boolean includeClosed = scope.includeClosedAccounts();
     boolean includePending = scope.includePendingReview();
     if (nonDateDim == Dimension.CATEGORY || nonDateDim == Dimension.ACCOUNT) {
-      return queryRepository.accountTreeClosingBalance(
-          types, asOf, includeClosed, includePending, constraints);
+      return ScopeDimensionMismatch.ownAccountTypes(nonDateDim, types)
+          .map(
+              ownTypes ->
+                  queryRepository.accountTreeClosingBalance(
+                      ownTypes, asOf, includeClosed, includePending, constraints))
+          .orElse(List.of());
     }
     if (nonDateDim == Dimension.PERSON) {
       return queryRepository.personClosingBalance(

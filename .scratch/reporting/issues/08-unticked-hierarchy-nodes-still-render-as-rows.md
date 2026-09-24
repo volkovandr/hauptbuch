@@ -97,3 +97,28 @@ deciding case 2. See also `13-single-slice-pie-renders-empty.md`.
 reporting slice f (f's "a cell's postings match the list it opens" guarantee needs the right row set
 first). The grilling also produced `19-counterpart-report-account-by-category.md` (deferred until
 after f) and `20-sign-presentation-of-spending-and-income.md`.
+
+Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation. How each decided rule
+is met:
+
+- **Rules 1 and 3 (grouping).** The account and tag "top ancestor" CTEs take the ticked ids as extra
+  roots, and the walk down from a real root stops at a ticked node, so every posting still rolls up
+  to exactly one top-level node. The filters' subtree lookup and the child queries stop at ticked
+  nodes the same way.
+- **Candidates.** "Booked to" lists only the ticked nodes. "Touching" lists them plus the real roots,
+  then `PromotedNodes.withoutUntouchedRoots` drops the roots the data shows untouched (on a nested
+  axis's inner dimension too).
+- **Rule 4.** Ticked nodes get full-path labels from `promotedAccountCandidates` /
+  `promotedTagCandidates`.
+- **Rule 5.** Category and Account narrow their queries to their own types
+  (`ScopeDimensionMismatch.ownAccountTypes`). A scope with none of them leaves an empty axis plus the
+  mismatch message.
+- **Structure.** The candidate lookups moved out of `ReportDataFetcher` into a new `AxisCandidates`
+  (PMD's God Class limit), and `realId` moved to `AxisNode`.
+- **Docs.** `reporting.md` §4, §6.3, §7.3 and §9.2 amended.
+
+Known limits:
+
+- Under "touching", expanding a real root still lists its untouched children blank (suppressible),
+  as before.
+- A ticked personal-debt leaf shows under its cosmetic account name until issues 06/11 land.
