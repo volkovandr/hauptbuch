@@ -1,6 +1,6 @@
 # Personal debts: one "Personal debts" row that expands to people, then to currencies
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: medium
 Area: Reporting (`analytics` module: `ReportQueryRepository`, `ReportDataFetcher`, `ReportGridBuilder`, `AutoExpansion`)
@@ -93,7 +93,7 @@ above.
 Scheduled before reporting slice f, together with issue 11, so f's drill-down builds on the typed node
 kind rather than the `personal:` prefix.
 
-Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation.
+Implemented 2026-09-24 (branch `feat/reporting`), owner-confirmed the same day.
 
 - **Tree.** The account tree groups every debt leaf under one `personal` / "Personal debts" node.
   Expanding it runs `debtPeopleCandidates` / `debtPeopleTurnover` / `debtPeopleClosingBalance`
