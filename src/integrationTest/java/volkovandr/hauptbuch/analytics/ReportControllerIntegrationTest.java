@@ -335,6 +335,60 @@ class ReportControllerIntegrationTest {
   }
 
   @Test
+  void filteredSectionOffersResetThatKeepsEveryOtherFilter() throws Exception {
+    // Reporting issue 21: one click clears a section's own filter; the rest of the draft stays.
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    MultiValueMap<String, String> draft = ReportSpecQueryString.toParams(Presets.balanceSheet());
+    draft.add("filterField", "ACCOUNT");
+    draft.add("filter.ACCOUNT.level", "TRANSACTION");
+    draft.add("filter.ACCOUNT.op", "IS_ONE_OF");
+    draft.add("filter.ACCOUNT.value", String.valueOf(cash));
+    draft.add("filterField", "PAYEE");
+    draft.add("filter.PAYEE.level", "TRANSACTION");
+    draft.add("filter.PAYEE.op", "MATCHES");
+    draft.add("filter.PAYEE.matches", "shop");
+    draft.add("filterField", "CURRENCY");
+    draft.add("filter.CURRENCY.level", "POSTING");
+    draft.add("filter.CURRENCY.op", "IS_ONE_OF");
+    draft.add("filter.CURRENCY.value", "EUR");
+
+    String body =
+        mockMvc
+            .perform(get("/reports/preset/balance-sheet").params(draft))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    // A hierarchy section's reset keeps the Payee and Currency filters, but not its own.
+    assertThat(resetForm(body, "ACCOUNT"))
+        .containsPattern("name=\"filter.PAYEE.matches\"\\s+value=\"shop\"")
+        .containsPattern("name=\"filter.CURRENCY.value\"\\s+value=\"EUR\"")
+        .doesNotContain("filter.ACCOUNT.");
+    // Payee and a flat option section get their own, which keep the Account filter.
+    assertThat(resetForm(body, "PAYEE"))
+        .contains("name=\"filter.ACCOUNT.value\"")
+        .doesNotContain("filter.PAYEE.");
+    assertThat(resetForm(body, "CURRENCY"))
+        .contains("name=\"filter.ACCOUNT.value\"")
+        .doesNotContain("filter.CURRENCY.");
+    assertThat(body).contains("form=\"filter-reset-ACCOUNT\"");
+    // An empty section has nothing to reset.
+    assertThat(body).doesNotContain("filter-reset-CATEGORY").doesNotContain("filter-reset-NOTE");
+  }
+
+  /** The Reset form of one filter section, from its opening tag to its close. */
+  private static String resetForm(String body, String field) {
+    Matcher matcher =
+        Pattern.compile("(?s)<form[^>]*id=\"filter-reset-" + field + "\".*?</form>").matcher(body);
+    if (!matcher.find()) {
+      throw new AssertionError("No reset form for " + field);
+    }
+    return matcher.group();
+  }
+
+  @Test
   void payeeMatchesOperatorRendersItsRegexAndTicksTheMatchesRadio() throws Exception {
     settingsService.setBaseCurrency("EUR");
     MultiValueMap<String, String> draft =
