@@ -31,3 +31,11 @@ still looks right.
 ## Comments
 
 Filed 2026-09-23 from owner testing at the close of reporting stage e.
+
+Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation: `.frame { overflow-x:
+auto; }` in `reports.css`, so a too-wide report scrolls inside its own Frame (the preferred option).
+The whole Frame scrolls, not just the table. A scroll box clips its content, including absolutely
+positioned `.help` tooltips, and the Frame's title/scope/date lines leave the first table rows'
+upward-opening tooltips room inside it. The rule is on `.frame`, so it applies on `/reports`, in the
+layout editor, and on the main page alike. Residual: a tooltip that grows leftward past the Frame's
+left edge (a marker in a narrow early column) is clipped rather than spilling over the neighbour.

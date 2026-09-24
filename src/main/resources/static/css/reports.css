@@ -154,8 +154,16 @@ table.report td:first-child .help__text {
   color: var(--focus);
 }
 
-/* A Frame (reporting.md §11, plan stage d2): the "Open report →" action sits at the bottom right,
-   a quiet app action rather than a bare link. */
+/* A Frame (reporting.md §11, plan stage d2): a report wider than its Layout cell scrolls inside its
+   own Frame rather than painting over the neighbouring one (issue 07). The whole Frame scrolls, not
+   just the table: a scroll box clips its content, and the title/scope/date lines above the table
+   are what leave the first rows' upward-opening .help tooltips room inside it. */
+.frame {
+  overflow-x: auto;
+}
+
+/* The "Open report →" action sits at the bottom right, a quiet app action rather than a bare
+   link. */
 .frame__open {
   margin: 0.5rem 0 0;
   text-align: right;
