@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
+import volkovandr.hauptbuch.analytics.repository.NodeKey;
 import volkovandr.hauptbuch.analytics.repository.QueryConstraints;
 import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
 
@@ -36,11 +37,28 @@ final class PromotedNodes {
         .findFirst();
   }
 
-  /** {@code dimension}'s promoted node ids, empty when nothing is promoted. */
+  /**
+   * {@code dimension}'s promoted real node ids, empty when nothing is promoted. A ticked "Personal
+   * debts" node is not among them: it has no account id, and the account tree groups every debt
+   * leaf under it anyway ({@link #promotesPersonalDebts}).
+   */
   static List<Long> ids(Dimension dimension, ReportSpec spec) {
     return ownFilter(dimension, spec)
-        .map(f -> f.values().stream().map(Long::parseLong).toList())
+        .map(
+            f ->
+                f.values().stream()
+                    .map(NodeKey::parse)
+                    .filter(n -> n.kind() == NodeKey.Kind.NODE)
+                    .map(NodeKey::id)
+                    .toList())
         .orElse(List.of());
+  }
+
+  /** Whether the filter on {@code dimension}'s own field ticks "Personal debts" (issue 11). */
+  static boolean promotesPersonalDebts(Dimension dimension, ReportSpec spec) {
+    return ownFilter(dimension, spec)
+        .map(f -> f.values().contains(NodeKey.PERSONAL_DEBTS))
+        .orElse(false);
   }
 
   /**

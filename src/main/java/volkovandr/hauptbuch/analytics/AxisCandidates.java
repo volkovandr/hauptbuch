@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
+import volkovandr.hauptbuch.analytics.repository.NodeKey;
 import volkovandr.hauptbuch.analytics.repository.ReportQueryRepository;
 import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
 
@@ -54,18 +55,32 @@ class AxisCandidates {
     if (dimension == Dimension.TAG) {
       nodes.addAll(queryRepository.promotedTagCandidates(ids));
     } else {
+      boolean includeClosed = spec.scope().includeClosedAccounts();
       ScopeDimensionMismatch.ownAccountTypes(dimension, types)
           .ifPresent(
-              ownTypes ->
-                  nodes.addAll(
-                      queryRepository.promotedAccountCandidates(
-                          ids, ownTypes, spec.scope().includeClosedAccounts())));
+              ownTypes -> {
+                nodes.addAll(
+                    queryRepository.promotedAccountCandidates(ids, ownTypes, includeClosed));
+                if (PromotedNodes.promotesPersonalDebts(dimension, spec)) {
+                  nodes.addAll(personalDebtsCandidate(ownTypes, includeClosed));
+                }
+              });
     }
     if (level == FilterLevel.TRANSACTION) {
       nodes.addAll(topLevelCandidates(dimension, types, spec.scope()));
       nodes.sort(Comparator.comparing(TopLevelNode::label, String.CASE_INSENSITIVE_ORDER));
     }
     return nodes;
+  }
+
+  /**
+   * The "Personal debts" node alone, when any debt leaf is in scope — ticked in the Account filter,
+   * it is a promoted top-level node like any other (reporting issues 08, 11).
+   */
+  private List<TopLevelNode> personalDebtsCandidate(List<String> ownTypes, boolean includeClosed) {
+    return queryRepository.topLevelAccounts(ownTypes, includeClosed).stream()
+        .filter(n -> NodeKey.PERSONAL_DEBTS.equals(n.key()))
+        .toList();
   }
 
   private List<TopLevelNode> topLevelCandidates(
@@ -111,17 +126,22 @@ class AxisCandidates {
    * e's cross-dimension nesting, §3) or, when there is no second dimension at all, {@code
    * outerDim}'s own direct children (§9.1's same-dimension "expand one node" case, recursing to
    * arbitrary depth — {@code parentKey} may itself be a depth &gt; 0 composite key, see {@link
-   * AxisNode#realId}). Split out so {@link ReportEngine} can determine each candidate's {@link
-   * AxisNode#expandable} flag before deciding what — if anything — to fetch data for. A promoted
-   * node (issue 08) is never listed as a child: it is a top-level node of its own.
+   * NodeKey#ofLastSegment}). Split out so {@link ReportEngine} can determine each candidate's
+   * {@link AxisNode#expandable} flag before deciding what — if anything — to fetch data for. A
+   * promoted node (issue 08) is never listed as a child: it is a top-level node of its own. The
+   * "Personal debts" node's children are people, and a person's are their debt leaves (issue 06).
    */
   List<TopLevelNode> childCandidatesFor(Dimension outerDim, String parentKey, ReportSpec spec) {
-    long parentId = AxisNode.realId(parentKey);
+    NodeKey parent = NodeKey.ofLastSegment(parentKey);
     List<Long> promoted = PromotedNodes.ids(outerDim, spec);
     if (outerDim == Dimension.TAG) {
-      return queryRepository.childTagCandidates(parentId, promoted);
+      return queryRepository.childTagCandidates(parent.id(), promoted);
     }
-    return queryRepository.childAccountCandidates(
-        parentId, spec.scope().includeClosedAccounts(), promoted);
+    boolean includeClosed = spec.scope().includeClosedAccounts();
+    return switch (parent.kind()) {
+      case PERSONAL_DEBTS -> queryRepository.debtPeopleCandidates(includeClosed);
+      case PERSON -> queryRepository.debtLeafCandidates(parent.id(), includeClosed);
+      case NODE -> queryRepository.childAccountCandidates(parent.id(), includeClosed, promoted);
+    };
   }
 }

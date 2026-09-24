@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.analytics;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -208,15 +209,41 @@ class ReportGridBuilderTest {
   }
 
   @Test
-  void frontierNodesNeverMarksThePersonalDebtsPseudoBucketExpandable() {
+  void frontierNodesWalkPersonalDebtsThroughPeopleToTheirCurrencyLeaves() {
+    // Reporting issue 06: one "Personal debts" row → one row per person → their currency leaves.
     Map<String, TopLevelNode> outer =
-        candidates(new TopLevelNode("personal:EUR", "Personal debts (EUR)", "asset"));
+        candidates(
+            new TopLevelNode("1", "Cash", "asset"),
+            new TopLevelNode("personal", "Personal debts", "asset", true));
+    Map<String, List<TopLevelNode>> children =
+        Map.of(
+            "personal",
+            List.of(
+                new TopLevelNode("person:7", "Max", "asset", true),
+                new TopLevelNode("person:8", "Doe", "asset", true)),
+            "personal|person:7",
+            List.of(
+                new TopLevelNode("31", "CHF", "asset", false),
+                new TopLevelNode("30", "EUR", "asset", false)));
 
     List<AxisNode> frontier =
         builder.frontierNodes(
-            Dimension.ACCOUNT, Dimension.CATEGORY, outer, Map.of(), Map.of(), Set.of());
+            Dimension.ACCOUNT,
+            null,
+            outer,
+            Map.of(),
+            children,
+            Set.of("personal", "personal|person:7"));
 
-    assertThat(frontier.get(0).expandable()).isFalse();
+    assertThat(frontier)
+        .extracting(AxisNode::key, AxisNode::depth, AxisNode::expandable, AxisNode::expanded)
+        .containsExactly(
+            tuple("1", 0, false, false),
+            tuple("personal", 0, true, true),
+            tuple("personal|person:7", 1, true, true),
+            tuple("personal|person:7|31", 2, false, false),
+            tuple("personal|person:7|30", 2, false, false),
+            tuple("personal|person:8", 1, true, false));
   }
 
   @Test

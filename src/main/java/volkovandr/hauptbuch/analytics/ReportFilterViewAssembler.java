@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.analytics;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -8,11 +9,13 @@ import volkovandr.hauptbuch.accounts.AccountNode;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.analytics.ReportFilterView.Candidate;
 import volkovandr.hauptbuch.analytics.ReportFilterView.HierarchySection;
+import volkovandr.hauptbuch.analytics.ReportFilterView.NodeRow;
 import volkovandr.hauptbuch.analytics.ReportFilterView.NoteSection;
 import volkovandr.hauptbuch.analytics.ReportFilterView.OptionRow;
 import volkovandr.hauptbuch.analytics.ReportFilterView.OptionSection;
 import volkovandr.hauptbuch.analytics.ReportFilterView.PayeeSection;
 import volkovandr.hauptbuch.analytics.ReportFilterView.View;
+import volkovandr.hauptbuch.analytics.repository.NodeKey;
 import volkovandr.hauptbuch.categories.CategoryService;
 import volkovandr.hauptbuch.categories.TagNode;
 import volkovandr.hauptbuch.categories.TagService;
@@ -70,14 +73,16 @@ class ReportFilterViewAssembler {
             FilterLevel.POSTING,
             filters,
             allParams),
-        hierarchySection(
-            FilterField.ACCOUNT,
-            accountCandidates(
-                accountService.findLiveByTypesWithDepth(
-                    ScopeDimensionMismatch.accountTypesFor(Dimension.ACCOUNT))),
-            FilterLevel.TRANSACTION,
-            filters,
-            allParams),
+        withPersonalDebts(
+            hierarchySection(
+                FilterField.ACCOUNT,
+                accountCandidates(
+                    accountService.findLiveByTypesWithDepth(
+                        ScopeDimensionMismatch.accountTypesFor(Dimension.ACCOUNT))),
+                FilterLevel.TRANSACTION,
+                filters,
+                allParams),
+            filters),
         hierarchySection(
             FilterField.TAG,
             tagCandidates(tagService.findLiveWithDepth()),
@@ -124,14 +129,37 @@ class ReportFilterViewAssembler {
     return filters.stream().filter(f -> f.field() == field).findFirst();
   }
 
+  /**
+   * Every account node but the currency leaves and the per-person debt leaves — a debt leaf's own
+   * name ({@code personal.<CUR>}, data-model §7) says nothing about whose it is; {@link
+   * #withPersonalDebts} offers them as one entry instead (reporting issue 11).
+   */
   private static List<Candidate> accountCandidates(List<AccountNode> nodes) {
     return nodes.stream()
-        .filter(n -> !n.account().currencyLeaf())
+        .filter(n -> !n.account().currencyLeaf() && !n.account().personLeaf())
         .map(
             n ->
                 new Candidate(
                     n.account().accountId(), n.account().parentId(), n.account().name(), n.depth()))
         .toList();
+  }
+
+  /**
+   * The Account section plus one "Personal debts" entry standing for every person's debt leaves
+   * (reporting issue 11, the same node the report's account tree shows, issue 06). Filtering by one
+   * person is the Person section's job, so the entry has no children.
+   */
+  private static HierarchySection withPersonalDebts(
+      HierarchySection section, List<ReportFilter> filters) {
+    boolean ticked =
+        find(filters, FilterField.ACCOUNT)
+            .map(f -> f.values().contains(NodeKey.PERSONAL_DEBTS))
+            .orElse(false);
+    List<NodeRow> nodes = new ArrayList<>(section.nodes());
+    nodes.add(
+        new NodeRow(NodeKey.PERSONAL_DEBTS, NodeKey.PERSONAL_DEBTS_LABEL, 0, ticked, false, ""));
+    return new HierarchySection(
+        section.label(), nodes, section.transactionLevel(), section.otherParams());
   }
 
   private static List<Candidate> tagCandidates(List<TagNode> nodes) {

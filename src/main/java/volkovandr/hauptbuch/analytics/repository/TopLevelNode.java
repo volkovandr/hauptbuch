@@ -14,9 +14,9 @@ package volkovandr.hauptbuch.analytics.repository;
  *     drives {@link volkovandr.hauptbuch.analytics.AxisNode#expandable()} for the same-dimension
  *     "expand one node within its own hierarchy" case, at any depth. Irrelevant (and always {@code
  *     false} via the three-arg constructor) for a dimension that is never nestable ({@link
- *     volkovandr.hauptbuch.analytics.AutoExpansion#isNestable}) or for a synthetic bucket (the
- *     per-currency "personal debts" pseudo-node, the tag tree's {@code (unspecified)} row) that is
- *     never itself expandable regardless of what it counts.
+ *     volkovandr.hauptbuch.analytics.AutoExpansion#isNestable}) or for a synthetic bucket (the tag
+ *     tree's {@code (unspecified)} row) that is never itself expandable regardless of what it
+ *     counts.
  */
 public record TopLevelNode(String key, String label, String type, boolean hasChildren) {
 

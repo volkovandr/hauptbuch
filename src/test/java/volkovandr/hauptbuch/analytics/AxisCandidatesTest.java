@@ -149,7 +149,7 @@ class AxisCandidatesTest {
     verify(queryRepository, never()).topLevelAccounts(anyList(), anyBoolean());
   }
 
-  // ── childCandidatesFor / realId (stage e's parent-key resolution) ──────────
+  // ── childCandidatesFor (stage e's parent-key resolution) ─────────────────
 
   @Test
   void childCandidatesForUsesTheWholeKeyAsTheParentIdForTopLevelNode() {
@@ -200,5 +200,39 @@ class AxisCandidatesTest {
     axisCandidates.childCandidatesFor(Dimension.ACCOUNT, "10", spec);
 
     verify(queryRepository).childAccountCandidates(10L, true, List.of(12L));
+  }
+
+  // ── the personal-debt tree (reporting issues 06, 11) ─────────────────────
+
+  @Test
+  void personalDebtsChildrenArePeopleAndPersonsChildrenAreTheirLeaves() {
+    ReportSpec spec = filteredSpec(Dimension.ACCOUNT, Scope.ofTypes("asset"), null);
+    List<TopLevelNode> people = List.of(new TopLevelNode("person:7", "Max", "asset", true));
+    List<TopLevelNode> leaves = List.of(new TopLevelNode("31", "EUR", "asset", false));
+    when(queryRepository.debtPeopleCandidates(true)).thenReturn(people);
+    when(queryRepository.debtLeafCandidates(7L, true)).thenReturn(leaves);
+
+    assertThat(axisCandidates.childCandidatesFor(Dimension.ACCOUNT, "personal", spec))
+        .isEqualTo(people);
+    assertThat(axisCandidates.childCandidatesFor(Dimension.ACCOUNT, "personal|person:7", spec))
+        .isEqualTo(leaves);
+  }
+
+  @Test
+  void tickedPersonalDebtsIsPromotedToTheTopLevel() {
+    ReportSpec spec =
+        filteredSpec(
+            Dimension.ACCOUNT,
+            Scope.ofTypes("asset"),
+            ownFilter(FilterField.ACCOUNT, FilterLevel.POSTING, "personal", "12"));
+    TopLevelNode personalDebts = new TopLevelNode("personal", "Personal debts", "asset", true);
+    when(queryRepository.promotedAccountCandidates(List.of(12L), List.of("asset"), true))
+        .thenReturn(List.of(new TopLevelNode("12", "Cash:Cash-EUR", "asset")));
+    when(queryRepository.topLevelAccounts(List.of("asset"), true))
+        .thenReturn(List.of(new TopLevelNode("1", "Cash", "asset", true), personalDebts));
+
+    assertThat(axisCandidates.candidatesFor(Dimension.ACCOUNT, spec).values())
+        .extracting(TopLevelNode::key)
+        .containsExactly("12", "personal");
   }
 }

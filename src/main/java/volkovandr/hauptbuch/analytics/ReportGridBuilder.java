@@ -72,11 +72,10 @@ class ReportGridBuilder {
    *     consulted) when {@code innerDim} is {@code null}
    * @param expandedKeys which nodes are expanded (reporting.md §9.2), at any depth — a node is
    *     {@link AxisNode#expandable} when {@code outerDim} can nest a second dimension at all (§9.1
-   *     — a hierarchical dimension only), it is not the per-currency "personal debts" pseudo-bucket
-   *     (not a single subtree, {@link AutoExpansion#isPersonLeafBucket}), and — for the same-
-   *     dimension case only — it actually {@link TopLevelNode#hasChildren} of its own; a cross-
-   *     dimension depth-0 node is always expandable when nestable, since its children come from the
-   *     independent inner dimension, not its own subtree
+   *     — a hierarchical dimension only) and — for the same-dimension case only — it actually
+   *     {@link TopLevelNode#hasChildren} of its own; a cross-dimension depth-0 node is always
+   *     expandable when nestable, since its children come from the independent inner dimension, not
+   *     its own subtree
    */
   List<AxisNode> frontierNodes(
       Dimension outerDim,
@@ -145,7 +144,6 @@ class ReportGridBuilder {
     boolean expandable =
         !crossDimensionChild
             && AutoExpansion.isNestable(outerDim)
-            && !AutoExpansion.isPersonLeafBucket(node.key())
             && (innerDim != null || node.hasChildren());
     boolean expanded = expandable && expandedKeys.contains(key);
     frontier.add(new AxisNode(key, node.label(), depth, expandable, parentKey, expanded));

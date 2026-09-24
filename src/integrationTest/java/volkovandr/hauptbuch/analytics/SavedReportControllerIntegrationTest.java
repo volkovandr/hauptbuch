@@ -647,6 +647,77 @@ class SavedReportControllerIntegrationTest {
   }
 
   @Test
+  void personalDebtsExpandsToPeopleThenToEachPersonsCurrencyLeaves() throws Exception {
+    // Reporting issue 06: one "Personal debts" row, expanding to people, then to their leaves.
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset", "EUR", null);
+    long max = insertPersonWithLeaf("Max");
+    long doe = insertPersonWithLeaf("Doe");
+    postSingleCurrency(cash, debtLeafOf(max), LocalDate.now(), "30.00");
+    postSingleCurrency(cash, debtLeafOf(doe), LocalDate.now(), "12.00");
+    SavedReport saved = reportService.save("Debts", Presets.balanceSheet(), Renderer.TABLE, false);
+
+    mockMvc
+        .perform(get("/reports/" + saved.reportId()))
+        .andExpect(content().string(containsString("Personal debts")))
+        .andExpect(content().string(containsString("42,00")))
+        // Collapsed: no person row yet ("Max" itself is on the page, in the Person filter).
+        .andExpect(content().string(not(containsString("padding-left: 20px"))))
+        .andExpect(content().string(not(containsString("personal.EUR"))));
+
+    String people =
+        mockMvc
+            .perform(post("/reports/" + saved.reportId() + "/expand").param("node", "personal"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(people).contains("Max", "Doe", "padding-left: 20px", "30,00", "12,00");
+    assertThat(people).doesNotContain("padding-left: 40px");
+
+    String leaves =
+        mockMvc
+            .perform(
+                post("/reports/" + saved.reportId() + "/expand")
+                    .param("node", "personal|person:" + max))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    // Max's one leaf, labelled by its currency, one level further in; Doe stays collapsed.
+    assertThat(leaves).contains("padding-left: 40px").contains(">EUR<");
+    assertThat(leaves.split("padding-left: 40px", -1)).hasSize(2);
+  }
+
+  private long insertPersonWithLeaf(String name) {
+    long personId =
+        jdbcClient
+            .sql("insert into person (name) values (:n) returning person_id")
+            .param("n", name)
+            .query(Long.class)
+            .single();
+    long leaf = insertAccount("personal.EUR", "asset", "EUR", null);
+    jdbcClient
+        .sql("update account set person_leaf = true where account_id = :a")
+        .param("a", leaf)
+        .update();
+    jdbcClient
+        .sql("insert into account_owner (account_id, person_id) values (:a, :p)")
+        .param("a", leaf)
+        .param("p", personId)
+        .update();
+    return personId;
+  }
+
+  private long debtLeafOf(long personId) {
+    return jdbcClient
+        .sql("select account_id from account_owner where person_id = :p")
+        .param("p", personId)
+        .query(Long.class)
+        .single();
+  }
+
+  @Test
   void multilevelExpandRevealsGrandchildOnceBothAncestorsAreToggled() throws Exception {
     // reporting.md §9.1's own multilevel case: Bakery is itself a child of Food AND has its own
     // child Sourdough — expanding Food then Bakery must reveal Sourdough at depth 2, not stop after

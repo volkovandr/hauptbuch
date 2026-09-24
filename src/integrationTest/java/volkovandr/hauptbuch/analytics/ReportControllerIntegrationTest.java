@@ -304,6 +304,37 @@ class ReportControllerIntegrationTest {
   }
 
   @Test
+  void accountFilterOffersOnePersonalDebtsEntryInsteadOfTheCosmeticLeaves() throws Exception {
+    // Reporting issue 11: the debt leaves' own names (personal.<CUR>) say nothing about whose
+    // they are; the filter offers one "Personal debts" entry that stands for all of them.
+    settingsService.setBaseCurrency("EUR");
+    long leaf = insertAccount("personal.EUR", "asset", "EUR", null);
+    jdbcClient
+        .sql("update account set person_leaf = true where account_id = :a")
+        .param("a", leaf)
+        .update();
+    MultiValueMap<String, String> draft = ReportSpecQueryString.toParams(Presets.balanceSheet());
+    draft.add("filterField", "ACCOUNT");
+    draft.add("filter.ACCOUNT.level", "TRANSACTION");
+    draft.add("filter.ACCOUNT.op", "IS_ONE_OF");
+    draft.add("filter.ACCOUNT.value", "personal");
+
+    String body =
+        mockMvc
+            .perform(get("/reports/preset/balance-sheet").params(draft))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    assertThat(body).doesNotContain("personal.EUR");
+    assertThat(filterCheckboxTag(body, "personal"))
+        .contains("checked=\"checked\"")
+        .doesNotContain("disabled=\"disabled\"");
+    assertThat(body).contains("Personal debts");
+  }
+
+  @Test
   void payeeMatchesOperatorRendersItsRegexAndTicksTheMatchesRadio() throws Exception {
     settingsService.setBaseCurrency("EUR");
     MultiValueMap<String, String> draft =
@@ -346,6 +377,10 @@ class ReportControllerIntegrationTest {
    * this node's ticked value as a plain hidden field too, since it does not own that filter).
    */
   private static String filterCheckboxTag(String body, long nodeId) {
+    return filterCheckboxTag(body, String.valueOf(nodeId));
+  }
+
+  private static String filterCheckboxTag(String body, String nodeId) {
     Matcher matcher =
         Pattern.compile("<input[^>]*data-filter-node=\"" + nodeId + "\"[^>]*/>").matcher(body);
     if (!matcher.find()) {
