@@ -51,6 +51,30 @@ public class ReportQueryRepository {
   private static final String BUCKET_FORMAT = "bucketFormat";
   private static final String PROMOTED_ACCOUNT_IDS = "promotedAccountIds";
   private static final String PROMOTED_TAG_IDS = "promotedTagIds";
+  private static final String PERSON_ID = "personId";
+  private static final String PERSON_NAME = "per.name";
+
+  /** The {@code PERSON} dimension's key: the owner's bare id. */
+  private static final String PERSON_ID_KEY = "per.person_id::text";
+
+  /** A person's key beneath "Personal debts" ({@link NodeKey#personKey}). */
+  private static final String PERSON_KEY = "'" + NodeKey.PERSON_PREFIX + "' || per.person_id::text";
+
+  /** A person's own debt leaf, beneath their person node. */
+  private static final String LEAF_KEY = "a.account_id::text";
+
+  /** Restricts the debt-leaf queries to one person's own leaves. */
+  private static final String ONE_PERSON = AND + "ao.person_id = :personId\n";
+
+  /** The debt-leaf queries' joins: each posting's account and its owner. */
+  private static final String DEBT_LEAF_JOINS =
+      """
+      from posting p
+      join transaction t on t.transaction_id = p.transaction_id
+      join account a on a.account_id = p.account_id
+      join account_owner ao on ao.account_id = a.account_id
+      join person per on per.person_id = ao.person_id
+      """;
 
   /**
    * The Date bucket a turnover row groups by (reporting.md §8.2, stage e4) — {@link
@@ -130,21 +154,25 @@ public class ReportQueryRepository {
    * A per-person debt leaf (data-model §7) is its own root in {@link #ACCOUNT_ANCESTOR_CTE} —
    * {@code parent_id is null} like a real top-level account — so without this, the {@code
    * CATEGORY}/{@code ACCOUNT} dimension would list every person's leaf individually under its
-   * cosmetic, non-owner name ({@code personal.<CUR>}, data-model §7). Collapse every leaf sharing a
-   * currency into one {@code "Personal debts (<CUR>)"} bucket instead; per-person expansion is
-   * deferred (reporting.md Q-REP-1) to the {@code PERSON} dimension, which already labels correctly
-   * via {@link #personCandidates}. A debt leaf ticked in its own right (reporting issue 08) is a
-   * promoted node like any other, and keeps its own key.
+   * cosmetic, non-owner name ({@code personal.<CUR>}, data-model §7). Every debt leaf groups under
+   * the one synthetic "Personal debts" node instead ({@link NodeKey#PERSONAL_DEBTS}, reporting
+   * issue 06), which expands to people ({@link #debtPeopleCandidates}) and then to each person's
+   * leaves ({@link #debtLeafCandidates}). A debt leaf ticked in its own right (reporting issue 08)
+   * is a promoted node like any other, and keeps its own key.
    */
   private static final String ACCOUNT_DIMENSION_KEY =
       "case when "
           + PERSONAL_DEBTS_BUCKET
-          + " then 'personal:' || a.currency_code else anc.top_id::text end";
+          + " then '"
+          + NodeKey.PERSONAL_DEBTS
+          + "' else anc.top_id::text end";
 
   private static final String ACCOUNT_DIMENSION_LABEL =
       "case when "
           + PERSONAL_DEBTS_BUCKET
-          + " then 'Personal debts (' || a.currency_code || ')' else top.name end";
+          + " then '"
+          + NodeKey.PERSONAL_DEBTS_LABEL
+          + "' else top.name end";
 
   private static final String ACCOUNT_DIMENSION_TYPE =
       "case when " + PERSONAL_DEBTS_BUCKET + " then a.type else top.type end";
@@ -416,7 +444,8 @@ public class ReportQueryRepository {
   /**
    * Every live, non-currency-leaf top-level account of the given types — the {@code CATEGORY}/
    * {@code ACCOUNT} row candidates, including ones with no activity this period, so an all-blank
-   * row can be suppressed rather than simply never listed (reporting.md §7.3).
+   * row can be suppressed rather than simply never listed (reporting.md §7.3) — plus the one
+   * "Personal debts" node when any debt leaf is in scope (see {@link #ACCOUNT_DIMENSION_KEY}).
    */
   public List<TopLevelNode> topLevelAccounts(List<String> types, boolean includeClosedAccounts) {
     return jdbcClient
@@ -432,17 +461,19 @@ public class ReportQueryRepository {
               and deleted_at is null
               and (:includeClosedAccounts or closed_at is null)
             union all
-            select distinct 'personal:' || currency_code as key,
-                   'Personal debts (' || currency_code || ')' as label,
-                   type,
-                   false as has_children
-            from account
-            where type in (:types)
-              and person_leaf = true
-              and deleted_at is null
-              and (:includeClosedAccounts or closed_at is null)
+            select :personalDebtsKey as key, :personalDebtsLabel as label, 'asset' as type,
+                   true as has_children
+            where exists(
+              select 1 from account
+              where type in (:types)
+                and person_leaf = true
+                and deleted_at is null
+                and (:includeClosedAccounts or closed_at is null)
+            )
             order by label
             """)
+        .param("personalDebtsKey", NodeKey.PERSONAL_DEBTS)
+        .param("personalDebtsLabel", NodeKey.PERSONAL_DEBTS_LABEL)
         .param(TYPES, types)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .query(TopLevelNode.class)
@@ -1088,32 +1119,7 @@ public class ReportQueryRepository {
       QueryConstraints constraints) {
     CompiledExtra extra = compileExtra(constraints);
     return jdbcClient
-        .sql(
-            """
-            select per.person_id::text as dimension_key,
-                   per.name as dimension_label,
-                   'asset' as dimension_type,
-                   """
-                + BUCKET_KEY_AND_CURRENCY_COLUMNS
-                + TURNOVER_AGGREGATES
-                + """
-                from posting p
-                join transaction t on t.transaction_id = p.transaction_id
-                join account a on a.account_id = p.account_id
-                join account_owner ao on ao.account_id = a.account_id
-                join person per on per.person_id = ao.person_id
-                """
-                + RATE_LATERAL_JOIN
-                + WHERE
-                + SCOPE_PREDICATE
-                + AND
-                + LEG_PREDICATE
-                + AND
-                + "a.person_leaf = true\n"
-                + extra.sql()
-                + """
-                group by per.person_id, per.name, bucket_key, a.currency_code
-                """)
+        .sql(debtTurnoverSql(PERSON_ID_KEY, PERSON_NAME, "", extra))
         .param(TYPES, types)
         .param(START_DATE, startDate)
         .param(END_DATE, endDate)
@@ -1137,30 +1143,7 @@ public class ReportQueryRepository {
       QueryConstraints constraints) {
     CompiledExtra extra = compileExtra(constraints);
     return jdbcClient
-        .sql(
-            """
-            select per.person_id::text as dimension_key,
-                   per.name as dimension_label,
-                   'asset' as dimension_type,
-                   a.currency_code as currency_code,
-                   sum(p.amount) as native_balance
-            from posting p
-            join transaction t on t.transaction_id = p.transaction_id
-            join account a on a.account_id = p.account_id
-            join account_owner ao on ao.account_id = a.account_id
-            join person per on per.person_id = ao.person_id
-            where a.type in (:types)
-              and a.deleted_at is null
-              and (:includeClosedAccounts or a.closed_at is null)
-              and t.deleted_at is null
-              and (:includePendingReview or t.lifecycle = 'confirmed')
-              and t.date <= :asOf
-              and a.person_leaf = true
-            """
-                + extra.sql()
-                + """
-                group by per.person_id, per.name, a.currency_code
-                """)
+        .sql(debtClosingBalanceSql(PERSON_ID_KEY, PERSON_NAME, "", extra))
         .param(TYPES, types)
         .param(AS_OF, asOf)
         .param(INCLUDE_CLOSED, includeClosedAccounts)
@@ -1186,6 +1169,217 @@ public class ReportQueryRepository {
             """)
         .query(TopLevelNode.class)
         .list();
+  }
+
+  // ── the personal-debt tree: Personal debts → person → leaf (reporting issue 06) ──
+
+  /**
+   * The people beneath the "Personal debts" node ({@link #ACCOUNT_DIMENSION_KEY}): every person
+   * owning a live debt leaf, soft-deleted people included — they keep their history (data-model
+   * §7), and an empty one is suppression's call (§7.3). Keyed {@link NodeKey#personKey}.
+   */
+  public List<TopLevelNode> debtPeopleCandidates(boolean includeClosedAccounts) {
+    return jdbcClient
+        .sql(
+            "select distinct "
+                + PERSON_KEY
+                + """
+                 as key, per.name as label, 'asset' as type,
+                       true as has_children
+                from person per
+                join account_owner ao on ao.person_id = per.person_id
+                join account a on a.account_id = ao.account_id
+                where a.person_leaf = true
+                  and a.deleted_at is null
+                  and (:includeClosedAccounts or a.closed_at is null)
+                order by label
+                """)
+        .param(INCLUDE_CLOSED, includeClosedAccounts)
+        .query(TopLevelNode.class)
+        .list();
+  }
+
+  /** One person's own live debt leaves, labelled by their currency — never expandable. */
+  public List<TopLevelNode> debtLeafCandidates(long personId, boolean includeClosedAccounts) {
+    return jdbcClient
+        .sql(
+            """
+            select a.account_id::text as key, a.currency_code as label, a.type,
+                   false as has_children
+            from account a
+            join account_owner ao on ao.account_id = a.account_id
+            where ao.person_id = :personId
+              and a.person_leaf = true
+              and a.deleted_at is null
+              and (:includeClosedAccounts or a.closed_at is null)
+            order by label
+            """)
+        .param(PERSON_ID, personId)
+        .param(INCLUDE_CLOSED, includeClosedAccounts)
+        .query(TopLevelNode.class)
+        .list();
+  }
+
+  /**
+   * Turnover of the debt leaves grouped by their owner — {@link #personTurnover} keyed {@link
+   * NodeKey#personKey}, for expanding the "Personal debts" node one level.
+   */
+  public List<RawTurnoverCell> debtPeopleTurnover(
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      DateGranularity granularity,
+      QueryConstraints constraints) {
+    CompiledExtra extra = compileExtra(constraints);
+    return jdbcClient
+        .sql(debtTurnoverSql(PERSON_KEY, PERSON_NAME, "", extra))
+        .param(TYPES, types)
+        .param(START_DATE, startDate)
+        .param(END_DATE, endDate)
+        .param(BASE_CURRENCY, baseCurrency)
+        .param(LEG, leg)
+        .param(INCLUDE_CLOSED, includeClosedAccounts)
+        .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .param(BUCKET_UNIT, granularity.sqlUnit())
+        .param(BUCKET_FORMAT, granularity.sqlFormat())
+        .params(extra.params())
+        .query(RawTurnoverCell.class)
+        .list();
+  }
+
+  /** {@link #debtPeopleTurnover}'s closing balance, as of {@code asOf}. */
+  public List<RawBalanceCell> debtPeopleClosingBalance(
+      List<String> types,
+      LocalDate asOf,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      QueryConstraints constraints) {
+    CompiledExtra extra = compileExtra(constraints);
+    return jdbcClient
+        .sql(debtClosingBalanceSql(PERSON_KEY, PERSON_NAME, "", extra))
+        .param(TYPES, types)
+        .param(AS_OF, asOf)
+        .param(INCLUDE_CLOSED, includeClosedAccounts)
+        .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .params(extra.params())
+        .query(RawBalanceCell.class)
+        .list();
+  }
+
+  /**
+   * Turnover of one person's debt leaves grouped by leaf, labelled by currency — for expanding a
+   * person one level beneath "Personal debts".
+   */
+  // ExcessiveParameterList: see childAccountTurnover's own suppression above — the same shape,
+  // for the same reason.
+  @SuppressWarnings("PMD.ExcessiveParameterList")
+  public List<RawTurnoverCell> debtLeafTurnover(
+      long personId,
+      List<String> types,
+      LocalDate startDate,
+      LocalDate endDate,
+      String baseCurrency,
+      String leg,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      DateGranularity granularity,
+      QueryConstraints constraints) {
+    CompiledExtra extra = compileExtra(constraints);
+    return jdbcClient
+        .sql(debtTurnoverSql(LEAF_KEY, "a.currency_code", ONE_PERSON, extra))
+        .param(PERSON_ID, personId)
+        .param(TYPES, types)
+        .param(START_DATE, startDate)
+        .param(END_DATE, endDate)
+        .param(BASE_CURRENCY, baseCurrency)
+        .param(LEG, leg)
+        .param(INCLUDE_CLOSED, includeClosedAccounts)
+        .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .param(BUCKET_UNIT, granularity.sqlUnit())
+        .param(BUCKET_FORMAT, granularity.sqlFormat())
+        .params(extra.params())
+        .query(RawTurnoverCell.class)
+        .list();
+  }
+
+  /** {@link #debtLeafTurnover}'s closing balance, as of {@code asOf}. */
+  public List<RawBalanceCell> debtLeafClosingBalance(
+      long personId,
+      List<String> types,
+      LocalDate asOf,
+      boolean includeClosedAccounts,
+      boolean includePendingReview,
+      QueryConstraints constraints) {
+    CompiledExtra extra = compileExtra(constraints);
+    return jdbcClient
+        .sql(debtClosingBalanceSql(LEAF_KEY, "a.currency_code", ONE_PERSON, extra))
+        .param(PERSON_ID, personId)
+        .param(TYPES, types)
+        .param(AS_OF, asOf)
+        .param(INCLUDE_CLOSED, includeClosedAccounts)
+        .param(INCLUDE_PENDING_REVIEW, includePendingReview)
+        .params(extra.params())
+        .query(RawBalanceCell.class)
+        .list();
+  }
+
+  /**
+   * Turnover of the debt leaves' postings ({@code p}/{@code a}/{@code t}, the owner as {@code
+   * per}), grouped by {@code keyExpr}/{@code labelExpr} — shared by the {@code PERSON} dimension
+   * and the personal-debt tree's two levels so the three cannot drift apart.
+   */
+  private static String debtTurnoverSql(
+      String keyExpr, String labelExpr, String ownerPredicate, CompiledExtra extra) {
+    return debtColumns(keyExpr, labelExpr)
+        + BUCKET_KEY_AND_CURRENCY_COLUMNS
+        + TURNOVER_AGGREGATES
+        + DEBT_LEAF_JOINS
+        + RATE_LATERAL_JOIN
+        + WHERE
+        + SCOPE_PREDICATE
+        + AND
+        + LEG_PREDICATE
+        + AND
+        + "a.person_leaf = true\n"
+        + ownerPredicate
+        + extra.sql()
+        + "group by dimension_key, dimension_label, bucket_key, a.currency_code\n";
+  }
+
+  /** The debt-leaf queries' leading dimension columns, grouped by {@code keyExpr}. */
+  private static String debtColumns(String keyExpr, String labelExpr) {
+    return "select "
+        + keyExpr
+        + " as dimension_key,\n       "
+        + labelExpr
+        + " as dimension_label,\n       'asset' as dimension_type,\n       ";
+  }
+
+  /** {@link #debtTurnoverSql}'s closing-balance twin. */
+  private static String debtClosingBalanceSql(
+      String keyExpr, String labelExpr, String ownerPredicate, CompiledExtra extra) {
+    return debtColumns(keyExpr, labelExpr)
+        + """
+        a.currency_code as currency_code,
+               sum(p.amount) as native_balance
+        """
+        + DEBT_LEAF_JOINS
+        + """
+        where a.type in (:types)
+          and a.deleted_at is null
+          and (:includeClosedAccounts or a.closed_at is null)
+          and t.deleted_at is null
+          and (:includePendingReview or t.lifecycle = 'confirmed')
+          and t.date <= :asOf
+          and a.person_leaf = true
+        """
+        + ownerPredicate
+        + extra.sql()
+        + "group by dimension_key, dimension_label, a.currency_code\n";
   }
 
   // ── currencyTurnover / currencyClosingBalance ──────────────────────────────
@@ -1607,6 +1801,33 @@ public class ReportQueryRepository {
         .list();
   }
 
+  private static List<Long> idsOf(List<NodeKey> nodes, NodeKey.Kind kind) {
+    return nodes.stream().filter(n -> n.kind() == kind).map(NodeKey::id).toList();
+  }
+
+  /**
+   * The live debt leaves of every person ({@code everyPerson}) or of {@code personIds} — what the
+   * "Personal debts" node and a person beneath it stand for in a filter (reporting issue 06).
+   */
+  private List<Long> debtLeafIds(boolean everyPerson, List<Long> personIds) {
+    if (!everyPerson && personIds.isEmpty()) {
+      return List.of();
+    }
+    return jdbcClient
+        .sql(
+            """
+            select a.account_id from account a
+            where a.person_leaf = true
+              and a.deleted_at is null
+              and (:everyPerson or a.account_id in (
+                select account_id from account_owner where person_id in (:personIds)))
+            """)
+        .param("everyPerson", everyPerson)
+        .param("personIds", orNoMatch(personIds))
+        .query(Long.class)
+        .list();
+  }
+
   /** Mirrors {@link #subtreeAccountIds} for the tag tree (data-model §10.3). */
   private List<Long> subtreeTagIds(List<Long> roots, List<Long> promotedIds) {
     if (roots.isEmpty()) {
@@ -1713,11 +1934,22 @@ public class ReportQueryRepository {
         : existsAcrossTransaction(key, join, transactionPredicate);
   }
 
-  /** {@code CATEGORY}/{@code ACCOUNT}: {@code IS_ONE_OF} expands to subtree membership (§6.3). */
+  /**
+   * {@code CATEGORY}/{@code ACCOUNT}: {@code IS_ONE_OF} expands to subtree membership (§6.3). A
+   * value naming the "Personal debts" node or one person beneath it ({@link NodeKey}) stands for
+   * those debt leaves — they have no real parent account whose subtree could say so (reporting
+   * issues 06, 11).
+   */
   private String accountHierarchyPredicate(
       ReportFilter filter, String key, Map<String, Object> params, List<Long> promotedIds) {
-    List<Long> roots = filter.values().stream().map(Long::parseLong).toList();
-    params.put(key, orNoMatch(subtreeAccountIds(roots, promotedIds)));
+    List<NodeKey> nodes = filter.values().stream().map(NodeKey::parse).toList();
+    List<Long> roots = idsOf(nodes, NodeKey.Kind.NODE);
+    List<Long> accountIds = new ArrayList<>(subtreeAccountIds(roots, promotedIds));
+    accountIds.addAll(
+        debtLeafIds(
+            nodes.stream().anyMatch(n -> n.kind() == NodeKey.Kind.PERSONAL_DEBTS),
+            idsOf(nodes, NodeKey.Kind.PERSON)));
+    params.put(key, orNoMatch(accountIds));
     return postingOrTransaction(
         filter.level(),
         key,

@@ -15,6 +15,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import volkovandr.hauptbuch.analytics.repository.QueryConstraints;
 import volkovandr.hauptbuch.analytics.repository.RawBalanceCell;
+import volkovandr.hauptbuch.analytics.repository.RawTurnoverCell;
 import volkovandr.hauptbuch.analytics.repository.ReportQueryRepository;
 
 /**
@@ -27,6 +28,7 @@ import volkovandr.hauptbuch.analytics.repository.ReportQueryRepository;
 class ReportDataFetcherTest {
 
   private static final LocalDate TODAY = LocalDate.of(2026, 9, 12);
+  private static final List<String> ASSET = List.of("asset");
 
   private final ReportQueryRepository queryRepository = mock();
   private final ReportDataFetcher fetcher = new ReportDataFetcher(queryRepository);
@@ -353,5 +355,86 @@ class ReportDataFetcherTest {
     assertThat(days.asOfByBucketKey())
         .containsEntry("2026-09-03", LocalDate.of(2026, 9, 3))
         .containsEntry("2026-09-30", TODAY);
+  }
+
+  // ── the personal-debt tree (reporting issue 06) ──────────────────────────
+
+  private GridData fetchExpanded(ReportSpec spec, String expandedKey) {
+    AxisPlan axes = new AxisPlan(Dimension.ACCOUNT, null, Dimension.ACCOUNT, false, false);
+    return fetcher.fetchGridData(
+        spec,
+        axes,
+        ASSET,
+        resolved(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)),
+        List.of(),
+        TODAY,
+        "EUR",
+        Set.of(expandedKey));
+  }
+
+  @Test
+  void expandingPersonalDebtsFetchesTurnoverByPersonUnderItsOwnKey() {
+    when(queryRepository.debtPeopleTurnover(
+            ASSET,
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            "EUR",
+            "NET",
+            true,
+            false,
+            DateGranularity.MONTH,
+            QueryConstraints.NONE))
+        .thenReturn(
+            List.of(
+                new RawTurnoverCell(
+                    "person:7",
+                    "Max",
+                    "asset",
+                    "2026-01",
+                    "EUR",
+                    BigDecimal.TEN,
+                    BigDecimal.TEN,
+                    0,
+                    1,
+                    1)));
+
+    GridData data =
+        fetchExpanded(filteredSpec(Dimension.ACCOUNT, Scope.ofTypes("asset"), null), "personal");
+
+    assertThat(data.turnoverByLeg().get(Leg.NET))
+        .extracting(RawTurnoverCell::dimensionKey)
+        .contains("personal|person:7");
+  }
+
+  @Test
+  void expandingPersonFetchesTheirLeavesTurnover() {
+    fetchExpanded(
+        filteredSpec(Dimension.ACCOUNT, Scope.ofTypes("asset"), null), "personal|person:7");
+
+    verify(queryRepository)
+        .debtLeafTurnover(
+            7L,
+            ASSET,
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            "EUR",
+            "NET",
+            true,
+            false,
+            DateGranularity.MONTH,
+            QueryConstraints.NONE);
+  }
+
+  @Test
+  void expandingPersonalDebtsAndPersonFetchesTheirClosingBalances() {
+    fetchExpanded(closingBalanceSpec(false, false), "personal");
+    fetchExpanded(closingBalanceSpec(false, false), "personal|person:7");
+
+    verify(queryRepository)
+        .debtPeopleClosingBalance(
+            ASSET, LocalDate.of(2026, 1, 31), true, false, QueryConstraints.NONE);
+    verify(queryRepository)
+        .debtLeafClosingBalance(
+            7L, ASSET, LocalDate.of(2026, 1, 31), true, false, QueryConstraints.NONE);
   }
 }

@@ -84,13 +84,22 @@ series takes exactly one.
 | Dimension | Hierarchical | Grain | Notes |
 |-----------|--------------|-------|-------|
 | **Category** | yes (accounts tree, `income`/`expense`) | posting | per-currency at the leaf (data-model §6.5) |
-| **Account** | yes (accounts tree, `asset`/`liability`/`equity`) | posting | |
+| **Account** | yes (accounts tree, `asset`/`liability`/`equity`) | posting | debt leaves sit under one synthetic **Personal debts** node: Personal debts → person → currency leaf |
 | **Tag** | yes, **not** leaves-only | posting | overlapping lenses (§7.2); needs the unspecified row (§9.3) |
 | **Payee** | no | transaction | |
 | **Person** | no | posting | **debt leaves only** — see the limitation below |
 | **Currency** | no | posting | `account.currency_code` |
 | **Account type** | no | posting | the five `account.type` values |
 | **Date** | yes (the ladder, §8.2) | transaction | `transaction.date`, the only date the model carries |
+
+Per-person debt leaves (data-model §7) have no parent account, and their own names
+(`personal.<CUR>`) say nothing about whose they are. So the Account dimension groups them all under
+one synthetic **Personal debts** node, which expands to one row per person (soft-deleted people
+included while they have history), and each person to their real per-currency leaves. Its parent
+rows follow the Report's subtotal/group-header setting like any other (§9.2): in Base the subtotal is
+data-model §7's base-currency "supplementary gloss", and in account currency a person spanning two
+currencies shows `—` (§7.2). The Account filter offers the same node as one **Personal debts** entry
+standing for every debt leaf; filtering by one person is the Person filter's job.
 
 Category and Account keep to their own account types **whatever the Scope holds**: Account never
 lists an `expense` account, and Category never lists an `asset`. A Scope with none of the dimension's
@@ -409,8 +418,9 @@ the bucket's end — otherwise the final point of a net-worth line is a balance 
 ### 9.1 Expansion
 
 Every hierarchical dimension (Category, Account, Tag) and the Date ladder renders as an **expandable
-tree on the row axis**, expanded in place via htmx fragment swaps. **Column-axis expansion is not in
-v1** — expanding a column reshapes the grid rather than adding a line.
+tree on the row axis** (Account's synthetic Personal debts → person → leaf levels included, §4),
+expanded in place via htmx fragment swaps. **Column-axis expansion is not in v1** — expanding a
+column reshapes the grid rather than adding a line.
 
 Expansion state is **remembered against the saved Report** (not per browser): it is a property of
 "my Food matrix", not of this session. It is deliberately the *one* piece of view state that
@@ -731,6 +741,8 @@ management screen.
   ephemeral state that travels with the draft and becomes the Report's on save (reporting issue 02).
   **§4/§6.3/§7.3/§9.2**: a filter on an axis dimension's own field makes its ticked nodes that
   axis's top level, and Category/Account keep to their own types whatever the Scope (issue 08).
+  **§4/§9.1**: debt leaves form one Personal debts → person → leaf tree on the Account axis, and one
+  Personal debts entry in the Account filter, replacing the per-currency buckets (issues 06, 11).
 - **v0.2 (2026-09-13):** From a grilling pass on the missing editor — v0.1 specified no UI for
   choosing dimensions, measures, scope, filters or renderer. New **§11a**: a Report's page is its
   editor (no separate viewer), drafts in the URL, live controls vs Apply groups, the measure grid,

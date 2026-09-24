@@ -35,16 +35,6 @@ final class AutoExpansion {
   }
 
   /**
-   * A cross-dimension nesting node's synthetic subtree-filter key (§3) is never a real hierarchy id
-   * — it is the per-currency "personal debts" pseudo-bucket ({@code ACCOUNT_DIMENSION_KEY} in
-   * {@code ReportQueryRepository}), an aggregate across every person's debt leaf in one currency,
-   * not a single account subtree. It is therefore never expandable.
-   */
-  static boolean isPersonLeafBucket(String key) {
-    return key != null && key.startsWith("personal:");
-  }
-
-  /**
    * {@code auto}'s one-node rule (§9.2), naming the node it expands: the single hierarchy node the
    * spec's own filter on {@code dimension} selects, or an empty set when the filter selects none or
    * two-or-more (or there is no such filter). "You asked about one thing; show its parts" means

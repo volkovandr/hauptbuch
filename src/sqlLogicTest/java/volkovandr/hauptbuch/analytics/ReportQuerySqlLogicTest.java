@@ -48,6 +48,7 @@ class ReportQuerySqlLogicTest {
   private static final List<String> INCOME_EXPENSE = List.of("income", "expense");
   private static final List<String> ASSET_LIABILITY = List.of("asset", "liability");
   private static final QueryConstraints NONE = QueryConstraints.NONE;
+  private static final LocalDate JAN_5 = LocalDate.of(2026, 1, 5);
 
   @Autowired JdbcClient jdbcClient;
   @Autowired ReportQueryRepository repository;
@@ -215,6 +216,21 @@ class ReportQuerySqlLogicTest {
         .orElseThrow(() -> new AssertionError("No cell for " + label + " in " + cells));
   }
 
+  private static RawTurnoverCell byCurrency(List<RawTurnoverCell> cells, String currency) {
+    return cells.stream()
+        .filter(c -> c.currencyCode().equals(currency))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("No cell in " + currency + " in " + cells));
+  }
+
+  /** The summed native balance of {@code cells} in {@code currency}. */
+  private static BigDecimal balanceIn(List<RawBalanceCell> cells, String currency) {
+    return cells.stream()
+        .filter(c -> c.currencyCode().equals(currency))
+        .map(RawBalanceCell::nativeBalance)
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
+  }
+
   private static void amount(BigDecimal actual, String expected) {
     assertThat(actual).isEqualByComparingTo(new BigDecimal(expected));
   }
@@ -348,7 +364,7 @@ class ReportQuerySqlLogicTest {
   }
 
   @Test
-  void groupsPersonDebtLeavesIntoOnePersonalDebtsBucketPerCurrencyNotTheCosmeticLeafName() {
+  void groupsEveryPersonDebtLeafIntoOnePersonalDebtsNodeNotTheCosmeticLeafName() {
     long cashEur = insertAccount("Cash", "asset", EUR, null);
     long cashChf = insertAccount("Cash CHF", "asset", CHF, null);
     long alice = insertPerson("Alice");
@@ -372,12 +388,15 @@ class ReportQuerySqlLogicTest {
             false,
             NONE);
 
+    List<RawTurnoverCell> debts =
+        cells.stream().filter(c -> "Personal debts".equals(c.dimensionLabel())).toList();
     assertThat(cells)
         .extracting(RawTurnoverCell::dimensionLabel)
-        .doesNotContain("personal.EUR", "personal.CHF", "Alice", "Bob", "Carol")
-        .contains("Personal debts (EUR)", "Personal debts (CHF)");
-    amount(byLabelAndMonth(cells, "Personal debts (EUR)", "2026-01").nativeAmount(), "50.00");
-    amount(byLabelAndMonth(cells, "Personal debts (CHF)", "2026-01").nativeAmount(), "15.00");
+        .doesNotContain("personal.EUR", "personal.CHF", "Alice", "Bob", "Carol");
+    // One node for every currency: still one row per currency underneath, never netted (§7).
+    assertThat(debts).extracting(RawTurnoverCell::dimensionKey).containsOnly("personal");
+    amount(byCurrency(debts, EUR).nativeAmount(), "50.00");
+    amount(byCurrency(debts, CHF).nativeAmount(), "15.00");
   }
 
   @Test
@@ -748,7 +767,7 @@ class ReportQuerySqlLogicTest {
   }
 
   @Test
-  void closingBalanceGroupsEveryPersonsDebtLeafIntoOnePersonalDebtsBucketPerCurrency() {
+  void closingBalanceGroupsEveryPersonsDebtLeafIntoOnePersonalDebtsNode() {
     long cashEur = insertAccount("Cash", "asset", EUR, null);
     long opening = insertAccount("Opening Balances", "equity", EUR, null);
     postSingleCurrency(opening, cashEur, LocalDate.of(2025, 1, 1), "1000.00");
@@ -767,12 +786,14 @@ class ReportQuerySqlLogicTest {
         repository.accountTreeClosingBalance(
             ASSET_LIABILITY, LocalDate.of(2026, 1, 31), true, false, NONE);
 
+    List<RawBalanceCell> debts =
+        cells.stream().filter(c -> "personal".equals(c.dimensionKey())).toList();
     assertThat(cells)
         .extracting(RawBalanceCell::dimensionLabel)
-        .doesNotContain("personal.EUR", "personal.CHF", "Alice", "Bob", "Carol")
-        .contains("Personal debts (EUR)", "Personal debts (CHF)");
-    amount(byLabel(cells, "Personal debts (EUR)").nativeBalance(), "50.00");
-    amount(byLabel(cells, "Personal debts (CHF)").nativeBalance(), "15.00");
+        .doesNotContain("personal.EUR", "personal.CHF", "Alice", "Bob", "Carol");
+    assertThat(debts).extracting(RawBalanceCell::dimensionLabel).containsOnly("Personal debts");
+    amount(balanceIn(debts, EUR), "50.00");
+    amount(balanceIn(debts, CHF), "15.00");
   }
 
   @Test
@@ -849,19 +870,31 @@ class ReportQuerySqlLogicTest {
   }
 
   @Test
-  void topLevelAccountsGroupsPersonDebtLeavesIntoOnePersonalDebtsCandidatePerCurrency() {
-    insertAccount("Cash", "asset", EUR, null);
+  void topLevelAccountsListsOneExpandablePersonalDebtsCandidateWhateverTheCurrencies() {
     long alice = insertPerson("Alice");
     long bob = insertPerson("Bob");
     long carol = insertPerson("Carol");
     insertPersonAccount(alice, "personal.EUR", EUR);
     insertPersonAccount(bob, "personal.EUR", EUR);
     insertPersonAccount(carol, "personal.CHF", CHF);
+    long cash = insertAccount("Cash", "asset", EUR, null);
 
     assertThat(repository.topLevelAccounts(ASSET_LIABILITY, true))
+        .containsExactlyInAnyOrder(
+            new TopLevelNode("personal", "Personal debts", "asset", true),
+            new TopLevelNode(String.valueOf(cash), "Cash", "asset", false));
+  }
+
+  @Test
+  void topLevelAccountsListsNoPersonalDebtsCandidateWithoutAnyDebtLeafInScope() {
+    insertAccount("Cash", "asset", EUR, null);
+    long max = insertPerson("Max");
+    insertPersonAccount(max, "personal.EUR", EUR);
+
+    assertThat(repository.topLevelAccounts(List.of("liability"), true)).isEmpty();
+    assertThat(repository.topLevelAccounts(List.of("asset"), true))
         .extracting(TopLevelNode::label)
-        .doesNotContain("personal.EUR", "personal.CHF", "Alice", "Bob", "Carol")
-        .containsExactlyInAnyOrder("Cash", "Personal debts (EUR)", "Personal debts (CHF)");
+        .containsExactly("Cash", "Personal debts");
   }
 
   @Test
@@ -1057,6 +1090,218 @@ class ReportQuerySqlLogicTest {
     assertThat(repository.personCandidates())
         .extracting(TopLevelNode::label)
         .containsExactly("Max");
+  }
+
+  // ── the personal-debt tree: Personal debts → person → leaf (reporting issue 06) ──
+
+  @Test
+  void debtPeopleCandidatesListEveryPersonWithDebtLeafSoftDeletedIncluded() {
+    long max = insertPerson("Max");
+    insertPersonAccount(max, "personal.EUR", EUR);
+    insertPersonAccount(max, "personal.CHF", CHF);
+    insertPerson("Nobody"); // no debt leaf provisioned — excluded
+    long gone = insertPerson("Gone");
+    insertPersonAccount(gone, "personal.EUR", EUR);
+    jdbcClient
+        .sql("update person set deleted_at = now() where person_id = :p")
+        .param("p", gone)
+        .update();
+
+    // A soft-deleted person keeps their history (data-model §7): listed, suppressible when empty.
+    assertThat(repository.debtPeopleCandidates(true))
+        .containsExactly(
+            new TopLevelNode("person:" + gone, "Gone", "asset", true),
+            new TopLevelNode("person:" + max, "Max", "asset", true));
+  }
+
+  @Test
+  void debtPeopleCandidatesLeaveOutPersonWhoseOnlyLeafIsClosedUnlessClosedAccountsIncluded() {
+    long doe = insertPerson("Doe");
+    long leaf = insertPersonAccount(doe, "personal.EUR", EUR);
+    jdbcClient
+        .sql("update account set closed_at = now() where account_id = :a")
+        .param("a", leaf)
+        .update();
+
+    assertThat(repository.debtPeopleCandidates(false)).isEmpty();
+    assertThat(repository.debtPeopleCandidates(true))
+        .extracting(TopLevelNode::label)
+        .containsExactly("Doe");
+  }
+
+  @Test
+  void debtLeafCandidatesListOnePersonsOwnLeavesLabelledByCurrency() {
+    long max = insertPerson("Max");
+    long maxEur = insertPersonAccount(max, "personal.EUR", EUR);
+    long maxChf = insertPersonAccount(max, "personal.CHF", CHF);
+    long doe = insertPerson("Doe");
+    insertPersonAccount(doe, "personal.EUR", EUR);
+
+    assertThat(repository.debtLeafCandidates(max, true))
+        .containsExactly(
+            new TopLevelNode(String.valueOf(maxChf), CHF, "asset", false),
+            new TopLevelNode(String.valueOf(maxEur), EUR, "asset", false));
+  }
+
+  @Test
+  void debtPeopleTurnoverGroupsDebtLeavesByOwnerUnderTheirPersonKeys() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long savings = insertAccount("Savings", "asset", EUR, null);
+    long max = insertPerson("Max");
+    long doe = insertPerson("Doe");
+    postSingleCurrency(cash, insertPersonAccount(max, "personal.EUR", EUR), JAN_5, "30.00");
+    postSingleCurrency(cash, insertPersonAccount(doe, "personal.EUR", EUR), JAN_5, "20.00");
+    postSingleCurrency(cash, savings, JAN_5, "999.00"); // not a debt leaf — never swept in
+
+    List<RawTurnoverCell> cells =
+        repository.debtPeopleTurnover(
+            List.of("asset"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            DateGranularity.MONTH,
+            NONE);
+
+    assertThat(cells)
+        .extracting(RawTurnoverCell::dimensionKey)
+        .containsExactlyInAnyOrder("person:" + max, "person:" + doe);
+    amount(byLabelAndMonth(cells, "Max", "2026-01").nativeAmount(), "30.00");
+    amount(byLabelAndMonth(cells, "Doe", "2026-01").nativeAmount(), "20.00");
+  }
+
+  @Test
+  void personSubtotalIsTheBaseSumOfTheirLeavesAcrossCurrencies() {
+    insertRate(CHF, LocalDate.of(2026, 1, 1), "1.05");
+    long cashEur = insertAccount("Cash", "asset", EUR, null);
+    long cashChf = insertAccount("Cash CHF", "asset", CHF, null);
+    long max = insertPerson("Max");
+    long maxEur = insertPersonAccount(max, "personal.EUR", EUR);
+    long maxChf = insertPersonAccount(max, "personal.CHF", CHF);
+    postSingleCurrency(cashEur, maxEur, JAN_5, "30.00");
+    postSingleCurrency(cashChf, maxChf, JAN_5, "20.00"); // 21.00 in base at 1.05
+
+    List<RawTurnoverCell> person =
+        repository.debtPeopleTurnover(
+            List.of("asset"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            DateGranularity.MONTH,
+            NONE);
+    List<RawTurnoverCell> leaves =
+        repository.debtLeafTurnover(
+            max,
+            List.of("asset"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            DateGranularity.MONTH,
+            NONE);
+
+    assertThat(leaves)
+        .extracting(RawTurnoverCell::dimensionKey, RawTurnoverCell::dimensionLabel)
+        .containsExactlyInAnyOrder(
+            tuple(String.valueOf(maxEur), EUR), tuple(String.valueOf(maxChf), CHF));
+    amount(baseSum(leaves), "51.00");
+    amount(baseSum(person), "51.00");
+    // The person row still carries one row per currency — never netted natively (§7).
+    amount(byCurrency(person, CHF).nativeAmount(), "20.00");
+  }
+
+  @Test
+  void debtLeafTurnoverLeavesOutOtherPeoplesLeaves() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long max = insertPerson("Max");
+    long doe = insertPerson("Doe");
+    postSingleCurrency(cash, insertPersonAccount(max, "personal.EUR", EUR), JAN_5, "30.00");
+    postSingleCurrency(cash, insertPersonAccount(doe, "personal.EUR", EUR), JAN_5, "20.00");
+
+    List<RawTurnoverCell> cells =
+        repository.debtLeafTurnover(
+            doe,
+            List.of("asset"),
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            DateGranularity.MONTH,
+            NONE);
+
+    assertThat(cells).hasSize(1);
+    amount(cells.get(0).nativeAmount(), "20.00");
+  }
+
+  @Test
+  void debtClosingBalancesAreCumulativeAtPersonAndLeafLevel() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long cashChf = insertAccount("Cash CHF", "asset", CHF, null);
+    long max = insertPerson("Max");
+    long maxEur = insertPersonAccount(max, "personal.EUR", EUR);
+    long maxChf = insertPersonAccount(max, "personal.CHF", CHF);
+    postSingleCurrency(cash, maxEur, LocalDate.of(2025, 12, 1), "30.00");
+    postSingleCurrency(maxEur, cash, JAN_5, "10.00"); // Max repays €10
+    postSingleCurrency(cashChf, maxChf, JAN_5, "15.00");
+    postSingleCurrency(cash, maxEur, LocalDate.of(2026, 2, 1), "99.00"); // after asOf
+
+    List<RawBalanceCell> person =
+        repository.debtPeopleClosingBalance(
+            List.of("asset"), LocalDate.of(2026, 1, 31), true, false, NONE);
+    assertThat(person).extracting(RawBalanceCell::dimensionKey).containsOnly("person:" + max);
+    amount(balanceIn(person, EUR), "20.00");
+    amount(balanceIn(person, CHF), "15.00");
+
+    List<RawBalanceCell> leaves =
+        repository.debtLeafClosingBalance(
+            max, List.of("asset"), LocalDate.of(2026, 1, 31), true, false, NONE);
+    amount(byLabel(leaves, EUR).nativeBalance(), "20.00");
+    amount(byLabel(leaves, CHF).nativeBalance(), "15.00");
+  }
+
+  @Test
+  void accountFilterOnPersonalDebtsSelectsEveryDebtLeafAndOnPersonOnlyTheirs() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long savings = insertAccount("Savings", "asset", EUR, null);
+    long max = insertPerson("Max");
+    long doe = insertPerson("Doe");
+    postSingleCurrency(cash, insertPersonAccount(max, "personal.EUR", EUR), JAN_5, "30.00");
+    postSingleCurrency(cash, insertPersonAccount(doe, "personal.EUR", EUR), JAN_5, "20.00");
+    postSingleCurrency(cash, savings, JAN_5, "999.00");
+
+    assertThat(bookedToAccountsTotal("personal")).isEqualByComparingTo("50.00");
+    assertThat(bookedToAccountsTotal("person:" + max)).isEqualByComparingTo("30.00");
+    assertThat(bookedToAccountsTotal("person:" + doe, String.valueOf(savings)))
+        .isEqualByComparingTo("1019.00");
+  }
+
+  private BigDecimal bookedToAccountsTotal(String... values) {
+    ReportFilter filter =
+        new ReportFilter(
+            FilterField.ACCOUNT, FilterLevel.POSTING, FilterOperator.IS_ONE_OF, List.of(values));
+    return repository
+        .totalClosingBalance(
+            List.of("asset"),
+            LocalDate.of(2026, 1, 31),
+            true,
+            false,
+            new QueryConstraints(List.of(filter)))
+        .stream()
+        .map(RawBalanceCell::nativeBalance)
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
+  }
+
+  private static BigDecimal baseSum(List<RawTurnoverCell> cells) {
+    return cells.stream().map(RawTurnoverCell::baseAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 
   // ── currencyTurnover / currencyClosingBalance / currencyCandidates ───────

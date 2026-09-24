@@ -92,3 +92,22 @@ above.
 2026-09-24: open question settled in an owner grilling session (see above); set ready-for-agent.
 Scheduled before reporting slice f, together with issue 11, so f's drill-down builds on the typed node
 kind rather than the `personal:` prefix.
+
+Implemented 2026-09-24 (branch `feat/reporting`), awaiting owner confirmation.
+
+- **Tree.** The account tree groups every debt leaf under one `personal` / "Personal debts" node.
+  Expanding it runs `debtPeopleCandidates` / `debtPeopleTurnover` / `debtPeopleClosingBalance`
+  (people keyed `person:<id>`, soft-deleted people included). Expanding a person runs the
+  `debtLeaf*` twins (their leaves, labelled by currency). The Person dimension shares the same SQL
+  builder.
+- **Discriminator, deviation from the note above.** The kind is not a `TopLevelNode` column. A new
+  `NodeKey` (kind + id) parses a key segment instead: `personal`, `person:<id>`, or a number. The
+  child dispatch only ever has the key string (expanded keys are persisted), never the candidate row,
+  so a column would not reach it. `NodeKey` is the one place keys are spelled and parsed. It replaces
+  `AxisNode.realId` and `isPersonLeafBucket`.
+- **Filters.** An Account filter value of `personal` or `person:<id>` compiles to those debt leaves,
+  so nesting another dimension under the row works too.
+- Old `personal:<CUR>` expanded keys are stale and ignored.
+
+Known limit: a saved Report whose Account filter ticks an individual debt leaf (only possible before
+issue 11) shows that leaf both as a promoted top-level node and under Personal debts → person.

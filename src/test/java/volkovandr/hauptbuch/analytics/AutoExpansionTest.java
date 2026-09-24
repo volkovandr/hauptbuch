@@ -98,10 +98,4 @@ class AutoExpansionTest {
     assertThat(AutoExpansion.isNestable(Dimension.DATE)).isFalse();
     assertThat(AutoExpansion.isNestable(null)).isFalse();
   }
-
-  @Test
-  void isPersonLeafBucketMatchesOnlyThePersonalDebtsPseudoKey() {
-    assertThat(AutoExpansion.isPersonLeafBucket("personal:EUR")).isTrue();
-    assertThat(AutoExpansion.isPersonLeafBucket("42")).isFalse();
-  }
 }

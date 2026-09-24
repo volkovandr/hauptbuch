@@ -214,8 +214,7 @@ public class ReportEngine {
    * candidate, {@link RowExpansion#AUTO} expands exactly the one node {@link
    * AutoExpansion#autoExpandedKeys} names (never "every top-level candidate", even when the filter
    * happens to select one of several). Never anything when {@code outerDim} cannot nest a second
-   * dimension at all (§9.1 — a hierarchical dimension only), and never the per-currency "personal
-   * debts" pseudo-bucket, which is not a single subtree a nesting filter can name (§3).
+   * dimension at all (§9.1 — a hierarchical dimension only).
    *
    * <p>The returned set can carry a nested (depth &gt; 0) node's own composite key too — same-
    * dimension nesting recurses to arbitrary depth (§9.1), not just one level into the top-level
@@ -234,10 +233,7 @@ public class ReportEngine {
     if (!AutoExpansion.isNestable(outerDim)) {
       return Set.of();
     }
-    Set<String> topLevelKeys =
-        outerCandidatesByKey.keySet().stream()
-            .filter(key -> !AutoExpansion.isPersonLeafBucket(key))
-            .collect(Collectors.toSet());
+    Set<String> topLevelKeys = Set.copyOf(outerCandidatesByKey.keySet());
     if (explicitOverride != null) {
       return explicitOverride.stream()
           .filter(key -> isNestedKey(key) || topLevelKeys.contains(key))

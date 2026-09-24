@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Component;
+import volkovandr.hauptbuch.analytics.repository.NodeKey;
 import volkovandr.hauptbuch.analytics.repository.QueryConstraints;
 import volkovandr.hauptbuch.analytics.repository.RawBalanceCell;
 import volkovandr.hauptbuch.analytics.repository.RawTurnoverCell;
@@ -217,10 +218,10 @@ class ReportDataFetcher {
           childConstraints);
     }
     QueryConstraints constraints = PromotedNodes.constraints(spec.filters(), spec, outerDim, null);
-    long parentId = AxisNode.realId(outerKey);
+    NodeKey parent = NodeKey.ofLastSegment(outerKey);
     if (outerDim == Dimension.TAG) {
       return queryRepository.childTagTurnover(
-          parentId,
+          parent.id(),
           types,
           resolved.start(),
           resolved.end(),
@@ -234,11 +235,10 @@ class ReportDataFetcher {
     return ScopeDimensionMismatch.ownAccountTypes(outerDim, types)
         .map(
             ownTypes ->
-                queryRepository.childAccountTurnover(
-                    parentId,
+                childAccountTreeTurnover(
+                    parent,
                     ownTypes,
-                    resolved.start(),
-                    resolved.end(),
+                    resolved,
                     baseCurrency,
                     legName,
                     includeClosed,
@@ -246,6 +246,59 @@ class ReportDataFetcher {
                     granularity,
                     constraints))
         .orElse(List.of());
+  }
+
+  /**
+   * One expanded account-tree node's children's turnover: a real node's direct children, the
+   * "Personal debts" node's people, or a person's debt leaves (reporting issue 06).
+   */
+  private List<RawTurnoverCell> childAccountTreeTurnover(
+      NodeKey parent,
+      List<String> ownTypes,
+      RangeResolver.ResolvedRange resolved,
+      String baseCurrency,
+      String legName,
+      boolean includeClosed,
+      boolean includePending,
+      DateGranularity granularity,
+      QueryConstraints constraints) {
+    return switch (parent.kind()) {
+      case PERSONAL_DEBTS ->
+          queryRepository.debtPeopleTurnover(
+              ownTypes,
+              resolved.start(),
+              resolved.end(),
+              baseCurrency,
+              legName,
+              includeClosed,
+              includePending,
+              granularity,
+              constraints);
+      case PERSON ->
+          queryRepository.debtLeafTurnover(
+              parent.id(),
+              ownTypes,
+              resolved.start(),
+              resolved.end(),
+              baseCurrency,
+              legName,
+              includeClosed,
+              includePending,
+              granularity,
+              constraints);
+      case NODE ->
+          queryRepository.childAccountTurnover(
+              parent.id(),
+              ownTypes,
+              resolved.start(),
+              resolved.end(),
+              baseCurrency,
+              legName,
+              includeClosed,
+              includePending,
+              granularity,
+              constraints);
+    };
   }
 
   /**
@@ -299,17 +352,23 @@ class ReportDataFetcher {
       return closingBalanceAt(innerDim, types, scope, asOf, childConstraints);
     }
     QueryConstraints constraints = PromotedNodes.constraints(spec.filters(), spec, outerDim, null);
-    long parentId = AxisNode.realId(outerKey);
+    NodeKey parent = NodeKey.ofLastSegment(outerKey);
+    boolean includeClosed = scope.includeClosedAccounts();
+    boolean includePending = scope.includePendingReview();
     return ScopeDimensionMismatch.ownAccountTypes(outerDim, types)
         .map(
             ownTypes ->
-                queryRepository.childAccountClosingBalance(
-                    parentId,
-                    ownTypes,
-                    asOf,
-                    scope.includeClosedAccounts(),
-                    scope.includePendingReview(),
-                    constraints))
+                switch (parent.kind()) {
+                  case PERSONAL_DEBTS ->
+                      queryRepository.debtPeopleClosingBalance(
+                          ownTypes, asOf, includeClosed, includePending, constraints);
+                  case PERSON ->
+                      queryRepository.debtLeafClosingBalance(
+                          parent.id(), ownTypes, asOf, includeClosed, includePending, constraints);
+                  case NODE ->
+                      queryRepository.childAccountClosingBalance(
+                          parent.id(), ownTypes, asOf, includeClosed, includePending, constraints);
+                })
         .orElse(List.of());
   }
 
