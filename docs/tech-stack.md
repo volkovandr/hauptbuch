@@ -53,7 +53,7 @@ into small, well-bounded leaves.
 | UI | **Thymeleaf + htmx** (server-rendered) | Must |
 | UI — image editing | Isolated client-side component (**Cropper.js** + canvas) | Should |
 | UI — keyboard layer | Small isolated vanilla-JS / Alpine.js module | Must |
-| UI testing | **Playwright** smoke tests on money-critical flows only | Should |
+| UI testing | **Playwright for Java** on the JS leaves' client-side behaviour only (`browserTest`) | Should |
 | AI parser | Anthropic API via official Java SDK / Spring AI, behind ARCH-03 interface | Should |
 | MCP server | Spring (Spring AI MCP) wrapping the §5.18 domain operations | Could |
 | Packaging | `installDist` + systemd for the app (ARCH-01, revised); Postgres native | Should |
@@ -257,10 +257,11 @@ to a working plain-HTML form. A fourth leaf needs the owner's agreement.
 ### 4.4 UI testing
 
 Server-side rendering means much of what would be "UI logic" in an SPA is **backend** logic already
-covered by TDD. For the genuine UI, write a thin layer of **Playwright** smoke tests only on flows
-where breakage costs money-correctness or real time: receipt review → commit, statement match →
-confirm, transaction entry. **Do not unit-test templates.** This is the deliberate 80/20 — lighter
-UI coverage is accepted (per owner's stance).
+covered by TDD, and the money-critical flows (receipt review → commit, statement match → confirm,
+transaction entry) are covered by MockMvc acceptance tests against real Postgres. **Playwright for
+Java** (the `browserTest` suite, headless Chromium, no npm) covers only what MockMvc cannot run: the
+client-side behaviour of the sanctioned JS leaves. **Do not unit-test templates.** This is the
+deliberate 80/20 — lighter UI coverage is accepted (per owner's stance).
 
 ### 4.5 QR code rendering — ZXing `core`, server-side, inline SVG
 

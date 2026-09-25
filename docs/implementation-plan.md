@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.48
-**Date:** 2026-09-12
+**Status:** Draft v0.49
+**Date:** 2026-09-25
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md`, `import.md`, `reporting.md`
@@ -28,6 +28,9 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.49 (2026-09-25):** **Browser tier reinstated, narrowly:** a fourth suite `browserTest`
+  (Playwright for Java) for the JS leaves' client-side behaviour, after register issue 26 slipped
+  past MockMvc. Money-critical flows stay on MockMvc (§3, §4).
 - **v0.48 (2026-09-12):** **Reporting re-scoped from two hand-built reports to a generic engine**
   (owner decision, from a grilling pass). `requirements.md` FR-ANA-07/08/09 are rewritten and
   **FR-ANA-08's prohibition on charts is overturned**; the matrix and the timeline become **Presets**
@@ -679,13 +682,17 @@ shipped; everything after it is unbuilt.
   Postgres, without the browser-binary/WSL setup cost. Revisit only if a defect surfaces that a
   server-side acceptance test structurally cannot catch (e.g. a real client-JS interaction in one of
   the sanctioned JS leaves). Supersedes the earlier "Playwright arrives at 7b" plan and the
-  Should-level UI-testing rows in `tech-stack.md`/§4.
+  Should-level UI-testing rows in `tech-stack.md`/§4. **Revisited 2026-09-25:** that defect surfaced
+  (register issue 26 — `filter-groups.js` dropped accounts on Apply, invisible to MockMvc), so a
+  fourth suite, `browserTest`, now drives the JS leaves in headless Chromium via Playwright for Java
+  (no npm; the task installs Chromium alone). Its scope is the leaves' client-side behaviour only;
+  the money-critical flows stay on MockMvc as above.
 
 ---
 
 ## 4. Testing strategy — the rationale
 
-The three-tier mechanics (which suite runs against what, and which tier a given repository method
+The four-tier mechanics (which suite runs against what, and which tier a given repository method
 belongs in) are the operational rules in **CLAUDE.md §6** — not restated here. This section keeps only
 the *why* behind the shape:
 
@@ -701,9 +708,10 @@ the *why* behind the shape:
 - **Migrations** are forward-only (Flyway Community); "tested migrations" (NFR-06) = apply on a fresh
   container and assert the resulting schema/data, plus data-preserving checks where a migration
   transforms existing rows.
-- **No separate UI tier:** browser smoke (Playwright) is dropped (§3); money-critical flows are
-  covered at the controller/htmx acceptance level (MockMvc) in the integration tier. Do **not**
-  unit-test templates — server-rendering means most "UI logic" is backend logic already covered above.
+- **The browser tier is narrow on purpose:** money-critical flows are covered at the controller/htmx
+  acceptance level (MockMvc) in the integration tier; `browserTest` (Playwright, §3) exists only for
+  what a JS leaf does client-side, which MockMvc cannot run. Do **not** unit-test templates —
+  server-rendering means most "UI logic" is backend logic already covered above.
 
 ---
 
