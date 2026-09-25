@@ -136,23 +136,17 @@ public class ReportEngine {
       }
     }
 
+    FetchContext fetchContext =
+        new FetchContext(spec, axes, types, today, baseCurrency, expandedKeys);
     GridData data =
         dataFetcher.fetchGridData(
-            spec, axes, types, resolved, buckets, today, baseCurrency, expandedKeys);
+            fetchContext, resolved, buckets, spec.dateLadder().bucketGranularity());
     // An expanded Date row's days re-run the same fetch over just that bucket's range (§9.1), so
     // every measure, filter and column nesting stays consistent and the days sum back to it.
     for (DateBucket bucket : expandedDateBuckets) {
       GridData days =
           dataFetcher.fetchGridData(
-              spec,
-              axes,
-              types,
-              bucket.effectiveRange(),
-              bucket.days(),
-              today,
-              baseCurrency,
-              expandedKeys,
-              DateGranularity.DAY);
+              fetchContext, bucket.effectiveRange(), bucket.days(), DateGranularity.DAY);
       data = data.withDays(bucket.key(), days);
     }
     candidatesByKey =

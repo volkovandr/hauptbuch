@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -45,7 +46,7 @@ class ReportEngineTest {
   /** A fetch no test cares about returns no data, never {@code null}. */
   @BeforeEach
   void fetchReturnsNoDataByDefault() {
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
   }
 
@@ -223,7 +224,7 @@ class ReportEngineTest {
     when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of());
     when(gridBuilder.axisNodes(any(), any(), any())).thenReturn(List.of());
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         new ReportSpec(
@@ -253,7 +254,7 @@ class ReportEngineTest {
     when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of());
     when(gridBuilder.axisNodes(any(), any(), any())).thenReturn(List.of());
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         spec(
@@ -274,7 +275,7 @@ class ReportEngineTest {
     when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of());
     when(gridBuilder.axisNodes(any(), any(), any())).thenReturn(List.of());
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         new ReportSpec(
@@ -311,7 +312,7 @@ class ReportEngineTest {
     TopLevelNode food = new TopLevelNode("1", "Food", "expense");
     when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of("1", food));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         spec(
@@ -331,7 +332,7 @@ class ReportEngineTest {
     TopLevelNode trip = new TopLevelNode("1", "Trip", null);
     when(axisCandidates.candidatesFor(eq(Dimension.TAG), any())).thenReturn(Map.of("1", trip));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         new ReportSpec(
@@ -361,7 +362,7 @@ class ReportEngineTest {
     when(axisCandidates.candidatesFor(eq(Dimension.TAG), any())).thenReturn(Map.of("1", trip));
     when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of());
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         new ReportSpec(
@@ -396,7 +397,7 @@ class ReportEngineTest {
     when(axisCandidates.candidatesFor(eq(Dimension.TAG), any()))
         .thenReturn(Map.of("1", trip, "2", car));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         new ReportSpec(
@@ -434,7 +435,7 @@ class ReportEngineTest {
     when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any()))
         .thenReturn(Map.of("1", food, "2", fuel));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         spec(
@@ -457,7 +458,7 @@ class ReportEngineTest {
     TopLevelNode food = new TopLevelNode("1", "Food", "expense");
     when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of("1", food));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         new ReportSpec(
@@ -494,7 +495,7 @@ class ReportEngineTest {
     TopLevelNode food = new TopLevelNode("1", "Food", "expense");
     when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of("1", food));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         spec(
@@ -515,7 +516,7 @@ class ReportEngineTest {
     TopLevelNode food = new TopLevelNode("1", "Food", "expense");
     when(axisCandidates.candidatesFor(eq(Dimension.CATEGORY), any())).thenReturn(Map.of("1", food));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         new ReportSpec(
@@ -610,10 +611,7 @@ class ReportEngineTest {
 
   private void stubGridData() {
     GridData empty = new GridData(Map.of(), Map.of(), Map.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
-        .thenReturn(empty);
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-        .thenReturn(empty);
+    when(dataFetcher.fetchGridData(any(), any(), any(), any())).thenReturn(empty);
   }
 
   @Test
@@ -624,8 +622,7 @@ class ReportEngineTest {
     engine.render(dateRowsJanToFeb(), TODAY);
 
     verify(gridBuilder).dateFrontierNodes(any(), eq(Set.of()));
-    verify(dataFetcher, never())
-        .fetchGridData(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    verify(dataFetcher, never()).fetchGridData(any(), any(), any(), eq(DateGranularity.DAY));
   }
 
   @Test
@@ -641,19 +638,17 @@ class ReportEngineTest {
     // Only January's days, over January's own range, at day granularity.
     verify(dataFetcher)
         .fetchGridData(
-            eq(s),
-            any(),
-            any(),
+            argThat(
+                c ->
+                    c.spec().equals(s)
+                        && c.today().equals(TODAY)
+                        && "EUR".equals(c.baseCurrency())),
             eq(
                 new RangeResolver.ResolvedRange(
                     LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31))),
             any(),
-            eq(TODAY),
-            eq("EUR"),
-            any(),
             eq(DateGranularity.DAY));
-    verify(dataFetcher, times(1))
-        .fetchGridData(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    verify(dataFetcher, times(1)).fetchGridData(any(), any(), any(), eq(DateGranularity.DAY));
   }
 
   @Test
@@ -725,7 +720,7 @@ class ReportEngineTest {
                 "20", new TopLevelNode("20", "BankBbb", "asset"),
                 "30", new TopLevelNode("30", "BankCcc", "asset")));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(Leg.NET, List.of(turnoverOf("20"))), Map.of(), Map.of()));
 
     engine.render(accountRowsFilteredTo(FilterLevel.TRANSACTION, "12"), TODAY);
@@ -743,7 +738,7 @@ class ReportEngineTest {
     when(axisCandidates.candidatesFor(eq(Dimension.ACCOUNT), any()))
         .thenReturn(Map.of("30", new TopLevelNode("30", "BankCcc", "asset")));
     when(gridBuilder.frontierNodes(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
-    when(dataFetcher.fetchGridData(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(dataFetcher.fetchGridData(any(), any(), any(), any()))
         .thenReturn(new GridData(Map.of(), Map.of(), Map.of()));
     ReportSpec s =
         spec(

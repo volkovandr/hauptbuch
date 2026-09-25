@@ -87,21 +87,18 @@ class ReportGridBuilder {
     if (outerDim == null) {
       return List.of(new AxisNode(AxisNode.TOTAL_KEY, "Total"));
     }
-    List<AxisNode> frontier = new ArrayList<>();
+    FrontierWalk walk =
+        new FrontierWalk(
+            outerDim,
+            innerDim,
+            innerCandidatesByKey,
+            sameDimensionChildrenByParentKey,
+            expandedKeys,
+            new ArrayList<>());
     for (TopLevelNode outer : outerCandidatesByKey.values()) {
-      addFrontierNode(
-          frontier,
-          outer,
-          outer.key(),
-          0,
-          null,
-          outerDim,
-          innerDim,
-          innerCandidatesByKey,
-          sameDimensionChildrenByParentKey,
-          expandedKeys);
+      walk.add(outer, outer.key(), 0, null);
     }
-    return frontier;
+    return walk.frontier();
   }
 
   /**
@@ -125,47 +122,36 @@ class ReportGridBuilder {
     return frontier;
   }
 
-  // ExcessiveParameterList: one recursive walk of the frontier tree, carrying the same fixed
-  // context (the two dimensions and their two child sources) down every level — splitting it would
-  // just wrap this same parameter list in a context object, not reduce it.
-  @SuppressWarnings("PMD.ExcessiveParameterList")
-  private void addFrontierNode(
-      List<AxisNode> frontier,
-      TopLevelNode node,
-      String key,
-      int depth,
-      String parentKey,
+  /**
+   * One {@link #frontierNodes} walk: what stays fixed at every level of the recursion, plus the
+   * {@code frontier} list it appends to in visiting order.
+   */
+  private record FrontierWalk(
       Dimension outerDim,
       Dimension innerDim,
       Map<String, TopLevelNode> innerCandidatesByKey,
       Map<String, List<TopLevelNode>> sameDimensionChildrenByParentKey,
-      Set<String> expandedKeys) {
-    boolean crossDimensionChild = depth > 0 && innerDim != null;
-    boolean expandable =
-        !crossDimensionChild
-            && AutoExpansion.isNestable(outerDim)
-            && (innerDim != null || node.hasChildren());
-    boolean expanded = expandable && expandedKeys.contains(key);
-    frontier.add(new AxisNode(key, node.label(), depth, expandable, parentKey, expanded));
-    if (!expanded) {
-      return;
-    }
-    List<TopLevelNode> children =
-        depth == 0 && innerDim != null
-            ? List.copyOf(innerCandidatesByKey.values())
-            : sameDimensionChildrenByParentKey.getOrDefault(key, List.of());
-    for (TopLevelNode child : children) {
-      addFrontierNode(
-          frontier,
-          child,
-          key + "|" + child.key(),
-          depth + 1,
-          key,
-          outerDim,
-          innerDim,
-          innerCandidatesByKey,
-          sameDimensionChildrenByParentKey,
-          expandedKeys);
+      Set<String> expandedKeys,
+      List<AxisNode> frontier) {
+
+    void add(TopLevelNode node, String key, int depth, String parentKey) {
+      boolean crossDimensionChild = depth > 0 && innerDim != null;
+      boolean expandable =
+          !crossDimensionChild
+              && AutoExpansion.isNestable(outerDim)
+              && (innerDim != null || node.hasChildren());
+      boolean expanded = expandable && expandedKeys.contains(key);
+      frontier.add(new AxisNode(key, node.label(), depth, expandable, parentKey, expanded));
+      if (!expanded) {
+        return;
+      }
+      List<TopLevelNode> children =
+          depth == 0 && innerDim != null
+              ? List.copyOf(innerCandidatesByKey.values())
+              : sameDimensionChildrenByParentKey.getOrDefault(key, List.of());
+      for (TopLevelNode child : children) {
+        add(child, key + "|" + child.key(), depth + 1, key);
+      }
     }
   }
 
