@@ -4,6 +4,9 @@ import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -12,6 +15,8 @@ import org.junit.jupiter.api.TestInstance;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 /**
  * Browser tier: the app on a random port against this suite's own Postgres, driven by a headless
@@ -55,6 +60,13 @@ public abstract class BrowserTest {
   @AfterEach
   void closePage() {
     context.close();
+  }
+
+  /** A throwaway receipt storage root, so a test never writes into the dev receipts directory. */
+  @DynamicPropertySource
+  static void receiptStorageRoot(DynamicPropertyRegistry registry) throws IOException {
+    Path root = Files.createTempDirectory("hauptbuch-receipts-browser");
+    registry.add("hauptbuch.receipts.storage-root", root::toString);
   }
 
   /** The absolute URL of {@code path} on the app under test. */
