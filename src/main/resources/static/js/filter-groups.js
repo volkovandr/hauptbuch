@@ -23,12 +23,14 @@
  *     input[data-filter-member="KEY …"]        a member; may belong to several groups (a real,
  *                                               named checkbox iff it carries no data-filter-group
  *                                               of its own — a nested group toggle carries both)
+ *     input[name]                              a named checkbox in no group at all (a standalone
+ *                                               account) — still covered by 3 and 4
  *     [data-filter-all] / [data-filter-none]   bulk links
  *
  * 1. Group state: each toggle reflects its members — checked if all are, indeterminate if some.
  * 2. Group click: ticks / unticks every member carrying that group's key.
- * 3. Bulk links: tick / untick every named member in the panel.
- * 4. On submit of a [data-filter-tidy-up-all] form: if EVERY named member in one of its panels is
+ * 3. Bulk links: tick / untick every named checkbox in the panel, grouped or not.
+ * 4. On submit of a [data-filter-tidy-up-all] form: if EVERY named checkbox in one of its panels is
  *    ticked, disable them so the query string carries none of them at all — the server then
  *    re-resolves the whole picker (and the entry dock will not serialise a defaulted filter). With
  *    JS off every id is sent and the server collapses them the same way; the URL is just longer.
@@ -63,17 +65,17 @@
 
   // ── Group mode (the register) ───────────────────────────────────────────
 
+  // Every real, submitted checkbox in the panel — a standalone one that belongs to no group
+  // included, so the bulk links and the all-ticked tidy-up cover it too. Group toggles carry no
+  // name, which is what keeps them out.
   function namedMembers(panel) {
-    return Array.prototype.filter.call(panel.querySelectorAll("[data-filter-member]"), function (
-      input,
-    ) {
-      return !input.hasAttribute("data-filter-group");
-    });
+    return Array.prototype.slice.call(panel.querySelectorAll("input[type=checkbox][name]"));
   }
 
   function membersOf(panel, key) {
     return namedMembers(panel).filter(function (input) {
-      return input.getAttribute("data-filter-member").split(/\s+/).indexOf(key) !== -1;
+      var groups = input.getAttribute("data-filter-member");
+      return groups !== null && groups.split(/\s+/).indexOf(key) !== -1;
     });
   }
 
