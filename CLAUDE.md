@@ -66,7 +66,7 @@ outranks cleverness, brevity, and raw capability every time. Concretely:
    with **one sanctioned exception** (NFR-04, amended 2026-08-01): the Anthropic API key lives in the
    `settings` row (write-only masked UI, never logged, `ANTHROPIC_API_KEY` env fallback; data-model §3.8).
 9. **`./gradlew check` is the completion gate — it must be fully green before any step is done.**
-   `check` runs the three test suites *and* every quality tool: **Checkstyle, PMD, SpotBugs,
+   `check` runs the four test suites *and* every quality tool: **Checkstyle, PMD, SpotBugs,
    Spotless, and JaCoCo coverage verification.** Never call a step complete on a red gate, and
    **never weaken a tool to pass** (don't suppress warnings, add blanket excludes, ratchet coverage
    *down*, or disable a rule). Fix the code. If a finding is a genuine false positive, narrow the
@@ -81,7 +81,7 @@ outranks cleverness, brevity, and raw capability every time. Concretely:
 ## 2. Commands
 
 ```bash
-# THE completion gate: all three test suites + module verification + every quality
+# THE completion gate: all four test suites + module verification + every quality
 # tool (Checkstyle, PMD, SpotBugs, Spotless, JaCoCo coverage). Must be green to finish a step.
 ./gradlew check
 
@@ -91,13 +91,14 @@ outranks cleverness, brevity, and raw capability every time. Concretely:
 # dev database (PostgreSQL runs natively/locally, not in the app container)
 docker-compose up -d        # local dev Postgres
 
-# the three test suites (Gradle JVM Test Suite plugin)
+# the four test suites (Gradle JVM Test Suite plugin)
 ./gradlew test              # unit (Mockito, no container) — includes ApplicationModules.verify()
 ./gradlew integrationTest   # Flyway + repositories vs Testcontainers Postgres
 ./gradlew sqlLogicTest      # SQL-resident logic vs Testcontainers Postgres
+./gradlew browserTest       # the JS leaves in headless Chromium (Playwright) vs the app on a port
 
 # quality tools — run these INDIVIDUALLY while iterating; save the slow `check` for last (§7.5).
-# Each has per-source-set variants (Main / Test / IntegrationTest / SqlLogicTest) — quality tools
+# Each has per-source-set variants (Main / Test / IntegrationTest / SqlLogicTest / BrowserTest) — quality tools
 # run on test code too, so run the *Test variants, not just *Main.
 ./gradlew spotlessApply                  # auto-fix formatting — run this FIRST, don't hand-format
 ./gradlew spotlessCheck                  # formatting (google-java-format); see report for diffs
@@ -240,13 +241,14 @@ Full detail in `docs/data-model.md`. The traps:
 
 ---
 
-## 6. Testing — three tiers, and where logic goes
+## 6. Testing — four tiers, and where logic goes
 
 | Suite | Against | Holds |
 |-------|---------|-------|
 | `test` (unit) | nothing — Mockito mocks the DB | service orchestration & validation logic (e.g. reject unbalanced input *before* the DB). **Thin by design** for query-heavy modules — do not pad it. |
 | `integrationTest` | Testcontainers Postgres | Flyway migrations apply; **every repository method** maps rows ↔ records; controller/htmx acceptance (rendered `hx-*`, redirects, OOB swaps) |
 | `sqlLogicTest` | Testcontainers Postgres | logic that *lives in SQL* and cannot be mocked: matrix query, running balances, tag rollups, conditional sum-to-zero, FX valuation |
+| `browserTest` | the app on a random port + Testcontainers Postgres, driven by headless Chromium (Playwright for Java) | the **client-side behaviour of the JS leaves** (§1.6) — what MockMvc structurally cannot see. Not a second acceptance tier: server-side flows stay in `integrationTest` |
 
 - **No service-level integration tests.** A service is orchestration over repositories — unit-test it
   with the repositories mocked; round-trip each **repository method** against Postgres in the
@@ -276,8 +278,9 @@ Full detail in `docs/data-model.md`. The traps:
 - **TDD.** For SQL-resident logic, write the `sqlLogicTest` first with crafted data — including the
   cross-currency and backdated-insert cases — then implement the query.
 - **Do not unit-test Thymeleaf templates.** Server rendering means most "UI logic" is backend logic
-  already covered above. Money-critical *flows* get thin **Playwright** smoke tests only (transaction
-  entry, receipt review→commit, statement match→confirm).
+  already covered above. Money-critical *flows* are covered by MockMvc acceptance in
+  `integrationTest`; **Playwright** (`browserTest`) is only for what a JS leaf does in the browser.
+  A browser test class seeds its own data once, under names no other class uses — the app commits.
 
 ---
 

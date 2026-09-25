@@ -35,6 +35,7 @@ repositories {
 
 ext {
 	set('springModulithVersion', "2.1.0")
+	set('playwrightVersion', "1.63.0")
 }
 
 dependencies {
@@ -107,7 +108,7 @@ def testPmdRuleset = resources.text.fromString("""<?xml version="1.0"?>
   </rule>
 </ruleset>
 """)
-tasks.matching { it.name in ['pmdTest', 'pmdIntegrationTest', 'pmdSqlLogicTest'] }.configureEach {
+tasks.matching { it.name in ['pmdTest', 'pmdIntegrationTest', 'pmdSqlLogicTest', 'pmdBrowserTest'] }.configureEach {
 	ruleSetFiles = files()
 	ruleSetConfig = testPmdRuleset
 }
@@ -270,12 +271,51 @@ testing {
 				}
 			}
 		}
+
+		// Browser tier: the sanctioned JS leaves (CLAUDE.md §1.6) driven in a real Chromium via
+		// Playwright, against the app on a random port and its own Postgres container. What the
+		// MockMvc acceptance tests structurally cannot catch — a leaf's client-side behaviour
+		// (register issue 26: filter-groups.js dropped standalone accounts on Apply).
+		browserTest(JvmTestSuite) {
+			dependencies {
+				implementation project()
+				implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+				implementation 'org.springframework.boot:spring-boot-starter-test'
+				implementation 'org.springframework.boot:spring-boot-testcontainers'
+				implementation 'org.testcontainers:testcontainers-junit-jupiter'
+				implementation 'org.testcontainers:testcontainers-postgresql'
+				implementation "com.microsoft.playwright:playwright:${playwrightVersion}"
+				runtimeOnly 'org.postgresql:postgresql'
+				runtimeOnly 'org.flywaydb:flyway-database-postgresql'
+			}
+			targets {
+				all {
+					testTask.configure {
+						shouldRunAfter(test)
+						dependsOn(tasks.named('installPlaywrightChromium'))
+						// Chromium is installed by the task above; stop Playwright.create() from
+						// also downloading Firefox and WebKit, which no test uses.
+						environment('PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD', '1')
+					}
+				}
+			}
+		}
 	}
+}
+
+// Installs the one browser the browser tier uses, through Playwright's own CLI. Idempotent: a
+// browser already in the shared cache (~/Library/Caches/ms-playwright on macOS) is not downloaded
+// again.
+tasks.register('installPlaywrightChromium', JavaExec) {
+	classpath = sourceSets.browserTest.runtimeClasspath
+	mainClass = 'com.microsoft.playwright.CLI'
+	args = ['install', 'chromium']
 }
 
 tasks.named('check') {
 	dependsOn(testing.suites.named('integrationTest'))
 	dependsOn(testing.suites.named('sqlLogicTest'))
+	dependsOn(testing.suites.named('browserTest'))
 	dependsOn(tasks.named('jacocoTestReport'))
 	// Fail the build on a coverage regression, not just report it.
 	dependsOn(tasks.named('jacocoTestCoverageVerification'))
