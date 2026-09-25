@@ -1,7 +1,7 @@
 # Hauptbuch — Reporting sub-plan (slices a–f)
 
-**Status:** Draft v0.10
-**Date:** 2026-09-23
+**Status:** Draft v0.11
+**Date:** 2026-09-25
 **Owner:** volkovandr
 **Companion to:** `reporting.md` (authoritative for every design decision),
 `implementation-plan.md` (§3, the Reporting bullet), `docs/adr/0001-generic-report-engine.md`
@@ -194,16 +194,18 @@ example from `reporting.md` §9.2.
 
 ## f — Drill-down and CSV
 
-- Cell → the reporting-owned transaction list, reusing the register's row fragment
-  (`reporting.md` §12).
+- Cell → the reporting-owned transaction list, reusing the register's row fragment, with the
+  running column; a closing-balance cell opens with its opening-balance line (`reporting.md` §12).
 - The **register handoff** and its leg-selection rule, including the transfer and no-real-leg cases.
-- **CSV export** of the raw grid (§13).
+- **CSV export**, as shown and raw (§13).
 
 **Tests.** Integration tier: a cell's posting set matches the list it opens (the assertion that
-makes the drill-down trustworthy); the handoff pre-selects the right account for a simple
-transaction, a transfer, and a category-to-category correction; the CSV's shape.
+makes the drill-down trustworthy), and a closing-balance list's opening line plus its rows lands on
+the cell, cross-currency included; the handoff pre-selects the right account for a simple
+transaction, a transfer, and a category-to-category correction; both CSVs' shape, including raw's
+leaf paths and a tag's own postings under the tag's path.
 
-**Done when** any cell opens its transactions and every Report exports.
+**Done when** any cell opens its transactions and every Report exports in both forms.
 
 ---
 
@@ -221,6 +223,8 @@ transaction, a transfer, and a category-to-category correction; the CSV's shape.
 
 ## Changelog
 
+- **v0.11 (2026-09-25):** Scope change in slice f (`reporting.md` v0.4): closing-balance cells drill
+  down too (opening-balance line + running column), and CSV exports in two forms, as shown and raw.
 - **v0.10 (2026-09-23):** Slice e marked complete (owner-confirmed). No scope change (routine);
   follow-ups found in testing are filed as `.scratch/reporting/issues/07`–`11` for triage.
 - **v0.9 (2026-09-23):** Scope change in slice e: the Date ladder's **year rung is deferred** out of
