@@ -1,8 +1,8 @@
 # Hauptbuch — Reporting: the Report Engine, Renderers & Layouts
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.3
-**Date:** 2026-09-24
+**Status:** Draft v0.4
+**Date:** 2026-09-25
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (§5.9, FR-ANA-01–10, FR-REP-01–14),
 `data-model.md` (§4 signs, §5 leaves-only, §6.1 the two valuation rules, §10 tags),
@@ -644,6 +644,16 @@ It is **not** the register pre-filtered. The register's filter vocabulary is nar
 cell to it would **silently drop constraints**, and a drill-down list you cannot trust is worse than
 none.
 
+The list carries a **running column** that accumulates the cell's measure row by row and ends on the
+cell's own number:
+
+- **Turnover** (and count): the cell's postings, starting from zero.
+- **Closing balance**: an **opening-balance line** at the start of the cell's period, then the
+  postings inside the period. The period is the cell's Date bucket, clipped to the range, or the
+  report's range when no axis carries Date. In base currency the opening line and every row are
+  valued at the **cell's period-end rate**, the same mark-to-market rule as the cell (§5.4), so the
+  list closes on the cell exactly; valuing each row at its own date's rate would not.
+
 From that list, editing a row **hands off to the register** with the transaction's
 **`asset`/`liability` leg** pre-selected as the account and its date in range. A transfer has two such
 legs: the **credited** one (the money's source) is chosen. A transaction with no such leg (a
@@ -653,10 +663,19 @@ category-to-category correction) opens the register unfiltered at that date.
 
 ## 13. Export
 
-Every Report exports its grid as **CSV**: the **raw** grid — fully expanded regardless of expansion
-state, ISO dates, plain decimal points, one row per leaf, base and native columns as separate
-columns. A CSV goes into a spreadsheet where German display formatting (`1.234,56`) fights the locale
-and a collapsed hierarchy would lose data. The rendered grid is what the screen is for.
+Every Report exports as **CSV**, in two forms:
+
+- **As shown** — the grid as it is on screen: the same rows and columns, the current expansion, the
+  totals the Report displays.
+- **Raw** — every hierarchy on either axis fully expanded to its **leaves only**, no parent rows or
+  columns, no totals. A leaf is labelled by its path: `Cash:Cash-USD` and `Cash:Cash-EUR`, not three
+  rows for `Cash` and its two children. A tag's postings on the tag itself (the on-screen
+  `(unspecified)` row, §9.3) export under the tag's own path, `Trips`. Date stays at the ladder's
+  rung; it is not expanded into days.
+
+Both use ISO dates, plain decimal points, and base and native measures as separate columns. A CSV
+goes into a spreadsheet, where German display formatting (`1.234,56`) fights the locale. Raw is
+fetched at leaf grain, not by expanding every node, so its cost does not grow with the tree.
 
 PDF export (FR-ANA-06's parenthetical) is **not** in scope.
 
@@ -738,6 +757,9 @@ management screen.
 
 ## Changelog
 
+- **v0.4 (2026-09-25):** **§12**: the drill-down list gains a running column; a closing-balance cell
+  drills down to an opening-balance line plus its period's postings, valued at the period-end rate.
+  **§13**: CSV exports in two forms, as shown and raw (leaves only, path labels, no totals).
 - **v0.3 (2026-09-24):** **§9.1/§9.2**: a draft's expansion is no longer thrown away; it is
   ephemeral state that travels with the draft and becomes the Report's on save (reporting issue 02).
   **§4/§6.3/§7.3/§9.2**: a filter on an axis dimension's own field makes its ticked nodes that
