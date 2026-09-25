@@ -1,6 +1,6 @@
 # Long parameter lists in the report engine (`addFrontierNode`, `fetchGridData`)
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: low
 Area: Reporting (`analytics` module: `ReportGridBuilder`, `ReportDataFetcher`, `ReportEngine`)
@@ -47,3 +47,11 @@ parameters, and `./gradlew check` is green.
 Filed 2026-09-23 from the stage e3/e4b `/code-review` leftovers (session-local
 `.scratch/.workpackages-e`). Deliberately kept out of e5 so that e5's diff stays about features.
 Good to pick up the next time either class is touched.
+
+Implemented 2026-09-25 (branch `feat/reporting`, before slice f): new package-private
+`FetchContext(spec, axes, types, today, baseCurrency, expandedKeys)` record; `fetchGridData` is now
+the single `fetchGridData(context, range, buckets, granularity)` (the 8-parameter overload is gone,
+`ReportEngine` passes the ladder's rung itself), and every child/closing-balance helper takes the
+context. `addFrontierNode` became a private `FrontierWalk` record's recursive `add(node, key, depth,
+parentKey)`; its `ExcessiveParameterList` suppression is removed. Only test call sites changed.
+`./gradlew check` green. Owner-confirmed 2026-09-25.

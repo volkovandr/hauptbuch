@@ -40,93 +40,39 @@ class ReportDataFetcher {
   }
 
   /**
-   * Every raw turnover/closing-balance row a Report's measures need — including, when {@code
-   * expandedOuterKeys} is non-empty, each expanded node's child rows (reporting.md §3, §9), merged
-   * straight into the same per-leg/per-bucket lists the outer-level rows already populate. {@link
-   * CellValuation} needs no change to read them: a child row's {@code dimensionKey} is already
-   * {@code "<outerKey>|<innerKey>"}, matching the composite key {@link
-   * ReportGridBuilder#frontierNodes} gave that row's {@link AxisNode}.
+   * Every raw turnover/closing-balance row a Report's measures need over {@code resolved}, bucketed
+   * at {@code granularity} — the ladder's own rung for the whole range, {@link DateGranularity#DAY}
+   * for one expanded Date row's days (reporting.md §9.1). Includes, when the context's expanded
+   * keys are non-empty, each expanded node's child rows (§3, §9), merged straight into the same
+   * per-leg/per-bucket lists the outer-level rows already populate. {@link CellValuation} needs no
+   * change to read them: a child row's {@code dimensionKey} is already {@code
+   * "<outerKey>|<innerKey>"}, matching the composite key {@link ReportGridBuilder#frontierNodes}
+   * gave that row's {@link AxisNode}.
    */
   GridData fetchGridData(
-      ReportSpec spec,
-      AxisPlan axes,
-      List<String> types,
+      FetchContext context,
       RangeResolver.ResolvedRange resolved,
       List<DateBucket> buckets,
-      LocalDate today,
-      String baseCurrency,
-      Set<String> expandedOuterKeys) {
-    return fetchGridData(
-        spec,
-        axes,
-        types,
-        resolved,
-        buckets,
-        today,
-        baseCurrency,
-        expandedOuterKeys,
-        spec.dateLadder().bucketGranularity());
-  }
-
-  /**
-   * {@link #fetchGridData(ReportSpec, AxisPlan, List, RangeResolver.ResolvedRange, List, LocalDate,
-   * String, Set)} at an explicit {@code granularity} rather than the ladder's own rung — {@link
-   * DateGranularity#DAY} for one expanded Date row's days (reporting.md §9.1).
-   */
-  GridData fetchGridData(
-      ReportSpec spec,
-      AxisPlan axes,
-      List<String> types,
-      RangeResolver.ResolvedRange resolved,
-      List<DateBucket> buckets,
-      LocalDate today,
-      String baseCurrency,
-      Set<String> expandedOuterKeys,
       DateGranularity granularity) {
+    AxisPlan axes = context.axes();
     QueryConstraints constraints =
-        PromotedNodes.constraints(spec.filters(), spec, axes.nonDateDim(), axes.innerDim());
+        PromotedNodes.constraints(
+            context.spec().filters(), context.spec(), axes.nonDateDim(), axes.innerDim());
     Map<Leg, List<RawTurnoverCell>> turnoverByLeg =
-        fetchTurnover(
-            spec, axes.nonDateDim(), types, resolved, baseCurrency, granularity, constraints);
-    if (!expandedOuterKeys.isEmpty()) {
-      mergeChildTurnover(
-          spec,
-          axes.nonDateDim(),
-          axes.innerDim(),
-          types,
-          resolved,
-          baseCurrency,
-          granularity,
-          expandedOuterKeys,
-          turnoverByLeg);
+        fetchTurnover(context, resolved, granularity, constraints);
+    if (!context.expandedKeys().isEmpty()) {
+      mergeChildTurnover(context, resolved, granularity, turnoverByLeg);
     }
 
     Map<String, List<RawBalanceCell>> balanceByBucketKey = new LinkedHashMap<>();
     Map<String, LocalDate> asOfByBucketKey = new LinkedHashMap<>();
-    if (spec.hasClosingBalance()) {
+    if (context.spec().hasClosingBalance()) {
       boolean hasDateAxis = axes.dateOnRows() || axes.dateOnColumns();
       List<DateBucket> balanceBuckets = hasDateAxis ? buckets : List.of();
       fetchClosingBalance(
-          axes.nonDateDim(),
-          types,
-          spec.scope(),
-          balanceBuckets,
-          resolved,
-          today,
-          constraints,
-          balanceByBucketKey,
-          asOfByBucketKey);
-      if (!expandedOuterKeys.isEmpty()) {
-        mergeChildClosingBalance(
-            spec,
-            axes.nonDateDim(),
-            axes.innerDim(),
-            types,
-            spec.scope(),
-            balanceBuckets,
-            expandedOuterKeys,
-            balanceByBucketKey,
-            asOfByBucketKey);
+          context, balanceBuckets, resolved, constraints, balanceByBucketKey, asOfByBucketKey);
+      if (!context.expandedKeys().isEmpty()) {
+        mergeChildClosingBalance(context, balanceBuckets, balanceByBucketKey, asOfByBucketKey);
       }
     }
     return new GridData(turnoverByLeg, balanceByBucketKey, asOfByBucketKey);
@@ -134,44 +80,30 @@ class ReportDataFetcher {
 
   /**
    * One expanded outer node's child turnover, per distinct {@link Leg} the spec's measures need,
-   * merged into {@code byLeg} (whose every key {@link #fetchTurnover} has already populated).
-   * {@code innerDim} set: {@link #queryTurnover} for {@code innerDim}, exactly as the outer level
-   * uses it, with one extra synthetic subtree filter scoping it to {@code outerKey} (§3's "reuse
-   * the existing filter-predicate compiler", no combinatorial per-dimension-pair SQL). {@code
-   * innerDim} {@code null}: {@code outerDim}'s own {@code parentId}-seeded child query (§9.1) — no
-   * synthetic filter needed, the query's own recursive CTE already scopes it structurally.
+   * merged into {@code byLeg} (whose every key {@link #fetchTurnover} has already populated). An
+   * inner dimension set: {@link #queryTurnover} for it, exactly as the outer level uses it, with
+   * one extra synthetic subtree filter scoping it to the outer key (§3's "reuse the existing
+   * filter-predicate compiler", no combinatorial per-dimension-pair SQL). No inner dimension: the
+   * outer dimension's own {@code parentId}-seeded child query (§9.1) — no synthetic filter needed,
+   * the query's own recursive CTE already scopes it structurally.
    */
   private void mergeChildTurnover(
-      ReportSpec spec,
-      Dimension outerDim,
-      Dimension innerDim,
-      List<String> types,
+      FetchContext context,
       RangeResolver.ResolvedRange resolved,
-      String baseCurrency,
       DateGranularity granularity,
-      Set<String> expandedOuterKeys,
       Map<Leg, List<RawTurnoverCell>> byLeg) {
     Set<Leg> legs = EnumSet.noneOf(Leg.class);
-    for (Measure measure : spec.measures()) {
+    for (Measure measure : context.spec().measures()) {
       Leg leg = legFor(measure);
       if (leg != null) {
         legs.add(leg);
       }
     }
     makeEveryListMutable(byLeg, legs);
-    for (String outerKey : expandedOuterKeys) {
+    for (String outerKey : context.expandedKeys()) {
       for (Leg leg : legs) {
         List<RawTurnoverCell> childRows =
-            childTurnover(
-                outerDim,
-                innerDim,
-                outerKey,
-                types,
-                resolved,
-                baseCurrency,
-                granularity,
-                leg.name(),
-                spec);
+            childTurnover(context, outerKey, resolved, granularity, leg.name());
         byLeg
             .get(leg)
             .addAll(
@@ -193,58 +125,43 @@ class ReportDataFetcher {
   }
 
   private List<RawTurnoverCell> childTurnover(
-      Dimension outerDim,
-      Dimension innerDim,
+      FetchContext context,
       String outerKey,
-      List<String> types,
       RangeResolver.ResolvedRange resolved,
-      String baseCurrency,
       DateGranularity granularity,
-      String legName,
-      ReportSpec spec) {
-    boolean includeClosed = spec.scope().includeClosedAccounts();
-    boolean includePending = spec.scope().includePendingReview();
+      String legName) {
+    Dimension outerDim = context.axes().nonDateDim();
+    Dimension innerDim = context.axes().innerDim();
     if (innerDim != null) {
-      QueryConstraints childConstraints = withSyntheticFilter(spec, outerDim, innerDim, outerKey);
       return queryTurnover(
+          context,
           innerDim,
-          types,
           resolved,
-          baseCurrency,
-          legName,
-          includeClosed,
-          includePending,
           granularity,
-          childConstraints);
+          legName,
+          withSyntheticFilter(context, outerKey));
     }
-    QueryConstraints constraints = PromotedNodes.constraints(spec.filters(), spec, outerDim, null);
+    QueryConstraints constraints =
+        PromotedNodes.constraints(context.spec().filters(), context.spec(), outerDim, null);
     NodeKey parent = NodeKey.ofLastSegment(outerKey);
     if (outerDim == Dimension.TAG) {
       return queryRepository.childTagTurnover(
           parent.id(),
-          types,
+          context.types(),
           resolved.start(),
           resolved.end(),
-          baseCurrency,
+          context.baseCurrency(),
           legName,
-          includeClosed,
-          includePending,
+          context.includeClosedAccounts(),
+          context.includePendingReview(),
           granularity,
           constraints);
     }
-    return ScopeDimensionMismatch.ownAccountTypes(outerDim, types)
+    return ScopeDimensionMismatch.ownAccountTypes(outerDim, context.types())
         .map(
             ownTypes ->
                 childAccountTreeTurnover(
-                    parent,
-                    ownTypes,
-                    resolved,
-                    baseCurrency,
-                    legName,
-                    includeClosed,
-                    includePending,
-                    granularity,
-                    constraints))
+                    context, parent, ownTypes, resolved, granularity, legName, constraints))
         .orElse(List.of());
   }
 
@@ -253,15 +170,16 @@ class ReportDataFetcher {
    * "Personal debts" node's people, or a person's debt leaves (reporting issue 06).
    */
   private List<RawTurnoverCell> childAccountTreeTurnover(
+      FetchContext context,
       NodeKey parent,
       List<String> ownTypes,
       RangeResolver.ResolvedRange resolved,
-      String baseCurrency,
-      String legName,
-      boolean includeClosed,
-      boolean includePending,
       DateGranularity granularity,
+      String legName,
       QueryConstraints constraints) {
+    String baseCurrency = context.baseCurrency();
+    boolean includeClosed = context.includeClosedAccounts();
+    boolean includePending = context.includePendingReview();
     return switch (parent.kind()) {
       case PERSONAL_DEBTS ->
           queryRepository.debtPeopleTurnover(
@@ -310,13 +228,8 @@ class ReportDataFetcher {
    * no date axis).
    */
   private void mergeChildClosingBalance(
-      ReportSpec spec,
-      Dimension outerDim,
-      Dimension innerDim,
-      List<String> types,
-      Scope scope,
+      FetchContext context,
       List<DateBucket> dateAxisBuckets,
-      Set<String> expandedOuterKeys,
       Map<String, List<RawBalanceCell>> balanceByBucketKey,
       Map<String, LocalDate> asOfByBucketKey) {
     List<String> bucketKeys =
@@ -324,11 +237,10 @@ class ReportDataFetcher {
             ? List.of(TOTAL_KEY)
             : dateAxisBuckets.stream().map(DateBucket::key).toList();
     makeEveryListMutable(balanceByBucketKey, Set.copyOf(bucketKeys));
-    for (String outerKey : expandedOuterKeys) {
+    for (String outerKey : context.expandedKeys()) {
       for (String bucketKey : bucketKeys) {
         LocalDate asOf = asOfByBucketKey.get(bucketKey);
-        List<RawBalanceCell> childRows =
-            childClosingBalance(outerDim, innerDim, outerKey, types, scope, asOf, spec);
+        List<RawBalanceCell> childRows = childClosingBalance(context, outerKey, asOf);
         balanceByBucketKey
             .get(bucketKey)
             .addAll(
@@ -340,22 +252,18 @@ class ReportDataFetcher {
   }
 
   private List<RawBalanceCell> childClosingBalance(
-      Dimension outerDim,
-      Dimension innerDim,
-      String outerKey,
-      List<String> types,
-      Scope scope,
-      LocalDate asOf,
-      ReportSpec spec) {
+      FetchContext context, String outerKey, LocalDate asOf) {
+    Dimension outerDim = context.axes().nonDateDim();
+    Dimension innerDim = context.axes().innerDim();
     if (innerDim != null) {
-      QueryConstraints childConstraints = withSyntheticFilter(spec, outerDim, innerDim, outerKey);
-      return closingBalanceAt(innerDim, types, scope, asOf, childConstraints);
+      return closingBalanceAt(context, innerDim, asOf, withSyntheticFilter(context, outerKey));
     }
-    QueryConstraints constraints = PromotedNodes.constraints(spec.filters(), spec, outerDim, null);
+    QueryConstraints constraints =
+        PromotedNodes.constraints(context.spec().filters(), context.spec(), outerDim, null);
     NodeKey parent = NodeKey.ofLastSegment(outerKey);
-    boolean includeClosed = scope.includeClosedAccounts();
-    boolean includePending = scope.includePendingReview();
-    return ScopeDimensionMismatch.ownAccountTypes(outerDim, types)
+    boolean includeClosed = context.includeClosedAccounts();
+    boolean includePending = context.includePendingReview();
+    return ScopeDimensionMismatch.ownAccountTypes(outerDim, context.types())
         .map(
             ownTypes ->
                 switch (parent.kind()) {
@@ -394,11 +302,16 @@ class ReportDataFetcher {
     return new ReportFilter(field, level, FilterOperator.IS_ONE_OF, List.of(rawKey));
   }
 
-  private static QueryConstraints withSyntheticFilter(
-      ReportSpec spec, Dimension outerDim, Dimension innerDim, String rawKey) {
+  /**
+   * The spec's filters plus a synthetic subtree filter scoping the inner dimension to {@code
+   * outerKey}.
+   */
+  private static QueryConstraints withSyntheticFilter(FetchContext context, String outerKey) {
+    ReportSpec spec = context.spec();
+    Dimension outerDim = context.axes().nonDateDim();
     List<ReportFilter> combined = new ArrayList<>(spec.filters());
-    combined.add(syntheticSubtreeFilter(outerDim, rawKey));
-    return PromotedNodes.constraints(combined, spec, outerDim, innerDim);
+    combined.add(syntheticSubtreeFilter(outerDim, outerKey));
+    return PromotedNodes.constraints(combined, spec, outerDim, context.axes().innerDim());
   }
 
   /**
@@ -407,15 +320,12 @@ class ReportDataFetcher {
    * counts have no leg of their own, so they always share the NET fetch.
    */
   private Map<Leg, List<RawTurnoverCell>> fetchTurnover(
-      ReportSpec spec,
-      Dimension nonDateDim,
-      List<String> types,
+      FetchContext context,
       RangeResolver.ResolvedRange resolved,
-      String baseCurrency,
       DateGranularity granularity,
       QueryConstraints constraints) {
     Map<Leg, List<RawTurnoverCell>> byLeg = new EnumMap<>(Leg.class);
-    for (Measure measure : spec.measures()) {
+    for (Measure measure : context.spec().measures()) {
       Leg leg = legFor(measure);
       if (leg == null) {
         continue;
@@ -424,31 +334,29 @@ class ReportDataFetcher {
           leg,
           l ->
               queryTurnover(
-                  nonDateDim,
-                  types,
+                  context,
+                  context.axes().nonDateDim(),
                   resolved,
-                  baseCurrency,
-                  l.name(),
-                  spec.scope().includeClosedAccounts(),
-                  spec.scope().includePendingReview(),
                   granularity,
+                  l.name(),
                   constraints));
     }
     return byLeg;
   }
 
   private List<RawTurnoverCell> queryTurnover(
-      Dimension nonDateDim,
-      List<String> types,
+      FetchContext context,
+      Dimension dimension,
       RangeResolver.ResolvedRange resolved,
-      String baseCurrency,
-      String legName,
-      boolean includeClosed,
-      boolean includePending,
       DateGranularity granularity,
+      String legName,
       QueryConstraints constraints) {
-    if (nonDateDim == Dimension.CATEGORY || nonDateDim == Dimension.ACCOUNT) {
-      return ScopeDimensionMismatch.ownAccountTypes(nonDateDim, types)
+    List<String> types = context.types();
+    String baseCurrency = context.baseCurrency();
+    boolean includeClosed = context.includeClosedAccounts();
+    boolean includePending = context.includePendingReview();
+    if (dimension == Dimension.CATEGORY || dimension == Dimension.ACCOUNT) {
+      return ScopeDimensionMismatch.ownAccountTypes(dimension, types)
           .map(
               ownTypes ->
                   queryRepository.accountTreeTurnover(
@@ -463,7 +371,7 @@ class ReportDataFetcher {
                       constraints))
           .orElse(List.of());
     }
-    if (nonDateDim == Dimension.TAG) {
+    if (dimension == Dimension.TAG) {
       return queryRepository.tagTurnover(
           types,
           resolved.start(),
@@ -475,7 +383,7 @@ class ReportDataFetcher {
           granularity,
           constraints);
     }
-    if (nonDateDim == Dimension.PAYEE) {
+    if (dimension == Dimension.PAYEE) {
       return queryRepository.payeeTurnover(
           types,
           resolved.start(),
@@ -487,7 +395,7 @@ class ReportDataFetcher {
           granularity,
           constraints);
     }
-    if (nonDateDim == Dimension.PERSON) {
+    if (dimension == Dimension.PERSON) {
       return queryRepository.personTurnover(
           types,
           resolved.start(),
@@ -499,7 +407,7 @@ class ReportDataFetcher {
           granularity,
           constraints);
     }
-    if (nonDateDim == Dimension.CURRENCY) {
+    if (dimension == Dimension.CURRENCY) {
       return queryRepository.currencyTurnover(
           types,
           resolved.start(),
@@ -511,7 +419,7 @@ class ReportDataFetcher {
           granularity,
           constraints);
     }
-    if (nonDateDim == Dimension.ACCOUNT_TYPE) {
+    if (dimension == Dimension.ACCOUNT_TYPE) {
       return queryRepository.accountTypeTurnover(
           types,
           resolved.start(),
@@ -536,57 +444,51 @@ class ReportDataFetcher {
   }
 
   private void fetchClosingBalance(
-      Dimension nonDateDim,
-      List<String> types,
-      Scope scope,
+      FetchContext context,
       List<DateBucket> dateAxisBuckets,
       RangeResolver.ResolvedRange resolved,
-      LocalDate today,
       QueryConstraints constraints,
       Map<String, List<RawBalanceCell>> balanceByBucketKey,
       Map<String, LocalDate> asOfByBucketKey) {
+    Dimension nonDateDim = context.axes().nonDateDim();
     if (dateAxisBuckets.isEmpty()) {
-      LocalDate asOf = clampToToday(resolved.end(), today);
+      LocalDate asOf = clampToToday(resolved.end(), context.today());
       asOfByBucketKey.put(TOTAL_KEY, asOf);
-      balanceByBucketKey.put(
-          TOTAL_KEY, closingBalanceAt(nonDateDim, types, scope, asOf, constraints));
+      balanceByBucketKey.put(TOTAL_KEY, closingBalanceAt(context, nonDateDim, asOf, constraints));
       return;
     }
     for (DateBucket bucket : dateAxisBuckets) {
       // Use the bucket's own effective end — clipped to the report's actual range, not the full
       // calendar month — then clamp to today (reporting.md §8.2).
-      LocalDate asOf = clampToToday(bucket.effectiveEnd(), today);
+      LocalDate asOf = clampToToday(bucket.effectiveEnd(), context.today());
       asOfByBucketKey.put(bucket.key(), asOf);
       balanceByBucketKey.put(
-          bucket.key(), closingBalanceAt(nonDateDim, types, scope, asOf, constraints));
+          bucket.key(), closingBalanceAt(context, nonDateDim, asOf, constraints));
     }
   }
 
   private List<RawBalanceCell> closingBalanceAt(
-      Dimension nonDateDim,
-      List<String> types,
-      Scope scope,
-      LocalDate asOf,
-      QueryConstraints constraints) {
-    boolean includeClosed = scope.includeClosedAccounts();
-    boolean includePending = scope.includePendingReview();
-    if (nonDateDim == Dimension.CATEGORY || nonDateDim == Dimension.ACCOUNT) {
-      return ScopeDimensionMismatch.ownAccountTypes(nonDateDim, types)
+      FetchContext context, Dimension dimension, LocalDate asOf, QueryConstraints constraints) {
+    List<String> types = context.types();
+    boolean includeClosed = context.includeClosedAccounts();
+    boolean includePending = context.includePendingReview();
+    if (dimension == Dimension.CATEGORY || dimension == Dimension.ACCOUNT) {
+      return ScopeDimensionMismatch.ownAccountTypes(dimension, types)
           .map(
               ownTypes ->
                   queryRepository.accountTreeClosingBalance(
                       ownTypes, asOf, includeClosed, includePending, constraints))
           .orElse(List.of());
     }
-    if (nonDateDim == Dimension.PERSON) {
+    if (dimension == Dimension.PERSON) {
       return queryRepository.personClosingBalance(
           types, asOf, includeClosed, includePending, constraints);
     }
-    if (nonDateDim == Dimension.CURRENCY) {
+    if (dimension == Dimension.CURRENCY) {
       return queryRepository.currencyClosingBalance(
           types, asOf, includeClosed, includePending, constraints);
     }
-    if (nonDateDim == Dimension.ACCOUNT_TYPE) {
+    if (dimension == Dimension.ACCOUNT_TYPE) {
       return queryRepository.accountTypeClosingBalance(
           types, asOf, includeClosed, includePending, constraints);
     }

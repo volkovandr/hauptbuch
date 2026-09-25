@@ -83,14 +83,16 @@ class ReportDataFetcherTest {
   @Test
   void categoryDimensionFetchesAccountTreeTurnover() {
     fetcher.fetchGridData(
-        turnoverSpec(Dimension.CATEGORY),
-        axesFor(Dimension.CATEGORY),
-        List.of("expense"),
+        new FetchContext(
+            turnoverSpec(Dimension.CATEGORY),
+            axesFor(Dimension.CATEGORY),
+            List.of("expense"),
+            TODAY,
+            "EUR",
+            Set.of()),
         resolved(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)),
         List.of(),
-        TODAY,
-        "EUR",
-        Set.of());
+        DateGranularity.MONTH);
 
     verify(queryRepository)
         .accountTreeTurnover(
@@ -108,14 +110,16 @@ class ReportDataFetcherTest {
   @Test
   void tagDimensionFetchesTagTurnover() {
     fetcher.fetchGridData(
-        turnoverSpec(Dimension.TAG),
-        axesFor(Dimension.TAG),
-        List.of("expense"),
+        new FetchContext(
+            turnoverSpec(Dimension.TAG),
+            axesFor(Dimension.TAG),
+            List.of("expense"),
+            TODAY,
+            "EUR",
+            Set.of()),
         resolved(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)),
         List.of(),
-        TODAY,
-        "EUR",
-        Set.of());
+        DateGranularity.MONTH);
 
     verify(queryRepository)
         .tagTurnover(
@@ -133,14 +137,11 @@ class ReportDataFetcherTest {
   @Test
   void noDimensionFetchesTotalTurnover() {
     fetcher.fetchGridData(
-        turnoverSpec(null),
-        axesFor(null),
-        List.of("expense"),
+        new FetchContext(
+            turnoverSpec(null), axesFor(null), List.of("expense"), TODAY, "EUR", Set.of()),
         resolved(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)),
         List.of(),
-        TODAY,
-        "EUR",
-        Set.of());
+        DateGranularity.MONTH);
 
     verify(queryRepository)
         .totalTurnover(
@@ -164,14 +165,11 @@ class ReportDataFetcherTest {
             ownFilter(FilterField.CATEGORY, FilterLevel.POSTING, "7"));
 
     fetcher.fetchGridData(
-        spec,
-        axesFor(Dimension.CATEGORY),
-        List.of("asset", "expense"),
+        new FetchContext(
+            spec, axesFor(Dimension.CATEGORY), List.of("asset", "expense"), TODAY, "EUR", Set.of()),
         resolved(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)),
         List.of(),
-        TODAY,
-        "EUR",
-        Set.of());
+        DateGranularity.MONTH);
 
     verify(queryRepository)
         .accountTreeTurnover(
@@ -211,14 +209,11 @@ class ReportDataFetcherTest {
 
     GridData data =
         fetcher.fetchGridData(
-            closingBalanceSpec(false, false),
-            axes,
-            List.of("asset"),
+            new FetchContext(
+                closingBalanceSpec(false, false), axes, List.of("asset"), TODAY, "EUR", Set.of()),
             resolved(LocalDate.of(2026, 1, 31), LocalDate.of(2026, 1, 31)),
             List.of(),
-            TODAY,
-            "EUR",
-            Set.of());
+            DateGranularity.MONTH);
 
     verify(queryRepository)
         .accountTreeClosingBalance(
@@ -231,14 +226,11 @@ class ReportDataFetcherTest {
     AxisPlan axes = new AxisPlan(Dimension.ACCOUNT, null, Dimension.ACCOUNT, false, false);
 
     fetcher.fetchGridData(
-        closingBalanceSpec(false, true),
-        axes,
-        List.of("asset"),
+        new FetchContext(
+            closingBalanceSpec(false, true), axes, List.of("asset"), TODAY, "EUR", Set.of()),
         resolved(LocalDate.of(2026, 1, 31), LocalDate.of(2026, 1, 31)),
         List.of(),
-        TODAY,
-        "EUR",
-        Set.of());
+        DateGranularity.MONTH);
 
     verify(queryRepository)
         .accountTreeClosingBalance(
@@ -259,14 +251,11 @@ class ReportDataFetcherTest {
     AxisPlan axes = new AxisPlan(Dimension.ACCOUNT, Dimension.DATE, Dimension.ACCOUNT, false, true);
 
     fetcher.fetchGridData(
-        closingBalanceSpec(true, false),
-        axes,
-        List.of("asset"),
+        new FetchContext(
+            closingBalanceSpec(true, false), axes, List.of("asset"), TODAY, "EUR", Set.of()),
         resolved(LocalDate.of(2026, 1, 10), LocalDate.of(2026, 1, 20)),
         buckets,
-        TODAY,
-        "EUR",
-        Set.of());
+        DateGranularity.MONTH);
 
     verify(queryRepository)
         .accountTreeClosingBalance(
@@ -284,14 +273,11 @@ class ReportDataFetcherTest {
     AxisPlan axes = new AxisPlan(Dimension.ACCOUNT, Dimension.DATE, Dimension.ACCOUNT, false, true);
 
     fetcher.fetchGridData(
-        closingBalanceSpec(true, false),
-        axes,
-        List.of("asset"),
+        new FetchContext(
+            closingBalanceSpec(true, false), axes, List.of("asset"), TODAY, "EUR", Set.of()),
         resolved(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)),
         septemberBucket,
-        TODAY,
-        "EUR",
-        Set.of());
+        DateGranularity.MONTH);
 
     // The bucket runs through 30 Sep, but TODAY is only the 12th — the as-of date must not run
     // ahead of today (reporting.md §8.2).
@@ -304,14 +290,15 @@ class ReportDataFetcherTest {
   @Test
   void explicitDayGranularityOverridesTheLaddersOwnRung() {
     fetcher.fetchGridData(
-        turnoverSpec(Dimension.CATEGORY),
-        new AxisPlan(Dimension.DATE, Dimension.CATEGORY, Dimension.CATEGORY, true, false),
-        List.of("expense"),
+        new FetchContext(
+            turnoverSpec(Dimension.CATEGORY),
+            new AxisPlan(Dimension.DATE, Dimension.CATEGORY, Dimension.CATEGORY, true, false),
+            List.of("expense"),
+            TODAY,
+            "EUR",
+            Set.of()),
         resolved(LocalDate.of(2026, 1, 10), LocalDate.of(2026, 1, 31)),
         List.of(),
-        TODAY,
-        "EUR",
-        Set.of(),
         DateGranularity.DAY);
 
     verify(queryRepository)
@@ -341,14 +328,15 @@ class ReportDataFetcherTest {
 
     GridData days =
         fetcher.fetchGridData(
-            closingBalanceSpec(true, false),
-            new AxisPlan(Dimension.DATE, Dimension.ACCOUNT, Dimension.ACCOUNT, true, false),
-            List.of("asset"),
+            new FetchContext(
+                closingBalanceSpec(true, false),
+                new AxisPlan(Dimension.DATE, Dimension.ACCOUNT, Dimension.ACCOUNT, true, false),
+                List.of("asset"),
+                TODAY,
+                "EUR",
+                Set.of()),
             september.effectiveRange(),
             september.days(),
-            TODAY,
-            "EUR",
-            Set.of(),
             DateGranularity.DAY);
 
     assertThat(days.balanceByBucketKey()).hasSize(30);
@@ -362,14 +350,10 @@ class ReportDataFetcherTest {
   private GridData fetchExpanded(ReportSpec spec, String expandedKey) {
     AxisPlan axes = new AxisPlan(Dimension.ACCOUNT, null, Dimension.ACCOUNT, false, false);
     return fetcher.fetchGridData(
-        spec,
-        axes,
-        ASSET,
+        new FetchContext(spec, axes, ASSET, TODAY, "EUR", Set.of(expandedKey)),
         resolved(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)),
         List.of(),
-        TODAY,
-        "EUR",
-        Set.of(expandedKey));
+        DateGranularity.MONTH);
   }
 
   @Test
