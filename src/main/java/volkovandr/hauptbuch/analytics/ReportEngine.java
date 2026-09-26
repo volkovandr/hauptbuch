@@ -45,16 +45,19 @@ public class ReportEngine {
   private final AxisCandidates axisCandidates;
   private final ReportDataFetcher dataFetcher;
   private final ReportGridBuilder gridBuilder;
+  private final RawGridFetcher rawGridFetcher;
 
   ReportEngine(
       SettingsService settingsService,
       AxisCandidates axisCandidates,
       ReportDataFetcher dataFetcher,
-      ReportGridBuilder gridBuilder) {
+      ReportGridBuilder gridBuilder,
+      RawGridFetcher rawGridFetcher) {
     this.settingsService = settingsService;
     this.axisCandidates = axisCandidates;
     this.dataFetcher = dataFetcher;
     this.gridBuilder = gridBuilder;
+    this.rawGridFetcher = rawGridFetcher;
   }
 
   /** Render a Report's grid, resolving the date range against today. */
@@ -132,6 +135,61 @@ public class ReportEngine {
     AssembledGrid assembled =
         assemble(spec, today, RowExpansion.AUTO, explicitExpandedKeys, resolved, axes, true);
     return assembled.drillSource(assembled.build(gridBuilder, spec), spec);
+  }
+
+  /**
+   * {@code spec}'s raw grid (reporting.md §13): every hierarchy on either axis fully expanded to
+   * its leaves — each labelled by its path, a nested axis's two paths joined — with no parent rows
+   * or columns and no totals; Date stays at the ladder's rung. A leaf with nothing to show is left
+   * out. Fetched at leaf grain ({@link RawGridFetcher}), not by expanding every node, and valued by
+   * the very rules the Report's own cells are. A refused spec yields its empty grid.
+   */
+  ReportGrid renderRaw(ReportSpec spec, LocalDate today) {
+    RangeResolver.ResolvedRange resolved = RangeResolver.resolve(spec.range(), today);
+    AxisPlan axes = planAxes(spec);
+    String refusal = refusal(spec, axes);
+    if (refusal != null) {
+      return ReportGrid.refused(refusal, resolved.start(), resolved.end());
+    }
+    String baseCurrency = requireBaseCurrency();
+    List<DateBucket> buckets = bucketsFor(spec, resolved);
+    RawGridFetcher.RawGrid raw =
+        rawGridFetcher.fetch(spec, axes, today, baseCurrency, resolved, buckets);
+    List<AxisNode> rowNodes =
+        onNonDateAxis(axes.rowDim(), axes.nonDateDim())
+            ? raw.leaves()
+            : gridBuilder.axisNodes(axes.rowDim(), Map.of(), buckets);
+    List<AxisNode> columnBucketNodes =
+        onNonDateAxis(axes.colDim(), axes.nonDateDim())
+            ? raw.leaves()
+            : gridBuilder.axisNodes(axes.colDim(), Map.of(), buckets);
+    return gridBuilder.build(
+        withoutTotals(spec),
+        axes,
+        rowNodes,
+        columnBucketNodes,
+        Map.of(),
+        raw.data(),
+        baseCurrency,
+        resolved);
+  }
+
+  /** {@code spec} with neither totals axis and no group-header parents — raw has no parents. */
+  private static ReportSpec withoutTotals(ReportSpec spec) {
+    return new ReportSpec(
+        spec.rows(),
+        spec.columns(),
+        spec.series(),
+        spec.measures(),
+        spec.scope(),
+        spec.filters(),
+        spec.range(),
+        false,
+        false,
+        spec.suppressEmptyRows(),
+        false,
+        spec.dateLadder(),
+        spec.suppressEmptyColumns());
   }
 
   private AssembledGrid assemble(

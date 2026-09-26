@@ -96,7 +96,7 @@ public class ReportQueryRepository {
    * AvoidDuplicateLiterals} would otherwise flag (repeated once per turnover method) live in one
    * place instead.
    */
-  private static final String BUCKET_KEY_AND_CURRENCY_COLUMNS =
+  static final String BUCKET_KEY_AND_CURRENCY_COLUMNS =
       BUCKET_KEY_EXPR + ",\n       a.currency_code as currency_code,\n       ";
 
   /**
@@ -251,7 +251,8 @@ public class ReportQueryRepository {
    * The rate-as-of lookup (data-model §3.7) joined once per posting so both the base sum and the
    * missing-rate count read the same resolved rate. Shared, with {@link #BASE_AMOUNT_EXPR} and
    * {@link #MISSING_RATE_EXPR}, by {@link PostingValueRepository}, so a drill-down list values each
-   * posting exactly as its cell summed it.
+   * posting exactly as its cell summed it, and by {@link LeafGrainRepository}, so a raw export's
+   * leaves add up to the rows the Report shows.
    */
   static final String RATE_LATERAL_JOIN =
       """
@@ -275,10 +276,10 @@ public class ReportQueryRepository {
       (p.base_amount is null and a.currency_code <> :baseCurrency and rate.rate is null)
       """;
 
-  private static final String LEG_PREDICATE =
+  static final String LEG_PREDICATE =
       "(:leg = 'NET' or (:leg = 'DEBITS' and p.amount > 0) or (:leg = 'CREDITS' and p.amount < 0))";
 
-  private static final String SCOPE_PREDICATE =
+  static final String SCOPE_PREDICATE =
       """
       a.type in (:types)
         and a.deleted_at is null
@@ -1923,7 +1924,7 @@ public class ReportQueryRepository {
    * none), which the account/tag ancestor CTEs read; a query that does not reference them ignores
    * them.
    */
-  private CompiledExtra compileExtra(QueryConstraints constraints) {
+  CompiledExtra compileExtra(QueryConstraints constraints) {
     Map<String, Object> params = new LinkedHashMap<>();
     params.put(PROMOTED_ACCOUNT_IDS, orNoMatch(constraints.promotedAccountIds()));
     params.put(PROMOTED_TAG_IDS, orNoMatch(constraints.promotedTagIds()));
@@ -2123,7 +2124,7 @@ public class ReportQueryRepository {
   }
 
   /** One compiled {@link QueryConstraints}: the extra SQL to append, and its bind params. */
-  private record CompiledExtra(String sql, Map<String, Object> params) {}
+  record CompiledExtra(String sql, Map<String, Object> params) {}
 
   /** {@code posting_ids} as a list — empty when not collected. */
   private static List<Long> postingIds(ResultSet rs) throws SQLException {

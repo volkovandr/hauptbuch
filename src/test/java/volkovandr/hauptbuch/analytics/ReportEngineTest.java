@@ -40,8 +40,9 @@ class ReportEngineTest {
   private final AxisCandidates axisCandidates = mock();
   private final ReportDataFetcher dataFetcher = mock();
   private final ReportGridBuilder gridBuilder = mock();
+  private final RawGridFetcher rawGridFetcher = mock();
   private final ReportEngine engine =
-      new ReportEngine(settingsService, axisCandidates, dataFetcher, gridBuilder);
+      new ReportEngine(settingsService, axisCandidates, dataFetcher, gridBuilder, rawGridFetcher);
 
   /** A fetch no test cares about returns no data, never {@code null}. */
   @BeforeEach

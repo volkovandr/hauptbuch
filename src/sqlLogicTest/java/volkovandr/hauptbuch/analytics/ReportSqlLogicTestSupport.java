@@ -24,7 +24,7 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @Transactional
-abstract class DrillDownSqlLogicTestSupport {
+abstract class ReportSqlLogicTestSupport {
 
   static final LocalDate TODAY = LocalDate.of(2026, 3, 31);
   static final String EUR = "EUR";
