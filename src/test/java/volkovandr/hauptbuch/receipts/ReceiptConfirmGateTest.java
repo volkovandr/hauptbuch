@@ -84,6 +84,17 @@ class ReceiptConfirmGateTest {
   }
 
   @Test
+  void blocksPayingAccountThatIsGroup() {
+    // A stale form or hand-made POST can still carry a group's id; it must not reach the ledger.
+    long bank = 6L;
+    when(accountService.findById(bank)).thenReturn(Optional.of(account(bank, "BankAaa", EUR)));
+    when(accountService.findParentAccountIds()).thenReturn(List.of(bank));
+
+    assertThat(problems(form(DATE, bank, EUR, "42,14", categoryLine("42,14", FUEL))))
+        .anyMatch(p -> p.contains("BankAaa") && p.contains("is a group"));
+  }
+
+  @Test
   void blocksMissingTotal() {
     assertThat(problems(form(DATE, CASH, EUR, "", categoryLine("42,14", FUEL))))
         .anyMatch(p -> p.contains("total"));
