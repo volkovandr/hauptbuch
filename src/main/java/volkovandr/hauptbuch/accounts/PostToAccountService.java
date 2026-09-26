@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.accounts.repository.AccountRepository;
@@ -49,6 +50,16 @@ public class PostToAccountService {
    */
   public PostToResolution resolve(String text) {
     return ownTree().resolve(text.strip());
+  }
+
+  /**
+   * The refusal for an account id that is a group, or empty when it is not one — for the pickers
+   * that post an id rather than a label (the receipt paying account, Settle-up). Their selects
+   * offer posting leaves only, but a stale form can still carry a group's id; refused with the same
+   * message the label resolver gives, never by the ledger's leaves-only rule at commit.
+   */
+  public Optional<PostToResolution.Group> groupOf(long accountId) {
+    return ownTree().groupOf(accountId);
   }
 
   private OwnTree ownTree() {
@@ -97,6 +108,15 @@ public class PostToAccountService {
           .map(c -> new PostToAccount(c.account(), c.path()))
           .sorted(Comparator.comparing(PostToAccount::path, String.CASE_INSENSITIVE_ORDER))
           .toList();
+    }
+
+    Optional<PostToResolution.Group> groupOf(long accountId) {
+      Account account = byId.get(accountId);
+      if (account == null || !parentIds.contains(accountId)) {
+        return Optional.empty();
+      }
+      return Optional.of(
+          new PostToResolution.Group(AccountService.composePath(account, byId, PATH_SEPARATOR)));
     }
 
     PostToResolution resolve(String text) {

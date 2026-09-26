@@ -147,7 +147,9 @@ resolves to nothing, with an error saying no such account exists.
   its own filter.
 - **One label format:** the full root-to-leaf path joined with ` - ` (the Category picker's idiom),
   followed by the existing ` (CUR)` suffix: `BankAaa - Credit card (EUR)`. A top-level leaf is
-  unchanged: `Cash (EUR)`. Transfer targets use the path too: `To → BankAaa - Credit card`. Options
+  unchanged: `Cash (EUR)`. Transfer targets carry the same label, suffix included:
+  `To → BankAaa - Credit card (EUR)` (owner, 2026-09-26 — without the currency, same-named
+  accounts in two currencies were indistinguishable and could not round-trip an edit). Options
   are sorted by path, case-insensitively.
 - **Suffix rules (owner, 2026-09-26):**
   1. Only the leaf carries the suffix. Parent segments of the path never get one:
@@ -197,8 +199,8 @@ resolves to nothing, with an error saying no such account exists.
       Account datalist offers `BankAaa - Credit card (EUR)` and `BankAaa - Debit card (EUR)` and does
       **not** offer `BankAaa (EUR)`. The same holds for the split panel, the receipt paying-account
       `<select>`, and the Settle-up `<select>`.
-- [ ] The Category datalist's transfer targets offer `To → BankAaa - Credit card` /
-      `From ← BankAaa - Credit card` and no targets for `BankAaa` itself.
+- [ ] The Category datalist's transfer targets offer `To → BankAaa - Credit card (EUR)` /
+      `From ← BankAaa - Credit card (EUR)` and no targets for `BankAaa` itself.
 - [ ] With `BankAaa - Credit card` and `BankBbb - Credit card` both live: each path resolves to its
       own account, and bare `Credit card` is refused with a message naming both paths.
 - [ ] With `Card` in EUR and in CHF, `Card (CHF)` resolves to the CHF account.
@@ -232,3 +234,9 @@ resolves to nothing, with an error saying no such account exists.
 **Suggested slicing (for a reviewable diff, CLAUDE.md §0):** (1) shared post-to set + path labels +
 richer resolver, with the register dock/split/transfer targets moved over; (2) receipt `<select>` +
 Confirm-gate leaf check; (3) Settle-up `<select>` + submit check. Each slice ships green.
+
+2026-09-26 — implemented on branch `feat/account-picker-leaves`, awaiting owner confirmation:
+`7438580` (register), `2b710a3` (receipt), `1ba4514` (Settle-up), plus a follow-up after review
+(transfer targets carry the currency suffix; one shared group check, `PostToAccountService.groupOf`;
+edit round-trip tests for simple and split transfers). The split panel's Account field resolves
+through the dock's `/register/account/resolve`, so the dock's group-refusal test covers it.

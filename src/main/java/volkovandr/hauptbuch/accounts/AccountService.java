@@ -375,25 +375,19 @@ public class AccountService {
   }
 
   /**
-   * The full root-to-leaf path of an own account ({@code BankAaa - Credit card}) — the name the
-   * transfer targets use, so an edit-mode pre-fill re-resolves to the same account (issue
-   * transaction-register-ui/25). The bare name for an account outside the live own-account tree.
-   */
-  public String ownAccountPath(Account account) {
-    return findLivePaths(MANAGEABLE_TYPES, PostToAccountService.PATH_SEPARATOR).stream()
-        .filter(p -> p.accountId() == account.accountId())
-        .map(AccountPath::path)
-        .findFirst()
-        .orElse(account.name());
-  }
-
-  /**
    * The picker label of an own account ({@code BankAaa - Credit card (EUR)}, {@link
-   * AccountEntryLabel}) — what an edit-mode Account field pre-fills, matching what the post-to
-   * pickers offer.
+   * AccountEntryLabel}) — what an edit-mode Account field or transfer target pre-fills, matching
+   * what the post-to pickers offer, so an untouched re-save resolves to the same account (issue
+   * transaction-register-ui/25). Named by its bare name when outside the live own-account tree.
    */
   public String ownAccountEntryLabel(Account account) {
-    return AccountEntryLabel.format(ownAccountPath(account), account.currencyCode());
+    String path =
+        findLivePaths(MANAGEABLE_TYPES, PostToAccountService.PATH_SEPARATOR).stream()
+            .filter(p -> p.accountId() == account.accountId())
+            .map(AccountPath::path)
+            .findFirst()
+            .orElse(account.name());
+    return AccountEntryLabel.format(path, account.currencyCode());
   }
 
   /**

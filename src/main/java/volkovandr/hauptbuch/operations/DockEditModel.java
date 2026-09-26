@@ -33,7 +33,7 @@ import volkovandr.hauptbuch.ledger.TransferTarget;
  * @param amount the magnitude the user would type, with a leading {@code +}/{@code −} only when the
  *     direction overrides the category type's default (register §3.8)
  * @param categoryId the semantic category id, or the transfer target account id for transfers
- * @param categoryName the semantic category name, or the transfer target account name
+ * @param categoryName the semantic category name, or the transfer target account's picker label
  * @param categoryCurrencyCode the currency override for the counterpart leg; {@code null} for
  *     single-currency transactions
  * @param categoryAmount the counterpart leg's native magnitude (cross-currency or transfers);

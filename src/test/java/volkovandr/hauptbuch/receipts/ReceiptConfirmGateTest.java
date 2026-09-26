@@ -17,6 +17,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountPath;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.accounts.PostToAccountService;
+import volkovandr.hauptbuch.accounts.PostToResolution;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.operations.SplitCurrency;
 import volkovandr.hauptbuch.shared.MoneyFormat;
@@ -46,13 +48,14 @@ class ReceiptConfirmGateTest {
   private static final int FRACTION_DIGITS = 2;
 
   @Mock AccountService accountService;
+  @Mock PostToAccountService postToAccountService;
   @Mock SettingsService settingsService;
 
   private ReceiptConfirmGate gate;
 
   @BeforeEach
   void setUp() {
-    gate = new ReceiptConfirmGate(accountService, settingsService);
+    gate = new ReceiptConfirmGate(accountService, postToAccountService, settingsService);
     lenient()
         .when(accountService.findById(CASH))
         .thenReturn(Optional.of(account(CASH, "Cash", EUR)));
@@ -88,10 +91,11 @@ class ReceiptConfirmGateTest {
     // A stale form or hand-made POST can still carry a group's id; it must not reach the ledger.
     long bank = 6L;
     when(accountService.findById(bank)).thenReturn(Optional.of(account(bank, "BankAaa", EUR)));
-    when(accountService.findParentAccountIds()).thenReturn(List.of(bank));
+    when(postToAccountService.groupOf(bank))
+        .thenReturn(Optional.of(new PostToResolution.Group("BankAaa")));
 
     assertThat(problems(form(DATE, bank, EUR, "42,14", categoryLine("42,14", FUEL))))
-        .anyMatch(p -> p.contains("BankAaa") && p.contains("is a group"));
+        .contains("'BankAaa' is a group — pick one of its accounts");
   }
 
   @Test

@@ -159,7 +159,7 @@ class RegisterServiceTest {
   }
 
   @Test
-  void offersToAndFromTransferTargetsByPathForEveryPostToAccount() {
+  void offersToAndFromTransferTargetsByLabelForEveryPostToAccount() {
     when(postToAccountService.postToAccounts())
         .thenReturn(List.of(postTo(GIRO, "Giro", "BankAaa - Giro"), postTo(CASH, "Cash", "Cash")));
 
@@ -167,7 +167,10 @@ class RegisterServiceTest {
 
     assertThat(view.transferTargets())
         .containsExactly(
-            "To → BankAaa - Giro", "From ← BankAaa - Giro", "To → Cash", "From ← Cash");
+            "To → BankAaa - Giro (EUR)",
+            "From ← BankAaa - Giro (EUR)",
+            "To → Cash (EUR)",
+            "From ← Cash (EUR)");
   }
 
   @Test

@@ -16,9 +16,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
-import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.accounts.PostToAccount;
 import volkovandr.hauptbuch.accounts.PostToAccountService;
+import volkovandr.hauptbuch.accounts.PostToResolution;
 import volkovandr.hauptbuch.debts.Person;
 import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.debts.SettleTarget;
@@ -47,7 +47,6 @@ class SettleUpServiceTest {
   private static final LocalDate DATE = LocalDate.of(2026, 7, 21);
 
   @Mock private PersonService personService;
-  @Mock private AccountService accountService;
   @Mock private PostToAccountService postToAccountService;
   @Mock private SettingsService settingsService;
   @Mock private CrossCurrencyFieldsService crossCurrencyFieldsService;
@@ -60,7 +59,6 @@ class SettleUpServiceTest {
     service =
         new SettleUpService(
             personService,
-            accountService,
             postToAccountService,
             settingsService,
             crossCurrencyFieldsService,
@@ -234,8 +232,8 @@ class SettleUpServiceTest {
     long bank = 9L;
     when(personService.settleTarget(PERSON_ID, EUR))
         .thenReturn(Optional.of(new SettleTarget(LEAF_ID, EUR, new BigDecimal("10.00"))));
-    when(accountService.findParentAccountIds()).thenReturn(List.of(bank));
-    when(accountService.findById(bank)).thenReturn(Optional.of(own(bank, "BankAaa", EUR)));
+    when(postToAccountService.groupOf(bank))
+        .thenReturn(Optional.of(new PostToResolution.Group("BankAaa")));
 
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> service.settle(PERSON_ID, EUR, bank, DATE, "10,00", null, null))

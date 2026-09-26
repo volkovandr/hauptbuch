@@ -491,7 +491,7 @@ class AccountServiceTest {
   }
 
   @Test
-  void ownAccountPathAndLabelNameEveryAncestor() {
+  void ownAccountEntryLabelNamesEveryAncestor() {
     // What an edit-mode pre-fill shows, matching what the post-to pickers offer (issue 25).
     Account card =
         new Account(
@@ -501,7 +501,6 @@ class AccountServiceTest {
             List.of(
                 new AccountNode(account(1L, "BankAaa", ASSET, null), 0), new AccountNode(card, 1)));
 
-    assertThat(accountService.ownAccountPath(card)).isEqualTo("BankAaa - Credit card");
     assertThat(accountService.ownAccountEntryLabel(card)).isEqualTo("BankAaa - Credit card (EUR)");
   }
 }
