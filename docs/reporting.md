@@ -7,7 +7,7 @@
 **Companion to:** `requirements.md` (§5.9, FR-ANA-01–10, FR-REP-01–14),
 `data-model.md` (§4 signs, §5 leaves-only, §6.1 the two valuation rules, §10 tags),
 `ui-transaction-register.md` (the drill-down handoff, the filter component),
-`implementation-plan.md` (§3) and `implementation-plan-reporting.md` (the slicing),
+`implementation-plan.md` (§3, the Reporting bullet),
 `docs/adr/0001-generic-report-engine.md`
 
 > This document records the **design of reporting** — one generic report engine and the objects

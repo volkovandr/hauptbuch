@@ -10,8 +10,8 @@ import org.springframework.util.MultiValueMap;
 
 /**
  * Unit tier (CLAUDE.md §6): {@link ReportSpecQueryString}'s own encode/decode round trip — the one
- * piece whose bugs silently change a Report (reporting.md §11a.1, implementation-plan-reporting.md
- * d3). Mirrors {@link volkovandr.hauptbuch.analytics.repository.ReportSpecJsonTest}'s shapes.
+ * piece whose bugs silently change a Report (reporting.md §11a.1). Mirrors {@link
+ * volkovandr.hauptbuch.analytics.repository.ReportSpecJsonTest}'s shapes.
  */
 class ReportSpecQueryStringTest {
 
