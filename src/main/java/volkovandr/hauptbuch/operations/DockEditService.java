@@ -5,7 +5,6 @@ import java.time.LocalDate;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.accounts.Account;
-import volkovandr.hauptbuch.accounts.AccountEntryLabel;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.debts.PersonTarget;
@@ -143,7 +142,7 @@ public class DockEditService {
         null,
         date,
         sticky == null ? null : sticky.accountId(),
-        sticky == null ? null : AccountEntryLabel.format(sticky),
+        sticky == null ? null : accountService.ownAccountEntryLabel(sticky),
         null,
         null,
         null,
@@ -158,10 +157,10 @@ public class DockEditService {
 
   /**
    * The value the dock's Account input shows for a re-opened transaction (register §3.3, plan stage
-   * 8b.1). An ordinary funding account shows {@code Name (CUR)}; a person's debt leaf shows the
-   * {@code for}/{@code by} sigil instead, never the cosmetic {@code personal.<CUR>} leaf name —
-   * both forms re-resolve through {@code /register/account/resolve}, so an untouched edit
-   * round-trips to the same funding leg.
+   * 8b.1). An ordinary funding account shows its picker label, {@code Parent - Name (CUR)}; a
+   * person's debt leaf shows the {@code for}/{@code by} sigil instead, never the cosmetic {@code
+   * personal.<CUR>} leaf name — both forms re-resolve through {@code /register/account/resolve}, so
+   * an untouched edit round-trips to the same funding leg.
    *
    * <p>The sigil follows the leg's own sign, the same rule the register displays by (§3.5): the
    * person's leg on the <em>debit</em> side (positive) is {@code for} — they owe you — and on the
@@ -177,7 +176,7 @@ public class DockEditService {
                         ? PersonTarget.Direction.BY
                         : PersonTarget.Direction.FOR,
                     name))
-        .orElseGet(() -> AccountEntryLabel.format(legs.fundingAccount()));
+        .orElseGet(() -> accountService.ownAccountEntryLabel(legs.fundingAccount()));
   }
 
   /**
@@ -262,7 +261,7 @@ public class DockEditService {
         funding.posting(),
         funding.account(),
         counterpart.account().accountId(),
-        counterpart.account().name(),
+        accountService.ownAccountPath(counterpart.account()),
         counterpart.account().type(),
         counterpart.account().currencyCode(),
         categoryAmount,

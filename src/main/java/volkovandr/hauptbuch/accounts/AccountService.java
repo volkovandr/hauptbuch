@@ -334,28 +334,6 @@ public class AccountService {
   }
 
   /**
-   * Resolve an open own account (asset/liability) by its display name, for the register's transfer
-   * counterpart (register §3.5, plan stage 7d.3) — the {@code To → <name>} / {@code From ← <name>}
-   * target the Category field carries. Case-insensitive; empty when no open own account matches (or
-   * more than one does — an ambiguous name is refused rather than guessed). Filters over {@link
-   * #findLiveByTypes} rather than adding a repository query: the option set is small and already
-   * fetched the same way the register lists it.
-   *
-   * <p>Per-person debt leaves are excluded (plan stage 8b.1): a person is a transfer counterpart
-   * only through the {@code for}/{@code by} sigils, never by their leaf's cosmetic {@code
-   * personal.<CUR>} name, so {@code to personal.EUR} must not resolve.
-   */
-  public Optional<Account> findOwnAccountByName(String name) {
-    List<Account> matches =
-        findLiveByTypes(MANAGEABLE_TYPES).stream()
-            .filter(a -> !a.personLeaf())
-            .filter(a -> a.closedAt() == null)
-            .filter(a -> a.name().equalsIgnoreCase(name))
-            .toList();
-    return matches.size() == 1 ? Optional.of(matches.get(0)) : Optional.empty();
-  }
-
-  /**
    * The live accounts of the given types, each annotated with its true hierarchy depth and listed
    * depth-first (every node immediately followed by all of its descendants) — what a screen needs
    * to indent a multi-level tree correctly, unlike the flat {@link #findLiveByTypes}.
@@ -397,6 +375,28 @@ public class AccountService {
   }
 
   /**
+   * The full root-to-leaf path of an own account ({@code BankAaa - Credit card}) — the name the
+   * transfer targets use, so an edit-mode pre-fill re-resolves to the same account (issue
+   * transaction-register-ui/25). The bare name for an account outside the live own-account tree.
+   */
+  public String ownAccountPath(Account account) {
+    return findLivePaths(MANAGEABLE_TYPES, PostToAccountService.PATH_SEPARATOR).stream()
+        .filter(p -> p.accountId() == account.accountId())
+        .map(AccountPath::path)
+        .findFirst()
+        .orElse(account.name());
+  }
+
+  /**
+   * The picker label of an own account ({@code BankAaa - Credit card (EUR)}, {@link
+   * AccountEntryLabel}) — what an edit-mode Account field pre-fills, matching what the post-to
+   * pickers offer.
+   */
+  public String ownAccountEntryLabel(Account account) {
+    return AccountEntryLabel.format(ownAccountPath(account), account.currencyCode());
+  }
+
+  /**
    * Every live account of the given types with its full root-to-leaf path — {@link
    * #findPostableLeafPaths} without the leaves-only filter, so a <em>group</em> is addressable by
    * path too.
@@ -433,7 +433,7 @@ public class AccountService {
   }
 
   /** Join a leaf's name to all its ancestors' names, root first, with the given separator. */
-  private static String composePath(Account leaf, Map<Long, Account> byId, String separator) {
+  static String composePath(Account leaf, Map<Long, Account> byId, String separator) {
     Deque<String> names = new ArrayDeque<>();
     Account current = leaf;
     while (current != null) {

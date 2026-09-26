@@ -10,10 +10,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import volkovandr.hauptbuch.accounts.Account;
-import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.accounts.PostToAccount;
+import volkovandr.hauptbuch.accounts.PostToAccountService;
+import volkovandr.hauptbuch.accounts.PostToResolution;
 import volkovandr.hauptbuch.debts.PersonResolution;
 import volkovandr.hauptbuch.debts.PersonResolutionService;
 import volkovandr.hauptbuch.debts.PersonTarget;
@@ -28,55 +29,50 @@ class DockAccountResolutionServiceTest {
 
   private static final String EUR = "EUR";
 
-  private final AccountService accountService = mock();
+  private final PostToAccountService postToAccountService = mock();
   private final PersonResolutionService personResolutionService = mock();
   private final DockAccountResolutionService service =
-      new DockAccountResolutionService(accountService, personResolutionService);
+      new DockAccountResolutionService(postToAccountService, personResolutionService);
 
-  private static Account cash() {
-    return new Account(1L, "Cash", "asset", null, EUR, 210, null, null, null, false, false, false);
+  private static PostToAccount card() {
+    return new PostToAccount(
+        new Account(
+            2L, "Credit card", "asset", 1L, EUR, 210, null, null, null, false, false, false),
+        "BankAaa - Credit card");
   }
 
   @Test
-  void resolvesOwnAccountByBareName() {
-    when(accountService.findOwnAccountByName("Cash")).thenReturn(Optional.of(cash()));
+  void resolvedAccountEchoesItsPickerLabel() {
+    when(postToAccountService.resolve("credit card"))
+        .thenReturn(new PostToResolution.Resolved(card()));
 
-    DockAccountResolution resolution = service.resolve("Cash", null);
+    DockAccountResolution resolution = service.resolve("  credit card ", null);
 
-    assertThat(resolution.accountId()).isEqualTo(1L);
-    assertThat(resolution.statusText()).isEqualTo("Cash (EUR)");
+    assertThat(resolution.accountId()).isEqualTo(2L);
+    assertThat(resolution.statusText()).isEqualTo("BankAaa - Credit card (EUR)");
     assertThat(resolution.personName()).isNull();
     assertThat(resolution.error()).isNull();
   }
 
   @Test
-  void resolvesOwnAccountByTheLabelTheDatalistOffers() {
-    // The datalist offers "Cash (EUR)", so round-tripping that exact string must work.
-    when(accountService.findOwnAccountByName("Cash")).thenReturn(Optional.of(cash()));
+  void groupIsRefusedWithItsReason() {
+    when(postToAccountService.resolve("BankAaa")).thenReturn(new PostToResolution.Group("BankAaa"));
 
-    assertThat(service.resolve("Cash (EUR)", null).accountId()).isEqualTo(1L);
-  }
-
-  @Test
-  void refusesCurrencySuffixThatContradictsTheAccount() {
-    // Ignoring the suffix would fund the transaction from an account the user did not name.
-    when(accountService.findOwnAccountByName("Cash")).thenReturn(Optional.of(cash()));
-
-    DockAccountResolution resolution = service.resolve("Cash (CHF)", null);
+    DockAccountResolution resolution = service.resolve("BankAaa", null);
 
     assertThat(resolution.accountId()).isNull();
-    assertThat(resolution.error()).contains("EUR").contains("CHF");
+    assertThat(resolution.error()).isEqualTo("'BankAaa' is a group — pick one of its accounts");
   }
 
   @Test
-  void unknownNameResolvesToNeitherIdNorPerson() {
-    when(accountService.findOwnAccountByName("Nope")).thenReturn(Optional.empty());
+  void unknownNameResolvesToNeitherIdNorPersonAndSuggestsTheSigils() {
+    when(postToAccountService.resolve("Nope")).thenReturn(new PostToResolution.NotFound("Nope"));
 
     DockAccountResolution resolution = service.resolve("Nope", null);
 
     assertThat(resolution.accountId()).isNull();
     assertThat(resolution.personName()).isNull();
-    assertThat(resolution.error()).contains("No open account named");
+    assertThat(resolution.error()).contains("No open account named 'Nope'").contains("for Nope");
   }
 
   @Test
@@ -85,7 +81,7 @@ class DockAccountResolutionServiceTest {
 
     assertThat(resolution.accountId()).isNull();
     assertThat(resolution.error()).isNotNull();
-    verify(accountService, never()).findOwnAccountByName(anyString());
+    verify(postToAccountService, never()).resolve(anyString());
   }
 
   @Test
@@ -100,7 +96,7 @@ class DockAccountResolutionServiceTest {
     assertThat(resolution.personName()).isEqualTo("Max");
     assertThat(resolution.personDirection()).isEqualTo("BY");
     assertThat(resolution.statusText()).isEqualTo("by Max");
-    verify(accountService, never()).findOwnAccountByName(anyString());
+    verify(postToAccountService, never()).resolve(anyString());
   }
 
   @Test

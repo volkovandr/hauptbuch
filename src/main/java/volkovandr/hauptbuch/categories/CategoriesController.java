@@ -12,7 +12,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountNode;
-import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.accounts.PostToAccount;
+import volkovandr.hauptbuch.accounts.PostToAccountService;
+import volkovandr.hauptbuch.accounts.PostToResolution;
 import volkovandr.hauptbuch.debts.PersonResolution;
 import volkovandr.hauptbuch.debts.PersonResolutionService;
 import volkovandr.hauptbuch.debts.PersonTarget;
@@ -86,7 +88,7 @@ class CategoriesController {
 
   private final CategoryService categoryService;
   private final CategoryResolutionService categoryResolutionService;
-  private final AccountService accountService;
+  private final PostToAccountService postToAccountService;
   private final TagService tagService;
   private final PersonResolutionService personResolutionService;
   private final AiVocabularyService aiVocabularyService;
@@ -94,13 +96,13 @@ class CategoriesController {
   CategoriesController(
       CategoryService categoryService,
       CategoryResolutionService categoryResolutionService,
-      AccountService accountService,
+      PostToAccountService postToAccountService,
       TagService tagService,
       PersonResolutionService personResolutionService,
       AiVocabularyService aiVocabularyService) {
     this.categoryService = categoryService;
     this.categoryResolutionService = categoryResolutionService;
-    this.accountService = accountService;
+    this.postToAccountService = postToAccountService;
     this.tagService = tagService;
     this.personResolutionService = personResolutionService;
     this.aiVocabularyService = aiVocabularyService;
@@ -301,18 +303,18 @@ class CategoriesController {
    */
   private void resolveTransfer(
       TransferTarget.Parsed transfer, Model model, HttpServletResponse response) {
-    Optional<Account> account = accountService.findOwnAccountByName(transfer.accountName());
-    if (account.isEmpty()) {
+    PostToResolution resolution = postToAccountService.resolve(transfer.accountName());
+    if (resolution instanceof PostToResolution.Refused refused) {
       model.addAttribute(RESOLVED_ID, "");
       model.addAttribute(RESOLVED_NAME, null);
       model.addAttribute(RESOLVED_TYPE, "");
       model.addAttribute(RESOLVED_DIRECTION, null);
-      model.addAttribute(RESOLVED_ERROR, "No account named " + transfer.accountName());
+      model.addAttribute(RESOLVED_ERROR, refused.message());
       return;
     }
-    model.addAttribute(RESOLVED_ID, account.get().accountId());
-    model.addAttribute(
-        RESOLVED_NAME, TransferTarget.option(transfer.direction(), account.get().name()));
+    PostToAccount account = ((PostToResolution.Resolved) resolution).account();
+    model.addAttribute(RESOLVED_ID, account.account().accountId());
+    model.addAttribute(RESOLVED_NAME, TransferTarget.option(transfer.direction(), account.path()));
     model.addAttribute(RESOLVED_TYPE, "");
     model.addAttribute(RESOLVED_DIRECTION, transfer.direction().name());
     model.addAttribute(RESOLVED_ERROR, null);

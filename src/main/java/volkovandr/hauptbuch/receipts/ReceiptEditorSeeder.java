@@ -138,7 +138,9 @@ class ReceiptEditorSeeder {
       return base.withCategoryText(text).withCategory(String.valueOf(accountId), target.type());
     }
     // A real own account target ⇒ a transfer leg (e.g. a supermarket-cashback line, §13.4).
-    return base.withCategoryText(TransferTarget.option(TransferTarget.Direction.TO, target.name()))
+    return base.withCategoryText(
+            TransferTarget.option(
+                TransferTarget.Direction.TO, accountService.ownAccountPath(target)))
         .withTransfer(String.valueOf(accountId), TransferTarget.Direction.TO.name());
   }
 

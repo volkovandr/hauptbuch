@@ -601,7 +601,7 @@ class RegisterEntryScreenIntegrationTest {
     mockMvc
         .perform(post("/categories/resolve").param("categoryText", "To → Nowhere"))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("No account named Nowhere")))
+        .andExpect(content().string(containsString("No open account named")))
         .andExpect(content().string(containsString("value=\"\"")))
         .andExpect(content().string(not(containsString("name=\"transferDirection\""))));
   }

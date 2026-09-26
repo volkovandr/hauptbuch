@@ -232,10 +232,12 @@ class SplitPanelAssemblerTest {
   // ── funding person (register §3.3/§3.10, issue 07) ─────────────────────────────
 
   @Test
-  void ordinaryAccountShowsItsNameCurrencyLabelAsTheAccountEntryText() {
+  void ordinaryAccountShowsItsPickerLabelAsTheAccountEntryText() {
+    when(accountService.ownAccountEntryLabel(account(CASH_ID, EUR))).thenReturn("Wallet - n (EUR)");
+
     SplitPanel panel = assembler.panel(form("17,00", List.of("expense"), List.of("20")), null);
 
-    assertThat(panel.accountEntryText()).isEqualTo("n (EUR)");
+    assertThat(panel.accountEntryText()).isEqualTo("Wallet - n (EUR)");
   }
 
   @Test

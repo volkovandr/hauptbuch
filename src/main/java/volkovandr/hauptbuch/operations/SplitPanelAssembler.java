@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.accounts.Account;
-import volkovandr.hauptbuch.accounts.AccountEntryLabel;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 
@@ -138,7 +137,7 @@ class SplitPanelAssembler {
   /**
    * The value the panel's Account input shows (register §3.3/§3.10, issue 07): the {@code for}/
    * {@code by} sigil when the Account field resolved to a person, otherwise the ordinary account's
-   * {@code Name (CUR)} label — mirrors {@code DockEditService#accountEntryText}.
+   * picker label — mirrors {@code DockEditService#accountEntryText}.
    */
   private String accountEntryText(SplitForm form) {
     String sigil = form.fundingPersonSigil();
@@ -148,7 +147,10 @@ class SplitPanelAssembler {
     if (form.accountId() == null) {
       return null;
     }
-    return accountService.findById(form.accountId()).map(AccountEntryLabel::format).orElse(null);
+    return accountService
+        .findById(form.accountId())
+        .map(accountService::ownAccountEntryLabel)
+        .orElse(null);
   }
 
   /**

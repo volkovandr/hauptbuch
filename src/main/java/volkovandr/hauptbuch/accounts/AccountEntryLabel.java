@@ -13,14 +13,36 @@ public final class AccountEntryLabel {
 
   private AccountEntryLabel() {}
 
-  /** The label for an account: {@code Cash (EUR)}. */
+  /**
+   * The label for an account: {@code Cash (EUR)}. {@code name} may be the account's full {@code
+   * Parent - Leaf} path; only the leaf's currency is named, once at the end. A name that already
+   * ends with the account's own currency code as a separate word ({@code BankAaa-EUR}, {@code Card
+   * (EUR)}) gets no second suffix (issue transaction-register-ui/25).
+   */
   public static String format(String name, String currencyCode) {
+    if (endsWithCurrency(name, currencyCode)) {
+      return name;
+    }
     return name + " (" + currencyCode + ")";
   }
 
   /** The label for an account. */
   public static String format(Account account) {
     return format(account.name(), account.currencyCode());
+  }
+
+  /**
+   * Whether {@code name} ends with {@code currencyCode} as its own word: case-insensitive, not
+   * preceded by a letter, optionally closed by a {@code )}. {@code Fleur} does not end with {@code
+   * EUR}.
+   */
+  private static boolean endsWithCurrency(String name, String currencyCode) {
+    String text = name.endsWith(")") ? name.substring(0, name.length() - 1) : name;
+    int start = text.length() - currencyCode.length();
+    if (start < 0 || !text.substring(start).equalsIgnoreCase(currencyCode)) {
+      return false;
+    }
+    return start == 0 || !Character.isLetter(text.charAt(start - 1));
   }
 
   /**
