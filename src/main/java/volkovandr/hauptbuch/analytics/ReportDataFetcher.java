@@ -65,16 +65,24 @@ class ReportDataFetcher {
 
     Map<String, List<RawBalanceCell>> balanceByBucketKey = new LinkedHashMap<>();
     Map<String, LocalDate> asOfByBucketKey = new LinkedHashMap<>();
+    Map<String, LocalDate> periodStartByBucketKey = new LinkedHashMap<>();
     if (context.spec().hasClosingBalance()) {
       boolean hasDateAxis = axes.dateOnRows() || axes.dateOnColumns();
       List<DateBucket> balanceBuckets = hasDateAxis ? buckets : List.of();
       fetchClosingBalance(
-          context, balanceBuckets, resolved, constraints, balanceByBucketKey, asOfByBucketKey);
+          context,
+          balanceBuckets,
+          resolved,
+          constraints,
+          balanceByBucketKey,
+          asOfByBucketKey,
+          periodStartByBucketKey);
       if (!context.expandedKeys().isEmpty()) {
-        mergeChildClosingBalance(context, balanceBuckets, balanceByBucketKey, asOfByBucketKey);
+        mergeChildClosingBalance(
+            context, balanceByBucketKey, asOfByBucketKey, periodStartByBucketKey);
       }
     }
-    return new GridData(turnoverByLeg, balanceByBucketKey, asOfByBucketKey);
+    return new GridData(turnoverByLeg, balanceByBucketKey, asOfByBucketKey, periodStartByBucketKey);
   }
 
   /**
@@ -227,18 +235,17 @@ class ReportDataFetcher {
    */
   private void mergeChildClosingBalance(
       FetchContext context,
-      List<DateBucket> dateAxisBuckets,
       Map<String, List<RawBalanceCell>> balanceByBucketKey,
-      Map<String, LocalDate> asOfByBucketKey) {
-    List<String> bucketKeys =
-        dateAxisBuckets.isEmpty()
-            ? List.of(TOTAL_KEY)
-            : dateAxisBuckets.stream().map(DateBucket::key).toList();
+      Map<String, LocalDate> asOfByBucketKey,
+      Map<String, LocalDate> periodStartByBucketKey) {
+    // fetchClosingBalance has already keyed every bucket (or the single "total" one).
+    List<String> bucketKeys = List.copyOf(asOfByBucketKey.keySet());
     makeEveryListMutable(balanceByBucketKey, Set.copyOf(bucketKeys));
     for (String outerKey : context.expandedKeys()) {
       for (String bucketKey : bucketKeys) {
         LocalDate asOf = asOfByBucketKey.get(bucketKey);
-        List<RawBalanceCell> childRows = childClosingBalance(context, outerKey, asOf);
+        List<RawBalanceCell> childRows =
+            childClosingBalance(context, outerKey, asOf, periodStartByBucketKey.get(bucketKey));
         balanceByBucketKey
             .get(bucketKey)
             .addAll(
@@ -250,13 +257,18 @@ class ReportDataFetcher {
   }
 
   private List<RawBalanceCell> childClosingBalance(
-      FetchContext context, String outerKey, LocalDate asOf) {
+      FetchContext context, String outerKey, LocalDate asOf, LocalDate periodStart) {
     Dimension outerDim = context.axes().nonDateDim();
     Dimension innerDim = context.axes().innerDim();
     if (innerDim != null) {
-      return closingBalanceAt(context, innerDim, asOf, withSyntheticFilter(context, outerKey));
+      return closingBalanceAt(
+          context,
+          innerDim,
+          asOf,
+          withSyntheticFilter(context, outerKey).withPeriodStart(periodStart));
     }
-    QueryConstraints constraints = constraints(context, context.spec().filters(), outerDim, null);
+    QueryConstraints constraints =
+        constraints(context, context.spec().filters(), outerDim, null).withPeriodStart(periodStart);
     NodeKey parent = NodeKey.ofLastSegment(outerKey);
     boolean includeClosed = context.includeClosedAccounts();
     boolean includePending = context.includePendingReview();
@@ -457,21 +469,29 @@ class ReportDataFetcher {
       RangeResolver.ResolvedRange resolved,
       QueryConstraints constraints,
       Map<String, List<RawBalanceCell>> balanceByBucketKey,
-      Map<String, LocalDate> asOfByBucketKey) {
+      Map<String, LocalDate> asOfByBucketKey,
+      Map<String, LocalDate> periodStartByBucketKey) {
     Dimension nonDateDim = context.axes().nonDateDim();
     if (dateAxisBuckets.isEmpty()) {
       LocalDate asOf = clampToToday(resolved.end(), context.today());
       asOfByBucketKey.put(TOTAL_KEY, asOf);
-      balanceByBucketKey.put(TOTAL_KEY, closingBalanceAt(context, nonDateDim, asOf, constraints));
+      periodStartByBucketKey.put(TOTAL_KEY, resolved.start());
+      balanceByBucketKey.put(
+          TOTAL_KEY,
+          closingBalanceAt(
+              context, nonDateDim, asOf, constraints.withPeriodStart(resolved.start())));
       return;
     }
     for (DateBucket bucket : dateAxisBuckets) {
-      // Use the bucket's own effective end — clipped to the report's actual range, not the full
-      // calendar month — then clamp to today (reporting.md §8.2).
+      // Use the bucket's own effective period — clipped to the report's actual range, not the
+      // full calendar month — its end clamped to today (reporting.md §8.2).
       LocalDate asOf = clampToToday(bucket.effectiveEnd(), context.today());
+      LocalDate start = bucket.effectiveStart();
       asOfByBucketKey.put(bucket.key(), asOf);
+      periodStartByBucketKey.put(bucket.key(), start);
       balanceByBucketKey.put(
-          bucket.key(), closingBalanceAt(context, nonDateDim, asOf, constraints));
+          bucket.key(),
+          closingBalanceAt(context, nonDateDim, asOf, constraints.withPeriodStart(start)));
     }
   }
 

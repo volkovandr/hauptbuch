@@ -97,8 +97,8 @@ final class ReportTableViewAssembler {
 
   /**
    * The grid's figures as display text, each carrying its drill-down token when the table offers
-   * drill-down (reporting.md §12) and the figure {@link DrillDown.isDrillable} for its measure; a
-   * total the Report does not show is blank.
+   * drill-down (reporting.md §12) and the figure {@link DrillDown#isDrillable}; a total the Report
+   * does not show is blank.
    */
   private record Figures(
       ReportSpec spec, ReportGrid grid, String baseCurrency, boolean drillOffered) {
@@ -140,10 +140,7 @@ final class ReportTableViewAssembler {
 
     private ReportTableView.CellText text(Cell cell, CellAddress address) {
       ReportTableView.CellText text = format(cell, baseCurrency);
-      Measure measure = spec.measures().get(address.measureIndex());
-      return drillOffered && DrillDown.isDrillable(cell, measure)
-          ? text.withDrill(address.token())
-          : text;
+      return drillOffered && DrillDown.isDrillable(cell) ? text.withDrill(address.token()) : text;
     }
   }
 

@@ -18,11 +18,23 @@ import volkovandr.hauptbuch.analytics.repository.RawTurnoverCell;
  *     sentinel when neither axis is {@link Dimension#DATE})
  * @param asOfByBucketKey the as-of date used for each entry in {@code balanceByBucketKey} — needed
  *     again for the base-currency rate lookup, which must use the same date as the query did
+ * @param periodStartByBucketKey the first day of each balance bucket's period — the bucket clipped
+ *     to the range, or the range itself with no Date axis — where a drill-down's opening-balance
+ *     line stands (reporting.md §12)
  */
 record GridData(
     Map<Leg, List<RawTurnoverCell>> turnoverByLeg,
     Map<String, List<RawBalanceCell>> balanceByBucketKey,
-    Map<String, LocalDate> asOfByBucketKey) {
+    Map<String, LocalDate> asOfByBucketKey,
+    Map<String, LocalDate> periodStartByBucketKey) {
+
+  /** Data whose balance periods no drill-down reads. */
+  GridData(
+      Map<Leg, List<RawTurnoverCell>> turnoverByLeg,
+      Map<String, List<RawBalanceCell>> balanceByBucketKey,
+      Map<String, LocalDate> asOfByBucketKey) {
+    this(turnoverByLeg, balanceByBucketKey, asOfByBucketKey, Map.of());
+  }
 
   /**
    * This data plus {@code days} — one expanded Date row bucket's own day-granularity fetch
@@ -44,7 +56,9 @@ record GridData(
     days.balanceByBucketKey().forEach((key, cells) -> balance.put(prefix + key, cells));
     Map<String, LocalDate> asOf = new LinkedHashMap<>(asOfByBucketKey);
     days.asOfByBucketKey().forEach((key, date) -> asOf.put(prefix + key, date));
-    return new GridData(turnover, balance, asOf);
+    Map<String, LocalDate> periodStart = new LinkedHashMap<>(periodStartByBucketKey);
+    days.periodStartByBucketKey().forEach((key, date) -> periodStart.put(prefix + key, date));
+    return new GridData(turnover, balance, asOf, periodStart);
   }
 
   /**

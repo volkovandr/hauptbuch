@@ -11,7 +11,7 @@ import volkovandr.hauptbuch.ledger.RegisterRowView;
 /**
  * Turns a {@link DrillDown} into its page's {@link DrillDownView}: each listed posting becomes the
  * register's own row for it (reporting.md §12 — visually identical to the register), with the
- * running figure in the Balance column.
+ * running figure in the Balance column — beneath a closing balance's opening-balance line.
  */
 final class DrillDownViewAssembler {
 
@@ -39,8 +39,21 @@ final class DrillDownViewAssembler {
         drill.rowLabel() + " · " + drill.columnLabel(),
         ReportGridBuilder.measureLabel(drill.measure()),
         ReportTableViewAssembler.format(drill.cell(), baseCurrency),
+        openingLine(drill.opening(), baseCurrency),
         rows,
         backUrl);
+  }
+
+  private static DrillDownView.OpeningLine openingLine(
+      DrillDown.Opening opening, String baseCurrency) {
+    if (opening == null) {
+      return null;
+    }
+    Cell running = opening.running();
+    return new DrillDownView.OpeningLine(
+        opening.date().toString(),
+        ReportTableViewAssembler.format(running, baseCurrency).text(),
+        isNegative(running));
   }
 
   private static boolean isNegative(Cell running) {

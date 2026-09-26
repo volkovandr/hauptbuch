@@ -39,17 +39,19 @@ class GridDataTest {
   }
 
   @Test
-  void daysClosingBalanceAndAsOfAreKeyedUnderCompositeBucketKeys() {
+  void daysClosingBalanceAsOfAndPeriodStartAreKeyedUnderCompositeBucketKeys() {
     RawBalanceCell cash = new RawBalanceCell("1", "Cash", "asset", "EUR", BigDecimal.TEN);
     GridData month =
         new GridData(
             Map.of(),
             Map.of("2026-09", List.of(cash)),
-            Map.of("2026-09", LocalDate.of(2026, 9, 12)));
+            Map.of("2026-09", LocalDate.of(2026, 9, 12)),
+            Map.of("2026-09", LocalDate.of(2026, 9, 1)));
     GridData days =
         new GridData(
             Map.of(),
             Map.of("2026-09-03", List.of(cash)),
+            Map.of("2026-09-03", LocalDate.of(2026, 9, 3)),
             Map.of("2026-09-03", LocalDate.of(2026, 9, 3)));
 
     GridData merged = month.withDays("2026-09", days);
@@ -58,6 +60,9 @@ class GridDataTest {
     assertThat(merged.asOfByBucketKey())
         .containsEntry("2026-09|2026-09-03", LocalDate.of(2026, 9, 3))
         .containsEntry("2026-09", LocalDate.of(2026, 9, 12));
+    assertThat(merged.periodStartByBucketKey())
+        .containsEntry("2026-09|2026-09-03", LocalDate.of(2026, 9, 3))
+        .containsEntry("2026-09", LocalDate.of(2026, 9, 1));
   }
 
   @Test

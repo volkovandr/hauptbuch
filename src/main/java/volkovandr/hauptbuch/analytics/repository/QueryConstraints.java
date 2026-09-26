@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.analytics.repository;
 
+import java.time.LocalDate;
 import java.util.List;
 import volkovandr.hauptbuch.analytics.ReportFilter;
 
@@ -17,12 +18,17 @@ import volkovandr.hauptbuch.analytics.ReportFilter;
  * @param collectPostingIds whether each turnover group also returns the ids of the postings it sums
  *     ({@link RawTurnoverCell#postingIds()}) — the drill-down's posting set (reporting.md §12); off
  *     for an ordinary render, which never reads them
+ * @param periodStart the first day of a closing-balance cell's period when posting ids are
+ *     collected: each balance group returns the ids of its postings dated on or after it — the
+ *     drill-down's in-period rows, beneath the opening-balance line (reporting.md §12); {@code
+ *     null} otherwise
  */
 public record QueryConstraints(
     List<ReportFilter> filters,
     List<Long> promotedAccountIds,
     List<Long> promotedTagIds,
-    boolean collectPostingIds) {
+    boolean collectPostingIds,
+    LocalDate periodStart) {
 
   /** No filters. */
   public static final QueryConstraints NONE = new QueryConstraints(List.of());
@@ -37,7 +43,7 @@ public record QueryConstraints(
   /** Posting ids not collected — every caller but the drill-down. */
   public QueryConstraints(
       List<ReportFilter> filters, List<Long> promotedAccountIds, List<Long> promotedTagIds) {
-    this(filters, promotedAccountIds, promotedTagIds, false);
+    this(filters, promotedAccountIds, promotedTagIds, false, null);
   }
 
   /** {@code filters} with nothing promoted: every node groups under its real root. */
@@ -47,6 +53,15 @@ public record QueryConstraints(
 
   /** These constraints, with each turnover group's posting ids collected (reporting.md §12). */
   public QueryConstraints collectingPostingIds() {
-    return new QueryConstraints(filters, promotedAccountIds, promotedTagIds, true);
+    return new QueryConstraints(filters, promotedAccountIds, promotedTagIds, true, periodStart);
+  }
+
+  /**
+   * These constraints, with a closing-balance group's posting ids read from {@code start} on — the
+   * period of the cell being drilled (reporting.md §12).
+   */
+  public QueryConstraints withPeriodStart(LocalDate start) {
+    return new QueryConstraints(
+        filters, promotedAccountIds, promotedTagIds, collectPostingIds, start);
   }
 }
