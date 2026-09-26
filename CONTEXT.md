@@ -21,9 +21,11 @@ _Avoid_: deleted (for the row that is merely closed)
 
 **Read set / post-to set** (register account filter, issue transaction-register-ui/22):
 The **read set** is every live own account the register may *view* — open, closed, and per-person
-debt leaves. The **post-to set** is the subset that may be *booked to* — open real accounts only
-(no closed, no person leaves). The dock's Account picker and transfer targets use the post-to set;
-the Closed and All filter tabs reach the whole read set.
+debt leaves. The **post-to set** is the subset that may be *booked to* — open real posting leaves
+only (no closed, no person leaves, no groups), each labelled by its full `Parent - Leaf` path. Every
+own-account picker uses it — the dock's Account picker and transfer targets, the receipt paying
+account, and Settle-up (issue transaction-register-ui/25); the Closed and All filter tabs reach
+the whole read set.
 _Avoid_: viewable/bookable as nouns, filter set
 
 **Deleted person** (register account filter, issue transaction-register-ui/23):

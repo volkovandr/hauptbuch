@@ -1,6 +1,8 @@
 package volkovandr.hauptbuch.operations;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -63,10 +65,14 @@ class SettleUpScreenIntegrationTest {
   }
 
   private long openAccount(String name, String currency) {
+    return openAccount(name, null, currency);
+  }
+
+  private long openAccount(String name, Long parentId, String currency) {
     Account account =
         accountService.openAccount(
             new AccountDraft(
-                name, "asset", null, currency, LocalDate.parse("2026-01-01"), BigDecimal.ZERO));
+                name, "asset", parentId, currency, LocalDate.parse("2026-01-01"), BigDecimal.ZERO));
     return account.accountId();
   }
 
@@ -110,6 +116,44 @@ class SettleUpScreenIntegrationTest {
         .andExpect(content().string(containsString("name=\"amount\"")))
         .andExpect(content().string(containsString("10,00"))) // amount defaulted to the outstanding
         .andExpect(content().string(containsString("Record settlement")));
+  }
+
+  @Test
+  void accountPickerOffersNestedAccountsByPathAndOmitsTheirGroup() throws Exception {
+    // Issue people-management/01 (via transaction-register-ui/25).
+    openAccount("Credit card", openAccount("BankAaa", EUR), EUR);
+    seedPosting(provisionLeaf("Max", EUR), "10.00");
+
+    mockMvc
+        .perform(get(settlePath("Max")).param("currency", EUR))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("BankAaa - Credit card (EUR)")))
+        .andExpect(content().string(not(containsString("BankAaa (EUR)"))));
+  }
+
+  @Test
+  void settlingFromGroupIsRefusedWithoutBooking() throws Exception {
+    long bank = openAccount("BankAaa", EUR);
+    openAccount("Credit card", bank, EUR);
+    seedPosting(provisionLeaf("Max", EUR), "10.00");
+
+    mockMvc
+        .perform(
+            post(settlePath("Max"))
+                .param("currency", EUR)
+                .param("accountId", String.valueOf(bank))
+                .param("date", TODAY)
+                .param("amount", "10,00"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("is a group")));
+
+    assertThat(
+            jdbcClient
+                .sql("select count(*) from posting where account_id = :a")
+                .param("a", bank)
+                .query(Long.class)
+                .single())
+        .isZero();
   }
 
   @Test

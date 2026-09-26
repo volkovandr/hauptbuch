@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.accounts.PostToAccount;
+import volkovandr.hauptbuch.accounts.PostToAccountService;
 import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.debts.SettleTarget;
 import volkovandr.hauptbuch.ledger.CrossCurrencyFields;
@@ -47,10 +49,9 @@ class SettleUpService {
   /** Dock amounts are entered German-formatted to the minor unit; two places covers EUR/CHF. */
   private static final int AMOUNT_FRACTION_DIGITS = 2;
 
-  private static final List<String> OWN_ACCOUNT_TYPES = List.of("asset", "liability");
-
   private final PersonService personService;
   private final AccountService accountService;
+  private final PostToAccountService postToAccountService;
   private final SettingsService settingsService;
   private final CrossCurrencyFieldsService crossCurrencyFieldsService;
   private final DockCommitService dockCommitService;
@@ -58,11 +59,13 @@ class SettleUpService {
   SettleUpService(
       PersonService personService,
       AccountService accountService,
+      PostToAccountService postToAccountService,
       SettingsService settingsService,
       CrossCurrencyFieldsService crossCurrencyFieldsService,
       DockCommitService dockCommitService) {
     this.personService = personService;
     this.accountService = accountService;
+    this.postToAccountService = postToAccountService;
     this.settingsService = settingsService;
     this.crossCurrencyFieldsService = crossCurrencyFieldsService;
     this.dockCommitService = dockCommitService;
@@ -84,7 +87,7 @@ class SettleUpService {
       long personId, String currencyCode, Long selectedAccountId, LocalDate date) {
     SettleTarget target = requireTarget(personId, currencyCode);
     LocalDate settleDate = date != null ? date : LocalDate.now();
-    List<Account> pickable = pickableAccounts();
+    List<PostToAccount> pickable = pickableAccounts();
     Account funding = chooseFunding(pickable, selectedAccountId, currencyCode);
 
     boolean cross = !fundingCurrency(funding, currencyCode).equals(currencyCode);
@@ -124,7 +127,7 @@ class SettleUpService {
       String baseAmount) {
     SettleTarget target = requireTarget(personId, currencyCode);
     LocalDate settleDate = date != null ? date : LocalDate.now();
-    List<Account> pickable = pickableAccounts();
+    List<PostToAccount> pickable = pickableAccounts();
     Account funding = chooseFunding(pickable, selectedAccountId, currencyCode);
     return build(
         personId,
@@ -150,7 +153,7 @@ class SettleUpService {
       long personId,
       String currencyCode,
       SettleTarget target,
-      List<Account> pickable,
+      List<PostToAccount> pickable,
       Account funding,
       LocalDate settleDate,
       String fundingAmountText,
@@ -224,6 +227,7 @@ class SettleUpService {
       String categoryAmount,
       String baseAmount) {
     SettleTarget target = requireTarget(personId, currencyCode);
+    requireNotGroup(fundingAccountId);
     // Positive balance (they owe you) settles by money coming in — a transfer FROM the leaf.
     // Negative balance (you owe them) settles by money going out — a transfer TO the leaf.
     String direction =
@@ -264,12 +268,27 @@ class SettleUpService {
     return funding != null ? funding.currencyCode() : currencyCode;
   }
 
-  /** The open own accounts a settle can be funded from — person leaves excluded (data-model §7). */
-  private List<Account> pickableAccounts() {
-    return accountService.findLiveByTypes(OWN_ACCOUNT_TYPES).stream()
-        .filter(a -> a.closedAt() == null)
-        .filter(a -> !a.personLeaf())
-        .toList();
+  /**
+   * The accounts a settle may be funded from: the post-to set (issue transaction-register-ui/25) —
+   * open, real posting leaves, each labelled by its full path. Never a group or a person's leaf.
+   */
+  private List<PostToAccount> pickableAccounts() {
+    return postToAccountService.postToAccounts();
+  }
+
+  /**
+   * Refuse a funding account that is a group. The select offers posting leaves only, but a stale
+   * form can still post a group's id; refused here with its name rather than by the ledger's
+   * leaves-only rule at commit.
+   */
+  private void requireNotGroup(Long fundingAccountId) {
+    if (fundingAccountId == null
+        || !accountService.findParentAccountIds().contains(fundingAccountId)) {
+      return;
+    }
+    String name = accountService.findById(fundingAccountId).map(Account::name).orElse("");
+    throw new IllegalArgumentException(
+        "'" + name + "' is a group — pick one of its accounts to settle from.");
   }
 
   /**
@@ -278,28 +297,29 @@ class SettleUpService {
    * pickable account, else null when there are none.
    */
   private Account chooseFunding(
-      List<Account> pickable, Long selectedAccountId, String currencyCode) {
+      List<PostToAccount> pickable, Long selectedAccountId, String currencyCode) {
+    List<Account> accounts = pickable.stream().map(PostToAccount::account).toList();
     if (selectedAccountId != null) {
-      for (Account account : pickable) {
+      for (Account account : accounts) {
         if (account.accountId().equals(selectedAccountId)) {
           return account;
         }
       }
     }
-    return pickable.stream()
+    return accounts.stream()
         .filter(a -> a.currencyCode().equals(currencyCode))
         .findFirst()
-        .orElse(pickable.isEmpty() ? null : pickable.get(0));
+        .orElse(accounts.isEmpty() ? null : accounts.get(0));
   }
 
   /** Label each pickable account and flag the chosen one for pre-selection. */
-  private List<AccountOption> options(List<Account> pickable, Account funding) {
+  private List<AccountOption> options(List<PostToAccount> pickable, Account funding) {
     List<AccountOption> options = new ArrayList<>();
     Long fundingId = funding != null ? funding.accountId() : null;
-    for (Account account : pickable) {
-      String label = account.name() + " (" + account.currencyCode() + ")";
-      options.add(
-          new AccountOption(account.accountId(), label, account.accountId().equals(fundingId)));
+    for (PostToAccount account : pickable) {
+      long accountId = account.account().accountId();
+      boolean selected = fundingId != null && fundingId == accountId;
+      options.add(new AccountOption(accountId, account.entryLabel(), selected));
     }
     return options;
   }
