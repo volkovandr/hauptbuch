@@ -1,8 +1,8 @@
 /*
  * Filter group toggles — the third isolated bespoke-JS leaf, after the keyboard layer (keyboard.js)
  * and the Cropper image component (receipt-editor.js). Sanctioned by issue
- * transaction-register-ui/22; CLAUDE.md §1.6 and tech-stack §4.3 note it. Generalised (plan stage
- * d3-4, implementation-plan-reporting.md's cross-cutting note) so the same file drives both the
+ * transaction-register-ui/22; CLAUDE.md §1.6 and tech-stack §4.3 note it. Generalised (reporting
+ * slice d3, reporting.md §14) so the same file drives both the
  * register's account filter (group mode) and the Report page's hierarchy filter sections (node
  * mode) — it is explicitly not a fourth leaf.
  *

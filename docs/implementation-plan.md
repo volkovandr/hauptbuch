@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.49
-**Date:** 2026-09-25
+**Status:** Draft v0.50
+**Date:** 2026-09-26
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md`, `import.md`, `reporting.md`
@@ -28,6 +28,9 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.50 (2026-09-26):** **Reporting complete** (slices a–f, owner-confirmed). No scope change
+  (routine). The sub-plan `implementation-plan-reporting.md` is deleted; its summary is folded into
+  §3's Reporting bullet (the stage-7/9/import pattern).
 - **v0.49 (2026-09-25):** **Browser tier reinstated, narrowly:** a fourth suite `browserTest`
   (Playwright for Java) for the JS leaves' client-side behaviour, after register issue 26 slipped
   past MockMvc. Money-critical flows stay on MockMvc (§3, §4).
@@ -623,10 +626,30 @@ shipped; everything after it is unbuilt.
   repo's first ADR (`docs/adr/0001-generic-report-engine.md`). Covers FR-ANA-01–10 and FR-REP-01–14:
   spend by category/tag/payee, period comparisons, category trends, drill-down from any cell, net
   worth in base incl. **held-balance revaluation** (FR-ANA-05, §1.2), CSV export, and **Layouts** —
-  the main page becoming a 1×1 Layout defaulting to net worth over time. Sequenced in the sub-plan
-  **`implementation-plan-reporting.md`** (slices a–f: engine+table, charts, Layouts, saving,
-  d2 read-only Layout, d3 the Report page as editor, expansion+nesting, drill-down+CSV), ordered so the main-page net-worth chart lands third. Deliberately
-  **not** a §2 stage; §2 stays closed.
+  the main page becoming a 1×1 Layout defaulting to net worth over time. ✅ **Complete**
+  (owner-confirmed 2026-09-26); built in slices ordered so the main-page net-worth chart landed
+  third. Deliberately **not** a §2 stage; §2 stays closed.
+  - **a — the engine and the table.** `ReportSpec` → `ReportGrid` in `analytics`; turnover, closing
+    balance and counts, base and native, with legs; every dimension; scope, filters and the anchor
+    grammar; the legality rules and `—`. Presets: the category×month matrix and the balance sheet.
+  - **b — charts.** Server-rendered SVG line (with trend line), bar and pie, small multiples; the
+    net worth over time and this month vs last Presets.
+  - **c, d2 — Layouts and the main page.** Rows × columns of Frames, each a Report under its name;
+    edited on its own page; the main page is a 1×1 Layout.
+  - **d — saving.** The `report` table (`jsonb` spec), `/reports/{id}`, code-defined Presets at
+    `/reports/preset/{slug}`.
+  - **d3 — the Report page is the editor.** The full spec in the query string (a draft until
+    saved), the actions and settings strips, per-field filter sections (`filter-groups.js` node
+    mode), help markers.
+  - **e — expansion and nesting.** Expand-in-place rows with remembered state and `auto`, two
+    dimensions per axis, subtotal or group-header parents, the `(unspecified)` tag row, the Date
+    ladder (month/week, rows expand to days).
+  - **f — drill-down and CSV.** Every figure, totals included, opens its postings as register rows
+    with a running column — a closing balance from an opening-balance line at the period-end rate —
+    each handing off to the register; CSV as shown and raw (leaves by path, leaf-grain fetch).
+
+  **Still unbuilt:** the Date ladder's **year rung** (deferred from e, `reporting.md` §8.2); the
+  follow-up issues under `.scratch/reporting/issues/`.
   The **monthly narrative report** (FR-RPT, Q12) is *not* part of it — it stays unbuilt below and is
   revisited **with budgets**, since "fact against budget" is the half that makes it worth writing.
 - **Register follow-ons:** column re-sorting with the balance-hide rule (register §2.7) — deferred
