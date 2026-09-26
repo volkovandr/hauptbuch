@@ -1,6 +1,6 @@
 # Hauptbuch — Reporting sub-plan (slices a–f)
 
-**Status:** Draft v0.12
+**Status:** Draft v0.13
 **Date:** 2026-09-26
 **Owner:** volkovandr
 **Companion to:** `reporting.md` (authoritative for every design decision),
@@ -192,7 +192,7 @@ example from `reporting.md` §9.2.
 
 ---
 
-## f — Drill-down and CSV
+## f — Drill-down and CSV ✅ complete (owner-confirmed 2026-09-26)
 
 - Cell → the reporting-owned transaction list, reusing the register's row fragment, with the
   running column; a closing-balance cell opens with its opening-balance line (`reporting.md` §12).
@@ -214,7 +214,7 @@ Built as three reviewed work packages, each with its own green `check` and owner
   handoff. `sqlLogicTest` carries the cell-equals-list assertion across dimensions.
 - **f2** ✅ (owner-confirmed 2026-09-26) — closing-balance drill-down: the opening-balance line, the clipped period, period-end-rate
   valuation, cross-currency closing on the cell.
-- **f3** — CSV, as shown and raw. Independent of f1/f2.
+- **f3** ✅ (owner-confirmed 2026-09-26) — CSV, as shown and raw. Independent of f1/f2.
 
 ---
 
@@ -233,6 +233,8 @@ Built as three reviewed work packages, each with its own green `check` and owner
 ## Changelog
 
 
+- **v0.13 (2026-09-26):** Work package f3 and slice f marked complete (owner-confirmed). No scope
+  change.
 - **v0.12 (2026-09-26):** Work packages f1 and f2 marked complete (owner-confirmed). No scope change.
 - **v0.11 (2026-09-25):** Scope change in slice f (`reporting.md` v0.4): closing-balance cells drill
   down too (opening-balance line + running column), and CSV exports in two forms, as shown and raw.

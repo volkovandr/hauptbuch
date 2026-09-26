@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -145,6 +146,40 @@ class ReportExportControllerIntegrationTest {
             .getContentAsString(StandardCharsets.UTF_8);
 
     assertThat(csv).isEqualTo("﻿Category,2026-01\r\n" + "Food:Lunch,50.50\r\n");
+  }
+
+  @Test
+  void rawKeepsTheDaysOfMonthsExpandedOnScreen() throws Exception {
+    seedFoodWithLunch();
+    ReportSpec byDay =
+        new ReportSpec(
+            List.of(Dimension.DATE),
+            List.of(Dimension.CATEGORY),
+            List.of(),
+            List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+            Scope.ofTypes("expense"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            true,
+            true,
+            true);
+
+    String csv =
+        mockMvc
+            .perform(
+                get(EXPORT_PATH)
+                    .params(ReportSpecQueryString.toParams(byDay))
+                    .params(RowToggle.expansionParams(Set.of("2026-01")))
+                    .param("form", "raw"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString(StandardCharsets.UTF_8);
+
+    assertThat(csv)
+        .isEqualTo("\uFEFFDate,Food:Lunch\r\n" + "2026-01-15,20.00\r\n" + "2026-01-20,30.50\r\n");
   }
 
   @Test
