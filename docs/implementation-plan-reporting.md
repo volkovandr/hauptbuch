@@ -1,7 +1,7 @@
 # Hauptbuch — Reporting sub-plan (slices a–f)
 
-**Status:** Draft v0.11
-**Date:** 2026-09-25
+**Status:** Draft v0.12
+**Date:** 2026-09-26
 **Owner:** volkovandr
 **Companion to:** `reporting.md` (authoritative for every design decision),
 `implementation-plan.md` (§3, the Reporting bullet), `docs/adr/0001-generic-report-engine.md`
@@ -209,10 +209,10 @@ leaf paths and a tag's own postings under the tag's path.
 
 Built as three reviewed work packages, each with its own green `check` and owner confirmation:
 
-- **f1** — turnover/count drill-down: the posting-set query, the reporting-owned list with its
+- **f1** ✅ (owner-confirmed 2026-09-26) — turnover/count drill-down: the posting-set query, the reporting-owned list with its
   running column from zero, the register row fragment extracted for reuse, and the register
   handoff. `sqlLogicTest` carries the cell-equals-list assertion across dimensions.
-- **f2** — closing-balance drill-down: the opening-balance line, the clipped period, period-end-rate
+- **f2** ✅ (owner-confirmed 2026-09-26) — closing-balance drill-down: the opening-balance line, the clipped period, period-end-rate
   valuation, cross-currency closing on the cell.
 - **f3** — CSV, as shown and raw. Independent of f1/f2.
 
@@ -233,6 +233,7 @@ Built as three reviewed work packages, each with its own green `check` and owner
 ## Changelog
 
 
+- **v0.12 (2026-09-26):** Work packages f1 and f2 marked complete (owner-confirmed). No scope change.
 - **v0.11 (2026-09-25):** Scope change in slice f (`reporting.md` v0.4): closing-balance cells drill
   down too (opening-balance line + running column), and CSV exports in two forms, as shown and raw.
 - **v0.10 (2026-09-23):** Slice e marked complete (owner-confirmed). No scope change (routine);
