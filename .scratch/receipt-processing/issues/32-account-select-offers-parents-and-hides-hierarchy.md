@@ -1,6 +1,6 @@
 # The receipt screen's Account select offers parent accounts and shows no hierarchy
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: medium
 Area: Receipts — processing screen, paying-account `<select>` (`receipt-process.html` `#receipt-account`, fed by `RegisterService.accountOptions` via `register.accounts()`)
@@ -63,3 +63,6 @@ Moved to `ready-for-agent` and folded into one fix with `transaction-register-ui
 decision: fix the own-account picker everywhere at once). **The agent brief lives in
 `transaction-register-ui/25`** and is the contract for this issue too. The parent-free, path-labelled
 option list and the server-side leaf check for this screen are both among its acceptance criteria.
+
+2026-09-26 — owner-confirmed: register (simple, split, To → transfers), receipts and Settle-up
+checked. Resolved on branch `feat/account-picker-leaves` (7438580, 2b710a3, 1ba4514, 4201b57).
