@@ -247,7 +247,7 @@ public class SplitEditService {
       TransferTarget.Direction direction =
           legAmount.signum() < 0 ? TransferTarget.Direction.FROM : TransferTarget.Direction.TO;
       return new ReloadedLine(
-          TransferTarget.option(direction, leg.account().name()),
+          TransferTarget.option(direction, accountService.ownAccountPath(leg.account())),
           String.valueOf(leg.account().accountId()),
           "",
           direction.name(),

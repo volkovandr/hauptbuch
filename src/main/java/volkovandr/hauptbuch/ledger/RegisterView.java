@@ -68,24 +68,14 @@ public record RegisterView(
    * {@link RegisterFilterView}.
    *
    * @param accountId the account
-   * @param name display name
+   * @param entryValue the label the dock's Account datalist offers and its resolver reads back: the
+   *     account's full path and currency, {@code BankAaa - Credit card (EUR)} ({@link
+   *     AccountEntryLabel}, issue transaction-register-ui/25)
    * @param hue stored register hue; null on accounts with no thread colour
    * @param currencyCode the account's currency
    */
   public record RegisterAccountOption(
-      long accountId, String name, Integer hue, String currencyCode) {
-
-    /**
-     * The {@code Name (CUR)} value the dock's Account datalist offers and its resolver round-trips
-     * back to this account (register §3.3, plan stage 8b.1) — the same shape {@link
-     * RegisterPayeeOption#entryValue()} plays for payees. Delegates to {@link AccountEntryLabel},
-     * which owns both this format and the parser that reads it back, so the label the picker offers
-     * and the label the resolver parses cannot drift apart.
-     */
-    public String entryValue() {
-      return AccountEntryLabel.format(name, currencyCode);
-    }
-  }
+      long accountId, String entryValue, Integer hue, String currencyCode) {}
 
   /**
    * One payee offered in the register's pickers, carrying whether it is the active filter choice.

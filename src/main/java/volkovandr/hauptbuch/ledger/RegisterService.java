@@ -4,8 +4,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
-import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.accounts.PostToAccount;
+import volkovandr.hauptbuch.accounts.PostToAccountService;
 import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.debts.PersonTarget;
 import volkovandr.hauptbuch.ledger.RegisterView.RegisterAccountOption;
@@ -28,9 +29,6 @@ import volkovandr.hauptbuch.ledger.repository.TagReadRepository;
 @Service
 public class RegisterService {
 
-  /** The default account set's types: your own real accounts (register §2.3). */
-  private static final List<String> OWN_ACCOUNT_TYPES = List.of("asset", "liability");
-
   /** The category types the dock offers in its category picker (data-model §6.5). */
   private static final List<String> CATEGORY_TYPES = List.of("income", "expense");
 
@@ -48,6 +46,7 @@ public class RegisterService {
   private final RegisterRepository registerRepository;
   private final PayeeRepository payeeRepository;
   private final AccountService accountService;
+  private final PostToAccountService postToAccountService;
   private final SettingsService settingsService;
   private final RegisterRowRenderer rowRenderer;
   private final TagReadRepository tagReadRepository;
@@ -58,6 +57,7 @@ public class RegisterService {
       RegisterRepository registerRepository,
       PayeeRepository payeeRepository,
       AccountService accountService,
+      PostToAccountService postToAccountService,
       SettingsService settingsService,
       RegisterRowRenderer rowRenderer,
       TagReadRepository tagReadRepository,
@@ -66,6 +66,7 @@ public class RegisterService {
     this.registerRepository = registerRepository;
     this.payeeRepository = payeeRepository;
     this.accountService = accountService;
+    this.postToAccountService = postToAccountService;
     this.settingsService = settingsService;
     this.rowRenderer = rowRenderer;
     this.tagReadRepository = tagReadRepository;
@@ -83,13 +84,13 @@ public class RegisterService {
    */
   public RegisterView view(RegisterFilter filter) {
     Optional<String> baseCurrency = settingsService.baseCurrency();
-    List<Account> pickable = pickable(openOwnAccounts());
+    List<PostToAccount> postTo = postToAccountService.postToAccounts();
 
     List<Long> viewed = resolveViewedAccounts(filter);
     List<RegisterRowView> rows =
         baseCurrency.map(base -> renderRows(viewed, filter, base)).orElseGet(List::of);
 
-    return assembleView(rows, pickable, filter);
+    return assembleView(rows, postTo, filter);
   }
 
   /**
@@ -102,7 +103,7 @@ public class RegisterService {
    * single receipt.
    */
   public RegisterView datalists() {
-    return assembleView(List.of(), pickable(openOwnAccounts()), NO_FILTER);
+    return assembleView(List.of(), postToAccountService.postToAccounts(), NO_FILTER);
   }
 
   /**
@@ -119,11 +120,11 @@ public class RegisterService {
   }
 
   private RegisterView assembleView(
-      List<RegisterRowView> rows, List<Account> pickable, RegisterFilter filter) {
-    List<RegisterAccountOption> accountOptions = accountOptions(pickable);
+      List<RegisterRowView> rows, List<PostToAccount> postTo, RegisterFilter filter) {
+    List<RegisterAccountOption> accountOptions = accountOptions(postTo);
     List<RegisterPayeeOption> payeeOptions = payeeOptions(filter.payeeId());
     List<RegisterCategoryOption> categoryOptions = categoryOptions();
-    List<String> transferTargets = transferTargets(pickable);
+    List<String> transferTargets = transferTargets(postTo);
     List<String> personTargets = personTargets();
     List<String> tagOptions = tagReadRepository.liveTagLabels();
     return new RegisterView(
@@ -139,17 +140,17 @@ public class RegisterService {
 
   /**
    * The transfer targets the Category datalist offers alongside categories (register §3.5, plan
-   * stage 7d.3): {@code To → <account>} and {@code From ← <account>} for every open own account, so
+   * stage 7d.3): {@code To → <path>} and {@code From ← <path>} for every post-to account, so
    * picking one routes the counter-leg to that real account instead of a category. Self-transfer is
    * refused at commit, so an account's own two options are offered even in its own register view.
    */
-  private List<String> transferTargets(List<Account> ownAccounts) {
-    return ownAccounts.stream()
+  private static List<String> transferTargets(List<PostToAccount> postTo) {
+    return postTo.stream()
         .flatMap(
-            a ->
+            p ->
                 Stream.of(
-                    TransferTarget.option(TransferTarget.Direction.TO, a.name()),
-                    TransferTarget.option(TransferTarget.Direction.FROM, a.name())))
+                    TransferTarget.option(TransferTarget.Direction.TO, p.path()),
+                    TransferTarget.option(TransferTarget.Direction.FROM, p.path())))
         .toList();
   }
 
@@ -168,27 +169,6 @@ public class RegisterService {
                     PersonTarget.option(PersonTarget.Direction.FOR, p.name()),
                     PersonTarget.option(PersonTarget.Direction.BY, p.name())))
         .toList();
-  }
-
-  /**
-   * The live own accounts (asset/liability), from which {@link #pickable} takes the post-to set.
-   */
-  private List<Account> openOwnAccounts() {
-    return accountService.findLiveByTypes(OWN_ACCOUNT_TYPES).stream()
-        .filter(a -> a.closedAt() == null)
-        .toList();
-  }
-
-  /**
-   * The <em>post-to set</em>: the accounts the dock's Account datalist, the transfer targets, and
-   * the fresh-dock default may name (plan stage 8b.1, issue transaction-register-ui/22) — open real
-   * accounts only. Per-person debt leaves are excluded (a person is reached by the {@code
-   * for}/{@code by} sigils, never by the leaf's cosmetic name); closed accounts are excluded
-   * ({@link #openOwnAccounts} already dropped them) since a closed account is viewable but not
-   * bookable. The <em>read</em> set — which does include both — is {@link RegisterPickerService}'s.
-   */
-  private static List<Account> pickable(List<Account> ownAccounts) {
-    return ownAccounts.stream().filter(a -> !a.personLeaf()).toList();
   }
 
   /**
@@ -212,9 +192,19 @@ public class RegisterService {
     return rowRenderer.render(rows);
   }
 
-  private List<RegisterAccountOption> accountOptions(List<Account> ownAccounts) {
-    return ownAccounts.stream()
-        .map(a -> new RegisterAccountOption(a.accountId(), a.name(), a.hue(), a.currencyCode()))
+  /**
+   * The dock's Account options: the post-to set ({@link PostToAccountService}) — posting leaves
+   * only, each labelled by its full path (issue transaction-register-ui/25).
+   */
+  private static List<RegisterAccountOption> accountOptions(List<PostToAccount> postTo) {
+    return postTo.stream()
+        .map(
+            p ->
+                new RegisterAccountOption(
+                    p.account().accountId(),
+                    p.entryLabel(),
+                    p.account().hue(),
+                    p.account().currencyCode()))
         .toList();
   }
 

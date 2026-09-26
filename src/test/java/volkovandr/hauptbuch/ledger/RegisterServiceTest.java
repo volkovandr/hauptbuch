@@ -23,9 +23,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountPath;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.accounts.PostToAccount;
+import volkovandr.hauptbuch.accounts.PostToAccountService;
 import volkovandr.hauptbuch.debts.Person;
 import volkovandr.hauptbuch.debts.PersonService;
-import volkovandr.hauptbuch.ledger.RegisterView.RegisterAccountOption;
 import volkovandr.hauptbuch.ledger.repository.PayeeRepository;
 import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
 import volkovandr.hauptbuch.ledger.repository.TagReadRepository;
@@ -47,6 +48,7 @@ class RegisterServiceTest {
   @Mock private RegisterRepository registerRepository;
   @Mock private PayeeRepository payeeRepository;
   @Mock private AccountService accountService;
+  @Mock private PostToAccountService postToAccountService;
   @Mock private SettingsService settingsService;
   @Mock private RegisterRowRenderer rowRenderer;
   @Mock private TagReadRepository tagReadRepository;
@@ -62,6 +64,7 @@ class RegisterServiceTest {
             registerRepository,
             payeeRepository,
             accountService,
+            postToAccountService,
             settingsService,
             rowRenderer,
             tagReadRepository,
@@ -71,7 +74,7 @@ class RegisterServiceTest {
     lenient().when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
     lenient().when(payeeRepository.findFilterOptions()).thenReturn(List.of());
     lenient().when(personService.findAllLive()).thenReturn(List.of());
-    lenient().when(accountService.findLiveByTypes(anyList())).thenReturn(List.of());
+    lenient().when(postToAccountService.postToAccounts()).thenReturn(List.of());
     lenient().when(registerPickerService.membership(any(), any(), any())).thenReturn(List.of());
     lenient()
         .when(registerRepository.findRows(anyList(), any(), any(), any(), anyString()))
@@ -79,9 +82,11 @@ class RegisterServiceTest {
     lenient().when(rowRenderer.render(anyList())).thenReturn(List.of());
   }
 
-  private static Account ownAccount(long id, String name) {
-    return new Account(
-        id, name, ASSET, null, EUR, 210, LocalDate.now(), null, null, false, false, false);
+  private static PostToAccount postTo(long id, String name, String path) {
+    return new PostToAccount(
+        new Account(
+            id, name, ASSET, null, EUR, 210, LocalDate.now(), null, null, false, false, false),
+        path);
   }
 
   private RegisterFilter defaultFilter() {
@@ -126,27 +131,17 @@ class RegisterServiceTest {
   }
 
   @Test
-  void theAccountDatalistOffersOpenNonPersonOwnAccountsOnly() {
-    Account personLeaf =
-        new Account(
-            9L,
-            "personal.EUR",
-            ASSET,
-            null,
-            EUR,
-            null,
-            LocalDate.now(),
-            null,
-            null,
-            false,
-            true,
-            false);
-    when(accountService.findLiveByTypes(List.of("asset", "liability")))
-        .thenReturn(List.of(ownAccount(CASH, "Cash"), personLeaf));
+  void theAccountDatalistOffersThePostToSetByLabel() {
+    when(postToAccountService.postToAccounts())
+        .thenReturn(List.of(postTo(GIRO, "Giro", "BankAaa - Giro"), postTo(CASH, "Cash", "Cash")));
 
     RegisterView view = registerService.view(defaultFilter());
 
-    assertThat(view.accounts()).extracting(RegisterAccountOption::name).containsExactly("Cash");
+    assertThat(view.accounts())
+        .extracting(
+            RegisterView.RegisterAccountOption::accountId,
+            RegisterView.RegisterAccountOption::entryValue)
+        .containsExactly(tuple(GIRO, "BankAaa - Giro (EUR)"), tuple(CASH, "Cash (EUR)"));
   }
 
   @Test
@@ -164,14 +159,15 @@ class RegisterServiceTest {
   }
 
   @Test
-  void offersToAndFromTransferTargetsForEveryOpenOwnAccount() {
-    when(accountService.findLiveByTypes(List.of("asset", "liability")))
-        .thenReturn(List.of(ownAccount(CASH, "Cash"), ownAccount(GIRO, "Giro")));
+  void offersToAndFromTransferTargetsByPathForEveryPostToAccount() {
+    when(postToAccountService.postToAccounts())
+        .thenReturn(List.of(postTo(GIRO, "Giro", "BankAaa - Giro"), postTo(CASH, "Cash", "Cash")));
 
     RegisterView view = registerService.view(defaultFilter());
 
     assertThat(view.transferTargets())
-        .containsExactly("To → Cash", "From ← Cash", "To → Giro", "From ← Giro");
+        .containsExactly(
+            "To → BankAaa - Giro", "From ← BankAaa - Giro", "To → Cash", "From ← Cash");
   }
 
   @Test
@@ -186,12 +182,13 @@ class RegisterServiceTest {
 
   @Test
   void datalistsOffersTheSameOptionsAsViewWithoutResolvingRows() {
-    when(accountService.findLiveByTypes(List.of("asset", "liability")))
-        .thenReturn(List.of(ownAccount(CASH, "Cash")));
+    when(postToAccountService.postToAccounts()).thenReturn(List.of(postTo(CASH, "Cash", "Cash")));
 
     RegisterView view = registerService.datalists();
 
-    assertThat(view.accounts()).extracting(RegisterAccountOption::name).containsExactly("Cash");
+    assertThat(view.accounts())
+        .extracting(RegisterView.RegisterAccountOption::entryValue)
+        .containsExactly("Cash (EUR)");
     assertThat(view.rows()).isEmpty();
   }
 

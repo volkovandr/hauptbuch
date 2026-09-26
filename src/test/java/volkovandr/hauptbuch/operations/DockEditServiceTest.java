@@ -2,17 +2,21 @@ package volkovandr.hauptbuch.operations;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
+import volkovandr.hauptbuch.accounts.AccountEntryLabel;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.LedgerService;
@@ -45,6 +49,16 @@ class DockEditServiceTest {
 
   private DockEditService service() {
     return new DockEditService(ledgerService, accountService, payeeService, personService);
+  }
+
+  @BeforeEach
+  void topLevelAccountsAreLabelledByName() {
+    lenient()
+        .when(accountService.ownAccountPath(any()))
+        .thenAnswer(inv -> inv.<Account>getArgument(0).name());
+    lenient()
+        .when(accountService.ownAccountEntryLabel(any()))
+        .thenAnswer(inv -> AccountEntryLabel.format(inv.<Account>getArgument(0)));
   }
 
   private static Account account(
@@ -141,18 +155,20 @@ class DockEditServiceTest {
   }
 
   @Test
-  void loadsAnOrdinaryExpenseShowingTheAccountNameAndCurrency() {
+  void loadsAnOrdinaryExpenseShowingTheAccountPickerLabel() {
+    Account cash = account(CASH_ID, "Cash", ASSET, 9L, EUR);
     when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
     when(ledgerService.findPostings(TXN_ID))
         .thenReturn(List.of(posting(CASH_ID, "-20"), posting(FOOD_ID, "20")));
-    when(accountService.findById(CASH_ID))
-        .thenReturn(Optional.of(account(CASH_ID, "Cash", ASSET, null, EUR)));
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(cash));
     when(accountService.findById(FOOD_ID))
         .thenReturn(Optional.of(account(FOOD_ID, "Food", EXPENSE, null, EUR)));
+    when(accountService.ownAccountEntryLabel(cash)).thenReturn("Wallet - Cash (EUR)");
 
     DockEditModel model = service().load(TXN_ID);
 
-    assertThat(model.accountEntryText()).isEqualTo("Cash (EUR)");
+    // The label the picker offers, so an untouched re-save resolves to the same account.
+    assertThat(model.accountEntryText()).isEqualTo("Wallet - Cash (EUR)");
   }
 
   @Test
@@ -388,15 +404,16 @@ class DockEditServiceTest {
         .thenReturn(List.of(posting(CASH_ID, "-100"), posting(visaId, "100")));
     when(accountService.findById(CASH_ID))
         .thenReturn(Optional.of(account(CASH_ID, "Cash", "asset", null, EUR)));
-    when(accountService.findById(visaId))
-        .thenReturn(Optional.of(account(visaId, "Visa", "liability", null, EUR)));
+    Account visa = account(visaId, "Visa", "liability", 9L, EUR);
+    when(accountService.findById(visaId)).thenReturn(Optional.of(visa));
+    when(accountService.ownAccountPath(visa)).thenReturn("BankAaa - Visa");
 
     DockEditModel model = service().load(TXN_ID);
 
     assertThat(model.transactionId()).isEqualTo(TXN_ID);
     assertThat(model.accountId()).isEqualTo(CASH_ID); // funding account
     assertThat(model.categoryId()).isEqualTo(visaId); // transfer target (not category)
-    assertThat(model.categoryName()).isEqualTo("Visa");
+    assertThat(model.categoryName()).isEqualTo("BankAaa - Visa"); // by path, as offered
     assertThat(model.amount()).isEqualTo("100,00");
     assertThat(model.transferDirection()).isEqualTo("TO"); // Cash is the funding source
   }

@@ -387,15 +387,6 @@ class AccountServiceTest {
         .containsExactly(tuple("Wallet", 0), tuple("Cash", 1));
   }
 
-  @Test
-  void doesNotResolvePersonLeafAsTransferTarget() {
-    // "to personal.EUR" must not reach a person — the for/by sigils are the only way in (§3.5).
-    when(accountRepository.findLiveByTypes(any()))
-        .thenReturn(List.of(personLeaf(2L, "personal.EUR")));
-
-    assertThat(accountService.findOwnAccountByName("personal.EUR")).isEmpty();
-  }
-
   private static Account personLeaf(long id, String name) {
     return new Account(id, name, ASSET, null, EUR, null, null, null, null, false, true, false);
   }
@@ -405,42 +396,6 @@ class AccountServiceTest {
     accountService.reparent(NEW_ID, PARENT_ID);
 
     verify(accountRepository).updateParent(NEW_ID, PARENT_ID);
-  }
-
-  // ── transfer counterpart resolution (register §3.5, plan stage 7d.3) ──────────
-
-  @Test
-  void findsAnOpenOwnAccountByNameCaseInsensitively() {
-    when(accountRepository.findLiveByTypes(any()))
-        .thenReturn(List.of(account(1L, "Cash", ASSET, 210), account(2L, "Visa", "liability", 30)));
-
-    assertThat(accountService.findOwnAccountByName("visa").orElseThrow().accountId()).isEqualTo(2L);
-  }
-
-  @Test
-  void doesNotResolveNameWithNoOpenOwnAccount() {
-    when(accountRepository.findLiveByTypes(any()))
-        .thenReturn(List.of(account(1L, "Cash", ASSET, 210)));
-
-    assertThat(accountService.findOwnAccountByName("Giro")).isEmpty();
-  }
-
-  @Test
-  void refusesToGuessAnAmbiguousName() {
-    // Two open own accounts share a name — resolving it would guess, so it is refused (empty).
-    when(accountRepository.findLiveByTypes(any()))
-        .thenReturn(List.of(account(1L, "Wallet", ASSET, 210), account(2L, "Wallet", ASSET, 30)));
-
-    assertThat(accountService.findOwnAccountByName("Wallet")).isEmpty();
-  }
-
-  @Test
-  void doesNotResolveClosedOwnAccount() {
-    Account closed =
-        new Account(3L, "Old", ASSET, null, EUR, 140, OPENED, OPENED, null, false, false, false);
-    when(accountRepository.findLiveByTypes(any())).thenReturn(List.of(closed));
-
-    assertThat(accountService.findOwnAccountByName("Old")).isEmpty();
   }
 
   // ── posting-leaf paths (register §3.5 Category picker) ────────────────────────
@@ -533,5 +488,20 @@ class AccountServiceTest {
     assertThat(accountService.findPostableLeafPaths(List.of(EXPENSE), " - "))
         .extracting(AccountPath::accountId, AccountPath::path)
         .containsExactly(tuple(2L, "Food - Milk"), tuple(4L, "Fuel"));
+  }
+
+  @Test
+  void ownAccountPathAndLabelNameEveryAncestor() {
+    // What an edit-mode pre-fill shows, matching what the post-to pickers offer (issue 25).
+    Account card =
+        new Account(
+            2L, "Credit card", ASSET, 1L, EUR, null, OPENED, null, null, false, false, false);
+    when(accountRepository.findLiveByTypesWithDepth(any()))
+        .thenReturn(
+            List.of(
+                new AccountNode(account(1L, "BankAaa", ASSET, null), 0), new AccountNode(card, 1)));
+
+    assertThat(accountService.ownAccountPath(card)).isEqualTo("BankAaa - Credit card");
+    assertThat(accountService.ownAccountEntryLabel(card)).isEqualTo("BankAaa - Credit card (EUR)");
   }
 }
