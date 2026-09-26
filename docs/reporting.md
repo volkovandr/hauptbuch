@@ -1,7 +1,7 @@
 # Hauptbuch — Reporting: the Report Engine, Renderers & Layouts
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.5
+**Status:** Draft v0.6
 **Date:** 2026-09-26
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (§5.9, FR-ANA-01–10, FR-REP-01–14),
@@ -677,9 +677,12 @@ Every Report exports as **CSV**, in two forms:
   columns, no totals. A leaf is labelled by its path: `Cash:Cash-USD` and `Cash:Cash-EUR`, not three
   rows for `Cash` and its two children. A tag's postings on the tag itself (the on-screen
   `(unspecified)` row, §9.3) export under the tag's own path, `Trips`. Date stays at the ladder's
-  rung; it is not expanded into days.
+  rung; it is not expanded into days. A debt leaf is `Personal debts:Doe:EUR`, as its tree shows
+  it; a nested axis joins its two paths, `Trips / Food:Lunch`; a leaf with nothing to show is left
+  out.
 
-Both use ISO dates, plain decimal points, and base and native measures as separate columns. A CSV
+Both use ISO dates, plain decimal points, and base and native measures as separate columns. A
+figure that is `—` on screen is `—` in the file too; a blank one is empty. A CSV
 goes into a spreadsheet, where German display formatting (`1.234,56`) fights the locale. Raw is
 fetched at leaf grain, not by expanding every node, so its cost does not grow with the tree.
 
@@ -763,6 +766,8 @@ management screen.
 
 ## Changelog
 
+- **v0.6 (2026-09-26):** **§13**: raw labels a debt leaf by its tree path and a nested axis by both
+  paths, and leaves out a leaf with nothing to show; `—` stays `—` in both files.
 - **v0.5 (2026-09-26):** **§12**: totals drill down as the union of their cells; a structural `—`
   opens nothing, a data-driven one (missing rate, second currency) does.
 - **v0.4 (2026-09-25):** **§12**: the drill-down list gains a running column; a closing-balance cell

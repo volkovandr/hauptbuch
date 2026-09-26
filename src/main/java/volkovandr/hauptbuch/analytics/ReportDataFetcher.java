@@ -289,7 +289,7 @@ class ReportDataFetcher {
         .orElse(List.of());
   }
 
-  private static Leg legFor(Measure measure) {
+  static Leg legFor(Measure measure) {
     return switch (measure.kind()) {
       case TURNOVER -> measure.leg();
       case COUNT_POSTINGS, COUNT_TRANSACTIONS -> Leg.NET;
@@ -524,7 +524,7 @@ class ReportDataFetcher {
         types, asOf, includeClosed, includePending, constraints);
   }
 
-  private static LocalDate clampToToday(LocalDate date, LocalDate today) {
+  static LocalDate clampToToday(LocalDate date, LocalDate today) {
     return date.isAfter(today) ? today : date;
   }
 }

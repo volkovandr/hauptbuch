@@ -292,7 +292,7 @@ final class ReportSettingsView {
         .anyMatch(Dimension::isBalanceless);
   }
 
-  private static String dimensionLabel(Dimension dimension) {
+  static String dimensionLabel(Dimension dimension) {
     return switch (dimension) {
       case CATEGORY -> "Category";
       case ACCOUNT -> "Account";

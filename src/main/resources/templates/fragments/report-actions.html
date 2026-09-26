@@ -7,7 +7,8 @@
   page's current effective spec, renderer and trend line (draft or saved) as hidden fields, so
   Save/Save as new always commit what is actually on screen. Replaces the old "Manage this report"
   panel (rename/duplicate) and the Preset-only "Copy to my reports" panel — both actions are now the
-  same "Save as new report" everywhere, per reporting.md's v0.2 changelog.
+  same "Save as new report" everywhere, per reporting.md's v0.2 changelog. Export (reporting.md §13)
+  downloads the same effective spec and expansion as CSV, as shown or raw.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
   <body>
@@ -72,6 +73,23 @@
         <th:block th:replace="~{::hidden-fields(${editor.specParams()})}"></th:block>
         <p class="actions">
           <button type="submit" class="btn">Save as new report</button>
+        </p>
+      </form>
+
+      <form method="get" th:action="@{/reports/export}" class="form">
+        <input
+          type="hidden"
+          name="name"
+          th:value="${editor.currentName() != null ? editor.currentName() : editor.saveAsNewName()}"
+        />
+        <th:block th:replace="~{::hidden-fields(${editor.specParams()})}"></th:block>
+        <p
+          class="actions"
+          th:with="help=${T(volkovandr.hauptbuch.analytics.ReportHelpText).EXPORT_RAW}"
+        >
+          <button type="submit" class="btn btn--ghost" name="form" value="shown">Export CSV</button>
+          <button type="submit" class="btn btn--ghost" name="form" value="raw">Export raw CSV</button>
+          <span th:replace="~{fragments/help-marker :: marker(${help})}"></span>
         </p>
       </form>
 

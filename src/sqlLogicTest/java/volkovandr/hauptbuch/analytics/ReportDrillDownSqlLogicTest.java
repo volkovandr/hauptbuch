@@ -13,7 +13,7 @@ import volkovandr.hauptbuch.analytics.repository.NodeKey;
  * and total a Report renders opens a list whose running column, from zero, closes on that very
  * figure. Each scenario is one of the dimension/measure shapes the engine keys differently.
  */
-class ReportDrillDownSqlLogicTest extends DrillDownSqlLogicTestSupport {
+class ReportDrillDownSqlLogicTest extends ReportSqlLogicTestSupport {
 
   // ── scenarios ─────────────────────────────────────────────────────────────
 

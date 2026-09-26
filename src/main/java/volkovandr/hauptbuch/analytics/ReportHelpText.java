@@ -14,6 +14,10 @@ package volkovandr.hauptbuch.analytics;
 @SuppressWarnings("PMD.DataClass")
 public final class ReportHelpText {
 
+  public static final String EXPORT_RAW =
+      "Raw lists every account, category and tag down to its leaves, by path, with no parent rows"
+          + " and no totals.";
+
   public static final String SCOPE =
       "Which account types count toward this measure, plus closed accounts and pending-review"
           + " transactions. Filters narrow this further.";

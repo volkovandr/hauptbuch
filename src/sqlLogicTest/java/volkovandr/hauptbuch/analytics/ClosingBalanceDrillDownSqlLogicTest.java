@@ -14,7 +14,7 @@ import volkovandr.hauptbuch.analytics.repository.NodeKey;
  * on what the figure's accounts held before its period, lists the period's postings, and closes on
  * the figure, everything valued at the period-end rate as the figure is.
  */
-class ClosingBalanceDrillDownSqlLogicTest extends DrillDownSqlLogicTestSupport {
+class ClosingBalanceDrillDownSqlLogicTest extends ReportSqlLogicTestSupport {
 
   @Test
   void closingBalanceCellsOpenOnTheBalanceBeforeTheirPeriod() {
