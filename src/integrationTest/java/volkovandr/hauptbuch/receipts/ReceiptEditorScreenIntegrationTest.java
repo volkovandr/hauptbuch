@@ -169,6 +169,23 @@ class ReceiptEditorScreenIntegrationTest {
   }
 
   @Test
+  void accountSelectAndTransferLineNameNestedAccountsByPathAndOmitTheirGroup() throws Exception {
+    // Issue transaction-register-ui/25: a group is not payable, and a nested leaf needs its path
+    // to be told apart from a same-named leaf elsewhere.
+    long bank = account("BankAaa", "asset", "EUR");
+    long card = childAccount("Credit card", bank);
+    long id = processedReceipt(card, "5.00", "EUR");
+    line(id, "Cashback", "5.00", card, null, null);
+
+    mockMvc
+        .perform(get("/receipts/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(Matchers.containsString(">BankAaa - Credit card (EUR)<")))
+        .andExpect(content().string(Matchers.not(Matchers.containsString(">BankAaa (EUR)<"))))
+        .andExpect(content().string(Matchers.containsString("To → BankAaa - Credit card")));
+  }
+
+  @Test
   void warnsWhenTheCurrencyDiffersFromTheAccount() throws Exception {
     long pay = account("Cash", "asset", "EUR");
     long id = processedReceipt(pay, "5.00", "USD");
@@ -377,6 +394,16 @@ class ReceiptEditorScreenIntegrationTest {
         .param("c", currency)
         .query(Long.class)
         .single();
+  }
+
+  private long childAccount(String name, long parentId) {
+    long child = account(name, "asset", "EUR");
+    jdbcClient
+        .sql("update account set parent_id = :p where account_id = :id")
+        .param("p", parentId)
+        .param("id", child)
+        .update();
+    return child;
   }
 
   private long processedReceipt(long accountId, String total, String currency) {

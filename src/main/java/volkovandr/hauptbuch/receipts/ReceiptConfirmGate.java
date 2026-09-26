@@ -3,8 +3,10 @@ package volkovandr.hauptbuch.receipts;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Component;
+import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountPath;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.SettingsService;
@@ -71,8 +73,16 @@ class ReceiptConfirmGate {
       problems.add("Pick the account the receipt was paid from before confirming.");
       return;
     }
-    if (accountService.findById(form.accountId()).isEmpty()) {
+    Optional<Account> account = accountService.findById(form.accountId());
+    if (account.isEmpty()) {
       problems.add("The paying account no longer exists — pick another one.");
+      return;
+    }
+    // The select offers posting leaves only (issue transaction-register-ui/25), but a stale form or
+    // an auto-detected group could still carry one — refused here, never by the ledger at commit.
+    if (accountService.findParentAccountIds().contains(form.accountId())) {
+      problems.add(
+          "'" + account.get().name() + "' is a group — pick one of its accounts to pay from.");
     }
   }
 

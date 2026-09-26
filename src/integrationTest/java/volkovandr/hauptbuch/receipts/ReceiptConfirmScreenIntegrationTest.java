@@ -342,6 +342,39 @@ class ReceiptConfirmScreenIntegrationTest {
   }
 
   @Test
+  void confirmRefusesPayingAccountThatIsGroupWithoutWriting() throws Exception {
+    // The select no longer offers a group (issue transaction-register-ui/25), but a stale form can
+    // still post one — the gate refuses it, rather than the ledger's leaves-only rule at commit.
+    long bank = openAccount("BankAaa", EUR);
+    long card = openAccount("Credit card", EUR);
+    jdbcClient
+        .sql("update account set parent_id = :p where account_id = :id")
+        .param("p", bank)
+        .param("id", card)
+        .update();
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(bank, "42.14", EUR);
+
+    mockMvc
+        .perform(
+            post("/receipts/" + id + "/confirm")
+                .param("date", DAY)
+                .param("accountId", String.valueOf(bank))
+                .param("currencyCode", EUR)
+                .param("total", "42,14")
+                .param("lineDescription", "Diesel")
+                .param("categoryText", "Fuel")
+                .param("lineCategoryId", String.valueOf(fuel))
+                .param("lineCategoryType", "expense")
+                .param("lineAmount", "42,14"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("is a group")));
+
+    assertThat(header(id, "state", String.class)).isEqualTo("processed");
+    assertThat(header(id, "transaction_id", Long.class)).isNull();
+  }
+
+  @Test
   void confirmRefusesWhenTheLinesDoNotAddUpToTheTotal() throws Exception {
     long cash = openAccount("Cash", EUR);
     long fuel = category("Fuel", "expense");
