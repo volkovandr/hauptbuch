@@ -977,10 +977,98 @@ class DockSplitServiceTest {
   }
 
   @Test
-  void crossCurrencySplitRejectsaBlankFundingTotal() {
+  void crossCurrencySplitMixingIncomeAndExpenseValuesEachLineAtTheNetRate() {
+    // A CHF salary paid out in EUR with CHF tax withheld: 2000 CHF salary, 500 CHF tax, 1450 EUR
+    // received. The rate is 1450 EUR for the lines' net 1500 CHF, so each line keeps its own sign
+    // in base — the tax is a debit worth +483.33, never a credit.
+    when(accountService.findById(CASH_ID))
+        .thenReturn(java.util.Optional.of(account(CASH_ID, "asset", EUR)));
+    when(settingsService.baseCurrency()).thenReturn(java.util.Optional.of(EUR));
+    when(currencyLeafService.resolveCurrencyLeaf(DEPOSIT_ID, CHF))
+        .thenReturn(account(DEPOSIT_LEAF_ID, INCOME, CHF));
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, CHF))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, CHF));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(12L);
+
+    dockSplitService.commit(
+        new SplitEntry(
+            null,
+            LocalDate.of(2026, 8, 15),
+            CASH_ID,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            CHF,
+            "1450",
+            null,
+            List.of(),
+            List.of(line(DEPOSIT_ID, "2000"), line(FOOD_ID, "500")),
+            "confirmed"));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("1450");
+    assertThat(base(legs, CASH_ID)).isEqualByComparingTo("1450");
+    assertThat(leg(legs, DEPOSIT_LEAF_ID)).isEqualByComparingTo("-2000");
+    assertThat(base(legs, DEPOSIT_LEAF_ID)).isEqualByComparingTo("-1933.33");
+    assertThat(leg(legs, FOOD_LEAF_ID)).isEqualByComparingTo("500");
+    assertThat(base(legs, FOOD_LEAF_ID)).isEqualByComparingTo("483.33");
+    assertThat(baseSum(legs)).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void crossCurrencySplitWhoseLinesAreBaseAndMixedPinsTheFundingBaseToTheirNet() {
+    // CHF card, EUR (base) lines: 60 EUR of food and a 10 EUR refund on the same receipt. The lines
+    // are already in base, each worth its own amount, so the funding leg's base is their net −50.
     when(accountService.findById(CARD_ID))
         .thenReturn(java.util.Optional.of(account(CARD_ID, "asset", CHF)));
     when(settingsService.baseCurrency()).thenReturn(java.util.Optional.of(EUR));
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, EUR))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, EUR));
+    when(currencyLeafService.resolveCurrencyLeaf(DEPOSIT_ID, EUR))
+        .thenReturn(account(DEPOSIT_LEAF_ID, EXPENSE, EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(13L);
+
+    dockSplitService.commit(
+        crossEntry(EUR, "52", null, List.of(line(FOOD_ID, "60"), line(DEPOSIT_ID, "-10"))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(base(legs, CARD_ID)).isEqualByComparingTo("-50");
+    assertThat(base(legs, FOOD_LEAF_ID)).isEqualByComparingTo("60");
+    assertThat(base(legs, DEPOSIT_LEAF_ID)).isEqualByComparingTo("-10");
+    assertThat(baseSum(legs)).isEqualByComparingTo("0");
+  }
+
+  @Test
+  void crossCurrencySplitWhoseLinesNetToZeroIsRejected() {
+    // Lines that cancel out state no rate between the two currencies (the importer's own rule,
+    // import.md §6.5), so no base amount can be derived for them.
+    when(accountService.findById(CARD_ID))
+        .thenReturn(java.util.Optional.of(account(CARD_ID, "asset", CHF)));
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, USD))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, USD));
+    when(currencyLeafService.resolveCurrencyLeaf(DEPOSIT_ID, USD))
+        .thenReturn(account(DEPOSIT_LEAF_ID, EXPENSE, USD));
+    SplitEntry entry =
+        crossEntry(USD, "10", "9", List.of(line(FOOD_ID, "30"), line(DEPOSIT_ID, "-30")));
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> dockSplitService.commit(entry))
+        .withMessageContaining("net to zero");
+  }
+
+  @Test
+  void crossCurrencySplitRejectsaBlankFundingTotal() {
+    when(accountService.findById(CARD_ID))
+        .thenReturn(java.util.Optional.of(account(CARD_ID, "asset", CHF)));
     when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, USD))
         .thenReturn(account(FOOD_LEAF_ID, EXPENSE, USD));
     SplitEntry entry = crossEntry(USD, "  ", "95", List.of(line(FOOD_ID, "60")));

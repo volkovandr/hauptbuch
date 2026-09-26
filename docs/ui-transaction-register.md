@@ -1,8 +1,8 @@
 # Personal Finance Manager — UI: Transaction Register & Entry Dock
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.5
-**Date:** 2026-07-11
+**Status:** Draft v0.7
+**Date:** 2026-09-26
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
@@ -20,6 +20,9 @@
 > pinning them now would be premature.
 
 **Changelog**
+- **v0.7 (2026-09-26):** §3.8a: a cross-currency split's shared rate is taken over the lines' net,
+  so a line in the other direction keeps its sign in base; lines netting to zero are refused. (The
+  split panel had allocated by summed magnitudes, mis-valuing mixed-direction splits.)
 - **v0.6 (2026-09-09):** Settled the leading-sign disagreement between the two entry surfaces
   (issue transaction-register-ui/06): **flip wins everywhere** — a leading `−` inverts the
   counterpart's direction, `+` is redundant — and the left-side `for`/`by` sigil becomes a **checked
@@ -576,7 +579,10 @@ spending-currency figure on the receipt — and its account-currency and base eq
 from the shared rate and shown **read-only per line**. Only the **base** amounts sum to zero in the
 ledger (the legs are in different currencies); the panel shows `remaining` in **every currency in
 play**, all reaching zero together. "The rest" defaulting extends to base, so the last line absorbs the
-rounding residual and `Σ base_amount = 0` holds exactly. A receipt that genuinely mixed currencies
+rounding residual and `Σ base_amount = 0` holds exactly. The shared rate is the header total over the
+lines' **net** — never their summed magnitudes — so a line pointing the other way (a refund, a
+withheld tax in a salary split) keeps its own sign in base. Lines that net to zero state no rate and
+are refused, as the importer refuses them (import.md §6.5). A receipt that genuinely mixed currencies
 would be two transactions.
 
 ### 3.9 The autofill rule (the core behaviour)
