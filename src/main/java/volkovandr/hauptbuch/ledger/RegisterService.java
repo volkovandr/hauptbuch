@@ -140,7 +140,7 @@ public class RegisterService {
 
   /**
    * The transfer targets the Category datalist offers alongside categories (register §3.5, plan
-   * stage 7d.3): {@code To → <path>} and {@code From ← <path>} for every post-to account, so
+   * stage 7d.3): {@code To → <label>} and {@code From ← <label>} for every post-to account, so
    * picking one routes the counter-leg to that real account instead of a category. Self-transfer is
    * refused at commit, so an account's own two options are offered even in its own register view.
    */
@@ -149,8 +149,8 @@ public class RegisterService {
         .flatMap(
             p ->
                 Stream.of(
-                    TransferTarget.option(TransferTarget.Direction.TO, p.path()),
-                    TransferTarget.option(TransferTarget.Direction.FROM, p.path())))
+                    TransferTarget.option(TransferTarget.Direction.TO, p.entryLabel()),
+                    TransferTarget.option(TransferTarget.Direction.FROM, p.entryLabel())))
         .toList();
   }
 

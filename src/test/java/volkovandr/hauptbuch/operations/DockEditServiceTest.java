@@ -54,9 +54,6 @@ class DockEditServiceTest {
   @BeforeEach
   void topLevelAccountsAreLabelledByName() {
     lenient()
-        .when(accountService.ownAccountPath(any()))
-        .thenAnswer(inv -> inv.<Account>getArgument(0).name());
-    lenient()
         .when(accountService.ownAccountEntryLabel(any()))
         .thenAnswer(inv -> AccountEntryLabel.format(inv.<Account>getArgument(0)));
   }
@@ -406,14 +403,14 @@ class DockEditServiceTest {
         .thenReturn(Optional.of(account(CASH_ID, "Cash", "asset", null, EUR)));
     Account visa = account(visaId, "Visa", "liability", 9L, EUR);
     when(accountService.findById(visaId)).thenReturn(Optional.of(visa));
-    when(accountService.ownAccountPath(visa)).thenReturn("BankAaa - Visa");
+    when(accountService.ownAccountEntryLabel(visa)).thenReturn("BankAaa - Visa (EUR)");
 
     DockEditModel model = service().load(TXN_ID);
 
     assertThat(model.transactionId()).isEqualTo(TXN_ID);
     assertThat(model.accountId()).isEqualTo(CASH_ID); // funding account
     assertThat(model.categoryId()).isEqualTo(visaId); // transfer target (not category)
-    assertThat(model.categoryName()).isEqualTo("BankAaa - Visa"); // by path, as offered
+    assertThat(model.categoryName()).isEqualTo("BankAaa - Visa (EUR)"); // by label, as offered
     assertThat(model.amount()).isEqualTo("100,00");
     assertThat(model.transferDirection()).isEqualTo("TO"); // Cash is the funding source
   }
@@ -444,7 +441,7 @@ class DockEditServiceTest {
     assertThat(model.transactionId()).isEqualTo(TXN_ID);
     assertThat(model.accountId()).isEqualTo(CASH_ID);
     assertThat(model.categoryId()).isEqualTo(visaChf); // actual account (not a currency leaf)
-    assertThat(model.categoryName()).isEqualTo("Visa");
+    assertThat(model.categoryName()).isEqualTo("Visa (CHF)"); // the transfer target label
     assertThat(model.categoryCurrencyCode()).isEqualTo("CHF"); // transfer target currency
     assertThat(model.amount()).isEqualTo("100,00");
     assertThat(model.categoryAmount()).isEqualTo("90,00");

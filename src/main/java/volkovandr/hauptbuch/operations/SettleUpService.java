@@ -8,7 +8,6 @@ import org.joda.money.Money;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.Account;
-import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.accounts.PostToAccount;
 import volkovandr.hauptbuch.accounts.PostToAccountService;
 import volkovandr.hauptbuch.debts.PersonService;
@@ -50,7 +49,6 @@ class SettleUpService {
   private static final int AMOUNT_FRACTION_DIGITS = 2;
 
   private final PersonService personService;
-  private final AccountService accountService;
   private final PostToAccountService postToAccountService;
   private final SettingsService settingsService;
   private final CrossCurrencyFieldsService crossCurrencyFieldsService;
@@ -58,13 +56,11 @@ class SettleUpService {
 
   SettleUpService(
       PersonService personService,
-      AccountService accountService,
       PostToAccountService postToAccountService,
       SettingsService settingsService,
       CrossCurrencyFieldsService crossCurrencyFieldsService,
       DockCommitService dockCommitService) {
     this.personService = personService;
-    this.accountService = accountService;
     this.postToAccountService = postToAccountService;
     this.settingsService = settingsService;
     this.crossCurrencyFieldsService = crossCurrencyFieldsService;
@@ -87,7 +83,7 @@ class SettleUpService {
       long personId, String currencyCode, Long selectedAccountId, LocalDate date) {
     SettleTarget target = requireTarget(personId, currencyCode);
     LocalDate settleDate = date != null ? date : LocalDate.now();
-    List<PostToAccount> pickable = pickableAccounts();
+    List<PostToAccount> pickable = postToAccountService.postToAccounts();
     Account funding = chooseFunding(pickable, selectedAccountId, currencyCode);
 
     boolean cross = !fundingCurrency(funding, currencyCode).equals(currencyCode);
@@ -127,7 +123,7 @@ class SettleUpService {
       String baseAmount) {
     SettleTarget target = requireTarget(personId, currencyCode);
     LocalDate settleDate = date != null ? date : LocalDate.now();
-    List<PostToAccount> pickable = pickableAccounts();
+    List<PostToAccount> pickable = postToAccountService.postToAccounts();
     Account funding = chooseFunding(pickable, selectedAccountId, currencyCode);
     return build(
         personId,
@@ -269,26 +265,20 @@ class SettleUpService {
   }
 
   /**
-   * The accounts a settle may be funded from: the post-to set (issue transaction-register-ui/25) —
-   * open, real posting leaves, each labelled by its full path. Never a group or a person's leaf.
-   */
-  private List<PostToAccount> pickableAccounts() {
-    return postToAccountService.postToAccounts();
-  }
-
-  /**
    * Refuse a funding account that is a group. The select offers posting leaves only, but a stale
    * form can still post a group's id; refused here with its name rather than by the ledger's
    * leaves-only rule at commit.
    */
   private void requireNotGroup(Long fundingAccountId) {
-    if (fundingAccountId == null
-        || !accountService.findParentAccountIds().contains(fundingAccountId)) {
+    if (fundingAccountId == null) {
       return;
     }
-    String name = accountService.findById(fundingAccountId).map(Account::name).orElse("");
-    throw new IllegalArgumentException(
-        "'" + name + "' is a group — pick one of its accounts to settle from.");
+    postToAccountService
+        .groupOf(fundingAccountId)
+        .ifPresent(
+            group -> {
+              throw new IllegalArgumentException(group.message());
+            });
   }
 
   /**

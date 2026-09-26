@@ -261,7 +261,7 @@ public class DockEditService {
         funding.posting(),
         funding.account(),
         counterpart.account().accountId(),
-        accountService.ownAccountPath(counterpart.account()),
+        accountService.ownAccountEntryLabel(counterpart.account()),
         counterpart.account().type(),
         counterpart.account().currencyCode(),
         categoryAmount,

@@ -98,6 +98,17 @@ class PostToAccountServiceTest {
         .containsExactly("BankAaa", "Cash", "giro");
   }
 
+  @Test
+  void groupOfNamesGroupByItsPathAndNothingElse() {
+    // What the id-based pickers (receipt, Settle-up) refuse a posted group with.
+    given(
+        own(1L, "BankAaa", null, EUR), own(2L, "Cards", 1L, EUR), own(3L, "Credit card", 2L, EUR));
+
+    assertThat(service.groupOf(2L)).contains(new PostToResolution.Group("BankAaa - Cards"));
+    assertThat(service.groupOf(3L)).isEmpty();
+    assertThat(service.groupOf(99L)).isEmpty();
+  }
+
   // ── resolving a picked or typed label ───────────────────────────────────────────
 
   private long resolvedId(String text) {

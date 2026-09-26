@@ -10,9 +10,10 @@ import java.util.Optional;
  * offers the options ({@link RegisterService}) and the resolver that reads them back (the {@code
  * categories} counterpart resolver) share one definition rather than duplicating the strings.
  *
- * <p>The option value is {@code "To → Name"} / {@code "From ← Name"} — the account's display name
- * only (no currency suffix), which {@link #parse} reads back so the counterpart account can be
- * resolved by name among the own accounts.
+ * <p>The option value is {@code "To → <label>"} / {@code "From ← <label>"}, where the label is the
+ * account's picker label ({@code BankAaa - Credit card (EUR)}, issue transaction-register-ui/25) —
+ * the currency is what tells two same-named accounts apart. {@link #parse} reads the label back so
+ * the counterpart can be resolved among the post-to set.
  */
 public final class TransferTarget {
 
@@ -29,9 +30,9 @@ public final class TransferTarget {
     FROM
   }
 
-  /** The datalist option value for a transfer to/from {@code accountName} (register §3.5). */
-  public static String option(Direction direction, String accountName) {
-    return (direction == Direction.TO ? TO_PREFIX : FROM_PREFIX) + accountName;
+  /** The datalist option value for a transfer to/from the account {@code accountLabel} names. */
+  public static String option(Direction direction, String accountLabel) {
+    return (direction == Direction.TO ? TO_PREFIX : FROM_PREFIX) + accountLabel;
   }
 
   /**

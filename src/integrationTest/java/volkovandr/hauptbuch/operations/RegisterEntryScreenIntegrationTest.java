@@ -572,8 +572,8 @@ class RegisterEntryScreenIntegrationTest {
         .perform(get(REGISTER_PATH))
         .andExpect(status().isOk())
         // Every own account contributes a To → and From ← option to the Category datalist.
-        .andExpect(content().string(containsString("value=\"To → Visa\"")))
-        .andExpect(content().string(containsString("value=\"From ← Visa\"")));
+        .andExpect(content().string(containsString("value=\"To → Visa (EUR)\"")))
+        .andExpect(content().string(containsString("value=\"From ← Visa (EUR)\"")));
   }
 
   @Test

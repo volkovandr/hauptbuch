@@ -303,18 +303,22 @@ class CategoriesController {
    */
   private void resolveTransfer(
       TransferTarget.Parsed transfer, Model model, HttpServletResponse response) {
-    PostToResolution resolution = postToAccountService.resolve(transfer.accountName());
-    if (resolution instanceof PostToResolution.Refused refused) {
-      model.addAttribute(RESOLVED_ID, "");
-      model.addAttribute(RESOLVED_NAME, null);
-      model.addAttribute(RESOLVED_TYPE, "");
-      model.addAttribute(RESOLVED_DIRECTION, null);
-      model.addAttribute(RESOLVED_ERROR, refused.message());
-      return;
+    switch (postToAccountService.resolve(transfer.accountName())) {
+      case PostToResolution.Refused refused -> {
+        model.addAttribute(RESOLVED_ID, "");
+        model.addAttribute(RESOLVED_NAME, null);
+        model.addAttribute(RESOLVED_TYPE, "");
+        model.addAttribute(RESOLVED_DIRECTION, null);
+        model.addAttribute(RESOLVED_ERROR, refused.message());
+        return;
+      }
+      case PostToResolution.Resolved resolved -> {
+        PostToAccount target = resolved.account();
+        model.addAttribute(RESOLVED_ID, target.account().accountId());
+        model.addAttribute(
+            RESOLVED_NAME, TransferTarget.option(transfer.direction(), target.entryLabel()));
+      }
     }
-    PostToAccount account = ((PostToResolution.Resolved) resolution).account();
-    model.addAttribute(RESOLVED_ID, account.account().accountId());
-    model.addAttribute(RESOLVED_NAME, TransferTarget.option(transfer.direction(), account.path()));
     model.addAttribute(RESOLVED_TYPE, "");
     model.addAttribute(RESOLVED_DIRECTION, transfer.direction().name());
     model.addAttribute(RESOLVED_ERROR, null);
