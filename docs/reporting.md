@@ -1,7 +1,7 @@
 # Hauptbuch — Reporting: the Report Engine, Renderers & Layouts
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.7
+**Status:** Draft v0.8
 **Date:** 2026-09-26
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (§5.9, FR-ANA-01–10, FR-REP-01–14),
@@ -683,7 +683,10 @@ Every Report exports as **CSV**, in two forms:
   out.
 
 Both use ISO dates, plain decimal points, and base and native measures as separate columns. A
-figure that is `—` on screen is `—` in the file too; a blank one is empty. A CSV
+figure that is `—` on screen is `—` in the file too; a blank one is empty. With a native measure,
+the figures' currency travels with them: a Currency column beside each row's label, or a Currency
+row beneath the header when the columns carry the dimension — the one currency of that row's or
+column's native figures, `—` when they span more than one. A CSV
 goes into a spreadsheet, where German display formatting (`1.234,56`) fights the locale. Raw is
 fetched at leaf grain, not by expanding every node, so its cost does not grow with the tree.
 
@@ -767,6 +770,8 @@ management screen.
 
 ## Changelog
 
+- **v0.8 (2026-09-26):** **§13** (owner decision): a native measure adds the figures' currency,
+  as a column beside the row labels or a row beneath the header.
 - **v0.7 (2026-09-26):** **§13** (owner decision): raw exports a Date bucket expanded on screen as
   its days, instead of always staying at the ladder's rung.
 - **v0.6 (2026-09-26):** **§13**: raw labels a debt leaf by its tree path and a nested axis by both
