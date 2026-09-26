@@ -58,6 +58,31 @@ public record RegisterRowView(
   }
 
   /**
+   * This row with {@code display} in its Balance column — a Report drill-down's running column
+   * (reporting.md §12) in place of the account balance the row does not thread.
+   */
+  public RegisterRowView withBalance(String display, boolean negative) {
+    return new RegisterRowView(
+        postingId,
+        transactionId,
+        date,
+        accountName,
+        accountPerson,
+        payeeName,
+        accountHue,
+        zebraDark,
+        category,
+        amountDisplay,
+        income,
+        display,
+        negative,
+        pending,
+        reconciliation,
+        tags,
+        receiptId);
+  }
+
+  /**
    * The Category cell's content (register §2.6): the chips shown, biggest-magnitude first, plus a
    * count of any not shown (the {@code · +n} overflow hint). A chip is a category name or a {@code
    * ⇄ Account} transfer target.

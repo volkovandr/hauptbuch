@@ -275,6 +275,34 @@ class RegisterRowRendererTest {
   }
 
   @Test
+  void rowOutsideItsAccountsThreadShowsNoBalance() {
+    stubLegs(leg(1L, "Food", EXPENSE, "20"));
+    RegisterRow threaded = row(100L, 1L, CASH, EUR, "-20");
+    RegisterRow unthreaded =
+        new RegisterRow(
+            threaded.postingId(),
+            threaded.transactionId(),
+            threaded.date(),
+            threaded.accountId(),
+            threaded.accountName(),
+            threaded.accountHue(),
+            threaded.currencyCode(),
+            threaded.baseCurrency(),
+            threaded.payeeName(),
+            threaded.amount(),
+            null,
+            threaded.lifecycle(),
+            threaded.reconciliation(),
+            threaded.receiptId());
+
+    RegisterRowView view = renderOne(unthreaded);
+
+    assertThat(view.balanceDisplay()).isEmpty();
+    assertThat(view.negativeBalance()).isFalse();
+    assertThat(view.amountDisplay()).isEqualTo("-20,00");
+  }
+
+  @Test
   void rendersThePostingsOwnTagsAsChips() {
     stubLegs(leg(1L, "Food", EXPENSE, "20"));
     // The tag read is keyed by the row's own posting id (register §3.6).

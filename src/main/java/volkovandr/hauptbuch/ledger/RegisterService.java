@@ -105,6 +105,19 @@ public class RegisterService {
     return assembleView(List.of(), pickable(openOwnAccounts()), NO_FILTER);
   }
 
+  /**
+   * The given postings as fully-rendered register rows, in the register's own order — a Report's
+   * drill-down list (reporting.md §12), which reuses the register's row. The legs come from many
+   * accounts, so no row threads an account balance; the caller supplies its own running column.
+   * Empty until the book's base currency is set, like {@link #view}.
+   */
+  public List<RegisterRowView> rowsForPostings(List<Long> postingIds) {
+    return settingsService
+        .baseCurrency()
+        .map(base -> rowRenderer.render(registerRepository.findRowsByPostingIds(postingIds, base)))
+        .orElseGet(List::of);
+  }
+
   private RegisterView assembleView(
       List<RegisterRowView> rows, List<Account> pickable, RegisterFilter filter) {
     List<RegisterAccountOption> accountOptions = accountOptions(pickable);

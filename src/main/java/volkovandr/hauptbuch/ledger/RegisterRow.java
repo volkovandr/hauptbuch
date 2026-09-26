@@ -26,7 +26,8 @@ import java.time.LocalDate;
  * @param baseCurrency whether this account's currency is the book's base (bare vs symbol display)
  * @param payeeName the transaction's payee display name; null for a payee-less transaction
  * @param amount the signed native amount of this leg
- * @param runningBalance the account's native running balance up to and including this leg
+ * @param runningBalance the account's native running balance up to and including this leg; {@code
+ *     null} for a row listed outside its account's thread (a Report drill-down, reporting.md §12)
  * @param lifecycle {@code pending_review} rows render muted with no balance (register §2.10)
  * @param reconciliation drives the reconciliation status glyph
  * @param receiptId the live receipt this transaction was booked from (register §7, plan stage 9g),

@@ -207,6 +207,15 @@ leaf paths and a tag's own postings under the tag's path.
 
 **Done when** any cell opens its transactions and every Report exports in both forms.
 
+Built as three reviewed work packages, each with its own green `check` and owner confirmation:
+
+- **f1** — turnover/count drill-down: the posting-set query, the reporting-owned list with its
+  running column from zero, the register row fragment extracted for reuse, and the register
+  handoff. `sqlLogicTest` carries the cell-equals-list assertion across dimensions.
+- **f2** — closing-balance drill-down: the opening-balance line, the clipped period, period-end-rate
+  valuation, cross-currency closing on the cell.
+- **f3** — CSV, as shown and raw. Independent of f1/f2.
+
 ---
 
 ## Cross-cutting, not a slice
@@ -222,6 +231,7 @@ leaf paths and a tag's own postings under the tag's path.
 ---
 
 ## Changelog
+
 
 - **v0.11 (2026-09-25):** Scope change in slice f (`reporting.md` v0.4): closing-balance cells drill
   down too (opening-balance line + running column), and CSV exports in two forms, as shown and raw.

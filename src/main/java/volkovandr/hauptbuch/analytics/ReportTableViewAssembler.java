@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import org.springframework.util.MultiValueMap;
 import volkovandr.hauptbuch.shared.MoneyFactory;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 
@@ -23,13 +25,31 @@ final class ReportTableViewAssembler {
   }
 
   /**
+   * {@link #assemble(String, ReportSpec, ReportGrid, String, RowToggle, MultiValueMap)} offering no
+   * drill-down.
+   */
+  static ReportTableView assemble(
+      String title, ReportSpec spec, ReportGrid grid, String baseCurrency, RowToggle rowToggle) {
+    return assemble(title, spec, grid, baseCurrency, rowToggle, null);
+  }
+
+  /**
    * Turns a {@link ReportGrid} into a display-ready {@link ReportTableView}.
    *
    * @param rowToggle what the row-tree's expand/collapse controls do (plan stage e2, issue 02), or
    *     {@code null} for none — see {@link RowToggle}
+   * @param drillParams the Report's spec and expansion as the drill-down form's hidden fields
+   *     (reporting.md §12), or {@code null} for no drill-down; with them, every figure {@link
+   *     DrillDown.isDrillable} carries its {@link CellAddress#token}
    */
   static ReportTableView assemble(
-      String title, ReportSpec spec, ReportGrid grid, String baseCurrency, RowToggle rowToggle) {
+      String title,
+      ReportSpec spec,
+      ReportGrid grid,
+      String baseCurrency,
+      RowToggle rowToggle,
+      MultiValueMap<String, String> drillParams) {
+    Figures figures = new Figures(spec, grid, baseCurrency, drillParams != null);
     List<ReportTableView.ColumnView> columns =
         grid.columns().stream()
             .map(
@@ -45,10 +65,6 @@ final class ReportTableViewAssembler {
     List<ReportTableView.RowView> rows = new ArrayList<>();
     for (int i = 0; i < grid.rows().size(); i++) {
       AxisNode node = grid.rows().get(i);
-      List<ReportTableView.CellText> cells =
-          grid.cells().get(i).stream().map(c -> format(c, baseCurrency)).toList();
-      ReportTableView.CellText rowTotal =
-          spec.rowTotals() ? format(grid.rowTotals().get(i), baseCurrency) : BLANK;
       rows.add(
           new ReportTableView.RowView(
               node.key(),
@@ -59,15 +75,9 @@ final class ReportTableViewAssembler {
               rowToggle != null && node.expandable()
                   ? rowToggle.urlFor(node.key(), onScreen)
                   : null,
-              cells,
-              rowTotal));
+              figures.bodyRow(i),
+              figures.rowTotal(i)));
     }
-    List<ReportTableView.CellText> columnTotals =
-        spec.columnTotals()
-            ? grid.columnTotals().stream().map(c -> format(c, baseCurrency)).toList()
-            : List.of();
-    ReportTableView.CellText grandTotal =
-        spec.rowTotals() && spec.columnTotals() ? format(grid.grandTotal(), baseCurrency) : BLANK;
 
     return new ReportTableView(
         title,
@@ -79,12 +89,66 @@ final class ReportTableViewAssembler {
         rows,
         spec.rowTotals(),
         spec.columnTotals(),
-        columnTotals,
-        grandTotal,
+        figures.columnTotals(),
+        figures.grandTotal(),
+        drillParams,
         rowToggle != null && rowToggle.persists());
   }
 
-  private static ReportTableView.CellText format(Cell cell, String baseCurrency) {
+  /**
+   * The grid's figures as display text, each carrying its drill-down token when the table offers
+   * drill-down (reporting.md §12) and the figure {@link DrillDown.isDrillable} for its measure; a
+   * total the Report does not show is blank.
+   */
+  private record Figures(
+      ReportSpec spec, ReportGrid grid, String baseCurrency, boolean drillOffered) {
+
+    List<ReportTableView.CellText> bodyRow(int row) {
+      return IntStream.range(0, grid.columns().size())
+          .mapToObj(
+              column ->
+                  text(
+                      grid.cells().get(row).get(column),
+                      CellAddress.forBody(spec, grid, row, column)))
+          .toList();
+    }
+
+    ReportTableView.CellText rowTotal(int row) {
+      return spec.rowTotals()
+          ? text(grid.rowTotals().get(row), CellAddress.forRowTotal(grid, row))
+          : BLANK;
+    }
+
+    List<ReportTableView.CellText> columnTotals() {
+      if (!spec.columnTotals()) {
+        return List.of();
+      }
+      return IntStream.range(0, grid.columnTotals().size())
+          .mapToObj(
+              column ->
+                  text(
+                      grid.columnTotals().get(column),
+                      CellAddress.forColumnTotal(spec, grid, column)))
+          .toList();
+    }
+
+    ReportTableView.CellText grandTotal() {
+      return spec.rowTotals() && spec.columnTotals()
+          ? text(grid.grandTotal(), CellAddress.forGrandTotal())
+          : BLANK;
+    }
+
+    private ReportTableView.CellText text(Cell cell, CellAddress address) {
+      ReportTableView.CellText text = format(cell, baseCurrency);
+      Measure measure = spec.measures().get(address.measureIndex());
+      return drillOffered && DrillDown.isDrillable(cell, measure)
+          ? text.withDrill(address.token())
+          : text;
+    }
+  }
+
+  /** {@code cell} as display text — shared with the drill-down's running column. */
+  static ReportTableView.CellText format(Cell cell, String baseCurrency) {
     if (cell instanceof Cell.Blank) {
       return BLANK;
     }

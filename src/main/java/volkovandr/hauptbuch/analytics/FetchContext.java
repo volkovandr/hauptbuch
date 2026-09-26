@@ -15,6 +15,8 @@ import java.util.Set;
  * @param today the date a closing balance's as-of date is clamped to (§8.2)
  * @param baseCurrency the settings row's base currency
  * @param expandedKeys the expanded nodes of the non-Date dimension, at any depth (§9.1, §9.2)
+ * @param collectPostingIds whether every turnover group also carries the ids of the postings it
+ *     sums — on only for a drill-down (§12), which reads them
  */
 record FetchContext(
     ReportSpec spec,
@@ -22,7 +24,19 @@ record FetchContext(
     List<String> types,
     LocalDate today,
     String baseCurrency,
-    Set<String> expandedKeys) {
+    Set<String> expandedKeys,
+    boolean collectPostingIds) {
+
+  /** An ordinary render's context: posting ids not collected. */
+  FetchContext(
+      ReportSpec spec,
+      AxisPlan axes,
+      List<String> types,
+      LocalDate today,
+      String baseCurrency,
+      Set<String> expandedKeys) {
+    this(spec, axes, types, today, baseCurrency, expandedKeys, false);
+  }
 
   boolean includeClosedAccounts() {
     return spec.scope().includeClosedAccounts();

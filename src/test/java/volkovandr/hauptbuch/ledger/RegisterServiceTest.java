@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -102,6 +103,16 @@ class RegisterServiceTest {
     registerService.view(new RegisterFilter(List.of(GIRO), RegisterPicker.OPEN, null, null, null));
 
     verify(registerRepository).findRows(eq(List.of(GIRO)), any(), any(), any(), anyString());
+  }
+
+  @Test
+  void rowsForPostingsRendersTheGivenLegs() {
+    List<RegisterRow> rows = List.of(mock(RegisterRow.class));
+    List<RegisterRowView> views = List.of(mock(RegisterRowView.class));
+    when(registerRepository.findRowsByPostingIds(List.of(7L, 8L), EUR)).thenReturn(rows);
+    when(rowRenderer.render(rows)).thenReturn(views);
+
+    assertThat(registerService.rowsForPostings(List.of(7L, 8L))).isEqualTo(views);
   }
 
   @Test

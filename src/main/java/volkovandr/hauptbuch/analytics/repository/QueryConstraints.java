@@ -14,9 +14,15 @@ import volkovandr.hauptbuch.analytics.ReportFilter;
  *     own field: each is its own top-level group in the account-tree queries, and a real root's
  *     group no longer reaches into it
  * @param promotedTagIds {@code promotedAccountIds}' own mirror for the tag tree
+ * @param collectPostingIds whether each turnover group also returns the ids of the postings it sums
+ *     ({@link RawTurnoverCell#postingIds()}) — the drill-down's posting set (reporting.md §12); off
+ *     for an ordinary render, which never reads them
  */
 public record QueryConstraints(
-    List<ReportFilter> filters, List<Long> promotedAccountIds, List<Long> promotedTagIds) {
+    List<ReportFilter> filters,
+    List<Long> promotedAccountIds,
+    List<Long> promotedTagIds,
+    boolean collectPostingIds) {
 
   /** No filters. */
   public static final QueryConstraints NONE = new QueryConstraints(List.of());
@@ -28,8 +34,19 @@ public record QueryConstraints(
     promotedTagIds = List.copyOf(promotedTagIds);
   }
 
+  /** Posting ids not collected — every caller but the drill-down. */
+  public QueryConstraints(
+      List<ReportFilter> filters, List<Long> promotedAccountIds, List<Long> promotedTagIds) {
+    this(filters, promotedAccountIds, promotedTagIds, false);
+  }
+
   /** {@code filters} with nothing promoted: every node groups under its real root. */
   public QueryConstraints(List<ReportFilter> filters) {
     this(filters, List.of(), List.of());
+  }
+
+  /** These constraints, with each turnover group's posting ids collected (reporting.md §12). */
+  public QueryConstraints collectingPostingIds() {
+    return new QueryConstraints(filters, promotedAccountIds, promotedTagIds, true);
   }
 }

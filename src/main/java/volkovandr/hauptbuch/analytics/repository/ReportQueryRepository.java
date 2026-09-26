@@ -1,10 +1,14 @@
 package volkovandr.hauptbuch.analytics.repository;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.analytics.DateGranularity;
@@ -245,9 +249,11 @@ public class ReportQueryRepository {
 
   /**
    * The rate-as-of lookup (data-model §3.7) joined once per posting so both the base sum and the
-   * missing-rate count read the same resolved rate.
+   * missing-rate count read the same resolved rate. Shared, with {@link #BASE_AMOUNT_EXPR} and
+   * {@link #MISSING_RATE_EXPR}, by {@link PostingValueRepository}, so a drill-down list values each
+   * posting exactly as its cell summed it.
    */
-  private static final String RATE_LATERAL_JOIN =
+  static final String RATE_LATERAL_JOIN =
       """
       left join lateral (
         select er.rate
@@ -258,13 +264,13 @@ public class ReportQueryRepository {
       ) rate on a.currency_code <> :baseCurrency
       """;
 
-  private static final String BASE_AMOUNT_EXPR =
+  static final String BASE_AMOUNT_EXPR =
       """
       coalesce(p.base_amount,
         case when a.currency_code = :baseCurrency then p.amount else p.amount * rate.rate end)
       """;
 
-  private static final String MISSING_RATE_EXPR =
+  static final String MISSING_RATE_EXPR =
       """
       (p.base_amount is null and a.currency_code <> :baseCurrency and rate.rate is null)
       """;
@@ -294,8 +300,30 @@ public class ReportQueryRepository {
           + """
           ) as missing_rate_count,
              count(*) as posting_count,
-             count(distinct p.transaction_id) as transaction_count
+             count(distinct p.transaction_id) as transaction_count,
+             coalesce(array_agg(p.posting_id) filter (where :collectPostingIds), '{}')
+               as posting_ids
       """;
+
+  /**
+   * Every turnover query's row mapper. Spelled out rather than {@code query(RawTurnoverCell.class)}
+   * because {@code posting_ids} is a Postgres {@code bigint[]}, which the property-based mapper
+   * cannot convert to a {@code List<Long>}.
+   */
+  private static final RowMapper<RawTurnoverCell> RAW_TURNOVER_CELL =
+      (rs, rowNum) ->
+          new RawTurnoverCell(
+              rs.getString("dimension_key"),
+              rs.getString("dimension_label"),
+              rs.getString("dimension_type"),
+              rs.getString("bucket_key"),
+              rs.getString("currency_code"),
+              rs.getBigDecimal("native_amount"),
+              rs.getBigDecimal("base_amount"),
+              rs.getLong("missing_rate_count"),
+              rs.getLong("posting_count"),
+              rs.getLong("transaction_count"),
+              postingIds(rs));
 
   private final JdbcClient jdbcClient;
 
@@ -387,7 +415,7 @@ public class ReportQueryRepository {
         .param(BUCKET_UNIT, granularity.sqlUnit())
         .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
-        .query(RawTurnoverCell.class)
+        .query(RAW_TURNOVER_CELL)
         .list();
   }
 
@@ -571,7 +599,7 @@ public class ReportQueryRepository {
         .param(BUCKET_UNIT, granularity.sqlUnit())
         .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
-        .query(RawTurnoverCell.class)
+        .query(RAW_TURNOVER_CELL)
         .list();
   }
 
@@ -778,7 +806,7 @@ public class ReportQueryRepository {
         .param(BUCKET_UNIT, granularity.sqlUnit())
         .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
-        .query(RawTurnoverCell.class)
+        .query(RAW_TURNOVER_CELL)
         .list();
   }
 
@@ -904,7 +932,7 @@ public class ReportQueryRepository {
         .param(BUCKET_UNIT, granularity.sqlUnit())
         .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
-        .query(RawTurnoverCell.class)
+        .query(RAW_TURNOVER_CELL)
         .list();
   }
 
@@ -1047,7 +1075,7 @@ public class ReportQueryRepository {
         .param(BUCKET_UNIT, granularity.sqlUnit())
         .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
-        .query(RawTurnoverCell.class)
+        .query(RAW_TURNOVER_CELL)
         .list();
   }
 
@@ -1130,7 +1158,7 @@ public class ReportQueryRepository {
         .param(BUCKET_UNIT, granularity.sqlUnit())
         .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
-        .query(RawTurnoverCell.class)
+        .query(RAW_TURNOVER_CELL)
         .list();
   }
 
@@ -1247,7 +1275,7 @@ public class ReportQueryRepository {
         .param(BUCKET_UNIT, granularity.sqlUnit())
         .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
-        .query(RawTurnoverCell.class)
+        .query(RAW_TURNOVER_CELL)
         .list();
   }
 
@@ -1302,7 +1330,7 @@ public class ReportQueryRepository {
         .param(BUCKET_UNIT, granularity.sqlUnit())
         .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
-        .query(RawTurnoverCell.class)
+        .query(RAW_TURNOVER_CELL)
         .list();
   }
 
@@ -1459,7 +1487,7 @@ public class ReportQueryRepository {
         .param(BUCKET_UNIT, granularity.sqlUnit())
         .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
-        .query(RawTurnoverCell.class)
+        .query(RAW_TURNOVER_CELL)
         .list();
   }
 
@@ -1597,7 +1625,7 @@ public class ReportQueryRepository {
         .param(BUCKET_UNIT, granularity.sqlUnit())
         .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
-        .query(RawTurnoverCell.class)
+        .query(RAW_TURNOVER_CELL)
         .list();
   }
 
@@ -1722,7 +1750,7 @@ public class ReportQueryRepository {
         .param(BUCKET_UNIT, granularity.sqlUnit())
         .param(BUCKET_FORMAT, granularity.sqlFormat())
         .params(extra.params())
-        .query(RawTurnoverCell.class)
+        .query(RAW_TURNOVER_CELL)
         .list();
   }
 
@@ -1860,10 +1888,11 @@ public class ReportQueryRepository {
    * them.
    */
   private CompiledExtra compileExtra(QueryConstraints constraints) {
-    StringBuilder sql = new StringBuilder(128);
     Map<String, Object> params = new LinkedHashMap<>();
     params.put(PROMOTED_ACCOUNT_IDS, orNoMatch(constraints.promotedAccountIds()));
     params.put(PROMOTED_TAG_IDS, orNoMatch(constraints.promotedTagIds()));
+    params.put("collectPostingIds", constraints.collectPostingIds());
+    StringBuilder sql = new StringBuilder(128);
     List<ReportFilter> filters = constraints.filters();
     for (int i = 0; i < filters.size(); i++) {
       sql.append(AND).append(filterPredicate(filters.get(i), i, params, constraints)).append('\n');
@@ -2058,4 +2087,9 @@ public class ReportQueryRepository {
 
   /** One compiled {@link QueryConstraints}: the extra SQL to append, and its bind params. */
   private record CompiledExtra(String sql, Map<String, Object> params) {}
+
+  /** {@code posting_ids} as a list — empty when not collected. */
+  private static List<Long> postingIds(ResultSet rs) throws SQLException {
+    return Arrays.asList((Long[]) rs.getArray("posting_ids").getArray());
+  }
 }

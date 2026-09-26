@@ -56,8 +56,7 @@ class ReportDataFetcher {
       DateGranularity granularity) {
     AxisPlan axes = context.axes();
     QueryConstraints constraints =
-        PromotedNodes.constraints(
-            context.spec().filters(), context.spec(), axes.nonDateDim(), axes.innerDim());
+        constraints(context, context.spec().filters(), axes.nonDateDim(), axes.innerDim());
     Map<Leg, List<RawTurnoverCell>> turnoverByLeg =
         fetchTurnover(context, resolved, granularity, constraints);
     if (!context.expandedKeys().isEmpty()) {
@@ -141,8 +140,7 @@ class ReportDataFetcher {
           legName,
           withSyntheticFilter(context, outerKey));
     }
-    QueryConstraints constraints =
-        PromotedNodes.constraints(context.spec().filters(), context.spec(), outerDim, null);
+    QueryConstraints constraints = constraints(context, context.spec().filters(), outerDim, null);
     NodeKey parent = NodeKey.ofLastSegment(outerKey);
     if (outerDim == Dimension.TAG) {
       return queryRepository.childTagTurnover(
@@ -258,8 +256,7 @@ class ReportDataFetcher {
     if (innerDim != null) {
       return closingBalanceAt(context, innerDim, asOf, withSyntheticFilter(context, outerKey));
     }
-    QueryConstraints constraints =
-        PromotedNodes.constraints(context.spec().filters(), context.spec(), outerDim, null);
+    QueryConstraints constraints = constraints(context, context.spec().filters(), outerDim, null);
     NodeKey parent = NodeKey.ofLastSegment(outerKey);
     boolean includeClosed = context.includeClosedAccounts();
     boolean includePending = context.includePendingReview();
@@ -311,7 +308,18 @@ class ReportDataFetcher {
     Dimension outerDim = context.axes().nonDateDim();
     List<ReportFilter> combined = new ArrayList<>(spec.filters());
     combined.add(syntheticSubtreeFilter(outerDim, outerKey));
-    return PromotedNodes.constraints(combined, spec, outerDim, context.axes().innerDim());
+    return constraints(context, combined, outerDim, context.axes().innerDim());
+  }
+
+  /**
+   * {@link PromotedNodes#constraints}, collecting each turnover group's posting ids when {@code
+   * context} is a drill-down's (§12) — one place, so no query of one render can forget it.
+   */
+  private static QueryConstraints constraints(
+      FetchContext context, List<ReportFilter> filters, Dimension outerDim, Dimension innerDim) {
+    QueryConstraints constraints =
+        PromotedNodes.constraints(filters, context.spec(), outerDim, innerDim);
+    return context.collectPostingIds() ? constraints.collectingPostingIds() : constraints;
   }
 
   /**

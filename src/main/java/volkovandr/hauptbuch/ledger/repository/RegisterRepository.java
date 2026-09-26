@@ -31,6 +31,43 @@ public class RegisterRepository {
   private static final String BASE_CURRENCY = "baseCurrency";
   private static final String TRANSACTION_IDS = "transactionIds";
 
+  /**
+   * A register row's columns, read from a {@code threaded} CTE of postings (each with its {@code
+   * running_balance}) — shared by {@link #findRows} and {@link #findRowsByPostingIds} so a row
+   * reads the same wherever it is listed.
+   */
+  private static final String ROWS_FROM_THREADED =
+      """
+      select threaded.posting_id,
+             threaded.transaction_id,
+             threaded.date,
+             threaded.account_id,
+             threaded.account_name,
+             threaded.account_hue,
+             threaded.currency_code,
+             (threaded.currency_code = :baseCurrency) as base_currency,
+             -- Display "Name · City · Country" so same-named payees are distinguishable
+             -- (register §3.4); the city/country parts drop out when absent.
+             pay.name
+               || coalesce(' · ' || pay.city, '')
+               || coalesce(' · ' || pay_country.name, '') as payee_name,
+             threaded.amount,
+             threaded.running_balance,
+             threaded.lifecycle,
+             threaded.reconciliation,
+             -- The paperclip (register §7, plan stage 9g): the live receipt this transaction
+             -- was booked from. A scalar subquery rather than a join, so a transaction that
+             -- somehow carries two live receipts can never double the register row; a
+             -- soft-deleted receipt is not a live link, which is exactly how the committed
+             -- delete's "keep the transaction" choice unlinks without writing a column.
+             (select min(rcpt.receipt_id) from receipt rcpt
+               where rcpt.transaction_id = threaded.transaction_id
+                 and rcpt.deleted_at is null) as receipt_id
+      from threaded
+      left join payee pay on threaded.payee_id = pay.payee_id
+      left join country pay_country on pay.country_code = pay_country.country_code
+      """;
+
   private final JdbcClient jdbcClient;
 
   RegisterRepository(JdbcClient jdbcClient) {
@@ -89,34 +126,9 @@ public class RegisterRepository {
               where p.account_id in (:accountIds)
                 and t.deleted_at is null
             )
-            select threaded.posting_id,
-                   threaded.transaction_id,
-                   threaded.date,
-                   threaded.account_id,
-                   threaded.account_name,
-                   threaded.account_hue,
-                   threaded.currency_code,
-                   (threaded.currency_code = :baseCurrency) as base_currency,
-                   -- Display "Name · City · Country" so same-named payees are distinguishable
-                   -- (register §3.4); the city/country parts drop out when absent.
-                   pay.name
-                     || coalesce(' · ' || pay.city, '')
-                     || coalesce(' · ' || pay_country.name, '') as payee_name,
-                   threaded.amount,
-                   threaded.running_balance,
-                   threaded.lifecycle,
-                   threaded.reconciliation,
-                   -- The paperclip (register §7, plan stage 9g): the live receipt this transaction
-                   -- was booked from. A scalar subquery rather than a join, so a transaction that
-                   -- somehow carries two live receipts can never double the register row; a
-                   -- soft-deleted receipt is not a live link, which is exactly how the committed
-                   -- delete's "keep the transaction" choice unlinks without writing a column.
-                   (select min(rcpt.receipt_id) from receipt rcpt
-                     where rcpt.transaction_id = threaded.transaction_id
-                       and rcpt.deleted_at is null) as receipt_id
-            from threaded
-            left join payee pay on threaded.payee_id = pay.payee_id
-            left join country pay_country on pay.country_code = pay_country.country_code
+            """
+                + ROWS_FROM_THREADED
+                + """
             where (cast(:fromDate as date) is null or threaded.date >= :fromDate)
               and (cast(:toDate as date) is null or threaded.date <= :toDate)
               and (cast(:payeeId as bigint) is null or threaded.payee_id = :payeeId)
@@ -126,6 +138,51 @@ public class RegisterRepository {
         .param(FROM_DATE, fromDate)
         .param(TO_DATE, toDate)
         .param(PAYEE_ID, payeeId)
+        .param(BASE_CURRENCY, baseCurrency)
+        .query(RegisterRow.class)
+        .list();
+  }
+
+  /**
+   * The given live postings as register rows, in {@code (date, transaction_id, posting_id)} order —
+   * a Report drill-down's list (reporting.md §12), whose legs come from many accounts and thread
+   * none of them, so every row's {@code running_balance} is {@code null}.
+   *
+   * @param postingIds the postings to list; an empty list yields no rows
+   * @param baseCurrency the book's base currency, to flag base vs non-base rows for display
+   */
+  public List<RegisterRow> findRowsByPostingIds(List<Long> postingIds, String baseCurrency) {
+    if (postingIds.isEmpty()) {
+      return List.of();
+    }
+    return jdbcClient
+        .sql(
+            """
+            with threaded as (
+              select p.posting_id,
+                     p.transaction_id,
+                     t.date,
+                     a.account_id,
+                     a.name          as account_name,
+                     a.hue           as account_hue,
+                     a.currency_code as currency_code,
+                     t.payee_id,
+                     t.lifecycle,
+                     p.amount,
+                     p.reconciliation,
+                     cast(null as numeric) as running_balance
+              from posting p
+              join transaction t on p.transaction_id = t.transaction_id
+              join account a on p.account_id = a.account_id
+              where p.posting_id in (:postingIds)
+                and t.deleted_at is null
+            )
+            """
+                + ROWS_FROM_THREADED
+                + """
+            order by threaded.date, threaded.transaction_id, threaded.posting_id
+            """)
+        .param("postingIds", postingIds)
         .param(BASE_CURRENCY, baseCurrency)
         .query(RegisterRow.class)
         .list();
@@ -198,9 +255,10 @@ public class RegisterRepository {
 
   /**
    * A live transaction's legs into your own accounts, with its date — what the {@code selected=}
-   * jump (register §7, plan stage 9g) derives its filter from. Biggest magnitude first, so the
-   * account that actually funded the transaction leads. Empty for a voided or unknown transaction,
-   * which lets the jump fall back to the default register view rather than showing an empty one.
+   * jump (register §7, plan stage 9g; reporting.md §12's handoff) derives its filter from. Credited
+   * legs first, then biggest magnitude, so the account the money left leads: a receipt's paying
+   * account, a transfer's source. Empty for a voided or unknown transaction, or one with no own leg
+   * at all.
    */
   public List<RegisterOwnLeg> findOwnLegs(long transactionId) {
     return jdbcClient
@@ -213,7 +271,7 @@ public class RegisterRepository {
             where p.transaction_id = :transactionId
               and t.deleted_at is null
               and a.type in ('asset', 'liability')
-            order by abs(p.amount) desc, p.account_id
+            order by p.amount < 0 desc, abs(p.amount) desc, p.account_id
             """)
         .param("transactionId", transactionId)
         .query(RegisterOwnLeg.class)

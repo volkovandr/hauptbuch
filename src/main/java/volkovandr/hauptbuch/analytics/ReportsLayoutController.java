@@ -151,13 +151,18 @@ class ReportsLayoutController {
     PresetRendering.FrameContent content =
         PresetRendering.renderFrame(selection, baseCurrency, reportEngine, reportService);
     String openFullReportUrl = content.configured() ? selection.fullReportUrl() : null;
+    // The editor wraps every Frame in its own form, which cannot hold the drill-down's form too.
+    ReportTableView report =
+        fieldName != null && content.report() != null
+            ? content.report().withoutDrillDown()
+            : content.report();
     return new FrameView(
         fieldName,
         selection.encoded(),
         content.configured(),
         content.baseCurrencyUnset(),
         content.title(),
-        content.report(),
+        report,
         content.chart(),
         openFullReportUrl);
   }

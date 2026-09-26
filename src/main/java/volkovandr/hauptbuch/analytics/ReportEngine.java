@@ -32,6 +32,12 @@ import volkovandr.hauptbuch.ledger.SettingsService;
  * #render(ReportSpec, LocalDate, RowExpansion)} is the uniform-all-or-nothing form e1's own tests
  * still use.
  */
+// CouplingBetweenObjects: this class is the pipeline's one orchestrator (spec in -> grid out, and
+// the drill-down's source beside it), so each stage's input and output type appears here once —
+// the same shape ReportDataFetcher, ReportGridBuilder and PresetRendering are suppressed for. The
+// stages themselves already live in their own classes; splitting further would move the list of
+// types, not shorten it.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class ReportEngine {
 
@@ -89,7 +95,7 @@ public class ReportEngine {
     AxisPlan axes = planAxes(spec);
     String refusal = refusal(spec, axes);
     if (refusal != null) {
-      return refusedGrid(refusal, resolved);
+      return ReportGrid.refused(refusal, resolved.start(), resolved.end());
     }
     return renderAccepted(spec, today, expansion, explicitOverride, resolved, axes);
   }
@@ -102,6 +108,40 @@ public class ReportEngine {
       Set<String> explicitOverride,
       RangeResolver.ResolvedRange resolved,
       AxisPlan axes) {
+    return assemble(spec, today, expansion, explicitOverride, resolved, axes, false)
+        .build(gridBuilder, spec);
+  }
+
+  /**
+   * What a drill-down (reporting.md §12) reads: the grid {@link #render(ReportSpec, LocalDate,
+   * Set)} would show, plus the axes and raw data it was built from — fetched with every turnover
+   * group's posting ids, so a figure's list is exactly the postings behind it. A refused spec
+   * yields its empty grid and no axes.
+   */
+  DrillSource drillSource(ReportSpec spec, LocalDate today, Set<String> explicitExpandedKeys) {
+    RangeResolver.ResolvedRange resolved = RangeResolver.resolve(spec.range(), today);
+    AxisPlan axes = planAxes(spec);
+    String refusal = refusal(spec, axes);
+    if (refusal != null) {
+      return new DrillSource(
+          ReportGrid.refused(refusal, resolved.start(), resolved.end()),
+          List.of(),
+          List.of(),
+          null);
+    }
+    AssembledGrid assembled =
+        assemble(spec, today, RowExpansion.AUTO, explicitExpandedKeys, resolved, axes, true);
+    return assembled.drillSource(assembled.build(gridBuilder, spec), spec);
+  }
+
+  private AssembledGrid assemble(
+      ReportSpec spec,
+      LocalDate today,
+      RowExpansion expansion,
+      Set<String> explicitOverride,
+      RangeResolver.ResolvedRange resolved,
+      AxisPlan axes,
+      boolean collectPostingIds) {
     String baseCurrency = requireBaseCurrency();
 
     List<String> types = List.copyOf(spec.scope().accountTypes());
@@ -137,7 +177,7 @@ public class ReportEngine {
     }
 
     FetchContext fetchContext =
-        new FetchContext(spec, axes, types, today, baseCurrency, expandedKeys);
+        new FetchContext(spec, axes, types, today, baseCurrency, expandedKeys, collectPostingIds);
     GridData data =
         dataFetcher.fetchGridData(
             fetchContext, resolved, buckets, spec.dateLadder().bucketGranularity());
@@ -177,8 +217,8 @@ public class ReportEngine {
             ? nestedAxisNodes
             : gridBuilder.axisNodes(axes.colDim(), candidatesByKey, buckets);
 
-    return gridBuilder.build(
-        spec, axes, rowNodes, columnBucketNodes, candidatesByKey, data, baseCurrency, resolved);
+    return new AssembledGrid(
+        axes, rowNodes, columnBucketNodes, candidatesByKey, data, baseCurrency, resolved);
   }
 
   /**
@@ -379,19 +419,6 @@ public class ReportEngine {
             + " dimension other than Tag."
         : "A payee has no closing balance (it is not an account) — pick a turnover measure, or a"
             + " dimension other than Payee.";
-  }
-
-  private static ReportGrid refusedGrid(String refusal, RangeResolver.ResolvedRange resolved) {
-    return new ReportGrid(
-        List.of(),
-        List.of(),
-        List.of(),
-        List.of(),
-        List.of(),
-        Cell.BLANK,
-        resolved.start(),
-        resolved.end(),
-        refusal);
   }
 
   private String requireBaseCurrency() {

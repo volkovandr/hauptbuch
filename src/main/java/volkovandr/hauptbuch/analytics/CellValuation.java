@@ -32,26 +32,41 @@ class CellValuation {
   }
 
   Cell compute(Measure measure, AxisNode rowNode, AxisNode columnBucketNode, CellContext context) {
-    AxisPlan axes = context.axes();
-    Dimension nonDateDim = axes.nonDateDim();
-    String dimKey =
-        nonDateDim == null
-            ? AxisNode.TOTAL_KEY
-            : (axes.rowDim() == nonDateDim ? rowNode.key() : columnBucketNode.key());
-    String bucketKey =
-        axes.dateOnRows() ? rowNode.key() : axes.dateOnColumns() ? columnBucketNode.key() : null;
     if (measure.kind() == MeasureKind.TURNOVER) {
-      List<RawTurnoverCell> matches =
-          turnoverMatches(measure.leg(), dimKey, bucketKey, context.data());
-      boolean creditNatural = isCreditNaturalType(turnoverDimensionType(matches), context.scope());
+      List<RawTurnoverCell> matches = turnoverMatches(measure, rowNode, columnBucketNode, context);
+      boolean creditNatural = isCreditNatural(matches, context.scope());
       return turnoverCellValue(matches, measure, context.baseCurrency(), creditNatural);
     }
     if (measure.kind() == MeasureKind.COUNT_POSTINGS
         || measure.kind() == MeasureKind.COUNT_TRANSACTIONS) {
-      List<RawTurnoverCell> matches = turnoverMatches(Leg.NET, dimKey, bucketKey, context.data());
-      return countCellValue(matches, measure.kind());
+      return countCellValue(
+          turnoverMatches(measure, rowNode, columnBucketNode, context), measure.kind());
     }
-    return computeClosingBalanceCell(measure, rowNode, columnBucketNode, dimKey, axes, context);
+    return computeClosingBalanceCell(
+        measure,
+        rowNode,
+        columnBucketNode,
+        dimensionKey(rowNode, columnBucketNode, context),
+        context);
+  }
+
+  /** The key of the non-Date dimension's node a cell sits in, or the plain-total sentinel. */
+  private static String dimensionKey(
+      AxisNode rowNode, AxisNode columnBucketNode, CellContext context) {
+    AxisPlan axes = context.axes();
+    Dimension nonDateDim = axes.nonDateDim();
+    if (nonDateDim == null) {
+      return AxisNode.TOTAL_KEY;
+    }
+    return axes.rowDim() == nonDateDim ? rowNode.key() : columnBucketNode.key();
+  }
+
+  /**
+   * Whether a turnover cell over {@code matches} displays sign-flipped (data-model §4.1) — shared
+   * with the drill-down, whose running column must flip exactly as its cell does.
+   */
+  static boolean isCreditNatural(List<RawTurnoverCell> matches, Scope scope) {
+    return isCreditNaturalType(turnoverDimensionType(matches), scope);
   }
 
   private Cell computeClosingBalanceCell(
@@ -59,8 +74,8 @@ class CellValuation {
       AxisNode rowNode,
       AxisNode columnBucketNode,
       String dimKey,
-      AxisPlan axes,
       CellContext context) {
+    AxisPlan axes = context.axes();
     String bucketKey =
         axes.dateOnRows()
             ? rowNode.key()
@@ -107,6 +122,21 @@ class CellValuation {
   private static boolean isCreditNaturalScope(Scope scope) {
     return !scope.accountTypes().isEmpty()
         && scope.accountTypes().stream().allMatch(CREDIT_NATURAL_TYPES::contains);
+  }
+
+  /**
+   * The raw turnover groups one turnover or count cell sums (§5.5: a count reads the {@link
+   * Leg#NET} data) — shared with the drill-down (§12), whose list is exactly these groups'
+   * postings.
+   */
+  static List<RawTurnoverCell> turnoverMatches(
+      Measure measure, AxisNode rowNode, AxisNode columnBucketNode, CellContext context) {
+    AxisPlan axes = context.axes();
+    String bucketKey =
+        axes.dateOnRows() ? rowNode.key() : axes.dateOnColumns() ? columnBucketNode.key() : null;
+    Leg leg = measure.kind() == MeasureKind.TURNOVER ? measure.leg() : Leg.NET;
+    return turnoverMatches(
+        leg, dimensionKey(rowNode, columnBucketNode, context), bucketKey, context.data());
   }
 
   private static List<RawTurnoverCell> turnoverMatches(

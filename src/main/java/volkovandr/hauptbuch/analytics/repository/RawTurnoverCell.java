@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.analytics.repository;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * One raw group from a turnover query (reporting.md §5.1): a single (dimension value, Date bucket,
@@ -24,6 +25,8 @@ import java.math.BigDecimal;
  *     base-currency cell {@code —} rather than a silently partial figure
  * @param postingCount postings contributing to this group
  * @param transactionCount distinct transactions contributing to this group
+ * @param postingIds the contributing postings' ids — the drill-down's posting set (reporting.md
+ *     §12), collected only when {@link QueryConstraints#collectPostingIds()} asks; empty otherwise
  */
 public record RawTurnoverCell(
     String dimensionKey,
@@ -35,7 +38,41 @@ public record RawTurnoverCell(
     BigDecimal baseAmount,
     long missingRateCount,
     long postingCount,
-    long transactionCount) {
+    long transactionCount,
+    List<Long> postingIds) {
+
+  /** A {@code null} array (posting ids not collected) reads as none. */
+  public RawTurnoverCell {
+    postingIds = postingIds == null ? List.of() : List.copyOf(postingIds);
+  }
+
+  /** A group without its posting ids — a hand-built cell in a test, or any caller not drilling. */
+  // ExcessiveParameterList: mirrors the canonical constructor minus postingIds.
+  @SuppressWarnings("PMD.ExcessiveParameterList")
+  public RawTurnoverCell(
+      String dimensionKey,
+      String dimensionLabel,
+      String dimensionType,
+      String bucketKey,
+      String currencyCode,
+      BigDecimal nativeAmount,
+      BigDecimal baseAmount,
+      long missingRateCount,
+      long postingCount,
+      long transactionCount) {
+    this(
+        dimensionKey,
+        dimensionLabel,
+        dimensionType,
+        bucketKey,
+        currencyCode,
+        nativeAmount,
+        baseAmount,
+        missingRateCount,
+        postingCount,
+        transactionCount,
+        List.of());
+  }
 
   /** This cell re-keyed under {@code key} — a nested child row's composite key (§9.1). */
   public RawTurnoverCell withDimensionKey(String key) {
@@ -49,7 +86,8 @@ public record RawTurnoverCell(
         baseAmount,
         missingRateCount,
         postingCount,
-        transactionCount);
+        transactionCount,
+        postingIds);
   }
 
   /** This cell moved to bucket {@code key} — an expanded Date row's own day (§9.1). */
@@ -64,6 +102,7 @@ public record RawTurnoverCell(
         baseAmount,
         missingRateCount,
         postingCount,
-        transactionCount);
+        transactionCount,
+        postingIds);
   }
 }
