@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
 import volkovandr.hauptbuch.ledger.SettingsService;
@@ -145,6 +146,15 @@ public class ReportEngine {
    * the very rules the Report's own cells are. A refused spec yields its empty grid.
    */
   ReportGrid renderRaw(ReportSpec spec, LocalDate today) {
+    return renderRaw(spec, today, null);
+  }
+
+  /**
+   * {@link #renderRaw(ReportSpec, LocalDate)} for a Report shown with {@code explicitExpandedKeys}
+   * (§9.1, {@code null} for {@code auto}): a Date row bucket expanded on screen exports as its
+   * days, in its place — raw shows more than the screen, never less, and has no parent rows.
+   */
+  ReportGrid renderRaw(ReportSpec spec, LocalDate today, Set<String> explicitExpandedKeys) {
     RangeResolver.ResolvedRange resolved = RangeResolver.resolve(spec.range(), today);
     AxisPlan axes = planAxes(spec);
     String refusal = refusal(spec, axes);
@@ -154,11 +164,42 @@ public class ReportEngine {
     String baseCurrency = requireBaseCurrency();
     List<DateBucket> buckets = bucketsFor(spec, resolved);
     RawGridFetcher.RawGrid raw =
-        rawGridFetcher.fetch(spec, axes, today, baseCurrency, resolved, buckets);
-    List<AxisNode> rowNodes =
-        onNonDateAxis(axes.rowDim(), axes.nonDateDim())
-            ? raw.leaves()
-            : gridBuilder.axisNodes(axes.rowDim(), Map.of(), buckets);
+        rawGridFetcher.fetch(
+            spec,
+            axes,
+            today,
+            baseCurrency,
+            resolved,
+            buckets,
+            spec.dateLadder().bucketGranularity());
+    GridData data = raw.data();
+    List<DateBucket> expandedDateBuckets =
+        axes.dateOnRows()
+            ? expandedDateBuckets(RowExpansion.AUTO, explicitExpandedKeys, buckets)
+            : List.of();
+    // An expanded bucket's days re-run the same fetch over its range, as the screen's do (§9.1);
+    // their leaves are among the bucket's own, so the columns need nothing more.
+    for (DateBucket bucket : expandedDateBuckets) {
+      RawGridFetcher.RawGrid days =
+          rawGridFetcher.fetch(
+              spec,
+              axes,
+              today,
+              baseCurrency,
+              bucket.effectiveRange(),
+              bucket.days(),
+              DateGranularity.DAY);
+      data = data.withDays(bucket.key(), days.data());
+    }
+    List<AxisNode> rowNodes;
+    if (axes.dateOnRows()) {
+      rowNodes = rawDateRows(buckets, keysOf(expandedDateBuckets));
+    } else {
+      rowNodes =
+          onNonDateAxis(axes.rowDim(), axes.nonDateDim())
+              ? raw.leaves()
+              : gridBuilder.axisNodes(axes.rowDim(), Map.of(), buckets);
+    }
     List<AxisNode> columnBucketNodes =
         onNonDateAxis(axes.colDim(), axes.nonDateDim())
             ? raw.leaves()
@@ -169,9 +210,23 @@ public class ReportEngine {
         rowNodes,
         columnBucketNodes,
         Map.of(),
-        raw.data(),
+        data,
         baseCurrency,
         resolved);
+  }
+
+  /**
+   * Each Date row bucket or, when expanded, its days in its place, keyed as the screen keys them.
+   */
+  private static List<AxisNode> rawDateRows(List<DateBucket> buckets, Set<String> expandedKeys) {
+    return buckets.stream()
+        .flatMap(
+            bucket ->
+                expandedKeys.contains(bucket.key())
+                    ? bucket.days().stream()
+                        .map(day -> new AxisNode(bucket.key() + "|" + day.key(), day.label()))
+                    : Stream.of(new AxisNode(bucket.key(), bucket.label())))
+        .toList();
   }
 
   /** {@code spec} with neither totals axis and no group-header parents — raw has no parents. */

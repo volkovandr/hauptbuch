@@ -36,14 +36,18 @@ class RawGridFetcher {
    */
   record RawGrid(GridData data, List<AxisNode> leaves) {}
 
-  /** {@code spec}'s raw data over {@code resolved}, bucketed as {@code buckets}. */
+  /**
+   * {@code spec}'s raw data over {@code resolved}, bucketed as {@code buckets} at {@code
+   * granularity} — the ladder's rung, or {@link DateGranularity#DAY} for an expanded bucket's days.
+   */
   RawGrid fetch(
       ReportSpec spec,
       AxisPlan axes,
       LocalDate today,
       String baseCurrency,
       RangeResolver.ResolvedRange resolved,
-      List<DateBucket> buckets) {
+      List<DateBucket> buckets,
+      DateGranularity granularity) {
     Optional<List<String>> types = queryTypes(axes, List.copyOf(spec.scope().accountTypes()));
     if (types.isEmpty()) {
       return new RawGrid(new GridData(Map.of(), Map.of(), Map.of()), List.of());
@@ -73,7 +77,7 @@ class RawGridFetcher {
                                 types.get(),
                                 resolved.start(),
                                 resolved.end(),
-                                spec.dateLadder().bucketGranularity(),
+                                granularity,
                                 baseCurrency,
                                 leg.name(),
                                 scope.includeClosedAccounts(),

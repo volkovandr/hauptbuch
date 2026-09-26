@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -239,5 +240,49 @@ class RawReportSqlLogicTest extends ReportSqlLogicTestSupport {
 
     assertThat(labels(raw)).containsExactly("Doe");
     assertSameFigure(cell(raw, "Doe", 0), eur("29.00"), null);
+  }
+
+  @Test
+  void dateRowExpandedOnScreenExportsAsItsDaysInsteadOfTheMonth() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+    long lunch = insertAccount("Lunch", "expense", EUR, food);
+    spend(cash, lunch, LocalDate.of(2026, 1, 5), "20.00");
+    spend(cash, lunch, LocalDate.of(2026, 1, 5), "4.00");
+    spend(cash, lunch, LocalDate.of(2026, 1, 9), "3.00");
+    spend(cash, lunch, LocalDate.of(2026, 2, 9), "8.00");
+    ReportSpec spec =
+        spec(List.of(Dimension.DATE), List.of(Dimension.CATEGORY), List.of(BASE_NET), EXPENSES);
+
+    ReportGrid raw = engine.renderRaw(spec, TODAY, Set.of("2026-01"));
+
+    // January's days replace January — raw has no parent rows — and February stays a month.
+    assertThat(raw.rows())
+        .extracting(AxisNode::key)
+        .containsExactly("2026-01|2026-01-05", "2026-01|2026-01-09", "2026-02");
+    assertThat(raw.columns()).extracting(AxisNode::label).containsExactly("Food:Lunch");
+    assertSameFigure(raw.cells().get(0).get(0), eur("24.00"), null);
+    assertSameFigure(raw.cells().get(2).get(0), eur("8.00"), null);
+  }
+
+  @Test
+  void closingBalanceOfAnExpandedMonthExportsEachDaysBalance() {
+    long equity = insertAccount("Opening", "equity", EUR, null);
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    move(equity, cash, LocalDate.of(2025, 12, 1), "100.00");
+    move(cash, equity, LocalDate.of(2026, 1, 9), "30.00");
+    ReportSpec spec =
+        spec(List.of(Dimension.DATE), List.of(Dimension.ACCOUNT), List.of(BASE_CLOSING), ASSETS);
+
+    ReportGrid raw = engine.renderRaw(spec, TODAY, Set.of("2026-01"));
+
+    assertSameFigure(
+        raw.cells().get(rowIndexByKey(raw, "2026-01|2026-01-08")).get(0), eur("100.00"), null);
+    assertSameFigure(
+        raw.cells().get(rowIndexByKey(raw, "2026-01|2026-01-09")).get(0), eur("70.00"), null);
+  }
+
+  private static int rowIndexByKey(ReportGrid grid, String key) {
+    return grid.rows().stream().map(AxisNode::key).toList().indexOf(key);
   }
 }

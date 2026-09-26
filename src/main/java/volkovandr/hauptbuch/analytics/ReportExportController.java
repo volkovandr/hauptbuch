@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.analytics;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Locale;
+import java.util.Set;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -50,10 +51,11 @@ class ReportExportController {
     }
     ReportSpec spec = spec(params);
     LocalDate today = LocalDate.now();
+    Set<String> expandedKeys = RowToggle.expandedKeysFrom(params).orElse(null);
     ReportGrid grid =
         raw
-            ? engine.renderRaw(spec, today)
-            : engine.render(spec, today, RowToggle.expandedKeysFrom(params).orElse(null));
+            ? engine.renderRaw(spec, today, expandedKeys)
+            : engine.render(spec, today, expandedKeys);
     return ResponseEntity.ok()
         .contentType(CSV)
         .header(
