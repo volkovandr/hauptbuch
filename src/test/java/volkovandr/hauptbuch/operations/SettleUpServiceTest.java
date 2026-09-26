@@ -17,6 +17,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.accounts.PostToAccount;
+import volkovandr.hauptbuch.accounts.PostToAccountService;
 import volkovandr.hauptbuch.debts.Person;
 import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.debts.SettleTarget;
@@ -46,6 +48,7 @@ class SettleUpServiceTest {
 
   @Mock private PersonService personService;
   @Mock private AccountService accountService;
+  @Mock private PostToAccountService postToAccountService;
   @Mock private SettingsService settingsService;
   @Mock private CrossCurrencyFieldsService crossCurrencyFieldsService;
   @Mock private DockCommitService dockCommitService;
@@ -58,6 +61,7 @@ class SettleUpServiceTest {
         new SettleUpService(
             personService,
             accountService,
+            postToAccountService,
             settingsService,
             crossCurrencyFieldsService,
             dockCommitService);
@@ -66,6 +70,10 @@ class SettleUpServiceTest {
   private static Account own(long id, String name, String currency) {
     return new Account(
         id, name, "asset", null, currency, null, null, null, null, false, false, false);
+  }
+
+  private static PostToAccount postTo(long id, String name, String currency) {
+    return new PostToAccount(own(id, name, currency), name);
   }
 
   private void stubBaseEur() {
@@ -85,8 +93,8 @@ class SettleUpServiceTest {
     stubPerson();
     when(personService.settleTarget(PERSON_ID, CHF))
         .thenReturn(Optional.of(new SettleTarget(LEAF_ID, CHF, new BigDecimal("10.00"))));
-    when(accountService.findLiveByTypes(any()))
-        .thenReturn(List.of(own(CASH_EUR, "Cash", EUR), own(WALLET_CHF, "Wallet", CHF)));
+    when(postToAccountService.postToAccounts())
+        .thenReturn(List.of(postTo(CASH_EUR, "Cash", EUR), postTo(WALLET_CHF, "Wallet", CHF)));
     when(crossCurrencyFieldsService.resolve(any()))
         .thenReturn(CrossCurrencyFields.singleCurrency(CHF));
 
@@ -116,7 +124,7 @@ class SettleUpServiceTest {
     stubPerson();
     when(personService.settleTarget(PERSON_ID, CHF))
         .thenReturn(Optional.of(new SettleTarget(LEAF_ID, CHF, new BigDecimal("10.00"))));
-    when(accountService.findLiveByTypes(any())).thenReturn(List.of(own(CASH_EUR, "Cash", EUR)));
+    when(postToAccountService.postToAccounts()).thenReturn(List.of(postTo(CASH_EUR, "Cash", EUR)));
     when(crossCurrencyFieldsService.resolve(any()))
         .thenReturn(new CrossCurrencyFields(EUR, CHF, true, false, "10,00", null));
 
@@ -138,7 +146,7 @@ class SettleUpServiceTest {
     stubPerson();
     when(personService.settleTarget(PERSON_ID, EUR))
         .thenReturn(Optional.of(new SettleTarget(LEAF_ID, EUR, new BigDecimal("-10.00"))));
-    when(accountService.findLiveByTypes(any())).thenReturn(List.of(own(CASH_EUR, "Cash", EUR)));
+    when(postToAccountService.postToAccounts()).thenReturn(List.of(postTo(CASH_EUR, "Cash", EUR)));
     when(crossCurrencyFieldsService.resolve(any()))
         .thenReturn(CrossCurrencyFields.singleCurrency(EUR));
 
@@ -147,6 +155,26 @@ class SettleUpServiceTest {
     assertThat(view.youOwe()).isTrue();
     assertThat(view.summary()).isEqualTo("You owe Max 10,00"); // base currency renders bare
     assertThat(view.fundingAmountText()).isEqualTo("10,00");
+  }
+
+  @Test
+  void assembleOffersThePostToSetByItsLabels() {
+    // Issue transaction-register-ui/25: leaves only, named by path — the group BankAaa is absent.
+    stubBaseEur();
+    stubPerson();
+    when(personService.settleTarget(PERSON_ID, EUR))
+        .thenReturn(Optional.of(new SettleTarget(LEAF_ID, EUR, new BigDecimal("10.00"))));
+    when(postToAccountService.postToAccounts())
+        .thenReturn(
+            List.of(new PostToAccount(own(CASH_EUR, "Credit card", EUR), "BankAaa - Credit card")));
+    when(crossCurrencyFieldsService.resolve(any()))
+        .thenReturn(CrossCurrencyFields.singleCurrency(EUR));
+
+    SettleUpView view = service.assemble(PERSON_ID, EUR, null, DATE);
+
+    assertThat(view.accounts())
+        .extracting(SettleUpView.AccountOption::label)
+        .containsExactly("BankAaa - Credit card (EUR)");
   }
 
   @Test
@@ -198,6 +226,21 @@ class SettleUpServiceTest {
     assertThatExceptionOfType(IllegalArgumentException.class)
         .isThrownBy(() -> service.settle(PERSON_ID, "USD", CASH_EUR, DATE, "10,00", null, null))
         .withMessageContaining("Nothing to settle");
+  }
+
+  @Test
+  void settleRefusesFundingAccountThatIsGroup() {
+    // The select no longer offers a group, but a stale form can still post one.
+    long bank = 9L;
+    when(personService.settleTarget(PERSON_ID, EUR))
+        .thenReturn(Optional.of(new SettleTarget(LEAF_ID, EUR, new BigDecimal("10.00"))));
+    when(accountService.findParentAccountIds()).thenReturn(List.of(bank));
+    when(accountService.findById(bank)).thenReturn(Optional.of(own(bank, "BankAaa", EUR)));
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> service.settle(PERSON_ID, EUR, bank, DATE, "10,00", null, null))
+        .withMessageContaining("'BankAaa' is a group");
+    org.mockito.Mockito.verify(dockCommitService, org.mockito.Mockito.never()).commit(any());
   }
 
   private DockEntry capturedEntry() {
