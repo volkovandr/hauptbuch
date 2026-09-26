@@ -93,8 +93,8 @@ class ReportCsvTest {
 
     assertThat(ReportCsv.write(spec, grid))
         .isEqualTo(
-            "Category,2026-01 — Turnover (native),2026-01 — Count of transactions\r\n"
-                + "Travel,1500,3\r\n");
+            "Category,Currency,2026-01 — Turnover (native),2026-01 — Count of transactions\r\n"
+                + "Travel,JPY,1500,3\r\n");
   }
 
   @Test
@@ -136,5 +136,61 @@ class ReportCsvTest {
 
     assertThat(ReportCsv.write(spec, ReportGrid.refused("Nothing to show.", JAN_1, FEB_28)))
         .isEqualTo("Nothing to show.\r\n");
+  }
+
+  private static Cell money(String amount, String currency) {
+    return new Cell.Value(new BigDecimal(amount), currency);
+  }
+
+  @Test
+  void nativeMeasureAddsEachRowsCurrencyNextToItsLabel() {
+    ReportSpec spec = spec(List.of(Dimension.PAYEE), List.of(Dimension.DATE), List.of(NATIVE_NET));
+    Cell mixed = new Cell.Illegal(Cell.Reason.MULTI_CURRENCY);
+    ReportGrid grid =
+        grid(
+            List.of(
+                new AxisNode("1", "ShopAaa"),
+                new AxisNode("2", "ShopBbb"),
+                new AxisNode("none", "(No payee)")),
+            List.of(new AxisNode("2026-01", "Jan 2026"), new AxisNode("2026-02", "Feb 2026")),
+            List.of(
+                List.of(money("10", "CHF"), money("5", "CHF")),
+                List.of(money("3", "EUR"), money("2", "USD")),
+                List.of(Cell.BLANK, Cell.BLANK)),
+            List.of(money("15", "CHF"), mixed, Cell.BLANK),
+            List.of(mixed, mixed),
+            mixed);
+
+    // ShopBbb's figures are in two currencies, so no one code names them.
+    assertThat(ReportCsv.write(spec, grid))
+        .isEqualTo(
+            "Payee,Currency,2026-01,2026-02,Total\r\n"
+                + "ShopAaa,CHF,10.00,5.00,15.00\r\n"
+                + "ShopBbb,—,3.00,2.00,—\r\n"
+                + "(No payee),,,,\r\n"
+                + "Total,,—,—,—\r\n");
+  }
+
+  @Test
+  void nativeMeasureAddsEachColumnsCurrencyUnderTheHeaderWhenTheDimensionIsOnColumns() {
+    ReportSpec spec =
+        spec(List.of(Dimension.DATE), List.of(Dimension.CATEGORY), List.of(BASE_NET, NATIVE_NET));
+    ReportGrid grid =
+        grid(
+            List.of(new AxisNode("2026-01", "Jan 2026")),
+            List.of(
+                new AxisNode("7|" + ReportGridBuilder.measureKey(BASE_NET), "Food — Turnover"),
+                new AxisNode(
+                    "7|" + ReportGridBuilder.measureKey(NATIVE_NET), "Food — Turnover (native)")),
+            List.of(List.of(eur("9"), money("10", "CHF"))),
+            List.of(),
+            List.of(),
+            Cell.BLANK);
+
+    assertThat(ReportCsv.write(spec, grid))
+        .isEqualTo(
+            "Date,Food — Turnover,Food — Turnover (native)\r\n"
+                + "Currency,,CHF\r\n"
+                + "2026-01,9.00,10.00\r\n");
   }
 }

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import volkovandr.hauptbuch.shared.MoneyFactory;
 
 /**
@@ -18,54 +19,140 @@ final class ReportCsv {
   private static final String LINE_END = "\r\n";
   private static final String TOTAL = "Total";
   private static final String INDENT = "  ";
+  private static final String CURRENCY = "Currency";
 
   private ReportCsv() {}
 
-  /** {@code grid}, rendered from {@code spec}, as CSV text with CRLF line ends. */
+  /**
+   * {@code grid}, rendered from {@code spec}, as CSV text with CRLF line ends. With a native
+   * measure the figures' currency travels alongside them: a Currency column beside each row's
+   * label, or — when the columns carry the dimension — a Currency row beneath the header, holding
+   * the one currency of that row's or column's native figures, empty when it has none, and {@code
+   * —} when they span more than one.
+   */
   static String write(ReportSpec spec, ReportGrid grid) {
     if (grid.refusalMessage() != null && grid.rows().isEmpty()) {
       return field(grid.refusalMessage()) + LINE_END;
     }
-    boolean rowTotals = !grid.rowTotals().isEmpty();
+    Layout layout = new Layout(spec, !grid.rowTotals().isEmpty());
     List<List<String>> lines = new ArrayList<>();
-    lines.add(header(spec, grid, rowTotals));
+    lines.add(layout.header(grid));
+    if (layout.hasCurrencyRow()) {
+      lines.add(layout.currencyRow(grid));
+    }
     IntStream.range(0, grid.rows().size())
         .mapToObj(
             row ->
-                line(
+                layout.line(
                     rowLabel(spec, grid.rows().get(row)),
                     grid.cells().get(row),
-                    rowTotals ? grid.rowTotals().get(row) : null))
+                    layout.rowTotals() ? grid.rowTotals().get(row) : null))
         .forEach(lines::add);
     if (!grid.columnTotals().isEmpty()) {
-      lines.add(line(TOTAL, grid.columnTotals(), rowTotals ? grid.grandTotal() : null));
+      lines.add(
+          layout.line(TOTAL, grid.columnTotals(), layout.rowTotals() ? grid.grandTotal() : null));
     }
     return lines.stream()
         .map(line -> line.stream().map(ReportCsv::field).collect(Collectors.joining(",")))
         .collect(Collectors.joining(LINE_END, "", LINE_END));
   }
 
-  private static List<String> header(ReportSpec spec, ReportGrid grid, boolean rowTotals) {
-    List<String> header = new ArrayList<>();
-    header.add(rowHeader(spec));
-    List<AxisNode> columns = grid.columns();
-    IntStream.range(0, columns.size())
-        .forEach(i -> header.add(columnHeader(spec, columns.get(i), i)));
-    if (rowTotals) {
-      header.add(TOTAL);
+  /**
+   * Where a grid's figures go in the file.
+   *
+   * @param spec the Report
+   * @param rowTotals whether the grid shows a totals column
+   */
+  private record Layout(ReportSpec spec, boolean rowTotals) {
+
+    private boolean anyNative() {
+      return spec.measures().stream().anyMatch(m -> m.currency() == PresentationCurrency.ACCOUNT);
     }
-    return header;
+
+    /** Whether the columns carry the non-Date dimension, so its currencies run along a row. */
+    boolean hasCurrencyRow() {
+      return anyNative() && !spec.columns().isEmpty() && spec.columns().get(0) != Dimension.DATE;
+    }
+
+    private boolean currencyColumn() {
+      return anyNative() && !hasCurrencyRow();
+    }
+
+    /** Whether rendered column {@code index} — or the totals column, after the last — is native. */
+    private boolean isNative(int index) {
+      List<Measure> measures = spec.measures();
+      return measures.get(index % measures.size()).currency() == PresentationCurrency.ACCOUNT;
+    }
+
+    List<String> header(ReportGrid grid) {
+      List<String> header = new ArrayList<>();
+      header.add(rowHeader(spec));
+      if (currencyColumn()) {
+        header.add(CURRENCY);
+      }
+      List<AxisNode> columns = grid.columns();
+      IntStream.range(0, columns.size())
+          .forEach(i -> header.add(columnHeader(spec, columns.get(i), i)));
+      if (rowTotals) {
+        header.add(TOTAL);
+      }
+      return header;
+    }
+
+    /** Each native column's currency, down its figures and its total. */
+    List<String> currencyRow(ReportGrid grid) {
+      List<String> line = new ArrayList<>();
+      line.add(CURRENCY);
+      IntStream.range(0, grid.columns().size())
+          .forEach(
+              column ->
+                  line.add(
+                      isNative(column)
+                          ? currencyOf(
+                              Stream.concat(
+                                  grid.cells().stream().map(cells -> cells.get(column)),
+                                  grid.columnTotals().stream().skip(column).limit(1)))
+                          : ""));
+      if (rowTotals) {
+        line.add(
+            isNative(0)
+                ? currencyOf(Stream.concat(grid.rowTotals().stream(), Stream.of(grid.grandTotal())))
+                : "");
+      }
+      return line;
+    }
+
+    /** One line: its label, its currency, its figures, and its total when shown ({@code null}). */
+    List<String> line(String label, List<Cell> cells, Cell total) {
+      List<String> line = new ArrayList<>();
+      line.add(label);
+      if (currencyColumn()) {
+        line.add(
+            currencyOf(
+                Stream.concat(
+                    IntStream.range(0, cells.size()).filter(this::isNative).mapToObj(cells::get),
+                    total != null && isNative(0) ? Stream.of(total) : Stream.empty())));
+      }
+      cells.forEach(cell -> line.add(value(cell)));
+      if (total != null) {
+        line.add(value(total));
+      }
+      return line;
+    }
   }
 
-  /** One line: its label, its figures, and its total when the grid shows one ({@code null}). */
-  private static List<String> line(String label, List<Cell> cells, Cell total) {
-    List<String> line = new ArrayList<>();
-    line.add(label);
-    cells.forEach(cell -> line.add(value(cell)));
-    if (total != null) {
-      line.add(value(total));
+  /** The one currency of {@code figures}' values; empty for none, {@code —} for several. */
+  private static String currencyOf(Stream<Cell> figures) {
+    List<String> currencies =
+        figures
+            .filter(cell -> cell instanceof Cell.Value)
+            .map(cell -> ((Cell.Value) cell).currencyCode())
+            .distinct()
+            .toList();
+    if (currencies.size() > 1) {
+      return "—";
     }
-    return line;
+    return currencies.isEmpty() ? "" : currencies.get(0);
   }
 
   /** The row axis's dimensions, a nested pair joined as its raw labels are. */
