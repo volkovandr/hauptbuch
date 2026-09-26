@@ -2,8 +2,9 @@
 <!--
   One Report figure's drill-down (reporting.md §12, ReportDrillDownController): the postings behind
   it, owned by reporting but drawn with the register's own row (fragments/register-row), so it
-  reads exactly like the register. Its Balance column is the running figure — starting from zero
-  and ending, on the bottom row, on the figure itself (the list scrolls to the bottom on load, like
+  reads exactly like the register. Its Balance column is the running figure — starting from zero,
+  or for a closing balance from an opening-balance line (what the accounts held before the cell's
+  period), and ending, on the bottom row, on the figure itself (the list scrolls to the bottom on load, like
   the register). Each row's pencil hands off to the register rather than to an entry dock: this
   page has none.
 -->
@@ -21,11 +22,11 @@
         <span class="num" th:text="${drill.figure().text()}">50,50</span>
       </h1>
 
-      <p class="muted" th:if="${#lists.isEmpty(drill.rows())}">
+      <p class="muted" th:if="${drill.opening() == null and #lists.isEmpty(drill.rows())}">
         No postings stand behind this figure.
       </p>
 
-      <div class="register-scroll" data-scroll-bottom th:unless="${#lists.isEmpty(drill.rows())}">
+      <div class="register-scroll" data-scroll-bottom th:unless="${drill.opening() == null and #lists.isEmpty(drill.rows())}">
         <table class="register">
           <thead>
             <tr>
@@ -42,6 +43,19 @@
             </tr>
           </thead>
           <tbody data-kbd-list>
+            <tr class="register__row report__drill-opening" th:if="${drill.opening() != null}">
+              <td class="register__spine"></td>
+              <td class="register__date num" th:text="${drill.opening().date()}">2026-02-01</td>
+              <td colspan="4">Opening balance</td>
+              <td
+                class="register__balance num"
+                th:classappend="${drill.opening().negative()} ? 'num--credit'"
+                th:text="${drill.opening().running()}"
+              >
+                980,00
+              </td>
+              <td class="register__status"></td>
+            </tr>
             <th:block th:each="r : ${drill.rows()}">
               <tr th:replace="~{fragments/register-row :: row(${r}, true)}"></tr>
             </th:block>

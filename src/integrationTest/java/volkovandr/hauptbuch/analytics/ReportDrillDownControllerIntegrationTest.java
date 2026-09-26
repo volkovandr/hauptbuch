@@ -141,6 +141,49 @@ class ReportDrillDownControllerIntegrationTest {
   }
 
   @Test
+  void closingBalanceListOpensOnWhatTheAccountHeldBeforeThePeriod() throws Exception {
+    settingsService.setBaseCurrency("EUR");
+    long cash = insertAccount("Cash", "asset");
+    long salary = insertAccount("Salary", "income");
+    long food = insertAccount("Food", "expense");
+    spend(salary, cash, LocalDate.of(2025, 12, 20), "1000.00"); // Cash +1000 before the range
+    long lunch = spend(cash, food, LocalDate.of(2026, 1, 15), "20.00");
+    ReportSpec januaryBalances =
+        new ReportSpec(
+            List.of(Dimension.ACCOUNT),
+            List.of(Dimension.DATE),
+            List.of(),
+            List.of(Measure.closingBalance(PresentationCurrency.BASE)),
+            Scope.ofTypes("asset"),
+            List.of(),
+            new DateRange(
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 1)),
+                new RangeEndpoint.Literal(LocalDate.of(2026, 1, 31))),
+            true,
+            true,
+            true);
+
+    String page =
+        mockMvc
+            .perform(
+                get(CELL_PATH)
+                    .params(ReportSpecQueryString.toParams(januaryBalances))
+                    .param("cell", "0/" + cash + "/2026-01"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString()
+            .replaceAll("\\s+", " ");
+
+    // The opening line comes first, then the period's one posting, closing on the figure.
+    assertThat(page)
+        .contains("Opening balance")
+        .contains("2026-01-01")
+        .contains("/register?selected=" + lunch)
+        .containsSubsequence(">1.000,00<", ">980,00<");
+  }
+
+  @Test
   void malformedCellIsBadRequest() throws Exception {
     settingsService.setBaseCurrency("EUR");
 

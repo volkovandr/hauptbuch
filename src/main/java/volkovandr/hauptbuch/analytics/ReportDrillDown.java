@@ -4,7 +4,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.IntStream;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.analytics.repository.PostingValue;
 import volkovandr.hauptbuch.analytics.repository.PostingValueRepository;
@@ -20,18 +19,23 @@ import volkovandr.hauptbuch.analytics.repository.PostingValueRepository;
  * {@link ReportGridBuilder} sums them. So the list is the figure's postings by construction, across
  * every dimension, filter, promoted node and nesting the engine knows.
  *
- * <p>Closing-balance figures are not drilled yet (plan slice f, work package f2): their list is
- * empty.
+ * <p>A closing-balance figure's list is {@link ClosingBalanceDrillDown}'s: an opening-balance line,
+ * then the postings inside the cell's period.
  */
 @Service
 class ReportDrillDown {
 
   private final ReportEngine engine;
   private final PostingValueRepository postingValueRepository;
+  private final ClosingBalanceDrillDown closingBalanceDrillDown;
 
-  ReportDrillDown(ReportEngine engine, PostingValueRepository postingValueRepository) {
+  ReportDrillDown(
+      ReportEngine engine,
+      PostingValueRepository postingValueRepository,
+      ClosingBalanceDrillDown closingBalanceDrillDown) {
     this.engine = engine;
     this.postingValueRepository = postingValueRepository;
+    this.closingBalanceDrillDown = closingBalanceDrillDown;
   }
 
   /** {@code address}'s drill-down in {@code spec}, rendered as of today. */
@@ -50,12 +54,19 @@ class ReportDrillDown {
     ReportGrid grid = source.grid();
     Measure measure = spec.measures().get(address.measureIndex());
     Cell figure = address.figureOn(spec, grid);
-    List<DrillDown.Row> rows =
-        source.cellContext() != null && DrillDown.isDrillable(figure, measure)
-            ? listRows(source, address, measure)
-            : List.of();
+    String rowLabel = address.rowLabelOn(grid);
+    String columnLabel = address.columnLabelOn(spec, grid);
+    if (source.cellContext() == null || !DrillDown.isDrillable(figure)) {
+      return new DrillDown(rowLabel, columnLabel, measure, figure, List.of());
+    }
+    if (measure.kind() == MeasureKind.CLOSING_BALANCE) {
+      ClosingBalanceDrillDown.Listing listing =
+          closingBalanceDrillDown.list(source, address, measure);
+      return new DrillDown(
+          rowLabel, columnLabel, measure, figure, listing.opening(), listing.rows());
+    }
     return new DrillDown(
-        address.rowLabelOn(grid), address.columnLabelOn(spec, grid), measure, figure, rows);
+        rowLabel, columnLabel, measure, figure, listRows(source, address, measure));
   }
 
   private List<DrillDown.Row> listRows(DrillSource source, CellAddress address, Measure measure) {
@@ -65,17 +76,7 @@ class ReportDrillDown {
     List<PostingValue> values =
         postingValueRepository.postingValues(
             List.copyOf(membershipsByPosting.keySet()), baseCurrency);
-    // A posting in two of a total's cells is listed once per cell, as the total counts it.
-    List<RunningColumn.Entry> entries =
-        values.stream()
-            .flatMap(
-                value ->
-                    membershipsByPosting.get(value.postingId()).stream()
-                        .map(m -> new RunningColumn.Entry(value, m.creditNatural(), m.addend())))
-            .toList();
-    List<Cell> running = RunningColumn.of(measure, baseCurrency, entries);
-    return IntStream.range(0, entries.size())
-        .mapToObj(i -> new DrillDown.Row(entries.get(i).posting(), running.get(i)))
-        .toList();
+    List<RunningColumn.Entry> entries = RunningColumn.entries(values, membershipsByPosting);
+    return DrillDown.rows(entries, RunningColumn.of(measure, baseCurrency, entries));
   }
 }

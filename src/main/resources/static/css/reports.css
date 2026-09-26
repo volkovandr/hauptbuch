@@ -114,6 +114,11 @@ table.report td:first-child .help__text {
   margin-bottom: 0.5rem;
 }
 
+/* A closing balance's opening-balance line: not a posting, so it reads as a label, not a row. */
+.report__drill-opening td {
+  font-style: italic;
+}
+
 /* Chart renderer (reporting.md §10): small multiples stack; each panel's SVG is intrinsically
    sized by its viewBox, so it only needs a max-width to stay legible on a phone. */
 .chart-panels {

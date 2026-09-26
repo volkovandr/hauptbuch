@@ -42,12 +42,9 @@ class CellValuation {
       return countCellValue(
           turnoverMatches(measure, rowNode, columnBucketNode, context), measure.kind());
     }
-    return computeClosingBalanceCell(
-        measure,
-        rowNode,
-        columnBucketNode,
-        dimensionKey(rowNode, columnBucketNode, context),
-        context);
+    BalanceMatches matches = balanceMatches(rowNode, columnBucketNode, context);
+    return balanceCellValue(
+        matches.cells(), measure, context.baseCurrency(), matches.asOf(), matches.creditNatural());
   }
 
   /** The key of the non-Date dimension's node a cell sits in, or the plain-total sentinel. */
@@ -69,24 +66,28 @@ class CellValuation {
     return isCreditNaturalType(turnoverDimensionType(matches), scope);
   }
 
-  private Cell computeClosingBalanceCell(
-      Measure measure,
-      AxisNode rowNode,
-      AxisNode columnBucketNode,
-      String dimKey,
-      CellContext context) {
+  /**
+   * The raw closing-balance groups one closing-balance cell sums, with the period they were read
+   * over — shared with the drill-down (§12), whose list opens on these groups.
+   */
+  static BalanceMatches balanceMatches(
+      AxisNode rowNode, AxisNode columnBucketNode, CellContext context) {
     AxisPlan axes = context.axes();
     String bucketKey =
         axes.dateOnRows()
             ? rowNode.key()
             : axes.dateOnColumns() ? columnBucketNode.key() : AxisNode.TOTAL_KEY;
-    List<RawBalanceCell> raw =
-        context.data().balanceByBucketKey().getOrDefault(bucketKey, List.of());
-    LocalDate asOf = context.data().asOfByBucketKey().get(bucketKey);
+    String dimKey = dimensionKey(rowNode, columnBucketNode, context);
+    GridData data = context.data();
     List<RawBalanceCell> matches =
-        raw.stream().filter(c -> c.dimensionKey().equals(dimKey)).toList();
-    boolean creditNatural = isCreditNaturalType(balanceDimensionType(matches), context.scope());
-    return balanceCellValue(matches, measure, context.baseCurrency(), asOf, creditNatural);
+        data.balanceByBucketKey().getOrDefault(bucketKey, List.of()).stream()
+            .filter(c -> c.dimensionKey().equals(dimKey))
+            .toList();
+    return new BalanceMatches(
+        matches,
+        data.asOfByBucketKey().get(bucketKey),
+        data.periodStartByBucketKey().get(bucketKey),
+        isCreditNaturalType(balanceDimensionType(matches), context.scope()));
   }
 
   private static String turnoverDimensionType(List<RawTurnoverCell> matches) {
@@ -233,6 +234,17 @@ class CellValuation {
     }
     return new Cell.Value(creditNatural ? total.negate() : total, baseCurrency);
   }
+
+  /**
+   * One closing-balance cell's raw groups.
+   *
+   * @param cells the groups, one per currency
+   * @param asOf the date the balance stands at and is valued at
+   * @param periodStart the first day of the cell's period
+   * @param creditNatural whether the cell displays sign-flipped (data-model §4.1)
+   */
+  record BalanceMatches(
+      List<RawBalanceCell> cells, LocalDate asOf, LocalDate periodStart, boolean creditNatural) {}
 
   /** Everything {@link #compute} needs, bundled to keep its parameter list short. */
   record CellContext(

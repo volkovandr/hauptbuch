@@ -37,17 +37,52 @@ record DrillSource(
    * of exactly the raw groups {@link CellValuation} matched for it, flipped as that cell displays.
    */
   Map<Long, List<Membership>> postingsBehind(CellAddress address, Measure measure) {
+    List<Addend> addends = addends(address);
+    return byPosting(
+        IntStream.range(0, addends.size())
+            .boxed()
+            .flatMap(i -> memberships(i, addends.get(i), measure)));
+  }
+
+  /**
+   * The in-period postings of the closing-balance groups {@link #balancesBehind} returned, each
+   * with the body cell it sits in, flipped as that cell displays.
+   */
+  static Map<Long, List<Membership>> balancePostingsBehind(
+      List<CellValuation.BalanceMatches> addends) {
+    return byPosting(
+        IntStream.range(0, addends.size())
+            .boxed()
+            .flatMap(
+                i ->
+                    addends.get(i).cells().stream()
+                        .flatMap(group -> group.postingIds().stream())
+                        .map(id -> new Membership(id, i, addends.get(i).creditNatural()))));
+  }
+
+  private static Map<Long, List<Membership>> byPosting(Stream<Membership> memberships) {
+    return memberships.collect(
+        Collectors.groupingBy(Membership::postingId, LinkedHashMap::new, Collectors.toList()));
+  }
+
+  /**
+   * The balance groups behind the closing-balance figure at {@code address}, one per body cell it
+   * sums, as {@link CellValuation} matched them for that cell. A legal closing-balance total never
+   * adds across time (§5.2), so every body cell shares one period.
+   */
+  List<CellValuation.BalanceMatches> balancesBehind(CellAddress address) {
+    return addends(address).stream()
+        .map(addend -> CellValuation.balanceMatches(addend.row(), addend.column(), cellContext))
+        .toList();
+  }
+
+  /** The body cells the figure at {@code address} sums: one for a body cell, many for a total. */
+  private List<Addend> addends(CellAddress address) {
     List<AxisNode> rows = nodes(rowNodes, address.rowKey());
     List<AxisNode> columns = nodes(columnBucketNodes, address.columnKey());
-    List<Addend> addends =
-        rows.stream()
-            .flatMap(row -> columns.stream().map(column -> new Addend(row, column)))
-            .toList();
-    return IntStream.range(0, addends.size())
-        .boxed()
-        .flatMap(i -> memberships(i, addends.get(i), measure))
-        .collect(
-            Collectors.groupingBy(Membership::postingId, LinkedHashMap::new, Collectors.toList()));
+    return rows.stream()
+        .flatMap(row -> columns.stream().map(column -> new Addend(row, column)))
+        .toList();
   }
 
   private Stream<Membership> memberships(int index, Addend addend, Measure measure) {

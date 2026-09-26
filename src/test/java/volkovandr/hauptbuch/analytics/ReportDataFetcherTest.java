@@ -27,6 +27,8 @@ import volkovandr.hauptbuch.analytics.repository.ReportQueryRepository;
  */
 class ReportDataFetcherTest {
 
+  private static final QueryConstraints JANUARY_PERIOD =
+      QueryConstraints.NONE.withPeriodStart(LocalDate.of(2026, 1, 1));
   private static final LocalDate TODAY = LocalDate.of(2026, 9, 12);
   private static final List<String> ASSET = List.of("asset");
 
@@ -217,8 +219,13 @@ class ReportDataFetcherTest {
 
     verify(queryRepository)
         .accountTreeClosingBalance(
-            List.of("asset"), LocalDate.of(2026, 1, 31), true, false, QueryConstraints.NONE);
+            List.of("asset"),
+            LocalDate.of(2026, 1, 31),
+            true,
+            false,
+            QueryConstraints.NONE.withPeriodStart(LocalDate.of(2026, 1, 31)));
     assertThat(data.balanceByBucketKey()).containsOnlyKeys("total");
+    assertThat(data.periodStartByBucketKey()).containsEntry("total", LocalDate.of(2026, 1, 31));
   }
 
   @Test
@@ -234,7 +241,11 @@ class ReportDataFetcherTest {
 
     verify(queryRepository)
         .accountTreeClosingBalance(
-            List.of("asset"), LocalDate.of(2026, 1, 31), true, true, QueryConstraints.NONE);
+            List.of("asset"),
+            LocalDate.of(2026, 1, 31),
+            true,
+            true,
+            QueryConstraints.NONE.withPeriodStart(LocalDate.of(2026, 1, 31)));
   }
 
   @Test
@@ -244,7 +255,7 @@ class ReportDataFetcherTest {
         .thenReturn(List.of(new RawBalanceCell("1", "Cash", "asset", "EUR", BigDecimal.TEN)));
     // The report's range ends mid-January (the 20th); the bucket's calendar month runs through the
     // 31st, but the as-of date must respect the report's own clipped range end (reporting.md §8.2),
-    // not the full month.
+    // not the full month — and its period starts at the range's start, the 10th.
     List<DateBucket> buckets =
         DateBucket.bucketsBetween(
             DateGranularity.MONTH, LocalDate.of(2026, 1, 10), LocalDate.of(2026, 1, 20));
@@ -259,7 +270,11 @@ class ReportDataFetcherTest {
 
     verify(queryRepository)
         .accountTreeClosingBalance(
-            List.of("asset"), LocalDate.of(2026, 1, 20), true, false, QueryConstraints.NONE);
+            List.of("asset"),
+            LocalDate.of(2026, 1, 20),
+            true,
+            false,
+            QueryConstraints.NONE.withPeriodStart(LocalDate.of(2026, 1, 10)));
   }
 
   @Test
@@ -282,7 +297,12 @@ class ReportDataFetcherTest {
     // The bucket runs through 30 Sep, but TODAY is only the 12th — the as-of date must not run
     // ahead of today (reporting.md §8.2).
     verify(queryRepository)
-        .accountTreeClosingBalance(List.of("asset"), TODAY, true, false, QueryConstraints.NONE);
+        .accountTreeClosingBalance(
+            List.of("asset"),
+            TODAY,
+            true,
+            false,
+            QueryConstraints.NONE.withPeriodStart(LocalDate.of(2026, 9, 1)));
   }
 
   // ── fetchGridData at an explicit granularity (a Date row's days, §9.1, stage e4b) ─────────
@@ -415,10 +435,8 @@ class ReportDataFetcherTest {
     fetchExpanded(closingBalanceSpec(false, false), "personal|person:7");
 
     verify(queryRepository)
-        .debtPeopleClosingBalance(
-            ASSET, LocalDate.of(2026, 1, 31), true, false, QueryConstraints.NONE);
+        .debtPeopleClosingBalance(ASSET, LocalDate.of(2026, 1, 31), true, false, JANUARY_PERIOD);
     verify(queryRepository)
-        .debtLeafClosingBalance(
-            7L, ASSET, LocalDate.of(2026, 1, 31), true, false, QueryConstraints.NONE);
+        .debtLeafClosingBalance(7L, ASSET, LocalDate.of(2026, 1, 31), true, false, JANUARY_PERIOD);
   }
 }

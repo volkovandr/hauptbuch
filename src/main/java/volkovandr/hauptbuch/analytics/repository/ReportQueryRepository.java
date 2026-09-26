@@ -325,6 +325,32 @@ public class ReportQueryRepository {
               rs.getLong("transaction_count"),
               postingIds(rs));
 
+  /**
+   * Every closing-balance query's aggregates: the native balance and, for a drill-down (§12), the
+   * ids of the postings inside the cell's period — dated {@code :periodStart} or later — whose sum
+   * the list's opening-balance line is the rest of.
+   */
+  private static final String BALANCE_AGGREGATES =
+      """
+      sum(p.amount) as native_balance,
+             coalesce(array_agg(p.posting_id)
+               filter (where :collectPostingIds and t.date >= :periodStart), '{}') as posting_ids
+      """;
+
+  /**
+   * Every closing-balance query's row mapper; spelled out for the reason {@link #RAW_TURNOVER_CELL}
+   * is.
+   */
+  private static final RowMapper<RawBalanceCell> RAW_BALANCE_CELL =
+      (rs, rowNum) ->
+          new RawBalanceCell(
+              rs.getString("dimension_key"),
+              rs.getString("dimension_label"),
+              rs.getString("dimension_type"),
+              rs.getString("currency_code"),
+              rs.getBigDecimal("native_balance"),
+              postingIds(rs));
+
   private final JdbcClient jdbcClient;
 
   ReportQueryRepository(JdbcClient jdbcClient) {
@@ -443,7 +469,9 @@ public class ReportQueryRepository {
                 + " as dimension_type,\n"
                 + """
                        a.currency_code as currency_code,
-                       sum(p.amount) as native_balance
+                """
+                + BALANCE_AGGREGATES
+                + """
                 from posting p
                 join transaction t on t.transaction_id = p.transaction_id
                 join account a on a.account_id = p.account_id
@@ -465,7 +493,7 @@ public class ReportQueryRepository {
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
         .params(extra.params())
-        .query(RawBalanceCell.class)
+        .query(RAW_BALANCE_CELL)
         .list();
   }
 
@@ -623,7 +651,9 @@ public class ReportQueryRepository {
                        top.name as dimension_label,
                        top.type as dimension_type,
                        a.currency_code as currency_code,
-                       sum(p.amount) as native_balance
+                """
+                + BALANCE_AGGREGATES
+                + """
                 from posting p
                 join transaction t on t.transaction_id = p.transaction_id
                 join account a on a.account_id = p.account_id
@@ -646,7 +676,7 @@ public class ReportQueryRepository {
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
         .params(extra.params())
-        .query(RawBalanceCell.class)
+        .query(RAW_BALANCE_CELL)
         .list();
   }
 
@@ -1177,7 +1207,7 @@ public class ReportQueryRepository {
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
         .params(extra.params())
-        .query(RawBalanceCell.class)
+        .query(RAW_BALANCE_CELL)
         .list();
   }
 
@@ -1294,7 +1324,7 @@ public class ReportQueryRepository {
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
         .params(extra.params())
-        .query(RawBalanceCell.class)
+        .query(RAW_BALANCE_CELL)
         .list();
   }
 
@@ -1351,7 +1381,7 @@ public class ReportQueryRepository {
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
         .params(extra.params())
-        .query(RawBalanceCell.class)
+        .query(RAW_BALANCE_CELL)
         .list();
   }
 
@@ -1393,8 +1423,8 @@ public class ReportQueryRepository {
     return debtColumns(keyExpr, labelExpr)
         + """
         a.currency_code as currency_code,
-               sum(p.amount) as native_balance
         """
+        + BALANCE_AGGREGATES
         + DEBT_LEAF_JOINS
         + """
         where a.type in (:types)
@@ -1508,7 +1538,9 @@ public class ReportQueryRepository {
                    a.currency_code as dimension_label,
                    cast(null as text) as dimension_type,
                    a.currency_code as currency_code,
-                   sum(p.amount) as native_balance
+            """
+                + BALANCE_AGGREGATES
+                + """
             from posting p
             join transaction t on t.transaction_id = p.transaction_id
             join account a on a.account_id = p.account_id
@@ -1528,7 +1560,7 @@ public class ReportQueryRepository {
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
         .params(extra.params())
-        .query(RawBalanceCell.class)
+        .query(RAW_BALANCE_CELL)
         .list();
   }
 
@@ -1647,7 +1679,9 @@ public class ReportQueryRepository {
                    a.type as dimension_label,
                    a.type as dimension_type,
                    a.currency_code as currency_code,
-                   sum(p.amount) as native_balance
+            """
+                + BALANCE_AGGREGATES
+                + """
             from posting p
             join transaction t on t.transaction_id = p.transaction_id
             join account a on a.account_id = p.account_id
@@ -1667,7 +1701,7 @@ public class ReportQueryRepository {
         .param(INCLUDE_CLOSED, includeClosedAccounts)
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
         .params(extra.params())
-        .query(RawBalanceCell.class)
+        .query(RAW_BALANCE_CELL)
         .list();
   }
 
@@ -1773,7 +1807,9 @@ public class ReportQueryRepository {
                    'Total' as dimension_label,
                    cast(null as text) as dimension_type,
                    a.currency_code as currency_code,
-                   sum(p.amount) as native_balance
+            """
+                + BALANCE_AGGREGATES
+                + """
             from posting p
             join transaction t on t.transaction_id = p.transaction_id
             join account a on a.account_id = p.account_id
@@ -1793,7 +1829,7 @@ public class ReportQueryRepository {
         .param(INCLUDE_PENDING_REVIEW, includePendingReview)
         .param(AS_OF, asOf)
         .params(extra.params())
-        .query(RawBalanceCell.class)
+        .query(RAW_BALANCE_CELL)
         .list();
   }
 
@@ -1892,6 +1928,7 @@ public class ReportQueryRepository {
     params.put(PROMOTED_ACCOUNT_IDS, orNoMatch(constraints.promotedAccountIds()));
     params.put(PROMOTED_TAG_IDS, orNoMatch(constraints.promotedTagIds()));
     params.put("collectPostingIds", constraints.collectPostingIds());
+    params.put("periodStart", constraints.periodStart());
     StringBuilder sql = new StringBuilder(128);
     List<ReportFilter> filters = constraints.filters();
     for (int i = 0; i < filters.size(); i++) {

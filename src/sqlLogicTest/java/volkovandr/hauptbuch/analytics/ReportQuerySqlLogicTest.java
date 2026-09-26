@@ -275,6 +275,37 @@ class ReportQuerySqlLogicTest {
   }
 
   @Test
+  void collectsTheIdsOfEachBalanceGroupsPostingsFromThePeriodStartOnly() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+    long before = insertTransaction(LocalDate.of(2026, 1, 31), false, false);
+    insertPosting(before, cash, "100.00", null);
+    insertPosting(before, food, "-100.00", null);
+    long first = insertTransaction(LocalDate.of(2026, 2, 1), false, false);
+    final long firstCash = insertPosting(first, cash, "-20.00", null);
+    insertPosting(first, food, "20.00", null);
+    long after = insertTransaction(LocalDate.of(2026, 3, 1), false, false);
+    insertPosting(after, cash, "-5.00", null);
+    insertPosting(after, food, "5.00", null);
+
+    List<RawBalanceCell> collected =
+        repository.accountTreeClosingBalance(
+            List.of("asset"),
+            LocalDate.of(2026, 2, 28),
+            true,
+            false,
+            NONE.collectingPostingIds().withPeriodStart(LocalDate.of(2026, 2, 1)));
+    List<RawBalanceCell> plain =
+        repository.accountTreeClosingBalance(
+            List.of("asset"), LocalDate.of(2026, 2, 28), true, false, NONE);
+
+    // The balance still counts everything up to the as-of date; the ids only the period's.
+    amount(byLabel(collected, "Cash").nativeBalance(), "80.00");
+    assertThat(byLabel(collected, "Cash").postingIds()).containsExactly(firstCash);
+    assertThat(byLabel(plain, "Cash").postingIds()).isEmpty();
+  }
+
+  @Test
   void leavesPostingIdsEmptyUnlessAsked() {
     long cash = insertAccount("Cash", "asset", EUR, null);
     long food = insertAccount("Food", "expense", EUR, null);
