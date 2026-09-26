@@ -15,6 +15,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
+import volkovandr.hauptbuch.analytics.repository.PostingValue;
+import volkovandr.hauptbuch.analytics.repository.PostingValueRepository;
 import volkovandr.hauptbuch.analytics.repository.QueryConstraints;
 import volkovandr.hauptbuch.analytics.repository.RawBalanceCell;
 import volkovandr.hauptbuch.analytics.repository.RawTurnoverCell;
@@ -26,8 +28,9 @@ import volkovandr.hauptbuch.analytics.repository.TopLevelNode;
  * Covers every measure×currency variant, the leg selections, cross-currency valuation under the
  * turnover rule (data-model §6.1), the tag double-tag dedup (§10.3), the scope defaults
  * (reporting.md §6.4), every dimension in the catalogue (§4), the scope subtree restriction (§6.1)
- * and every filter field/level/operator combination (§6.2–§6.3). Boots Spring so the query under
- * test is the real repository SQL.
+ * and every filter field/level/operator combination (§6.2–§6.3) — plus {@link
+ * PostingValueRepository}, the drill-down list's valuation of the same postings (§12). Boots Spring
+ * so the query under test is the real repository SQL.
  *
  * <p>{@code posting.amount} is {@code numeric(19,4)}, so a summed result carries a different scale
  * than a hand-typed {@code "50.00"} literal — every amount assertion compares numerically ({@link
@@ -52,6 +55,7 @@ class ReportQuerySqlLogicTest {
 
   @Autowired JdbcClient jdbcClient;
   @Autowired ReportQueryRepository repository;
+  @Autowired PostingValueRepository postingValueRepository;
 
   @BeforeEach
   void setBaseCurrency() {
@@ -233,6 +237,109 @@ class ReportQuerySqlLogicTest {
 
   private static void amount(BigDecimal actual, String expected) {
     assertThat(actual).isEqualByComparingTo(new BigDecimal(expected));
+  }
+
+  // ── posting ids (the drill-down's posting set, reporting.md §12) ──────────
+
+  @Test
+  void collectsTheIdsOfThePostingsEachTurnoverGroupSumsWhenAsked() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+    long restaurants = insertAccount("Restaurants", "expense", EUR, food);
+    final long transport = insertAccount("Transport", "expense", EUR, null);
+    long lunch = insertTransaction(LocalDate.of(2026, 1, 15), false, false);
+    insertPosting(lunch, cash, "-20.00", null);
+    long lunchFood = insertPosting(lunch, food, "20.00", null);
+    long dinner = insertTransaction(LocalDate.of(2026, 1, 20), false, false);
+    insertPosting(dinner, cash, "-30.00", null);
+    long dinnerRestaurants = insertPosting(dinner, restaurants, "30.00", null);
+    long bus = insertTransaction(LocalDate.of(2026, 1, 21), false, false);
+    insertPosting(bus, cash, "-5.00", null);
+    long busTransport = insertPosting(bus, transport, "5.00", null);
+
+    List<RawTurnoverCell> cells =
+        repository.accountTreeTurnover(
+            INCOME_EXPENSE,
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            NONE.collectingPostingIds());
+
+    assertThat(byLabelAndMonth(cells, "Food", "2026-01").postingIds())
+        .containsExactlyInAnyOrder(lunchFood, dinnerRestaurants);
+    assertThat(byLabelAndMonth(cells, "Transport", "2026-01").postingIds())
+        .containsExactly(busTransport);
+  }
+
+  @Test
+  void leavesPostingIdsEmptyUnlessAsked() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    long food = insertAccount("Food", "expense", EUR, null);
+    postSingleCurrency(cash, food, LocalDate.of(2026, 1, 15), "20.00");
+
+    List<RawTurnoverCell> cells =
+        repository.accountTreeTurnover(
+            INCOME_EXPENSE,
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(2026, 1, 31),
+            EUR,
+            "NET",
+            true,
+            false,
+            NONE);
+
+    assertThat(byLabelAndMonth(cells, "Food", "2026-01").postingIds()).isEmpty();
+  }
+
+  @Test
+  void valuesEachPostingByTheTurnoverRuleInRegisterOrder() {
+    long cash = insertAccount("Cash", "asset", EUR, null);
+    final long cashChf = insertAccount("Cash-CHF", "asset", CHF, null);
+    final long food = insertAccount("Food", "expense", EUR, null);
+    final long foodChf = insertAccount("Food-CHF", "expense", CHF, null);
+    insertRate(CHF, LocalDate.of(2025, 12, 1), "0.90"); // carries forward to Jan 10th
+    insertRate(CHF, LocalDate.of(2026, 1, 15), "0.95");
+
+    long late = insertTransaction(LocalDate.of(2026, 1, 20), false, false);
+    insertPosting(late, cash, "-7.00", null);
+    long lateFood = insertPosting(late, food, "7.00", null);
+    long early = insertTransaction(LocalDate.of(2026, 1, 10), false, false);
+    insertPosting(early, cashChf, "-10.00", null);
+    long earlyFood = insertPosting(early, foodChf, "10.00", null);
+    long frozen = insertTransaction(LocalDate.of(2026, 1, 20), false, false);
+    insertPosting(frozen, cashChf, "-20.00", "-18.00");
+    long frozenFood = insertPosting(frozen, foodChf, "20.00", "18.00");
+
+    List<PostingValue> values =
+        postingValueRepository.postingValues(List.of(frozenFood, lateFood, earlyFood), EUR);
+
+    // (date, transaction, posting) — the register's own order; the two Jan 20th transactions keep
+    // their insertion order by id.
+    assertThat(values)
+        .extracting(PostingValue::postingId)
+        .containsExactly(earlyFood, lateFood, frozenFood);
+    amount(values.get(0).amount(), "10.00");
+    amount(values.get(0).baseAmount(), "9.00"); // the Dec 1st rate, carried forward
+    amount(values.get(1).baseAmount(), "7.00"); // base currency, valued at par
+    amount(values.get(2).baseAmount(), "18.00"); // frozen, never recomputed at 0.95
+    assertThat(values.get(0).transactionId()).isEqualTo(early);
+    assertThat(values.get(0).currencyCode()).isEqualTo(CHF);
+  }
+
+  @Test
+  void leavesBaseAmountNullWhenNoRateCoversThePostingDate() {
+    long cashChf = insertAccount("Cash-CHF", "asset", CHF, null);
+    long foodChf = insertAccount("Food-CHF", "expense", CHF, null);
+    long txn = insertTransaction(LocalDate.of(2026, 1, 10), false, false);
+    insertPosting(txn, cashChf, "-10.00", null);
+    long posting = insertPosting(txn, foodChf, "10.00", null);
+
+    List<PostingValue> values = postingValueRepository.postingValues(List.of(posting), EUR);
+
+    assertThat(values.get(0).baseAmount()).isNull();
   }
 
   // ── accountTreeTurnover ───────────────────────────────────────────────────

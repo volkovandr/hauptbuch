@@ -117,11 +117,16 @@ class RegisterRowRenderer {
       String personName) {
     String amount =
         MoneyFormat.display(MoneyFactory.of(row.amount(), row.currencyCode()), base(row));
-    String balance =
-        pending
-            ? "—"
-            : MoneyFormat.display(
-                MoneyFactory.of(row.runningBalance(), row.currencyCode()), base(row));
+    boolean threaded = row.runningBalance() != null;
+    String balance;
+    if (pending) {
+      balance = "—";
+    } else if (threaded) {
+      balance =
+          MoneyFormat.display(MoneyFactory.of(row.runningBalance(), row.currencyCode()), base(row));
+    } else {
+      balance = "";
+    }
     // A person's debt leg shows the owner's name with a direction arrow, not the cosmetic leaf name
     // (register §2.6, plan stage 8c). The arrow side is set by the leg's sign in the template.
     boolean accountPerson = personName != null;
@@ -138,7 +143,7 @@ class RegisterRowRenderer {
         amount,
         row.amount().signum() > 0,
         balance,
-        !pending && row.runningBalance().signum() < 0,
+        !pending && threaded && row.runningBalance().signum() < 0,
         pending,
         row.reconciliation(),
         tags,

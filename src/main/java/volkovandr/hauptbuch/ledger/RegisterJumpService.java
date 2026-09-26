@@ -4,17 +4,21 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
+import volkovandr.hauptbuch.ledger.repository.TransactionRepository;
 
 /**
  * The register's {@code selected=} jump (register §7, plan stage 9g) — what a committed receipt's
- * "Edit transaction" lands on. It derives the filter from the <em>transaction</em> rather than
- * reusing the last-used one, so the row it lands on is guaranteed visible: the transaction's
- * <em>funding</em> account is the viewed set and its date is the range's lower bound, left
- * open-ended upward so the row keeps its running-balance context below it.
+ * "Edit transaction" and a Report's drill-down list (reporting.md §12's handoff) land on. It
+ * derives the filter from the <em>transaction</em> rather than reusing the last-used one, so the
+ * row it lands on is guaranteed visible: the transaction's leading own account is the viewed set
+ * and its date is the range's lower bound, left open-ended upward so the row keeps its
+ * running-balance context below it.
  *
- * <p>The funding account is the biggest own leg — the account the money actually moved through,
- * which for a receipt is the one that paid. A receipt that also carries a transfer line (cashback
- * into savings, §13.4) therefore lands on the paying account's thread rather than opening both.
+ * <p>The leading own leg is the credited one, the biggest first — the account the money left: a
+ * receipt's paying account (so a receipt that also carries a transfer line, cashback into savings,
+ * §13.4, lands on the paying account's thread rather than opening both), a transfer's source. A
+ * transaction with no own leg at all (a category-to-category correction) opens every account from
+ * its date, since there is no one thread to pick.
  *
  * <p>Its own service rather than another method on {@link RegisterService}: this is one small,
  * self-contained derivation with nothing in common with assembling the screen.
@@ -23,9 +27,12 @@ import volkovandr.hauptbuch.ledger.repository.RegisterRepository;
 public class RegisterJumpService {
 
   private final RegisterRepository registerRepository;
+  private final TransactionRepository transactionRepository;
 
-  RegisterJumpService(RegisterRepository registerRepository) {
+  RegisterJumpService(
+      RegisterRepository registerRepository, TransactionRepository transactionRepository) {
     this.registerRepository = registerRepository;
+    this.transactionRepository = transactionRepository;
   }
 
   /**
@@ -36,15 +43,20 @@ public class RegisterJumpService {
    */
   public Optional<RegisterFilter> filterForTransaction(long transactionId) {
     List<RegisterOwnLeg> legs = registerRepository.findOwnLegs(transactionId);
-    if (legs.isEmpty()) {
-      return Optional.empty();
+    // The jump carries at most one explicit account id, so it lands on the All tab (issue
+    // transaction-register-ui/22 — an inbound link with explicit accounts and no picker opens on
+    // All); with none, All's whole membership is the view.
+    if (!legs.isEmpty()) {
+      RegisterOwnLeg leading = legs.get(0);
+      return Optional.of(
+          new RegisterFilter(
+              List.of(leading.accountId()), RegisterPicker.ALL, leading.date(), null, null));
     }
-    // The query orders by descending magnitude, so the first leg is the funding one. The jump
-    // carries one explicit account id, so it lands on the All tab (issue transaction-register-ui/22
-    // — an inbound link with explicit accounts and no picker opens on All).
-    RegisterOwnLeg funding = legs.get(0);
-    return Optional.of(
-        new RegisterFilter(
-            List.of(funding.accountId()), RegisterPicker.ALL, funding.date(), null, null));
+    return transactionRepository
+        .findById(transactionId)
+        .filter(transaction -> transaction.deletedAt() == null)
+        .map(
+            transaction ->
+                new RegisterFilter(List.of(), RegisterPicker.ALL, transaction.date(), null, null));
   }
 }

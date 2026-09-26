@@ -19,10 +19,34 @@
   Columns cannot be expanded by hand (§9.1), but `auto` can still expand a filtered node on the
   column axis. An expanded parent column (a subtotal over the columns after it) renders bold, and a
   nested column muted with a ↳ marker (reports.css), so the header shows the hierarchy.
+
+  The included fragment is `report`, not `table`: a fragment selector is also a markup selector, so
+  `:: table` would match the `grid` <table> element too and draw it twice.
+
+  Drill-down (reporting.md §12): with `report.drillParams()` set, the table sits in one plain GET
+  form to /reports/cell carrying the Report's spec once as hidden fields, and every figure that has
+  a posting set is a submit button naming its own `cell` — no per-cell URL repeating the spec.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
   <body>
-    <table class="report" th:fragment="table">
+    <th:block th:fragment="report">
+      <form
+        th:if="${report.drillParams() != null}"
+        class="report__drill-form"
+        method="get"
+        th:action="@{/reports/cell}"
+      >
+        <th:block
+          th:replace="~{fragments/report-actions :: hidden-fields(${report.drillParams()})}"
+        ></th:block>
+        <table th:replace="~{:: grid}"></table>
+      </form>
+      <th:block th:if="${report.drillParams() == null}">
+        <table th:replace="~{:: grid}"></table>
+      </th:block>
+    </th:block>
+
+    <table class="report" th:fragment="grid">
       <thead>
         <tr>
           <th></th>
@@ -69,13 +93,13 @@
             th:each="cell, cellStat : ${row.cells()}"
             th:classappend="${report.columns()[cellStat.index].parent()} ? 'report__col--parent'"
           >
-            <span th:text="${cell.text()}">0,00</span>
+            <span th:replace="~{:: figure(${cell})}">0,00</span>
             <span th:if="${cell.help() != null}">
               <span th:replace="~{fragments/help-marker :: marker(${cell.help()})}"></span>
             </span>
           </td>
           <td class="num" th:if="${report.showRowTotals()}">
-            <span th:text="${row.rowTotal().text()}">0,00</span>
+            <span th:replace="~{:: figure(${row.rowTotal()})}">0,00</span>
             <span th:if="${row.rowTotal().help() != null}">
               <span
                 th:replace="~{fragments/help-marker :: marker(${row.rowTotal().help()})}"
@@ -88,13 +112,13 @@
         <tr>
           <td>Total</td>
           <td class="num" th:each="total : ${report.columnTotals()}">
-            <span th:text="${total.text()}">0,00</span>
+            <span th:replace="~{:: figure(${total})}">0,00</span>
             <span th:if="${total.help() != null}">
               <span th:replace="~{fragments/help-marker :: marker(${total.help()})}"></span>
             </span>
           </td>
           <td class="num" th:if="${report.showRowTotals()}">
-            <span th:text="${report.grandTotal().text()}">0,00</span>
+            <span th:replace="~{:: figure(${report.grandTotal()})}">0,00</span>
             <span th:if="${report.grandTotal().help() != null}">
               <span
                 th:replace="~{fragments/help-marker :: marker(${report.grandTotal().help()})}"
@@ -104,5 +128,18 @@
         </tr>
       </tfoot>
     </table>
+
+    <!-- One figure's text: a submit button opening its drill-down when it has one, else plain. -->
+    <th:block th:fragment="figure(figure)">
+      <button
+        th:if="${figure.drill() != null}"
+        type="submit"
+        class="report__drill"
+        name="cell"
+        th:value="${figure.drill()}"
+        th:text="${figure.text()}"
+      >0,00</button>
+      <span th:if="${figure.drill() == null}" th:text="${figure.text()}">0,00</span>
+    </th:block>
   </body>
 </html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<!--
+  One register row (register §2.4–§2.10): a RegisterRowView, already formatted. Shared by the
+  register itself and a Report's drill-down list (reporting.md §12), so the two cannot drift.
+
+  `handoff` picks the edit affordance: false on the register, where the pencil loads the row into
+  the entry dock; true on the drill-down list, which has no dock, so the pencil links to the
+  register's selected= jump instead.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <table>
+      <tbody>
+        <tr
+          th:fragment="row(r, handoff)"
+          class="register__row"
+          data-kbd-row
+          th:attr="data-transaction-id=${r.transactionId()}"
+          tabindex="-1"
+          th:classappend="(${r.pending()} ? 'register__row--pending ' : '')
+            + (${selectedTransactionId != null and r.transactionId() == selectedTransactionId}
+                 ? 'row--selected' : '')"
+          th:style="${r.accountHue() != null}
+            ? (${r.zebraDark()}
+                ? |background: hsl(${r.accountHue()} 40% 90%)|
+                : |background: hsl(${r.accountHue()} 38% 95%)|)"
+        >
+          <td
+            class="register__spine"
+            th:style="${r.accountHue() != null} ? |background: hsl(${r.accountHue()} 55% 78%)|"
+          ></td>
+          <td class="register__date num" th:text="${r.date()}">2026-01-01</td>
+          <!-- Account cell (register §2.6): a real account is a bare name; a person's debt leg
+               carries a trailing arrow (the column's inner edge), the glyph carrying the flow —
+               Name ← on a debit (income), Name → on a credit. -->
+          <td class="register__account" th:style="${r.accountHue() != null} ? |color: hsl(${r.accountHue()} 55% 25%)|">
+            <th:block th:if="${r.accountPerson()}"
+              ><span th:text="${r.accountName()}">Max</span
+              ><span th:if="${r.income()}" aria-hidden="true">&nbsp;←</span
+              ><span th:unless="${r.income()}" aria-hidden="true">&nbsp;→</span
+            ></th:block>
+            <span th:unless="${r.accountPerson()}" th:text="${r.accountName()}">Cash</span>
+          </td>
+          <td class="register__payee" th:text="${r.payeeName()}">Rewe</td>
+          <td class="register__category">
+            <!-- A counterpart chip (register §2.6): a plain category is a bare name; a leg that
+                 names an account — a transfer to another own account, or a person's debt leg —
+                 carries a leading arrow (the column's inner edge), the glyph carrying the flow
+                 (← from it / → to it). -->
+            <span
+              th:each="chip, i : ${r.category().chips()}"
+              class="cat-chip"
+              th:classappend="${chip.transfer()} ? 'cat-chip--transfer' : (${chip.person()} ? 'cat-chip--person' : '')"
+            >
+              <span
+                th:if="${chip.transfer() or chip.person()}"
+                aria-hidden="true"
+                th:text="${chip.inbound()} ? '← ' : '→ '"
+                >→ </span
+              ><span th:text="${chip.label()}">Food</span
+              >
+            </span>
+            <span
+              class="cat-chip__overflow muted"
+              th:if="${r.category().overflow() > 0}"
+              th:text="'· +' + ${r.category().overflow()}"
+              >· +2</span
+            >
+            <!-- Tag chips (register §3.6, plan stage 7e): the leg's own tags, canonical
+                 Parent:Child labels, after the counterpart summary. -->
+            <span
+              th:each="tag : ${r.tags()}"
+              class="tag-chip"
+              th:text="'#' + ${tag}"
+              >#Trip:Prague</span
+            >
+          </td>
+          <td
+            class="register__amount num"
+            th:classappend="${r.income()} ? 'num--income'"
+            th:text="${r.amountDisplay()}"
+          >
+            -20,00
+          </td>
+          <td
+            class="register__balance num"
+            th:classappend="${r.negativeBalance()} ? 'num--credit'"
+            th:text="${r.balanceDisplay()}"
+          >
+            -150,00
+          </td>
+          <td class="register__status">
+            <span
+              class="recon"
+              th:classappend="'recon--' + ${r.reconciliation()}"
+              th:title="${r.reconciliation()}"
+              aria-hidden="true"
+              >●</span
+            >
+            <span class="recon recon--pending" th:if="${r.pending()}" title="Pending review"
+              >◷</span
+            >
+            <!-- Edit affordance (register §3.1): loads this transaction into the dock's edit mode.
+                 hx-includes the dock's active-filter hidden fields so the edit dock keeps
+                 repainting the current view. Keyboard: the row is [data-kbd-row]; Enter on it
+                 activates this button (keyboard.js clicks the row's first button). -->
+            <button
+              th:unless="${handoff}"
+              type="button"
+              class="register__edit"
+              title="Edit transaction"
+              th:attr="hx-get=@{/register/edit/{id}(id=${r.transactionId()})}"
+              hx-include="[name='viewAccountId'], [name='viewPicker'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
+              hx-target="#entry-dock"
+              hx-swap="outerHTML"
+            >
+              ✎
+            </button>
+            <!-- The drill-down's handoff (reporting.md §12): that page has no dock, so the pencil
+                 opens the register on this transaction instead — its leading own account from its
+                 date, the row selected and loaded into the dock. Same position, so Enter on the
+                 row still means "edit this transaction". -->
+            <a
+              th:if="${handoff}"
+              class="register__edit"
+              th:href="@{/register(selected=${r.transactionId()})}"
+              title="Edit in the register"
+              >✎</a
+            >
+            <!-- The paperclip (register §7, plan stage 9g): this row was booked from a receipt;
+                 click through to its committed view. Deliberately AFTER the edit button —
+                 keyboard.js activates a row's FIRST link or button on Enter, and Enter on a
+                 register row must keep meaning "edit this transaction". Carries the `committed`
+                 filter explicitly (issue tracker #10) — a bare id would default the processing
+                 screen's filter to the work queue, which excludes committed receipts and leaves
+                 its Prev/Next dead; `range=all` since the receipt's own capture date has nothing
+                 to do with this jump. -->
+            <a
+              class="register__receipt"
+              th:if="${r.receiptId() != null}"
+              th:href="@{/receipts/{id}(id=${r.receiptId()},state='committed',range='all')}"
+              title="Open the receipt this was booked from"
+              >📎</a
+            >
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>

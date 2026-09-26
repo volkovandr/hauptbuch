@@ -431,11 +431,11 @@ class ReportGridBuilder {
     return columns;
   }
 
-  private static String measureKey(Measure measure) {
+  static String measureKey(Measure measure) {
     return measure.kind() + ":" + measure.currency() + ":" + measure.leg();
   }
 
-  private static String measureLabel(Measure measure) {
+  static String measureLabel(Measure measure) {
     String name =
         switch (measure.kind()) {
           case TURNOVER -> "Turnover";

@@ -101,20 +101,21 @@ class RegisterSqlLogicTest {
         .single();
   }
 
-  private void insertPosting(long txnId, long accountId, String amount) {
-    insertPosting(txnId, accountId, amount, null);
+  private long insertPosting(long txnId, long accountId, String amount) {
+    return insertPosting(txnId, accountId, amount, null);
   }
 
-  private void insertPosting(long txnId, long accountId, String amount, String baseAmount) {
-    jdbcClient
+  private long insertPosting(long txnId, long accountId, String amount, String baseAmount) {
+    return jdbcClient
         .sql(
             "insert into posting (transaction_id, account_id, amount, base_amount) "
-                + "values (:t, :a, :amt, :base)")
+                + "values (:t, :a, :amt, :base) returning posting_id")
         .param("t", txnId)
         .param("a", accountId)
         .param("amt", new BigDecimal(amount))
         .param("base", baseAmount == null ? null : new BigDecimal(baseAmount))
-        .update();
+        .query(Long.class)
+        .single();
   }
 
   private void softDeleteTxn(long txnId) {
@@ -475,6 +476,39 @@ class RegisterSqlLogicTest {
     assertThat(registerRepository.findRows(List.of(cash), null, null, null, EUR)).hasSize(1);
   }
 
+  // ── findRowsByPostingIds: a Report drill-down's rows (reporting.md §12) ─────
+
+  @Test
+  void rowsByPostingIdsAreTheGivenLegsInRegisterOrderUnthreaded() {
+    long cash = insertAccount(CASH, ASSET, EUR, 210);
+    long giro = insertAccount(GIRO, ASSET, EUR, 30);
+    long food = insertAccount(FOOD, EXPENSE, EUR, null);
+    long shop = insertPayee("ShopAaa");
+    long later = insertTxn(JAN_10, shop, "confirmed");
+    insertPosting(later, giro, "-30.00");
+    long laterFood = insertPosting(later, food, THIRTY);
+    long earlier = insertTxn(JAN_5, null, "pending_review");
+    long earlierCash = insertPosting(earlier, cash, "-10.00");
+    long earlierFood = insertPosting(earlier, food, TEN);
+
+    List<RegisterRow> rows =
+        registerRepository.findRowsByPostingIds(List.of(laterFood, earlierFood, earlierCash), EUR);
+
+    assertThat(rows)
+        .extracting(RegisterRow::postingId)
+        .containsExactly(earlierCash, earlierFood, laterFood);
+    RegisterRow shopRow = rows.get(2);
+    assertThat(shopRow.accountId()).isEqualTo(food);
+    assertThat(shopRow.accountName()).isEqualTo(FOOD);
+    assertThat(shopRow.payeeName()).isEqualTo("ShopAaa");
+    assertThat(shopRow.amount()).isEqualByComparingTo(THIRTY);
+    assertThat(shopRow.baseCurrency()).isTrue();
+    // A list of legs from many accounts threads no account's balance.
+    assertThat(rows).extracting(RegisterRow::runningBalance).containsOnlyNulls();
+    assertThat(rows.get(0).lifecycle()).isEqualTo("pending_review");
+    assertThat(registerRepository.findRowsByPostingIds(List.of(), EUR)).isEmpty();
+  }
+
   // ── findOwnLegs: the receipt→register jump's derived filter ────────────────
 
   @Test
@@ -492,6 +526,28 @@ class RegisterSqlLogicTest {
         .containsExactly(giro, cash); // the category leg is not a viewable account thread
     assertThat(registerRepository.findOwnLegs(txn))
         .allSatisfy(leg -> assertThat(leg.date()).isEqualTo(LocalDate.parse(JAN_5)));
+  }
+
+  @Test
+  void creditedOwnLegsLeadSoTransfersOpenOnTheMoneysSource() {
+    long cash = insertAccount(CASH, ASSET, EUR, 210);
+    long giro = insertAccount(GIRO, ASSET, EUR, 30);
+    final long food = insertAccount(FOOD, EXPENSE, EUR, null);
+    long transfer = insertTxn(JAN_5, null, "confirmed");
+    insertPosting(transfer, cash, "100.00");
+    insertPosting(transfer, giro, "-100.00");
+    // A debited own leg bigger than the credited one still follows it (reporting.md §12).
+    long withdrawal = insertTxn(JAN_5, null, "confirmed");
+    insertPosting(withdrawal, cash, "100.00");
+    insertPosting(withdrawal, giro, "-60.00");
+    insertPosting(withdrawal, food, "-40.00");
+
+    assertThat(registerRepository.findOwnLegs(transfer))
+        .extracting(RegisterOwnLeg::accountId)
+        .containsExactly(giro, cash);
+    assertThat(registerRepository.findOwnLegs(withdrawal))
+        .extracting(RegisterOwnLeg::accountId)
+        .containsExactly(giro, cash);
   }
 
   @Test

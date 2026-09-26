@@ -94,6 +94,26 @@ table.report td:first-child .help__text {
   opacity: 0.4;
 }
 
+/* A figure that opens its drill-down (reporting.md §12): a submit button that reads as the plain
+   number it is, underlined only on hover or focus, so the table stays a table. */
+.report__drill {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.report__drill:hover,
+.report__drill:focus-visible {
+  text-decoration: underline;
+}
+
+.report__drill-back {
+  margin-bottom: 0.5rem;
+}
+
 /* Chart renderer (reporting.md §10): small multiples stack; each panel's SVG is intrinsically
    sized by its viewBox, so it only needs a max-width to stay legible on a phone. */
 .chart-panels {

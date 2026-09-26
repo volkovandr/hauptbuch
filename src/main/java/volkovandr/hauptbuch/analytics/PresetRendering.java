@@ -123,7 +123,12 @@ final class PresetRendering {
     if (asTable) {
       return new Rendered(
           ReportTableViewAssembler.assemble(
-              presentation.title(), presentation.spec(), grid, baseCurrency, rowToggle),
+              presentation.title(),
+              presentation.spec(),
+              grid,
+              baseCurrency,
+              rowToggle,
+              drillParams(presentation)),
           null);
     }
     return new Rendered(
@@ -229,6 +234,18 @@ final class PresetRendering {
     params.add("renderer", effective.renderer().name());
     params.add("trendLine", String.valueOf(effective.trendLine()));
     addExpansion(params, effective.expandedNodeKeys());
+    return params;
+  }
+
+  /**
+   * What a figure's drill-down (reporting.md §12) needs to re-render {@code presentation} exactly
+   * as shown: its spec, and its explicit expansion when it has one — absent, both render {@code
+   * auto} (§9.2) alike.
+   */
+  private static MultiValueMap<String, String> drillParams(Presentation presentation) {
+    MultiValueMap<String, String> params =
+        new LinkedMultiValueMap<>(ReportSpecQueryString.toParams(presentation.spec()));
+    addExpansion(params, presentation.expandedNodeKeys());
     return params;
   }
 

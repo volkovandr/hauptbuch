@@ -1,8 +1,8 @@
 # Hauptbuch — Reporting: the Report Engine, Renderers & Layouts
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.4
-**Date:** 2026-09-25
+**Status:** Draft v0.5
+**Date:** 2026-09-26
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (§5.9, FR-ANA-01–10, FR-REP-01–14),
 `data-model.md` (§4 signs, §5 leaves-only, §6.1 the two valuation rules, §10 tags),
@@ -654,6 +654,12 @@ cell's own number:
   valued at the **cell's period-end rate**, the same mark-to-market rule as the cell (§5.4), so the
   list closes on the cell exactly; valuing each row at its own date's rate would not.
 
+**Totals drill down too.** A row, column or grand total opens the union of the cells it sums, each
+posting flipped as its own cell is, so the list closes on the total. A `—` that exists for a
+structural reason — overlapping tags, two measures, or balances added across time (§7.2) — stands
+for no posting set and opens nothing; a `—` for a missing rate or a second native currency does open,
+and the running column turns `—` at the posting that breaks the sum.
+
 From that list, editing a row **hands off to the register** with the transaction's
 **`asset`/`liability` leg** pre-selected as the account and its date in range. A transfer has two such
 legs: the **credited** one (the money's source) is chosen. A transaction with no such leg (a
@@ -757,6 +763,8 @@ management screen.
 
 ## Changelog
 
+- **v0.5 (2026-09-26):** **§12**: totals drill down as the union of their cells; a structural `—`
+  opens nothing, a data-driven one (missing rate, second currency) does.
 - **v0.4 (2026-09-25):** **§12**: the drill-down list gains a running column; a closing-balance cell
   drills down to an opening-balance line plus its period's postings, valued at the period-end rate.
   **§13**: CSV exports in two forms, as shown and raw (leaves only, path labels, no totals).

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<!--
+  One Report figure's drill-down (reporting.md §12, ReportDrillDownController): the postings behind
+  it, owned by reporting but drawn with the register's own row (fragments/register-row), so it
+  reads exactly like the register. Its Balance column is the running figure — starting from zero
+  and ending, on the bottom row, on the figure itself (the list scrolls to the bottom on load, like
+  the register). Each row's pencil hands off to the register rather than to an entry dock: this
+  page has none.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel">
+      <p class="report__drill-back"><a th:href="${drill.backUrl()}">← Back to the report</a></p>
+      <p class="eyebrow" th:text="${drill.measureLabel()}">Turnover</p>
+      <h1>
+        <span th:text="${drill.heading()}">Food · Jan 2026</span>:
+        <span class="num" th:text="${drill.figure().text()}">50,50</span>
+      </h1>
+
+      <p class="muted" th:if="${#lists.isEmpty(drill.rows())}">
+        No postings stand behind this figure.
+      </p>
+
+      <div class="register-scroll" data-scroll-bottom th:unless="${#lists.isEmpty(drill.rows())}">
+        <table class="register">
+          <thead>
+            <tr>
+              <th class="register__spine" aria-hidden="true"></th>
+              <th scope="col">Date</th>
+              <th scope="col">Account</th>
+              <th scope="col">Payee</th>
+              <th scope="col">Category</th>
+              <th scope="col" class="num">Amount</th>
+              <th scope="col" class="num" th:text="${drill.measureLabel()}">Running</th>
+              <th scope="col" class="register__status">
+                <span class="visually-hidden">Status</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody data-kbd-list>
+            <th:block th:each="r : ${drill.rows()}">
+              <tr th:replace="~{fragments/register-row :: row(${r}, true)}"></tr>
+            </th:block>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</html>

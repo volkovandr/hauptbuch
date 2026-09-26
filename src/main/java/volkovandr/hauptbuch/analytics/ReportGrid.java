@@ -36,6 +36,20 @@ public record ReportGrid(
     LocalDate resolvedEnd,
     String refusalMessage) {
 
+  /** An empty grid carrying why the engine refused to render the spec at all. */
+  static ReportGrid refused(String refusal, LocalDate resolvedStart, LocalDate resolvedEnd) {
+    return new ReportGrid(
+        List.of(),
+        List.of(),
+        List.of(),
+        List.of(),
+        List.of(),
+        Cell.BLANK,
+        resolvedStart,
+        resolvedEnd,
+        refusal);
+  }
+
   /** Defensively copies the lists to immutable ones. */
   public ReportGrid {
     rows = List.copyOf(rows);

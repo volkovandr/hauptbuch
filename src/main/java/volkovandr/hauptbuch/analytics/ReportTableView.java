@@ -1,7 +1,9 @@
 package volkovandr.hauptbuch.analytics;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The table renderer's display-ready model (reporting.md §10's {@code Table} row): every {@link
@@ -15,6 +17,10 @@ import java.util.List;
  * @param rows one row per surviving (post-suppression) {@link AxisNode}
  * @param columnTotals the bottom totals row; empty when not shown
  * @param grandTotal blank when either totals axis is off
+ * @param drillParams the Report's spec and expansion as query parameters, carried once as the
+ *     drill-down form's hidden fields (reporting.md §12) — each figure's button adds only its own
+ *     {@code cell}; {@code null} when the table offers no drill-down (a Frame previewed inside the
+ *     layout editor's own form, which cannot hold another)
  * @param togglePersists whether the rows' expand/collapse controls post to a saved Report's own
  *     persisting endpoint rather than re-GET the page with an ephemeral expansion ({@link
  *     RowToggle}, issue 02); meaningless when no row has a {@link RowView#toggleUrl}
@@ -31,10 +37,12 @@ public record ReportTableView(
     boolean showColumnTotals,
     List<CellText> columnTotals,
     CellText grandTotal,
+    Map<String, List<String>> drillParams,
     boolean togglePersists) {
 
   /** Defensively copies the lists to immutable ones. */
   public ReportTableView {
+    drillParams = drillParams == null ? null : Map.copyOf(withImmutableValues(drillParams));
     columns = List.copyOf(columns);
     rows = List.copyOf(rows);
     columnTotals = List.copyOf(columnTotals);
@@ -77,12 +85,63 @@ public record ReportTableView(
     public RowView {
       cells = List.copyOf(cells);
     }
+
+    RowView withoutDrillDown() {
+      return new RowView(
+          key,
+          label,
+          depth,
+          expandable,
+          expanded,
+          toggleUrl,
+          cells.stream().map(CellText::withoutDrillDown).toList(),
+          rowTotal.withoutDrillDown());
+    }
+  }
+
+  private static Map<String, List<String>> withImmutableValues(Map<String, List<String>> params) {
+    Map<String, List<String>> copy = new HashMap<>();
+    params.forEach((key, values) -> copy.put(key, List.copyOf(values)));
+    return copy;
+  }
+
+  /** This table without its drill-down — for a Frame previewed inside another form. */
+  public ReportTableView withoutDrillDown() {
+    return new ReportTableView(
+        title,
+        scopeLine,
+        refusalMessage,
+        resolvedStart,
+        resolvedEnd,
+        columns,
+        rows.stream().map(RowView::withoutDrillDown).toList(),
+        showRowTotals,
+        showColumnTotals,
+        columnTotals.stream().map(CellText::withoutDrillDown).toList(),
+        grandTotal.withoutDrillDown(),
+        null,
+        togglePersists);
   }
 
   /**
    * One formatted cell or total (§10): already-display-ready {@code text}, plus {@code help} — the
    * §11a.7 help-marker text naming which of §7.2's reasons made it {@code —} — {@code null} for a
-   * blank cell or a real figure, which need no explaining.
+   * blank cell or a real figure, which need no explaining — and {@code drill}, the figure's {@link
+   * CellAddress#token} when it opens a drill-down (reporting.md §12), else {@code null}.
    */
-  public record CellText(String text, String help) {}
+  public record CellText(String text, String help, String drill) {
+
+    /** A figure that opens no drill-down. */
+    public CellText(String text, String help) {
+      this(text, help, null);
+    }
+
+    CellText withDrill(String token) {
+      return new CellText(text, help, token);
+    }
+
+    CellText withoutDrillDown() {
+      return withDrill(null);
+    }
+  }
 }

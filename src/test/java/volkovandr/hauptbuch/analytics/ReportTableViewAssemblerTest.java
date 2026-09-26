@@ -230,4 +230,66 @@ class ReportTableViewAssemblerTest {
         END,
         null);
   }
+
+  // ── drill-down (reporting.md §12) ─────────────────────────────────────────
+
+  /** One Food row × Jan and Feb, with both totals on. */
+  private static ReportGrid drillGrid(Cell foodFeb, Cell columnTotalJan) {
+    return new ReportGrid(
+        List.of(new AxisNode("1", "Food")),
+        List.of(new AxisNode("2026-01", "Jan 2026"), new AxisNode("2026-02", "Feb 2026")),
+        List.of(List.of(new Cell.Value(new BigDecimal("20"), "EUR"), foodFeb)),
+        List.of(new Cell.Illegal(Cell.Reason.MISSING_RATE)),
+        List.of(columnTotalJan, Cell.BLANK),
+        Cell.BLANK,
+        START,
+        END,
+        null);
+  }
+
+  private static ReportSpec byMonthWithTotals() {
+    return new ReportSpec(
+        List.of(Dimension.CATEGORY),
+        List.of(Dimension.DATE),
+        List.of(),
+        List.of(Measure.turnover(PresentationCurrency.BASE, Leg.NET)),
+        Scope.ofTypes("expense"),
+        List.of(),
+        new DateRange(new RangeEndpoint.Literal(START), new RangeEndpoint.Literal(END)),
+        true,
+        true,
+        true);
+  }
+
+  @Test
+  void everyFigureWithPostingsBehindItOpensItsDrillDown() {
+    ReportGrid grid = drillGrid(Cell.BLANK, new Cell.Illegal(Cell.Reason.CROSS_TAG_TOTAL));
+
+    ReportTableView view =
+        ReportTableViewAssembler.assemble(
+            "Title", byMonthWithTotals(), grid, "EUR", null, new LinkedMultiValueMap<>());
+
+    ReportTableView.RowView food = view.rows().get(0);
+    assertThat(food.cells())
+        .extracting(ReportTableView.CellText::drill)
+        .containsExactly("0/1/2026-01", null); // a blank cell has no postings
+    // A missing rate's — still has its postings; overlapping tags' — has no one posting set.
+    assertThat(food.rowTotal().drill()).isEqualTo("0/1/");
+    assertThat(view.columnTotals())
+        .extracting(ReportTableView.CellText::drill)
+        .containsExactly(null, null);
+    assertThat(view.grandTotal().drill()).isNull();
+  }
+
+  @Test
+  void noFigureOpensDrillDownWhenTheTableOffersNone() {
+    ReportGrid grid = drillGrid(Cell.BLANK, new Cell.Value(new BigDecimal("20"), "EUR"));
+
+    ReportTableView view =
+        ReportTableViewAssembler.assemble("Title", byMonthWithTotals(), grid, "EUR", null);
+
+    assertThat(view.drillParams()).isNull();
+    assertThat(view.rows().get(0).cells().get(0).drill()).isNull();
+    assertThat(view.columnTotals().get(0).drill()).isNull();
+  }
 }
