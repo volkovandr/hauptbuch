@@ -53,7 +53,7 @@ public class DockSplitService {
   /** Base amounts are frozen to the minor unit; two places covers EUR/CHF/USD. */
   private static final int BASE_FRACTION_DIGITS = 2;
 
-  /** Intermediate scale for the proportional base allocation before rounding to the minor unit. */
+  /** Intermediate scale for the rate conversion before rounding to the minor unit. */
   private static final int ALLOCATION_SCALE = 10;
 
   private final AccountService accountService;
@@ -285,8 +285,10 @@ public class DockSplitService {
    *       ±fundingTotal} (funding currency), base {@code ±baseTotal} — signed by the lines' net
    *       direction (a pure-expense split is an outflow);
    *   <li>each <strong>category leg</strong> is in the spending currency: native the line's negated
-   *       contribution (unchanged from the single-currency rule), base the line's derived share of
-   *       the base total, allocated proportionally by spending magnitude;
+   *       contribution (unchanged from the single-currency rule), base that native amount at the
+   *       split's one rate — the base total over the lines' <em>net</em> — so each leg keeps its
+   *       own sign: in a salary split, the withheld tax stays a debit in base too. Lines that net
+   *       to zero state no rate and are refused, as the importer refuses them (import.md §6.5);
    *   <li>the <strong>last line absorbs the rounding residual</strong> so the category legs' base
    *       amounts sum to exactly {@code ∓baseTotal} and {@code Σ base_amount = 0} holds exactly
    *       (data-model §6.4 — the engine books no residual and re-validates the base sum).
@@ -294,6 +296,30 @@ public class DockSplitService {
    */
   private List<PostingDraft> crossCurrencyLegs(
       SplitEntry entry, Account fundingAccount, String spendingCurrency) {
+    List<ResolvedLine> resolved = new ArrayList<>();
+    BigDecimal netSpending = BigDecimal.ZERO;
+    for (SplitLineDraft line : entry.lines()) {
+      ResolvedLine resolvedLine = resolveLine(line, fundingAccount, spendingCurrency);
+      netSpending = netSpending.add(resolvedLine.contribution());
+      resolved.add(resolvedLine);
+    }
+    // netSpending carries the funding leg's sign (fundingNative is signed(magnitude, its sign)).
+    FundingSigilCheck.verify(entry.fundingPersonDirection(), netSpending);
+    if (netSpending.signum() == 0) {
+      throw new IllegalArgumentException(
+          "The lines net to zero, so they state no rate between "
+              + spendingCurrency
+              + " and "
+              + fundingAccount.currencyCode()
+              + " — split them into separate transactions");
+    }
+    BigDecimal netMagnitude = netSpending.abs();
+
+    // The funding side (register §3.8, mixed-split convention): outflow when the lines net to a
+    // debit of the categories, else inflow.
+    int fundingSign = netSpending.signum() < 0 ? -1 : 1;
+    BigDecimal fundingMagnitude =
+        requiredMagnitude(entry.fundingTotal(), fundingAccount.currencyCode());
     String baseCurrency =
         settingsService
             .baseCurrency()
@@ -302,27 +328,8 @@ public class DockSplitService {
                     new IllegalStateException(
                         "Base currency is not set; a cross-currency split needs it to balance "
                             + "(data-model §3.8)"));
-
-    List<ResolvedLine> resolved = new ArrayList<>();
-    BigDecimal netSpending = BigDecimal.ZERO;
-    BigDecimal spendingMagnitude = BigDecimal.ZERO;
-    for (SplitLineDraft line : entry.lines()) {
-      ResolvedLine resolvedLine = resolveLine(line, fundingAccount, spendingCurrency);
-      netSpending = netSpending.add(resolvedLine.contribution());
-      spendingMagnitude = spendingMagnitude.add(resolvedLine.contribution().abs());
-      resolved.add(resolvedLine);
-    }
-    // netSpending carries the funding leg's sign (fundingNative is signed(magnitude, its sign)).
-    FundingSigilCheck.verify(entry.fundingPersonDirection(), netSpending);
-
-    // The funding side (register §3.8, mixed-split convention): outflow when the lines net to a
-    // debit of the categories, else inflow; an exactly-zero net books on the debit side.
-    int fundingSign = netSpending.signum() < 0 ? -1 : 1;
-    BigDecimal fundingMagnitude =
-        requiredMagnitude(entry.fundingTotal(), fundingAccount.currencyCode());
     BigDecimal baseMagnitude =
-        baseTotalMagnitude(
-            entry, fundingAccount, spendingCurrency, baseCurrency, spendingMagnitude);
+        baseTotalMagnitude(entry, fundingAccount, spendingCurrency, baseCurrency, netMagnitude);
     BigDecimal fundingNative = signed(fundingMagnitude, fundingSign);
     BigDecimal fundingBase = signed(baseMagnitude, fundingSign);
 
@@ -331,19 +338,19 @@ public class DockSplitService {
         tagged(
             PostingDraft.ofCrossCurrency(fundingAccount.accountId(), fundingNative, fundingBase),
             entry.tagIds()));
-    legs.addAll(
-        categoryLegsInBase(resolved, spendingMagnitude, baseMagnitude, fundingBase.negate()));
+    legs.addAll(categoryLegsInBase(resolved, netMagnitude, baseMagnitude, fundingBase.negate()));
     return legs;
   }
 
   /**
-   * Build the spending-currency category legs, freezing each one's base amount as its share of the
-   * base total (proportional to its spending magnitude) with the last line absorbing the residual
-   * so the legs' base amounts sum to exactly {@code targetBaseSum} ({@code = −fundingBase}).
+   * Build the spending-currency category legs, freezing each one's base amount as its native amount
+   * at the split's rate ({@code baseMagnitude / netMagnitude}), sign and all, with the last line
+   * absorbing the rounding residual so the legs' base amounts sum to exactly {@code targetBaseSum}
+   * ({@code = −fundingBase}).
    */
   private List<PostingDraft> categoryLegsInBase(
       List<ResolvedLine> resolved,
-      BigDecimal spendingMagnitude,
+      BigDecimal netMagnitude,
       BigDecimal baseMagnitude,
       BigDecimal targetBaseSum) {
     List<PostingDraft> legs = new ArrayList<>();
@@ -355,9 +362,7 @@ public class DockSplitService {
       if (i == resolved.size() - 1) {
         categoryBase = targetBaseSum.subtract(allocated); // the last line closes the base gap
       } else {
-        BigDecimal share =
-            proportionalBase(line.contribution().abs(), spendingMagnitude, baseMagnitude);
-        categoryBase = signed(share, categoryNative.signum());
+        categoryBase = atSplitRate(categoryNative, netMagnitude, baseMagnitude);
         allocated = allocated.add(categoryBase);
       }
       legs.add(
@@ -380,15 +385,15 @@ public class DockSplitService {
     return distinct.isEmpty() ? leg : leg.withTags(distinct);
   }
 
-  /** A line's proportional share of the base total, rounded to the minor unit (magnitude only). */
-  private static BigDecimal proportionalBase(
-      BigDecimal lineMagnitude, BigDecimal spendingMagnitude, BigDecimal baseMagnitude) {
-    if (spendingMagnitude.signum() == 0) {
-      return BigDecimal.ZERO;
-    }
-    return lineMagnitude
-        .divide(spendingMagnitude, ALLOCATION_SCALE, RoundingMode.HALF_UP)
+  /**
+   * {@code nativeAmount} in base at the split's one rate, {@code baseMagnitude / netMagnitude},
+   * rounded to the minor unit; its sign is the native amount's own.
+   */
+  private static BigDecimal atSplitRate(
+      BigDecimal nativeAmount, BigDecimal netMagnitude, BigDecimal baseMagnitude) {
+    return nativeAmount
         .multiply(baseMagnitude)
+        .divide(netMagnitude, ALLOCATION_SCALE, RoundingMode.HALF_UP)
         .setScale(BASE_FRACTION_DIGITS, RoundingMode.HALF_UP);
   }
 
@@ -396,19 +401,19 @@ public class DockSplitService {
    * The base-currency total magnitude (the funding leg's frozen base), following the header's field
    * layout (register §3.8a): when the funding account is already the base currency it is the
    * funding total; when the spending currency is base the lines are already in base, so it is their
-   * summed magnitude; otherwise neither leg is base and it is the explicit base-total field.
+   * net; otherwise neither leg is base and it is the explicit base-total field.
    */
   private static BigDecimal baseTotalMagnitude(
       SplitEntry entry,
       Account fundingAccount,
       String spendingCurrency,
       String baseCurrency,
-      BigDecimal spendingMagnitude) {
+      BigDecimal netMagnitude) {
     if (fundingAccount.currencyCode().equals(baseCurrency)) {
       return requiredMagnitude(entry.fundingTotal(), baseCurrency);
     }
     if (spendingCurrency.equals(baseCurrency)) {
-      return spendingMagnitude;
+      return netMagnitude;
     }
     return requiredMagnitude(entry.baseTotal(), baseCurrency);
   }
