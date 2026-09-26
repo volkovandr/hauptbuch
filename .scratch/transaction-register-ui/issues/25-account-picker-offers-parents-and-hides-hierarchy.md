@@ -1,6 +1,6 @@
 # The register's Account picker (and its transfer targets) offers parent accounts and shows no hierarchy
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: medium
 Area: Transaction register — entry (`RegisterService.accountOptions` / `transferTargets`, `DockAccountResolutionService`, `AccountService.findOwnAccountByName`)
@@ -240,3 +240,6 @@ Confirm-gate leaf check; (3) Settle-up `<select>` + submit check. Each slice shi
 (transfer targets carry the currency suffix; one shared group check, `PostToAccountService.groupOf`;
 edit round-trip tests for simple and split transfers). The split panel's Account field resolves
 through the dock's `/register/account/resolve`, so the dock's group-refusal test covers it.
+
+2026-09-26 — owner-confirmed: register (simple, split, To → transfers), receipts and Settle-up
+checked. Resolved on branch `feat/account-picker-leaves` (7438580, 2b710a3, 1ba4514, 4201b57).
