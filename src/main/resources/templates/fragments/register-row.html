@@ -142,6 +142,15 @@
               title="Open the receipt this was booked from"
               >📎</a
             >
+            <!-- The recurring marker (register §2.10): this row was booked from a recurring
+                 template. It shares the paperclip's slot; a row with both shows the paperclip. -->
+            <a
+              class="register__receipt register__recurring"
+              th:if="${r.receiptId() == null and r.recurringTemplateId() != null}"
+              th:href="@{/recurring/{id}(id=${r.recurringTemplateId()})}"
+              title="Open the recurring template this was booked from"
+              >↻</a
+            >
           </td>
         </tr>
       </tbody>

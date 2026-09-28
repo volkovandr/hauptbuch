@@ -190,6 +190,7 @@ public final class SplitFormBinder {
               blankToNull(personName),
               blankToNull(at(form.linePersonDirection(), i)),
               blankToNull(at(form.linePersonRevive(), i)),
+              null,
               tagsAt(form.lineTagIds(), i)));
     }
     return lines;

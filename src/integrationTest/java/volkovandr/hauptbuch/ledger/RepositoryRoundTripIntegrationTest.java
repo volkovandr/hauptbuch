@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -212,6 +213,49 @@ class RepositoryRoundTripIntegrationTest {
     assertThat(transactionRepository.findById(txnId).orElseThrow().deletedAt()).isNotNull();
     // Already deleted: the guarded update affects no rows.
     assertThat(transactionRepository.softDelete(txnId)).isZero();
+  }
+
+  /**
+   * The occurrence stamp (data-model §14.2): a transaction booked from a recurring template carries
+   * the template and the occurrence date, written once. A second stamp on the same transaction is
+   * refused, so where a row came from never changes.
+   */
+  @Test
+  void stampOccurrenceWritesTheTemplateAndOccurrenceDateOnce() {
+    long cash = insertCashAccount(EUR);
+    long templateId =
+        jdbcClient
+            .sql(
+                """
+                insert into recurring_template
+                  (name, start_date, cadence_unit, cadence_n, confirmation, booked_through,
+                   account_id)
+                values ('Streaming', date '2026-06-01', 'month', 1, 'auto', date '2026-05-31', :a)
+                returning recurring_template_id
+                """)
+            .param("a", cash)
+            .query(Long.class)
+            .single();
+    long txnId =
+        transactionRepository.insertTransaction(
+            new Transaction(
+                null, LocalDate.of(2026, 6, 1), null, null, CONFIRMED, null, null, null));
+
+    assertThat(transactionRepository.stampOccurrence(txnId, templateId, LocalDate.of(2026, 6, 1)))
+        .isEqualTo(1);
+    assertThat(transactionRepository.stampOccurrence(txnId, templateId, LocalDate.of(2026, 7, 1)))
+        .isZero();
+
+    Map<String, Object> stamp =
+        jdbcClient
+            .sql(
+                "select recurring_template_id, occurrence_date from transaction"
+                    + " where transaction_id = :t")
+            .param("t", txnId)
+            .query()
+            .singleRow();
+    assertThat(stamp.get("recurring_template_id")).isEqualTo(templateId);
+    assertThat(stamp.get("occurrence_date")).isEqualTo(java.sql.Date.valueOf("2026-06-01"));
   }
 
   /**

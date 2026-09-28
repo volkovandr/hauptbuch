@@ -54,6 +54,7 @@ class RecurringTemplateServiceTest {
   @Mock private PayeeService payeeService;
   @Mock private PersonProvisioningService personProvisioningService;
   @Mock private TransactionCurrencyResolver transactionCurrencyResolver;
+  @Mock private RecurringBookingService bookingService;
 
   private RecurringTemplateService service;
 
@@ -68,6 +69,7 @@ class RecurringTemplateServiceTest {
             payeeService,
             personProvisioningService,
             transactionCurrencyResolver,
+            bookingService,
             clock);
   }
 
@@ -77,13 +79,18 @@ class RecurringTemplateServiceTest {
   }
 
   private static RecurringScheduleForm schedule(Long id, String name) {
-    return new RecurringScheduleForm(id, name, "1", "month", "none", "", "", "3", "review", "");
+    return new RecurringScheduleForm(id, name, "1", "month", "none", "", "", "3", "review", "", "");
   }
 
   private static SplitForm split(Long accountId, String fundingPerson, String amount) {
+    return split(accountId, fundingPerson, amount, START);
+  }
+
+  private static SplitForm split(
+      Long accountId, String fundingPerson, String amount, LocalDate start) {
     return new SplitForm(
         null,
-        START,
+        start,
         accountId,
         fundingPerson,
         fundingPerson.isEmpty() ? "" : "BY",
@@ -218,7 +225,8 @@ class RecurringTemplateServiceTest {
     proposesNothing();
     when(repository.insert(any(), any())).thenReturn(1L);
     RecurringScheduleForm afterThree =
-        new RecurringScheduleForm(null, "Loan", "1", "month", "after", "", "3", "0", "auto", "");
+        new RecurringScheduleForm(
+            null, "Loan", "1", "month", "after", "", "3", "0", "auto", "", "");
 
     service.save(afterThree, split(BANK_ID, "", "100"));
 
@@ -231,7 +239,7 @@ class RecurringTemplateServiceTest {
     proposesNothing();
     when(repository.insert(any(), any())).thenReturn(1L);
     RecurringScheduleForm defaults =
-        new RecurringScheduleForm(null, "Gym", "1", "month", "none", "", "", "", "", "");
+        new RecurringScheduleForm(null, "Gym", "1", "month", "none", "", "", "", "", "", "");
 
     service.save(defaults, split(BANK_ID, "", "30"));
 
@@ -254,7 +262,7 @@ class RecurringTemplateServiceTest {
   @Test
   void refusesCadenceBelowOne() {
     RecurringScheduleForm zero =
-        new RecurringScheduleForm(null, "Gym", "0", "month", "none", "", "", "0", "auto", "");
+        new RecurringScheduleForm(null, "Gym", "0", "month", "none", "", "", "0", "auto", "", "");
 
     assertThatIllegalArgumentException()
         .isThrownBy(() -> service.save(zero, split(BANK_ID, "", "30")))
@@ -265,7 +273,7 @@ class RecurringTemplateServiceTest {
   void refusesEndDateBeforeTheStart() {
     RecurringScheduleForm backwards =
         new RecurringScheduleForm(
-            null, "Gym", "1", "month", "date", "2026-10-01", "", "0", "auto", "");
+            null, "Gym", "1", "month", "date", "2026-10-01", "", "0", "auto", "", "");
 
     assertThatIllegalArgumentException()
         .isThrownBy(() -> service.save(backwards, split(BANK_ID, "", "30")))
@@ -276,7 +284,7 @@ class RecurringTemplateServiceTest {
   void refusesManagementLinkThatIsNotWebAddress() {
     RecurringScheduleForm script =
         new RecurringScheduleForm(
-            null, "Gym", "1", "month", "none", "", "", "0", "auto", "javascript:alert(1)");
+            null, "Gym", "1", "month", "none", "", "", "0", "auto", "javascript:alert(1)", "");
 
     assertThatIllegalArgumentException()
         .isThrownBy(() -> service.save(script, split(BANK_ID, "", "30")))
@@ -302,6 +310,82 @@ class RecurringTemplateServiceTest {
         .isThrownBy(() -> service.save(schedule(null, "Gym"), split(BANK_ID, "", "30")))
         .withMessage("A transfer needs two different accounts");
     verify(repository, never()).insert(any(), any());
+  }
+
+  // ── booking on save (slice c) ──────────────────────────────────────────────
+
+  private static RecurringScheduleForm answering(String pastOccurrences) {
+    return new RecurringScheduleForm(
+        null, "Gym", "1", "month", "none", "", "", "0", "auto", "", pastOccurrences);
+  }
+
+  @Test
+  void newTemplateStartingInThePastCountsItsPastOccurrences() {
+    // Monthly from 31 Jul with today 28 Sep: 31 Jul and 31 Aug are past; 30 Sep is not.
+    LocalDate start = LocalDate.of(2026, 7, 31);
+
+    int past = service.pastOccurrences(answering(""), split(BANK_ID, "", "30", start));
+
+    assertThat(past).isEqualTo(2);
+  }
+
+  @Test
+  void todaysOccurrenceIsNotPast() {
+    assertThat(service.pastOccurrences(answering(""), split(BANK_ID, "", "30", TODAY))).isZero();
+  }
+
+  @Test
+  void futureStartOrExistingTemplateHasNoPastToAskAbout() {
+    assertThat(service.pastOccurrences(answering(""), split(BANK_ID, "", "30"))).isZero();
+    assertThat(
+            service.pastOccurrences(
+                schedule(42L, "Gym"), split(BANK_ID, "", "30", LocalDate.of(2026, 1, 31))))
+        .isZero();
+  }
+
+  @Test
+  void bookingThePastStartsTheCursorTheDayBeforeTheStart() {
+    proposesNothing();
+    LocalDate start = LocalDate.of(2026, 7, 31);
+    when(repository.insert(any(), any())).thenReturn(42L);
+
+    service.save(answering(RecurringScheduleForm.BOOK_PAST), split(BANK_ID, "", "30", start));
+
+    assertThat(insertedDraft(start.minusDays(1)).startDate()).isEqualTo(start);
+  }
+
+  @Test
+  void startingFromTheNextStartsTheCursorAtYesterday() {
+    proposesNothing();
+    when(repository.insert(any(), any())).thenReturn(42L);
+
+    service.save(
+        answering(RecurringScheduleForm.SKIP_PAST),
+        split(BANK_ID, "", "30", LocalDate.of(2026, 7, 31)));
+
+    assertThat(insertedDraft(TODAY.minusDays(1)).startDate()).isEqualTo(LocalDate.of(2026, 7, 31));
+  }
+
+  @Test
+  void saveRunsTheBookingForThatTemplateOnceItIsStored() {
+    proposesNothing();
+    when(repository.insert(any(), any())).thenReturn(42L);
+
+    service.save(schedule(null, "Streaming"), split(BANK_ID, "", "9,99"));
+
+    InOrder order = inOrder(repository, bookingService);
+    order.verify(repository).insert(any(), any());
+    order.verify(bookingService).run(42L);
+  }
+
+  @Test
+  void editRunsTheBookingForThatTemplate() {
+    proposesNothing();
+    when(repository.update(eq(42L), any())).thenReturn(1);
+
+    service.save(schedule(42L, "Streaming"), split(BANK_ID, "", "12,99"));
+
+    verify(bookingService).run(42L);
   }
 
   // ── edit and delete ─────────────────────────────────────────────────────────

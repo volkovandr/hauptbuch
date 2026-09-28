@@ -234,6 +234,7 @@ class RegisterSplitController {
               form.fundingPersonDirection(),
               form.fundingPersonRevive(),
               null,
+              null,
               SplitFormBinder.blankToNull(form.payeeText()),
               form.note(),
               SplitFormBinder.blankToNull(form.spendingCurrencyCode()),

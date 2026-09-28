@@ -62,7 +62,13 @@ public class RegisterRepository {
              -- delete's "keep the transaction" choice unlinks without writing a column.
              (select min(rcpt.receipt_id) from receipt rcpt
                where rcpt.transaction_id = threaded.transaction_id
-                 and rcpt.deleted_at is null) as receipt_id
+                 and rcpt.deleted_at is null) as receipt_id,
+             -- The recurring marker (register §2.10, data-model §14.2): the live template this
+             -- transaction was booked from. The stamp itself never changes; a deleted template
+             -- simply has no page left to link to.
+             (select rt.recurring_template_id from recurring_template rt
+               where rt.recurring_template_id = threaded.recurring_template_id
+                 and rt.deleted_at is null) as recurring_template_id
       from threaded
       left join payee pay on threaded.payee_id = pay.payee_id
       left join country pay_country on pay.country_code = pay_country.country_code
@@ -113,6 +119,7 @@ public class RegisterRepository {
                      a.currency_code as currency_code,
                      t.payee_id,
                      t.lifecycle,
+                     t.recurring_template_id,
                      p.amount,
                      p.reconciliation,
                      sum(p.amount) over (
@@ -168,6 +175,7 @@ public class RegisterRepository {
                      a.currency_code as currency_code,
                      t.payee_id,
                      t.lifecycle,
+                     t.recurring_template_id,
                      p.amount,
                      p.reconciliation,
                      cast(null as numeric) as running_balance

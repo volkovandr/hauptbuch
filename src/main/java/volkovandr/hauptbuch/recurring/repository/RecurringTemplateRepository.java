@@ -119,6 +119,39 @@ public class RecurringTemplateRepository {
         .list();
   }
 
+  /**
+   * A live template by id, its row locked until the caller's transaction ends (data-model §14.3):
+   * the booking run holds the lock across its bookings and the cursor advance, so a save's run and
+   * the midnight run on the same template take turns rather than both booking.
+   */
+  public Optional<RecurringTemplate> lockLive(long recurringTemplateId) {
+    return jdbcClient
+        .sql(
+            SELECT_TEMPLATE
+                + "where recurring_template_id = :recurringTemplateId and deleted_at is null"
+                + " for update")
+        .param(TEMPLATE_ID, recurringTemplateId)
+        .query(RecurringTemplate.class)
+        .optional();
+  }
+
+  /**
+   * Move a live template's cursor to {@code bookedThrough} (data-model §14.3).
+   *
+   * @return the number of templates updated (0 when unknown or soft-deleted)
+   */
+  public int advanceBookedThrough(long recurringTemplateId, LocalDate bookedThrough) {
+    return jdbcClient
+        .sql(
+            """
+            update recurring_template set booked_through = :bookedThrough
+            where recurring_template_id = :recurringTemplateId and deleted_at is null
+            """)
+        .param(TEMPLATE_ID, recurringTemplateId)
+        .param("bookedThrough", bookedThrough)
+        .update();
+  }
+
   /** A template's header tags, which land on the funding leg. */
   public List<Long> findTagIds(long recurringTemplateId) {
     return jdbcClient

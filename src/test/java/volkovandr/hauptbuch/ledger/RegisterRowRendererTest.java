@@ -67,6 +67,7 @@ class RegisterRowRendererTest {
         new BigDecimal(amount),
         CONFIRMED,
         "unreconciled",
+        null,
         null);
   }
 
@@ -247,6 +248,7 @@ class RegisterRowRendererTest {
             new BigDecimal("-10.00"),
             "pending_review",
             "unreconciled",
+            null,
             null);
 
     RegisterRowView view = renderOne(pending);
@@ -293,7 +295,8 @@ class RegisterRowRendererTest {
             null,
             threaded.lifecycle(),
             threaded.reconciliation(),
-            threaded.receiptId());
+            threaded.receiptId(),
+            threaded.recurringTemplateId());
 
     RegisterRowView view = renderOne(unthreaded);
 

@@ -60,3 +60,20 @@ table.recurring tbody td {
 .recurring-schedule__count {
   width: 5rem;
 }
+
+/* The new-template question (data-model §14.3): the start is in the past, so the save asks whether
+   to book the occurrences before today. The caution edge of the register's pending rows. */
+.recurring-past {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 0.8rem;
+  padding: 0.4rem 0.6rem;
+  border-left: 3px solid var(--amber-ink, #b26a00);
+}
+
+.recurring-past p {
+  margin: 0;
+  flex: 1 1 100%;
+}

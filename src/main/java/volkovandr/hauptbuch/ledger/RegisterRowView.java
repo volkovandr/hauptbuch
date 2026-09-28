@@ -32,6 +32,8 @@ import java.util.List;
  *     the Category cell (register §3.6, plan stage 7e); empty when the leg is untagged
  * @param receiptId the live receipt this transaction was booked from (register §7, plan stage 9g),
  *     or null — the row's paperclip, linking to that receipt's committed view
+ * @param recurringTemplateId the live recurring template this transaction was booked from (register
+ *     §2.10), or null — the row's recurring marker, sharing the paperclip's slot
  */
 public record RegisterRowView(
     long postingId,
@@ -50,7 +52,8 @@ public record RegisterRowView(
     boolean pending,
     String reconciliation,
     List<String> tags,
-    Long receiptId) {
+    Long receiptId,
+    Long recurringTemplateId) {
 
   /** Defensively copy the tags to an immutable list (null-safe). */
   public RegisterRowView {
@@ -79,7 +82,8 @@ public record RegisterRowView(
         pending,
         reconciliation,
         tags,
-        receiptId);
+        receiptId,
+        recurringTemplateId);
   }
 
   /**

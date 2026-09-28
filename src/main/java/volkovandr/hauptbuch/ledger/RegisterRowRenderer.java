@@ -147,7 +147,8 @@ class RegisterRowRenderer {
         pending,
         row.reconciliation(),
         tags,
-        row.receiptId());
+        row.receiptId(),
+        row.recurringTemplateId());
   }
 
   /**

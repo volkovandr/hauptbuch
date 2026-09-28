@@ -377,6 +377,37 @@ class RecurringTemplateRepositoryIntegrationTest {
     assertThat(repository.findLines(id)).hasSize(1);
   }
 
+  // ── the booking run: lock and cursor ───────────────────────────────────────
+
+  @Test
+  void lockLiveReadsLiveTemplateAndSkipsDeletedOnes() {
+    long live =
+        repository.insert(
+            draft("Gym", bankAccountId, null, List.of(categoryLine("30"))), START.minusDays(1));
+    long deleted =
+        repository.insert(
+            draft("Club", bankAccountId, null, List.of(categoryLine("5"))), START.minusDays(1));
+    repository.softDelete(deleted);
+
+    assertThat(repository.lockLive(live).orElseThrow().name()).isEqualTo("Gym");
+    assertThat(repository.lockLive(deleted)).isEmpty();
+    assertThat(repository.lockLive(-1L)).isEmpty();
+  }
+
+  @Test
+  void advanceBookedThroughMovesTheCursorOfLiveTemplateOnly() {
+    long id =
+        repository.insert(
+            draft("Gym", bankAccountId, null, List.of(categoryLine("30"))), START.minusDays(1));
+
+    assertThat(repository.advanceBookedThrough(id, START.plusDays(3))).isEqualTo(1);
+    assertThat(repository.findById(id).orElseThrow().bookedThrough()).isEqualTo(START.plusDays(3));
+
+    repository.softDelete(id);
+    assertThat(repository.advanceBookedThrough(id, START.plusDays(9))).isZero();
+    assertThat(repository.findById(id).orElseThrow().bookedThrough()).isEqualTo(START.plusDays(3));
+  }
+
   // ── schema guards ───────────────────────────────────────────────────────────
 
   @Test

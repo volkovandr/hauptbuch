@@ -55,4 +55,9 @@ public record RecurringTemplateDraft(
     tagIds = tagIds == null ? List.of() : List.copyOf(tagIds);
     lines = lines == null ? List.of() : List.copyOf(lines);
   }
+
+  /** The draft's schedule, for the occurrence math. */
+  public Schedule schedule() {
+    return new Schedule(startDate, CadenceUnit.fromCode(cadenceUnit), cadenceN, endDate);
+  }
 }

@@ -41,6 +41,11 @@ import java.util.List;
  *     a person rather than an account (register §3.3/§3.10, issue 07); {@code null} otherwise
  * @param fundingPersonDirection {@code FOR}/{@code BY} alongside {@code fundingPersonName}
  * @param fundingPersonRevive the Restore/Create-new decision for {@code fundingPersonName}
+ * @param fundingPersonId the funding person by id instead of by name, alongside {@code
+ *     fundingPersonDirection}: a recurring template stores the person it names, and live names can
+ *     repeat (data-model §7, §14.2). The by-id person must already exist and is never revived; the
+ *     entry must then carry {@code spendingCurrencyCode}, since there is no name to look a debt
+ *     currency up by. {@code null} for every hand-typed entry
  * @param payeeId a picked existing payee, or null
  * @param payeeText create-new payee text when no existing payee was picked; null/blank otherwise
  * @param note transaction-level note (register §3.7); nullable — the per-line notes live on the
@@ -70,6 +75,7 @@ public record SplitEntry(
     String fundingPersonName,
     String fundingPersonDirection,
     String fundingPersonRevive,
+    Long fundingPersonId,
     Long payeeId,
     String payeeText,
     String note,

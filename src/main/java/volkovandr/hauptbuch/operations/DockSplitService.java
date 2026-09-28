@@ -154,8 +154,9 @@ public class DockSplitService {
    * #commit} reads it off the funding account as it always did, and needs no special case.
    */
   private Account resolveFundingAccount(SplitEntry entry) {
-    if (blankToNull(entry.fundingPersonName()) == null
-        || blankToNull(entry.fundingPersonDirection()) == null) {
+    boolean namesPerson =
+        blankToNull(entry.fundingPersonName()) != null || entry.fundingPersonId() != null;
+    if (!namesPerson || blankToNull(entry.fundingPersonDirection()) == null) {
       if (entry.accountId() == null) {
         throw new IllegalArgumentException("An account or person is required");
       }
@@ -163,6 +164,10 @@ public class DockSplitService {
           .findById(entry.accountId())
           .orElseThrow(
               () -> new IllegalArgumentException("No account with id " + entry.accountId()));
+    }
+    if (entry.fundingPersonId() != null) {
+      return personProvisioningService.ensureLeaf(
+          entry.fundingPersonId(), transactionCurrency(entry));
     }
     boolean revive = "true".equalsIgnoreCase(blankToNull(entry.fundingPersonRevive()));
     return personProvisioningService.ensureLeaf(
@@ -178,6 +183,10 @@ public class DockSplitService {
    * #commit} can never disagree, since both trace back to this same value.
    */
   private String transactionCurrency(SplitEntry entry) {
+    if (entry.fundingPersonId() != null && blankToNull(entry.spendingCurrencyCode()) == null) {
+      // A by-id person has no typed name to look a sole debt currency up by (SplitEntry).
+      throw new IllegalArgumentException("A person funding the entry by id needs its currency");
+    }
     String currency =
         transactionCurrencyResolver.forFundingPerson(
             entry.fundingPersonName(), entry.spendingCurrencyCode());
@@ -266,11 +275,9 @@ public class DockSplitService {
     }
     String personName = blankToNull(line.personName());
     String personDirection = blankToNull(line.personDirection());
-    if (personName != null && personDirection != null) {
-      boolean revive = "true".equalsIgnoreCase(blankToNull(line.personRevive()));
-      Account leaf = personProvisioningService.ensureLeaf(personName, lineCurrency, revive);
+    if ((personName != null || line.personId() != null) && personDirection != null) {
       return new ResolvedLine(
-          leaf,
+          personLeaf(line, lineCurrency),
           SplitLineAmounts.personContribution(line.amount(), personDirection),
           blankToNull(line.note()),
           line.tagIds());
@@ -281,6 +288,19 @@ public class DockSplitService {
         SplitLineAmounts.signedContribution(line.amount(), leaf.type()),
         blankToNull(line.note()),
         line.tagIds());
+  }
+
+  /**
+   * A person line's debt leaf in {@code lineCurrency}, provisioned here at commit: by the stored id
+   * when the line carries one (a recurring template's booking), else by the typed name with the
+   * panel's Restore/Create-new decision.
+   */
+  private Account personLeaf(SplitLineDraft line, String lineCurrency) {
+    if (line.personId() != null) {
+      return personProvisioningService.ensureLeaf(line.personId(), lineCurrency);
+    }
+    boolean revive = "true".equalsIgnoreCase(blankToNull(line.personRevive()));
+    return personProvisioningService.ensureLeaf(line.personName(), lineCurrency, revive);
   }
 
   /**
