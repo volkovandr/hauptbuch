@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.recurring;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -12,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -149,6 +151,48 @@ class RecurringScreenIntegrationTest {
         .andExpect(content().string(containsString("value=\"2\"")))
         .andExpect(content().string(containsString("<option value=\"week\" selected")))
         .andExpect(content().string(containsString("hx-post=\"/recurring/editor/save\"")));
+  }
+
+  @Test
+  void totalTypedFirstFillsTheBlankLine() throws Exception {
+    mockMvc
+        .perform(
+            post("/recurring/editor/currency")
+                .param("name", "Streaming")
+                .param("date", START)
+                .param("accountId", String.valueOf(bankId))
+                .param("total", "12,99")
+                .param("categoryText", "")
+                .param("lineAmount", ""))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    matchesPattern(
+                        Pattern.compile(
+                            ".*name=\"lineAmount\"[^>]*value=\"12,99\".*", Pattern.DOTALL))));
+  }
+
+  @Test
+  void endChoiceShowsOnlyItsOwnInputAndKeepsTheOthersValue() throws Exception {
+    mockMvc
+        .perform(
+            post("/recurring/editor/currency")
+                .param("endMode", "after")
+                .param("endDate", "2099-12-31")
+                .param("endAfter", "6")
+                .param("date", START)
+                .param("accountId", String.valueOf(bankId)))
+        .andExpect(content().string(containsString("id=\"recurring-end-after\"")))
+        .andExpect(content().string(not(containsString("id=\"recurring-end-date\""))))
+        // the end date rides along hidden, so switching back to it loses nothing
+        .andExpect(
+            content()
+                .string(
+                    matchesPattern(
+                        Pattern.compile(
+                            ".*type=\"hidden\"\\s+name=\"endDate\"\\s+value=\"2099-12-31\".*",
+                            Pattern.DOTALL))));
   }
 
   // ── create → list ───────────────────────────────────────────────────────────

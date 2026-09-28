@@ -102,12 +102,16 @@ class RecurringController {
   }
 
   /**
-   * Recompute the currency layout after the account, currency or a total changed, proposing any
-   * blank cross-currency total from the rate on the start date (register §3.8a).
+   * Re-render after the account, currency, a total or the end choice changed: any blank
+   * cross-currency total is proposed from the rate on the start date (register §3.8a), and a line
+   * with no amount yet takes the rest, so a total typed first fills the first line as the
+   * register's Split does (register §3.10).
    */
   @PostMapping(EDITOR_URL + "/currency")
   String currency(@RequestParam MultiValueMap<String, String> params, Model model) {
-    SplitForm proposed = splitCurrencyService.withProposedTotals(SplitFormBinder.bind(params));
+    SplitForm proposed =
+        assembler.restIntoBlankLine(
+            splitCurrencyService.withProposedTotals(SplitFormBinder.bind(params)));
     return panel(proposed, RecurringScheduleForm.bind(params), null, model);
   }
 

@@ -168,6 +168,28 @@ public class SplitPanelAssembler {
     return SplitLineArrays.appendedLine(form, rest);
   }
 
+  /**
+   * Give the first line with no amount "the rest" (register §3.10), exactly as {@link #addLine}
+   * gives a new line. A panel that opens blank — the recurring template editor — has no dock line
+   * to seed from, so the total typed first flows into the first line here, as the register's Split
+   * carries the dock's amount into it. A form whose lines all have amounts is returned unchanged.
+   */
+  public SplitForm restIntoBlankLine(SplitForm form) {
+    List<String> amounts = form.lineAmount();
+    if (amounts == null) {
+      return form;
+    }
+    for (int i = 0; i < amounts.size(); i++) {
+      if (amounts.get(i) == null || amounts.get(i).isBlank()) {
+        SplitPanel current = panel(form, null);
+        return lenientParse(current.remaining()).signum() > 0
+            ? SplitLineArrays.withLineAmount(form, i, current.remaining())
+            : form;
+      }
+    }
+    return form;
+  }
+
   /** Remove the line at {@code index} across every aligned array. Returns a new form. */
   public SplitForm removeLine(SplitForm form, int index) {
     return SplitLineArrays.removedLine(form, index);

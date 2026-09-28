@@ -72,37 +72,60 @@
           </select>
         </span>
       </div>
-      <fieldset class="field recurring-schedule__end">
-        <legend class="field__label">Ends</legend>
-        <label>
-          <input type="radio" name="endMode" value="none" th:checked="${template.endMode() == 'none'}" />
-          never
-        </label>
-        <label>
-          <input type="radio" name="endMode" value="date" th:checked="${template.endMode() == 'date'}" />
-          on
+      <!-- Ends: a choice that re-renders the panel, so only the one input it needs is shown and
+           the block stays a single row. The other mode's value rides along hidden, so switching
+           back and forth loses nothing. -->
+      <div class="field recurring-schedule__end">
+        <label class="field__label" for="recurring-end-mode">Ends</label>
+        <span class="recurring-schedule__inline">
+          <select
+            id="recurring-end-mode"
+            name="endMode"
+            class="input"
+            hx-post="/recurring/editor/currency"
+            hx-trigger="change"
+            hx-include="closest form"
+            hx-target="#entry-dock"
+            hx-swap="outerHTML"
+          >
+            <option value="none" th:selected="${template.endMode() == 'none'}">never</option>
+            <option value="date" th:selected="${template.endMode() == 'date'}">on</option>
+            <option value="after" th:selected="${template.endMode() == 'after'}">after</option>
+          </select>
           <input
+            th:if="${template.endMode() == 'date'}"
+            id="recurring-end-date"
             name="endDate"
             type="date"
             class="input"
             aria-label="End date"
             th:value="${template.endDate()}"
           />
-        </label>
-        <label>
-          <input type="radio" name="endMode" value="after" th:checked="${template.endMode() == 'after'}" />
-          after
           <input
+            th:unless="${template.endMode() == 'date'}"
+            type="hidden"
+            name="endDate"
+            th:value="${template.endDate()}"
+          />
+          <th:block th:if="${template.endMode() == 'after'}">
+            <input
+              id="recurring-end-after"
+              name="endAfter"
+              class="input num recurring-schedule__count"
+              inputmode="numeric"
+              aria-label="Number of occurrences"
+              th:value="${template.endAfter()}"
+            />
+            <span>occurrences</span>
+          </th:block>
+          <input
+            th:unless="${template.endMode() == 'after'}"
+            type="hidden"
             name="endAfter"
-            class="input num"
-            inputmode="numeric"
-            size="3"
-            aria-label="Number of occurrences"
             th:value="${template.endAfter()}"
           />
-          occurrences
-        </label>
-      </fieldset>
+        </span>
+      </div>
       <div class="field">
         <label class="field__label" for="recurring-lead">Book days ahead</label>
         <input

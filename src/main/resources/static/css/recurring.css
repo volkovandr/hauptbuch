@@ -42,12 +42,21 @@ table.recurring tbody td {
   gap: 0.4rem;
 }
 
-.recurring-schedule__end {
-  border: 0;
-  padding: 0;
-  margin: 0;
+/* Ends: the choice and its one input on a single line, wider than a plain field. */
+.entry-dock .recurring-schedule__end {
+  flex: 1 1 16rem;
+}
+
+.recurring-schedule__inline {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.8rem;
+  gap: 0.4rem;
   align-items: center;
+}
+
+.recurring-schedule__inline select {
+  width: auto;
+}
+
+.recurring-schedule__count {
+  width: 5rem;
 }
