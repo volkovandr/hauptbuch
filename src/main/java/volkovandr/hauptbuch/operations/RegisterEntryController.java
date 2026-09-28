@@ -72,7 +72,8 @@ class RegisterEntryController {
   private static final String ACCOUNT_RESOLVED = "account-resolved";
 
   private static final String SPLIT_PANEL =
-      "fragments/split-panel :: panel(register=${register}, panel=${panel}, oob=false)";
+      "fragments/split-panel :: panel(register=${register}, panel=${panel}, oob=false,"
+          + " host=null, header=null)";
 
   private final DockCommitService dockCommitService;
   private final DockEditService dockEditService;

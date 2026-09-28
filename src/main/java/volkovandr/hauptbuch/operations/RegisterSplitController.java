@@ -34,7 +34,8 @@ class RegisterSplitController {
   private static final String REGISTER = "register";
   private static final String CURRENCIES = "currencies";
   private static final String PANEL =
-      "fragments/split-panel :: panel(register=${register}," + " panel=${panel}, oob=%s)";
+      "fragments/split-panel :: panel(register=${register}, panel=${panel}, oob=%s,"
+          + " host=null, header=null)";
   private static final String PANEL_DIRECT = String.format(PANEL, "false");
   private static final String PANEL_OOB = String.format(PANEL, "true");
   // sticky=null: the split panel resets to a bare dock, never a pre-filled one (plan stage 8b.1
@@ -184,17 +185,8 @@ class RegisterSplitController {
    */
   @PostMapping("/register/split/currency")
   String currency(@RequestParam MultiValueMap<String, String> params, Model model) {
-    SplitForm form = SplitFormBinder.bind(params);
-    SplitTotals totals =
-        splitCurrencyService.proposeTotals(
-            new SplitTotalsQuery(
-                form.accountId(),
-                form.spendingCurrencyCode(),
-                form.date(),
-                form.total(),
-                form.fundingTotal(),
-                form.baseTotal()));
-    return renderPanel(SplitFormBinder.withTotals(form, totals), null, PANEL_DIRECT, model);
+    SplitForm form = splitCurrencyService.withProposedTotals(SplitFormBinder.bind(params));
+    return renderPanel(form, null, PANEL_DIRECT, model);
   }
 
   /**

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<!--
+  The recurring template editor (data-model §14.1, recurring sub-plan slice b). The editor is the
+  register's split panel in template mode — fragments/split-panel with a `host` and this page's
+  `schedule` block as its `header` — so a
+  template is entered exactly as a transaction is, and whatever the dock refuses, the editor
+  refuses. This page only hosts it; `schedule` below is the block template mode adds on top of the
+  panel. The panel's own Date field is the start date.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel">
+      <p class="eyebrow"><a th:href="@{/recurring}">Recurring</a></p>
+      <th:block th:replace="~{:: editorPanel}"></th:block>
+    </section>
+  </main>
+
+  <!-- The hosted split panel, also what the editor's round-trips render (a controller's view name
+       cannot pass a fragment as a parameter, so the composition lives here). -->
+  <th:block th:fragment="editorPanel">
+    <form
+      th:replace="~{fragments/split-panel :: panel(register=${register}, panel=${panel}, oob=false, host=${host}, header=~{recurring-editor :: schedule(template=${template})})}"
+    ></form>
+  </th:block>
+
+  <!-- The schedule block template mode adds to the split panel. `template` is the
+       RecurringScheduleForm; every field is its raw text, so a refused save redisplays as typed. -->
+  <th:block th:fragment="schedule(template)">
+    <p class="entry-dock__title eyebrow"
+       th:text="${template.recurringTemplateId() == null} ? '↻ New recurring template' : '✎ Edit recurring template'">
+      ↻ New recurring template
+    </p>
+    <input
+      th:if="${template.recurringTemplateId() != null}"
+      type="hidden"
+      name="recurringTemplateId"
+      th:value="${template.recurringTemplateId()}"
+    />
+    <div class="entry-dock__fields recurring-schedule">
+      <div class="field">
+        <label class="field__label" for="recurring-name">Name</label>
+        <input
+          id="recurring-name"
+          name="name"
+          class="input"
+          autocomplete="off"
+          placeholder="Streaming"
+          required
+          th:value="${template.name()}"
+        />
+      </div>
+      <div class="field">
+        <label class="field__label" for="recurring-cadence-n">Every</label>
+        <span class="recurring-schedule__cadence">
+          <input
+            id="recurring-cadence-n"
+            name="cadenceN"
+            class="input num"
+            inputmode="numeric"
+            size="3"
+            th:value="${template.cadenceN()}"
+          />
+          <select name="cadenceUnit" class="input" aria-label="Cadence unit">
+            <option value="day" th:selected="${template.cadenceUnit() == 'day'}">days</option>
+            <option value="week" th:selected="${template.cadenceUnit() == 'week'}">weeks</option>
+            <option value="month" th:selected="${template.cadenceUnit() == 'month'}">months</option>
+            <option value="year" th:selected="${template.cadenceUnit() == 'year'}">years</option>
+          </select>
+        </span>
+      </div>
+      <fieldset class="field recurring-schedule__end">
+        <legend class="field__label">Ends</legend>
+        <label>
+          <input type="radio" name="endMode" value="none" th:checked="${template.endMode() == 'none'}" />
+          never
+        </label>
+        <label>
+          <input type="radio" name="endMode" value="date" th:checked="${template.endMode() == 'date'}" />
+          on
+          <input
+            name="endDate"
+            type="date"
+            class="input"
+            aria-label="End date"
+            th:value="${template.endDate()}"
+          />
+        </label>
+        <label>
+          <input type="radio" name="endMode" value="after" th:checked="${template.endMode() == 'after'}" />
+          after
+          <input
+            name="endAfter"
+            class="input num"
+            inputmode="numeric"
+            size="3"
+            aria-label="Number of occurrences"
+            th:value="${template.endAfter()}"
+          />
+          occurrences
+        </label>
+      </fieldset>
+      <div class="field">
+        <label class="field__label" for="recurring-lead">Book days ahead</label>
+        <input
+          id="recurring-lead"
+          name="leadDays"
+          class="input num"
+          inputmode="numeric"
+          size="3"
+          th:value="${template.leadDays()}"
+        />
+      </div>
+      <div class="field">
+        <label class="field__label" for="recurring-confirmation">Confirmation</label>
+        <select id="recurring-confirmation" name="confirmation" class="input">
+          <option value="auto" th:selected="${template.confirmation() == 'auto'}">Automatic</option>
+          <option value="review" th:selected="${template.confirmation() == 'review'}">Review</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field__label" for="recurring-url">Management link</label>
+        <input
+          id="recurring-url"
+          name="managementUrl"
+          type="url"
+          class="input"
+          autocomplete="off"
+          placeholder="https://"
+          th:value="${template.managementUrl()}"
+        />
+      </div>
+    </div>
+  </th:block>
+</html>

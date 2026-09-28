@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<!--
+  The recurring page (data-model §14, recurring sub-plan slice b): the live templates — the
+  subscriptions, standing orders and pocket money the book repeats. Each row shows the cadence in
+  words and the next three occurrence dates, which come from the template's schedule, so the
+  schedule math can be checked by eye. The name opens the editor (the split panel in template
+  mode); the management link opens the provider's page in a new tab. No bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel">
+      <p class="eyebrow">Recurring</p>
+      <p class="actions">
+        <a class="btn" th:href="@{/recurring/new}">＋ New template</a>
+      </p>
+      <p class="muted" th:if="${#lists.isEmpty(templates)}">No recurring templates yet.</p>
+      <div class="recurring-list" th:unless="${#lists.isEmpty(templates)}">
+        <table class="recurring">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Cadence</th>
+              <th class="num">Amount</th>
+              <th>Account</th>
+              <th>Confirmation</th>
+              <th>Booked</th>
+              <th>Next dates</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr th:each="t : ${templates}">
+              <td>
+                <a th:href="@{/recurring/{id}(id=${t.recurringTemplateId()})}" th:text="${t.name()}"
+                  >Streaming</a
+                >
+              </td>
+              <td th:text="${t.cadence()}">every month on the 31st</td>
+              <td class="num" th:text="${t.amount()}">-9,99</td>
+              <td th:text="${t.account()}">BankAaa-EUR</td>
+              <td th:text="${t.confirmation()}">Automatic</td>
+              <td th:text="${t.leadTime()}">on the day</td>
+              <td class="recurring__dates">
+                <span
+                  th:each="d : ${t.nextDates()}"
+                  class="num"
+                  th:text="${#temporals.format(d, 'dd.MM.yyyy')}"
+                  >31.10.2026</span
+                >
+                <span th:if="${#lists.isEmpty(t.nextDates())}" class="muted">ended</span>
+              </td>
+              <td>
+                <a
+                  th:if="${t.managementUrl() != null}"
+                  th:href="${t.managementUrl()}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open the management page"
+                  >↗</a
+                >
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</html>

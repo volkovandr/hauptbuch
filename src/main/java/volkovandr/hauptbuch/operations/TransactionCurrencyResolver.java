@@ -18,10 +18,12 @@ import volkovandr.hauptbuch.ledger.SettingsService;
  *
  * <p>Shared by {@link DockCommitService} (which provisions the leaf) and {@link
  * DockAmountFieldsService} (which decides what the amount fields and the currency picker show), so
- * the default the user is shown and the currency actually booked can never disagree.
+ * the default the user is shown and the currency actually booked can never disagree. Public for the
+ * recurring template editor, which fixes a person-funded template's currency when it is saved, so a
+ * later second debt currency cannot move it (data-model §14.2).
  */
 @Service
-class TransactionCurrencyResolver {
+public class TransactionCurrencyResolver {
 
   private final PersonService personService;
   private final SettingsService settingsService;
@@ -42,7 +44,7 @@ class TransactionCurrencyResolver {
    *     nothing else supplied one (the caller decides whether that is an error or just an empty
    *     field)
    */
-  String forFundingPerson(String personName, String override) {
+  public String forFundingPerson(String personName, String override) {
     if (override != null && !override.isBlank()) {
       return override;
     }

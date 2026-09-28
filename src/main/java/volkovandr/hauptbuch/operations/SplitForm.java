@@ -122,6 +122,43 @@ public record SplitForm(
     viewAccountId = viewAccountId == null ? null : List.copyOf(viewAccountId);
   }
 
+  /**
+   * An empty form for a new entry: one blank line, dated {@code date}, funded by {@code accountId}
+   * (null leaves the Account field to the operator).
+   */
+  public static SplitForm blank(LocalDate date, Long accountId) {
+    List<String> oneBlank = List.of("");
+    return new SplitForm(
+        null,
+        date,
+        accountId,
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        null,
+        "",
+        "",
+        oneBlank,
+        oneBlank,
+        oneBlank,
+        oneBlank,
+        oneBlank,
+        oneBlank,
+        oneBlank,
+        oneBlank,
+        oneBlank,
+        List.of(),
+        List.of(List.of()),
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
   /** Null-safe immutable copy of one line's tag-id list (an unresolved line may bind a null). */
   private static List<Long> copyOf(List<Long> ids) {
     return ids == null ? List.of() : List.copyOf(ids);

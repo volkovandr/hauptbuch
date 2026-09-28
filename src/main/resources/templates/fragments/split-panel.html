@@ -21,25 +21,36 @@
 
   `oob`: the commit response returns the panel out-of-band (over #entry-dock) only to redisplay a
   validation error while leaving the rows untouched; open/add/remove swap it in directly (oob=false).
+
+  `host` and `header`: both null on the register. A page that edits an entry without booking it —
+  the recurring template editor (data-model §14.1) — passes an operations.SplitPanelHost and its own
+  header fragment (the template's schedule block): the panel then posts under host.baseUrl(), shows
+  the header in place of the title, drops the register's filter inputs and Void, and offers the
+  host's Cancel and Delete. It is the same panel, never a second entry form, and it names no host.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
   <body>
     <form
-      th:fragment="panel(register, panel, oob)"
+      th:fragment="panel(register, panel, oob, host, header)"
       id="entry-dock"
       class="entry-dock entry-dock--split"
       data-split-panel
-      hx-post="/register/split/commit"
-      hx-target="#register-body"
       hx-swap="outerHTML"
-      th:attr="hx-swap-oob=${oob} ? 'true',
+      th:with="splitUrl=${host == null} ? '/register/split' : ${host.baseUrl()}"
+      th:attr="hx-post=${host == null} ? '/register/split/commit' : ${host.baseUrl()} + '/save',
+               hx-target=${host == null} ? '#register-body' : '#entry-dock',
+               hx-swap-oob=${oob} ? 'true',
                data-split-cross=${panel.currency().crossCurrency()},
                data-split-rate-funding=${panel.currency().rateFunding()},
                data-split-rate-base=${panel.currency().rateBase()},
                data-split-funding-currency=${panel.currency().fundingCurrencyCode()}"
     >
-      <p class="entry-dock__title eyebrow" th:if="${panel.transactionId() == null}">⑃ Split transaction</p>
-      <p class="entry-dock__title eyebrow" th:if="${panel.transactionId() != null}">✎ Edit split</p>
+      <th:block th:if="${host == null}">
+        <p class="entry-dock__title eyebrow" th:if="${panel.transactionId() == null}">⑃ Split transaction</p>
+        <p class="entry-dock__title eyebrow" th:if="${panel.transactionId() != null}">✎ Edit split</p>
+      </th:block>
+      <!-- Nested, because fragment inclusion runs before th:if on one element. -->
+      <th:block th:if="${header != null}"><th:block th:replace="${header}"></th:block></th:block>
 
       <!-- Edit mode: the hidden id that turns the commit into an in-place re-thread (§3.1/§3.3). -->
       <input th:if="${panel.transactionId() != null}" type="hidden" name="transactionId" th:value="${panel.transactionId()}" />
@@ -48,17 +59,19 @@
            dock's own block: only an EXPLICIT tick selection is carried, an empty selection stays
            empty so the server re-resolves the whole picker, and the picker token is always carried
            (issue transaction-register-ui/22). -->
-      <th:block th:each="id : ${register.filter().accountIds()}">
-        <input type="hidden" name="viewAccountId" th:value="${id}" />
+      <th:block th:if="${host == null}">
+        <th:block th:each="id : ${register.filter().accountIds()}">
+          <input type="hidden" name="viewAccountId" th:value="${id}" />
+        </th:block>
+        <input type="hidden" name="viewPicker" th:value="${register.filter().picker().param()}" />
+        <input type="hidden" name="viewFromDate" th:value="${register.filter().fromDate()}" />
+        <input type="hidden" name="viewToDate" th:value="${register.filter().toDate()}" />
+        <input type="hidden" name="viewPayeeId" th:value="${register.filter().payeeId()}" />
       </th:block>
-      <input type="hidden" name="viewPicker" th:value="${register.filter().picker().param()}" />
-      <input type="hidden" name="viewFromDate" th:value="${register.filter().fromDate()}" />
-      <input type="hidden" name="viewToDate" th:value="${register.filter().toDate()}" />
-      <input type="hidden" name="viewPayeeId" th:value="${register.filter().payeeId()}" />
 
       <div class="entry-dock__fields">
         <div class="field">
-          <label class="field__label" for="split-date">Date</label>
+          <label class="field__label" for="split-date" th:text="${host == null} ? 'Date' : ${host.dateLabel()}">Date</label>
           <input id="split-date" name="date" type="date" class="input" th:value="${panel.date()}" required />
         </div>
 
@@ -123,7 +136,7 @@
              /register/currency-fields). -->
         <span
           hidden
-          hx-post="/register/split/currency"
+          th:attr="hx-post=${splitUrl} + '/currency'"
           hx-trigger="account-resolved from:body"
           hx-include="closest form"
           hx-target="#entry-dock"
@@ -136,7 +149,7 @@
              total fields plus the per-line derived columns below. A change re-renders the panel. -->
         <div
           class="field"
-          hx-post="/register/split/currency"
+          th:attr="hx-post=${splitUrl} + '/currency'"
           hx-trigger="change"
           hx-include="closest form"
           hx-target="#entry-dock"
@@ -170,8 +183,16 @@
              funding leg is the signed sum of the lines, which may differ from the reference total
              typed here: that is the "Save and update amount" path. -->
         <div
-          th:replace="~{fragments/split-currency-header :: totals(currency=${panel.currency()}, total=${panel.total()}, idPrefix='split', currencyUrl='/register/split/currency', panelTarget='#entry-dock')}"
+          th:replace="~{fragments/split-currency-header :: totals(currency=${panel.currency()}, total=${panel.total()}, idPrefix='split', currencyUrl=${splitUrl} + '/currency', panelTarget='#entry-dock')}"
         ></div>
+        <!-- The host's note on the totals, e.g. that a recurring template stores none and each
+             occurrence proposes them from its own date's rate (data-model §14.2). -->
+        <p
+          class="field"
+          th:if="${host != null and host.totalsHelp() != null and panel.currency().crossCurrency()}"
+        >
+          <span th:replace="~{fragments/help-marker :: marker(${host.totalsHelp()})}"></span>
+        </p>
 
         <div class="field">
           <label class="field__label" for="split-note">Note</label>
@@ -220,7 +241,7 @@
              remove-line and re-render target are its own (#entry-dock). -->
         <th:block th:each="line : ${panel.lines()}">
           <th:block
-            th:replace="~{fragments/line-editor :: line(line=${line}, currency=${panel.currency()}, removeUrl='/register/split/remove-line', redistributeUrl=null, panelTarget='#entry-dock', categoryOptionsId='split-category-options', tagOptionsId='split-tag-options', ghost=null, description=null, tagIndexBase=1)}"
+            th:replace="~{fragments/line-editor :: line(line=${line}, currency=${panel.currency()}, removeUrl=${splitUrl} + '/remove-line', redistributeUrl=null, panelTarget='#entry-dock', categoryOptionsId='split-category-options', tagOptionsId='split-tag-options', ghost=null, description=null, tagIndexBase=1)}"
           ></th:block>
         </th:block>
       </ol>
@@ -246,7 +267,7 @@
         <button
           type="button"
           class="btn btn--ghost"
-          hx-post="/register/split/add-line"
+          th:attr="hx-post=${splitUrl} + '/add-line'"
           hx-include="closest form"
           hx-target="#entry-dock"
           hx-swap="outerHTML"
@@ -289,9 +310,20 @@
         >
           Void
         </button>
+        <!-- A hosted panel: the host's Delete (when it offers one) and Cancel back to the host. -->
+        <button
+          th:if="${host != null and host.deleteUrl() != null}"
+          type="button"
+          class="btn btn--danger"
+          th:attr="hx-post=${host.deleteUrl()}, hx-confirm=${host.deleteConfirm()}"
+        >
+          Delete
+        </button>
+        <a th:if="${host != null}" class="btn btn--ghost" th:href="${host.cancelUrl()}">Cancel</a>
         <!-- Cancel returns to the dock pre-filled with the header + first line (register §3.9), not
              blank — so changing your mind after Split does not discard what you entered. -->
         <button
+          th:if="${host == null}"
           type="button"
           class="btn btn--ghost"
           hx-post="/register/split/cancel"

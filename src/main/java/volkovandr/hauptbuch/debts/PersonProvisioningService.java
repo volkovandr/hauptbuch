@@ -66,28 +66,7 @@ public class PersonProvisioningService {
    */
   @Transactional
   public Account ensureLeaf(String personName, String currencyCode, boolean revive) {
-    if (personName == null || personName.isBlank()) {
-      throw new IllegalArgumentException("Person name cannot be blank");
-    }
-    String trimmedName = personName.strip();
-    // Commit-time backstop for the reserved sigils (plan stage 8b.1): "for for Max" parses to the
-    // person name "for Max", which must not be conjured into existence here.
-    ReservedNamePrefix.check(trimmedName);
-    Person person =
-        switch (personService.matchExact(trimmedName)) {
-          case PersonMatch.Live live -> live.person();
-          case PersonMatch.NotFound ignored -> createPerson(trimmedName);
-          case PersonMatch.DeletedOnly deletedOnly ->
-              revive
-                  ? personRepository.revive(deletedOnly.person().personId())
-                  : createPerson(trimmedName);
-          case PersonMatch.Ambiguous ignored ->
-              throw new IllegalArgumentException(
-                  "More than one person named '"
-                      + trimmedName
-                      + "' — rename one via the People page to disambiguate");
-        };
-    return ensureLeafAccount(person.personId(), currencyCode);
+    return ensureLeafAccount(ensurePerson(personName, revive).personId(), currencyCode);
   }
 
   /**
@@ -100,6 +79,39 @@ public class PersonProvisioningService {
   @Transactional
   public Account ensureLeaf(Long personId, String currencyCode) {
     return ensureLeafAccount(personId, currencyCode);
+  }
+
+  /**
+   * Ensure a person named {@code personName} exists and return them, by the same rules as {@link
+   * #ensureLeaf(String, String, boolean)} but without a currency leaf. A recurring template stores
+   * the person it names (data-model §14.2); their leaf is provisioned only when an occurrence
+   * books.
+   *
+   * @throws IllegalArgumentException if the name is blank, or the name is ambiguous among live
+   *     persons
+   */
+  @Transactional
+  public Person ensurePerson(String personName, boolean revive) {
+    if (personName == null || personName.isBlank()) {
+      throw new IllegalArgumentException("Person name cannot be blank");
+    }
+    String trimmedName = personName.strip();
+    // Commit-time backstop for the reserved sigils (plan stage 8b.1): "for for Max" parses to the
+    // person name "for Max", which must not be conjured into existence here.
+    ReservedNamePrefix.check(trimmedName);
+    return switch (personService.matchExact(trimmedName)) {
+      case PersonMatch.Live live -> live.person();
+      case PersonMatch.NotFound ignored -> createPerson(trimmedName);
+      case PersonMatch.DeletedOnly deletedOnly ->
+          revive
+              ? personRepository.revive(deletedOnly.person().personId())
+              : createPerson(trimmedName);
+      case PersonMatch.Ambiguous ignored ->
+          throw new IllegalArgumentException(
+              "More than one person named '"
+                  + trimmedName
+                  + "' — rename one via the People page to disambiguate");
+    };
   }
 
   /**

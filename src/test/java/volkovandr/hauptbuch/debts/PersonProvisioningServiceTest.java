@@ -114,6 +114,26 @@ class PersonProvisioningServiceTest {
   }
 
   @Test
+  void ensurePersonCreatesThePersonWithoutAnyLeaf() {
+    when(personService.matchExact("Max")).thenReturn(new PersonMatch.NotFound());
+    when(personRepository.insert("Max")).thenReturn(new Person(2L, "Max", null));
+
+    Person result = service.ensurePerson(" Max ", false);
+
+    assertThat(result.personId()).isEqualTo(2L);
+    verify(accountService, never()).insertPersonLeaf(anyString(), anyString());
+  }
+
+  @Test
+  void ensurePersonReusesTheLivePerson() {
+    Person max = new Person(1L, "Max", null);
+    when(personService.matchExact("Max")).thenReturn(new PersonMatch.Live(max));
+
+    assertThat(service.ensurePerson("Max", false)).isEqualTo(max);
+    verify(personRepository, never()).insert(anyString());
+  }
+
+  @Test
   void rejectsAnAmbiguousName() {
     Person max1 = new Person(1L, "Max", null);
     Person max2 = new Person(2L, "Max", null);
