@@ -43,6 +43,9 @@ import java.util.List;
  * @param personDirection {@code FOR}/{@code BY} alongside {@code personName} (data-model §7)
  * @param personRevive the panel's Restore ({@code "true"}) / Create-new decision for a name that
  *     matched only a soft-deleted person; null when no revival was in question
+ * @param personId the attributed person by id instead of by name, alongside {@code
+ *     personDirection}: a recurring template stores the person it names, and live names can repeat
+ *     (data-model §7, §14.2). {@code null} for every hand-typed line
  * @param tagIds this line's own tags (register §3.6, plan stage 7e.3) — the chips on the line,
  *     already carrying any transaction-level tags inherited (and visibly removable) per §3.6, so
  *     {@link DockSplitService} attaches exactly these to the line's category leg. The funding leg
@@ -57,6 +60,7 @@ public record SplitLineDraft(
     String personName,
     String personDirection,
     String personRevive,
+    Long personId,
     List<Long> tagIds) {
 
   /** Defensively copy the tag ids (null-safe) so the draft cannot be mutated after. */

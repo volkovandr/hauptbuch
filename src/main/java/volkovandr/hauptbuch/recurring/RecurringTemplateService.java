@@ -23,10 +23,11 @@ import volkovandr.hauptbuch.operations.TransactionCurrencyResolver;
 import volkovandr.hauptbuch.recurring.repository.RecurringTemplateRepository;
 
 /**
- * Saves and deletes recurring templates (data-model §14, recurring sub-plan slice b). A save takes
- * the split panel's form plus the schedule block, and refuses whatever the dock would refuse: it
- * dry-runs the entry through {@link DockSplitService#validate} on the start date before storing
- * anything. It never books an occurrence; the booking run arrives in slice c.
+ * Saves and deletes recurring templates (data-model §14, recurring sub-plan slices b and c). A save
+ * takes the split panel's form plus the schedule block, and refuses whatever the dock would refuse:
+ * it dry-runs the entry through {@link DockSplitService#validate} on the start date before storing
+ * anything. It then runs the booking for that template, in the same transaction, so a template
+ * whose occurrences cannot book is not saved either.
  */
 @Service
 class RecurringTemplateService {
@@ -39,6 +40,7 @@ class RecurringTemplateService {
   private final PayeeService payeeService;
   private final PersonProvisioningService personProvisioningService;
   private final TransactionCurrencyResolver transactionCurrencyResolver;
+  private final RecurringBookingService bookingService;
   private final Clock clock;
 
   RecurringTemplateService(
@@ -48,6 +50,7 @@ class RecurringTemplateService {
       PayeeService payeeService,
       PersonProvisioningService personProvisioningService,
       TransactionCurrencyResolver transactionCurrencyResolver,
+      RecurringBookingService bookingService,
       Clock clock) {
     this.repository = repository;
     this.dockSplitService = dockSplitService;
@@ -55,12 +58,33 @@ class RecurringTemplateService {
     this.payeeService = payeeService;
     this.personProvisioningService = personProvisioningService;
     this.transactionCurrencyResolver = transactionCurrencyResolver;
+    this.bookingService = bookingService;
     this.clock = clock;
   }
 
   /**
-   * Validate and store a template. A new one starts its cursor at yesterday, so the booking run
-   * books nothing past (data-model §14.3); an edit leaves the cursor alone.
+   * How many occurrences of a new template fall before today, for the save to ask whether to book
+   * them (data-model §14.3). Zero for an existing template, and for a start today or later: an
+   * occurrence already inside the lead time books without asking.
+   *
+   * @throws IllegalArgumentException if the schedule is incomplete, carrying the message to show
+   */
+  int pastOccurrences(RecurringScheduleForm schedule, SplitForm split) {
+    RecurringTemplateDraft draft = scheduleOf(schedule, split);
+    LocalDate today = LocalDate.now(clock);
+    if (schedule.recurringTemplateId() != null || !draft.startDate().isBefore(today)) {
+      return 0;
+    }
+    return draft
+        .schedule()
+        .occurrencesBetween(draft.startDate().minusDays(1), today.minusDays(1))
+        .size();
+  }
+
+  /**
+   * Validate and store a template, then book what it has due (data-model §14.3). A new one starts
+   * its cursor the day before its start when the operator chose to book its past occurrences, else
+   * at yesterday, so nothing past is booked; an edit leaves the cursor alone.
    *
    * @return the template's id
    * @throws IllegalArgumentException if the schedule is incomplete or the dock refuses the entry,
@@ -82,14 +106,20 @@ class RecurringTemplateService {
 
     Long id = schedule.recurringTemplateId();
     if (id == null) {
-      long created = repository.insert(draft, LocalDate.now(clock).minusDays(1));
+      LocalDate bookedThrough =
+          RecurringScheduleForm.BOOK_PAST.equals(schedule.pastOccurrences())
+              ? draft.startDate().minusDays(1)
+              : LocalDate.now(clock).minusDays(1);
+      long created = repository.insert(draft, bookedThrough);
       LOG.info("Recurring template created: id={}, name={}", created, draft.name());
+      bookingService.run(created);
       return created;
     }
     if (repository.update(id, draft) == 0) {
       throw new IllegalArgumentException("No live recurring template with id " + id);
     }
     LOG.debug("Recurring template saved: id={}", id);
+    bookingService.run(id);
     return id;
   }
 
@@ -121,6 +151,7 @@ class RecurringTemplateService {
         proposed.fundingPersonName(),
         proposed.fundingPersonDirection(),
         proposed.fundingPersonRevive(),
+        null,
         null,
         blankToNull(proposed.payeeText()),
         proposed.note(),

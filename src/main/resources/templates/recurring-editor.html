@@ -157,5 +157,37 @@
         />
       </div>
     </div>
+    <!-- A new template starting in the past (data-model §14.3): the save asks once whether to
+         book the occurrences before today, and each button saves with its answer. Once answered,
+         the answer rides along hidden, so a refused save does not ask again. -->
+    <div
+      th:if="${pastOccurrences != null}"
+      class="recurring-past"
+      role="alert"
+      th:with="plural=${pastOccurrences != 1}"
+    >
+      <p th:text="'The start date is in the past: ' + ${pastOccurrences}
+                  + (${plural} ? ' occurrences fall' : ' occurrence falls') + ' before today.'">
+        The start date is in the past: 2 occurrences fall before today.
+      </p>
+      <button
+        type="submit"
+        class="btn"
+        name="pastOccurrences"
+        value="book"
+        th:text="${plural} ? 'Book the ' + ${pastOccurrences} + ' past occurrences' : 'Book the past occurrence'"
+      >
+        Book the 2 past occurrences
+      </button>
+      <button type="submit" class="btn btn--ghost" name="pastOccurrences" value="skip">
+        Start from the next one
+      </button>
+    </div>
+    <input
+      th:unless="${pastOccurrences != null}"
+      type="hidden"
+      name="pastOccurrences"
+      th:value="${template.pastOccurrences()}"
+    />
   </th:block>
 </html>

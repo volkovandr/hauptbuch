@@ -334,6 +334,15 @@ class LedgerServiceTest {
         .isThrownBy(() -> ledgerService.voidTransaction(42L));
   }
 
+  @Test
+  void stampingAnAlreadyStampedTransactionFails() {
+    LocalDate occurrence = LocalDate.of(2026, 6, 1);
+    when(transactionRepository.stampOccurrence(42L, 7L, occurrence)).thenReturn(0);
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> ledgerService.stampOccurrence(42L, 7L, occurrence));
+  }
+
   /**
    * The batched sibling to {@link LedgerService#findTransaction}'s single-id liveness check (issue
    * tracker #08): a plain pass-through to the repository's batched query, wrapped in a {@link

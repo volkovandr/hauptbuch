@@ -64,6 +64,7 @@ final class ReceiptSplitEntries {
         null,
         null,
         null,
+        null,
         receipt.payeeId(),
         null,
         ReceiptEditorText.blankToNull(form.note()),
@@ -156,6 +157,7 @@ final class ReceiptSplitEntries {
         first.personName(),
         first.personDirection(),
         first.personRevive(),
+        first.personId(),
         first.tagIds());
   }
 
@@ -197,6 +199,7 @@ final class ReceiptSplitEntries {
         ReceiptEditorText.blankToNull(line.personName()),
         ReceiptEditorText.blankToNull(line.personDirection()),
         ReceiptEditorText.blankToNull(line.personRevive()),
+        null,
         line.tags());
   }
 }

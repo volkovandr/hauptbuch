@@ -302,6 +302,28 @@ public class TransactionRepository {
         .update();
   }
 
+  /**
+   * Stamp a transaction as the occurrence of a recurring template on {@code occurrenceDate}
+   * (data-model §14.2). Written once: an already-stamped transaction is left alone, so where a row
+   * came from never changes.
+   *
+   * @return the number of transactions stamped (0 when unknown or already stamped)
+   */
+  public int stampOccurrence(
+      long transactionId, long recurringTemplateId, LocalDate occurrenceDate) {
+    return jdbcClient
+        .sql(
+            """
+            update transaction
+            set recurring_template_id = :recurringTemplateId, occurrence_date = :occurrenceDate
+            where transaction_id = :transactionId and recurring_template_id is null
+            """)
+        .param(TRANSACTION_ID, transactionId)
+        .param("recurringTemplateId", recurringTemplateId)
+        .param("occurrenceDate", occurrenceDate)
+        .update();
+  }
+
   private static long requireKey(KeyHolder keyHolder) {
     Number key = keyHolder.getKey();
     if (key == null) {

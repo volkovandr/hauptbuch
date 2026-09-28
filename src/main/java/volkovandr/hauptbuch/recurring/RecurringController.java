@@ -117,7 +117,9 @@ class RecurringController {
 
   /**
    * Save the template and go back to the recurring page. A refused save re-renders the panel with
-   * the message, keeping everything typed.
+   * the message, keeping everything typed. A new template starting in the past is not saved until
+   * the operator answers whether to book its past occurrences (data-model §14.3): the panel comes
+   * back with the question, and the answer rides along on the next save.
    */
   @PostMapping(EDITOR_URL + "/save")
   String save(
@@ -127,6 +129,13 @@ class RecurringController {
     SplitForm split = SplitFormBinder.bind(params);
     RecurringScheduleForm schedule = RecurringScheduleForm.bind(params);
     try {
+      if (!schedule.pastOccurrencesAnswered()) {
+        int past = templateService.pastOccurrences(schedule, split);
+        if (past > 0) {
+          model.addAttribute("pastOccurrences", past);
+          return panel(split, schedule, null, model);
+        }
+      }
       templateService.save(schedule, split);
     } catch (IllegalArgumentException | IllegalStateException | UnbalancedTransactionException e) {
       return panel(split, schedule, e.getMessage(), model);

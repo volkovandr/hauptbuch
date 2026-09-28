@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,7 +35,8 @@ import volkovandr.hauptbuch.recurring.repository.RecurringTemplateRepository;
  * Integration tier (CLAUDE.md §6): the recurring page and the template editor (recurring sub-plan
  * slice b) driven through MockMvc against real Postgres. The editor is the split panel in template
  * mode: a template saves through the dock's own dry run, so the dock's refusals appear here, and
- * nothing the dry run wrote survives it. Saving books nothing yet (slice c).
+ * nothing the dry run wrote survives it. Saving runs the booking for that template (slice c), so a
+ * start in the past asks first and then puts the occurrences in the register.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -87,14 +89,19 @@ class RecurringScreenIntegrationTest {
 
   /** A one-line template funded by the bank account: the simple dock entry as a split. */
   private MockHttpServletRequestBuilder saveStreaming(String name) {
+    return saveStreaming(name, "month", START, "0", "auto");
+  }
+
+  private MockHttpServletRequestBuilder saveStreaming(
+      String name, String cadenceUnit, String start, String leadDays, String confirmation) {
     return post(SAVE)
         .param("name", name)
         .param("cadenceN", "1")
-        .param("cadenceUnit", "month")
+        .param("cadenceUnit", cadenceUnit)
         .param("endMode", "none")
-        .param("leadDays", "0")
-        .param("confirmation", "auto")
-        .param("date", START)
+        .param("leadDays", leadDays)
+        .param("confirmation", confirmation)
+        .param("date", start)
         .param("accountId", String.valueOf(bankId))
         .param("total", "9,99")
         .param("categoryText", "Streaming")
@@ -206,10 +213,11 @@ class RecurringScreenIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(header().string("HX-Redirect", "/recurring"));
 
-    // the dry run left nothing behind, and saving books nothing
+    // the dry run left nothing behind, and a start far in the future has nothing due: the save's
+    // run only moves the cursor through today
     assertThat(transactionCount()).isEqualTo(before);
     assertThat(repository.findById(onlyTemplateId()).orElseThrow().bookedThrough())
-        .isEqualTo(LocalDate.now().minusDays(1));
+        .isEqualTo(LocalDate.now());
 
     mockMvc
         .perform(get("/recurring"))
@@ -221,6 +229,105 @@ class RecurringScreenIntegrationTest {
         .andExpect(content().string(containsString("28.02.2099")))
         .andExpect(content().string(containsString("31.03.2099")))
         .andExpect(content().string(not(containsString("30.04.2099"))));
+  }
+
+  // ── booking on save (slice c) ───────────────────────────────────────────────
+
+  /**
+   * A weekly template that started 15 days ago: three occurrences fall before today, none on it.
+   */
+  private MockHttpServletRequestBuilder saveWeeklyFromThePast(String confirmation) {
+    return saveStreaming(
+        "Cleaning", "week", LocalDate.now().minusDays(15).toString(), "0", confirmation);
+  }
+
+  private List<Map<String, Object>> bookedRows(long templateId) {
+    return jdbcClient
+        .sql(
+            """
+            select occurrence_date, date, lifecycle from transaction
+            where recurring_template_id = :t order by occurrence_date
+            """)
+        .param("t", templateId)
+        .query()
+        .listOfRows();
+  }
+
+  @Test
+  void pastStartAsksWhetherToBookThePastOccurrencesAndStoresNothingYet() throws Exception {
+    mockMvc
+        .perform(saveWeeklyFromThePast("auto"))
+        .andExpect(status().isOk())
+        .andExpect(header().doesNotExist("HX-Redirect"))
+        .andExpect(content().string(containsString("3 occurrences fall before today")))
+        .andExpect(content().string(containsString("Book the 3 past occurrences")))
+        .andExpect(content().string(containsString("Start from the next one")));
+
+    assertThat(repository.findLive()).isEmpty();
+  }
+
+  @Test
+  void bookingThePastPutsEachOccurrenceInTheRegisterWithTheRecurringMarker() throws Exception {
+    LocalDate start = LocalDate.now().minusDays(15);
+    mockMvc
+        .perform(saveWeeklyFromThePast("auto").param("pastOccurrences", "book"))
+        .andExpect(header().string("HX-Redirect", "/recurring"));
+
+    long templateId = onlyTemplateId();
+    List<Map<String, Object>> booked = bookedRows(templateId);
+    assertThat(booked)
+        .extracting(row -> row.get("occurrence_date"))
+        .containsExactly(
+            java.sql.Date.valueOf(start),
+            java.sql.Date.valueOf(start.plusWeeks(1)),
+            java.sql.Date.valueOf(start.plusWeeks(2)));
+    // dated on the occurrence date, confirmed for an automatic template
+    assertThat(booked)
+        .allSatisfy(row -> assertThat(row.get("date")).isEqualTo(row.get("occurrence_date")));
+    assertThat(booked).allSatisfy(row -> assertThat(row.get("lifecycle")).isEqualTo("confirmed"));
+    assertThat(repository.findById(templateId).orElseThrow().bookedThrough())
+        .isEqualTo(LocalDate.now());
+
+    mockMvc
+        .perform(get("/register").param("accountId", String.valueOf(bankId)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("register__recurring")))
+        .andExpect(content().string(containsString("href=\"/recurring/" + templateId + "\"")));
+  }
+
+  @Test
+  void startingFromTheNextBooksNothingPast() throws Exception {
+    mockMvc
+        .perform(saveWeeklyFromThePast("auto").param("pastOccurrences", "skip"))
+        .andExpect(header().string("HX-Redirect", "/recurring"));
+
+    long templateId = onlyTemplateId();
+    assertThat(bookedRows(templateId)).isEmpty();
+    assertThat(repository.findById(templateId).orElseThrow().bookedThrough())
+        .isEqualTo(LocalDate.now());
+  }
+
+  @Test
+  void reviewTemplateBooksPendingRows() throws Exception {
+    mockMvc
+        .perform(saveWeeklyFromThePast("review").param("pastOccurrences", "book"))
+        .andExpect(header().string("HX-Redirect", "/recurring"));
+
+    assertThat(bookedRows(onlyTemplateId()))
+        .hasSize(3)
+        .allSatisfy(row -> assertThat(row.get("lifecycle")).isEqualTo("pending_review"));
+  }
+
+  @Test
+  void occurrenceInsideTheLeadTimeBooksWithoutAsking() throws Exception {
+    LocalDate inThreeDays = LocalDate.now().plusDays(3);
+    mockMvc
+        .perform(saveStreaming("Rent", "month", inThreeDays.toString(), "5", "auto"))
+        .andExpect(header().string("HX-Redirect", "/recurring"));
+
+    assertThat(bookedRows(onlyTemplateId()))
+        .extracting(row -> row.get("occurrence_date"))
+        .containsExactly(java.sql.Date.valueOf(inThreeDays));
   }
 
   // ── edit round-trips ────────────────────────────────────────────────────────

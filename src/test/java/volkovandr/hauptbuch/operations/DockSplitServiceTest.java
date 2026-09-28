@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.operations;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -54,6 +55,7 @@ class DockSplitServiceTest {
   private static final long DEPOSIT_LEAF_ID = 21L;
   private static final long SAVINGS_ID = 30L;
   private static final long MAX_LEAF_ID = 40L;
+  private static final long MAX_PERSON_ID = 42L;
   private static final long ANNA_LEAF_ID = 41L;
 
   @Mock private AccountService accountService;
@@ -99,20 +101,22 @@ class DockSplitServiceTest {
   }
 
   private static SplitLineDraft line(long categoryId, String amount) {
-    return new SplitLineDraft(categoryId, amount, null, null, null, null, null, List.of());
+    return new SplitLineDraft(categoryId, amount, null, null, null, null, null, null, List.of());
   }
 
   private static SplitLineDraft line(long categoryId, String amount, List<Long> tagIds) {
-    return new SplitLineDraft(categoryId, amount, null, null, null, null, null, tagIds);
+    return new SplitLineDraft(categoryId, amount, null, null, null, null, null, null, tagIds);
   }
 
   /** A for/by person line (register §3.5, plan stage 8b.2) with no category id. */
   private static SplitLineDraft personLine(String personName, String direction, String amount) {
-    return new SplitLineDraft(null, amount, null, null, personName, direction, null, List.of());
+    return new SplitLineDraft(
+        null, amount, null, null, personName, direction, null, null, List.of());
   }
 
   private static SplitLineDraft transferLine(long accountId, String amount, String direction) {
-    return new SplitLineDraft(accountId, amount, null, direction, null, null, null, List.of());
+    return new SplitLineDraft(
+        accountId, amount, null, direction, null, null, null, null, List.of());
   }
 
   /** A same-currency split entry (the 7c.2 shape) — the 7d.2 header currency fields left blank. */
@@ -130,8 +134,8 @@ class DockSplitServiceTest {
       List<SplitLineDraft> lines,
       String lifecycle) {
     return new SplitEntry(
-        txnId, date, accountId, null, null, null, null, null, note, null, null, null, List.of(),
-        lines, lifecycle);
+        txnId, date, accountId, null, null, null, null, null, null, note, null, null, null,
+        List.of(), lines, lifecycle);
   }
 
   /** A same-currency split entry carrying transaction-level (funding-leg) tags. */
@@ -141,6 +145,7 @@ class DockSplitServiceTest {
         null,
         LocalDate.of(2026, 2, 1),
         accountId,
+        null,
         null,
         null,
         null,
@@ -169,6 +174,7 @@ class DockSplitServiceTest {
         null,
         personName,
         personDirection,
+        null,
         null,
         null,
         null,
@@ -309,7 +315,7 @@ class DockSplitServiceTest {
             null,
             List.of(
                 new SplitLineDraft(
-                    FOOD_ID, "20", "organic aisle", null, null, null, null, List.of()))));
+                    FOOD_ID, "20", "organic aisle", null, null, null, null, null, List.of()))));
 
     ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
     verify(ledgerService).recordTransaction(draft.capture());
@@ -557,7 +563,9 @@ class DockSplitServiceTest {
             LocalDate.of(2026, 2, 1),
             CASH_ID,
             null,
-            List.of(new SplitLineDraft(null, "10", null, null, "Max", "FOR", "true", List.of()))));
+            List.of(
+                new SplitLineDraft(
+                    null, "10", null, null, "Max", "FOR", "true", null, List.of()))));
 
     verify(personProvisioningService).ensureLeaf("Max", EUR, true);
   }
@@ -644,6 +652,70 @@ class DockSplitServiceTest {
     assertThatExceptionOfType(IllegalStateException.class)
         .isThrownBy(() -> dockSplitService.commit(entry))
         .withMessageContaining("Base currency is not set");
+  }
+
+  // ── people by id: a recurring template books the people it stored (data-model §14.2) ────────
+
+  @Test
+  void personLineByIdProvisionsThatPersonsLeafWithoutNameMatching() {
+    // Live names can repeat, so a template's booking names its person by id: the by-name match
+    // (and its ambiguity refusal) never runs.
+    cashFunds();
+    foodLeaf();
+    when(personProvisioningService.ensureLeaf(MAX_PERSON_ID, EUR))
+        .thenReturn(account(MAX_LEAF_ID, "asset", EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(7L);
+
+    dockSplitService.commit(
+        entry(
+            null,
+            LocalDate.of(2026, 2, 1),
+            CASH_ID,
+            null,
+            List.of(
+                line(FOOD_ID, "21,50"),
+                new SplitLineDraft(
+                    null, "10", null, null, null, "FOR", null, MAX_PERSON_ID, List.of()))));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    assertThat(leg(draft.getValue().postings(), MAX_LEAF_ID)).isEqualByComparingTo("10");
+    verify(personProvisioningService, never()).ensureLeaf(any(String.class), any(), anyBoolean());
+  }
+
+  @Test
+  void personFundedSplitByIdProvisionsThatPersonsLeafInTheEntrysCurrency() {
+    when(currencyLeafService.resolveCurrencyLeaf(FOOD_ID, EUR))
+        .thenReturn(account(FOOD_LEAF_ID, EXPENSE, EUR));
+    when(personProvisioningService.ensureLeaf(MAX_PERSON_ID, EUR))
+        .thenReturn(account(MAX_LEAF_ID, "asset", EUR));
+    when(payeeService.resolvePayee(null, null)).thenReturn(null);
+    when(ledgerService.recordTransaction(any())).thenReturn(23L);
+
+    dockSplitService.commit(
+        new SplitEntry(
+            null,
+            LocalDate.of(2026, 2, 1),
+            null,
+            null,
+            "BY",
+            null,
+            MAX_PERSON_ID,
+            null,
+            null,
+            null,
+            EUR,
+            null,
+            null,
+            List.of(),
+            List.of(line(FOOD_ID, "20")),
+            "confirmed"));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    assertThat(leg(draft.getValue().postings(), MAX_LEAF_ID)).isEqualByComparingTo("-20");
+    verify(personProvisioningService, never()).ensureLeaf(any(String.class), any(), anyBoolean());
   }
 
   // ── the funding-leg sigil as a checked assertion (issue transaction-register-ui/06) ───────────
@@ -884,6 +956,7 @@ class DockSplitServiceTest {
         null,
         null,
         null,
+        null,
         spendingCurrency,
         fundingTotal,
         baseTotal,
@@ -996,6 +1069,7 @@ class DockSplitServiceTest {
             null,
             LocalDate.of(2026, 8, 15),
             CASH_ID,
+            null,
             null,
             null,
             null,

@@ -107,6 +107,24 @@ public class LedgerService {
   }
 
   /**
+   * Stamp a just-recorded transaction as the occurrence of a recurring template on {@code
+   * occurrenceDate} (data-model §14.2). The stamp is the only record an occurrence leaves, and it
+   * never changes afterwards; the {@code recurring} module books through {@code operations} and
+   * then stamps through here, never touching the table itself.
+   *
+   * @throws IllegalArgumentException if the transaction is unknown or already stamped
+   */
+  @Transactional
+  public void stampOccurrence(
+      long transactionId, long recurringTemplateId, LocalDate occurrenceDate) {
+    if (transactionRepository.stampOccurrence(transactionId, recurringTemplateId, occurrenceDate)
+        == 0) {
+      throw new IllegalArgumentException(
+          "No unstamped transaction with id " + transactionId + " to stamp");
+    }
+  }
+
+  /**
    * A live (not soft-deleted) transaction by id, for loading it into the entry dock's edit mode
    * (register §3.1). A read the dock needs before it can re-thread; pairs with {@link
    * #findPostings}. Returns empty for a missing or voided transaction.

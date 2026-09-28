@@ -18,6 +18,8 @@ import org.springframework.util.MultiValueMap;
  * @param leadDays how many days ahead of its date an occurrence is booked
  * @param confirmation {@code auto} or {@code review}
  * @param managementUrl the provider's management page, or blank
+ * @param pastOccurrences a new template's answer to "book the past occurrences?" (data-model
+ *     §14.3): {@code book} or {@code skip}, blank while unasked
  */
 public record RecurringScheduleForm(
     Long recurringTemplateId,
@@ -29,18 +31,26 @@ public record RecurringScheduleForm(
     String endAfter,
     String leadDays,
     String confirmation,
-    String managementUrl) {
+    String managementUrl,
+    String pastOccurrences) {
 
   static final String END_NONE = "none";
   static final String END_DATE = "date";
   static final String END_AFTER = "after";
   static final String AUTO = "auto";
   static final String REVIEW = "review";
+  static final String BOOK_PAST = "book";
+  static final String SKIP_PAST = "skip";
+
+  /** Whether the operator has answered the past-occurrences question (either way). */
+  boolean pastOccurrencesAnswered() {
+    return pastOccurrences != null && !pastOccurrences.isBlank();
+  }
 
   /** A blank schedule for a new template: every month, no end, booked on the day, automatic. */
   static RecurringScheduleForm blank() {
     return new RecurringScheduleForm(
-        null, "", "1", CadenceUnit.MONTH.code(), END_NONE, "", "", "0", AUTO, "");
+        null, "", "1", CadenceUnit.MONTH.code(), END_NONE, "", "", "0", AUTO, "", "");
   }
 
   /** Bind the schedule block from the editor's raw request parameters. */
@@ -56,6 +66,7 @@ public record RecurringScheduleForm(
         params.getFirst("endAfter"),
         params.getFirst("leadDays"),
         params.getFirst("confirmation"),
-        params.getFirst("managementUrl"));
+        params.getFirst("managementUrl"),
+        params.getFirst("pastOccurrences"));
   }
 }
