@@ -1,0 +1,293 @@
+package volkovandr.hauptbuch.recurring;
+
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import volkovandr.hauptbuch.debts.PersonProvisioningService;
+import volkovandr.hauptbuch.ledger.PayeeService;
+import volkovandr.hauptbuch.operations.DockSplitService;
+import volkovandr.hauptbuch.operations.SplitCurrencyService;
+import volkovandr.hauptbuch.operations.SplitEntry;
+import volkovandr.hauptbuch.operations.SplitForm;
+import volkovandr.hauptbuch.operations.SplitFormBinder;
+import volkovandr.hauptbuch.operations.SplitLineAmounts;
+import volkovandr.hauptbuch.operations.SplitLineDraft;
+import volkovandr.hauptbuch.operations.TransactionCurrencyResolver;
+import volkovandr.hauptbuch.recurring.repository.RecurringTemplateRepository;
+
+/**
+ * Saves and deletes recurring templates (data-model §14, recurring sub-plan slice b). A save takes
+ * the split panel's form plus the schedule block, and refuses whatever the dock would refuse: it
+ * dry-runs the entry through {@link DockSplitService#validate} on the start date before storing
+ * anything. It never books an occurrence; the booking run arrives in slice c.
+ */
+@Service
+class RecurringTemplateService {
+
+  private static final Logger LOG = LoggerFactory.getLogger(RecurringTemplateService.class);
+
+  private final RecurringTemplateRepository repository;
+  private final DockSplitService dockSplitService;
+  private final SplitCurrencyService splitCurrencyService;
+  private final PayeeService payeeService;
+  private final PersonProvisioningService personProvisioningService;
+  private final TransactionCurrencyResolver transactionCurrencyResolver;
+  private final Clock clock;
+
+  RecurringTemplateService(
+      RecurringTemplateRepository repository,
+      DockSplitService dockSplitService,
+      SplitCurrencyService splitCurrencyService,
+      PayeeService payeeService,
+      PersonProvisioningService personProvisioningService,
+      TransactionCurrencyResolver transactionCurrencyResolver,
+      Clock clock) {
+    this.repository = repository;
+    this.dockSplitService = dockSplitService;
+    this.splitCurrencyService = splitCurrencyService;
+    this.payeeService = payeeService;
+    this.personProvisioningService = personProvisioningService;
+    this.transactionCurrencyResolver = transactionCurrencyResolver;
+    this.clock = clock;
+  }
+
+  /**
+   * Validate and store a template. A new one starts its cursor at yesterday, so the booking run
+   * books nothing past (data-model §14.3); an edit leaves the cursor alone.
+   *
+   * @return the template's id
+   * @throws IllegalArgumentException if the schedule is incomplete or the dock refuses the entry,
+   *     carrying the message to show
+   * @throws IllegalStateException if the dock refuses the entry for want of a base currency
+   */
+  @Transactional
+  long save(RecurringScheduleForm schedule, SplitForm split) {
+    RecurringTemplateDraft unresolved = scheduleOf(schedule, split);
+    if (split.accountId() == null && !split.hasFundingPerson()) {
+      throw new IllegalArgumentException("An account or person is required");
+    }
+    List<SplitLineDraft> lines = SplitFormBinder.linesOf(split);
+    String spending = spendingCurrency(split);
+    // The payee and the people are resolved for real before the dry run, so the dry run finds them
+    // and logs no "created" line for rows it then rolls back. A refused save rolls them back too.
+    RecurringTemplateDraft draft = withEntry(unresolved, split, lines, spending);
+    dockSplitService.validate(entryOf(split, lines, spending));
+
+    Long id = schedule.recurringTemplateId();
+    if (id == null) {
+      long created = repository.insert(draft, LocalDate.now(clock).minusDays(1));
+      LOG.info("Recurring template created: id={}, name={}", created, draft.name());
+      return created;
+    }
+    if (repository.update(id, draft) == 0) {
+      throw new IllegalArgumentException("No live recurring template with id " + id);
+    }
+    LOG.debug("Recurring template saved: id={}", id);
+    return id;
+  }
+
+  /**
+   * Soft-delete a template. Transactions it already booked stay (data-model §14.3).
+   *
+   * @throws IllegalArgumentException if there is no live template with that id
+   */
+  @Transactional
+  void delete(long recurringTemplateId) {
+    if (repository.softDelete(recurringTemplateId) == 0) {
+      throw new IllegalArgumentException(
+          "No live recurring template with id " + recurringTemplateId);
+    }
+    LOG.info("Recurring template deleted: id={}", recurringTemplateId);
+  }
+
+  /**
+   * The entry as the dock would commit it on the start date, in the currency the template stores.
+   * Cross-currency totals the operator left blank are proposed from the rate first, as each
+   * occurrence's booking will propose them.
+   */
+  private SplitEntry entryOf(SplitForm split, List<SplitLineDraft> lines, String spending) {
+    SplitForm proposed = splitCurrencyService.withProposedTotals(split);
+    return new SplitEntry(
+        null,
+        proposed.date(),
+        proposed.accountId(),
+        proposed.fundingPersonName(),
+        proposed.fundingPersonDirection(),
+        proposed.fundingPersonRevive(),
+        null,
+        blankToNull(proposed.payeeText()),
+        proposed.note(),
+        spending,
+        proposed.fundingTotal(),
+        proposed.baseTotal(),
+        proposed.tagId(),
+        lines,
+        "confirmed");
+  }
+
+  /**
+   * The currency the lines are in, as stored. A person-funded entry has no account to take it from,
+   * so the dock resolves it at commit (the picked currency, else the person's one debt currency,
+   * else base); a template fixes that answer now, so a booking months later books the same currency
+   * the operator saw validated.
+   */
+  private String spendingCurrency(SplitForm split) {
+    String picked = blankToNull(split.spendingCurrencyCode());
+    if (picked != null || !split.hasFundingPerson()) {
+      return picked;
+    }
+    return transactionCurrencyResolver.forFundingPerson(split.fundingPersonName(), null);
+  }
+
+  /** The schedule part of the draft, parsed and checked; the entry part is still empty. */
+  private static RecurringTemplateDraft scheduleOf(RecurringScheduleForm form, SplitForm split) {
+    String name = blankToNull(form.name());
+    if (name == null) {
+      throw new IllegalArgumentException("A template needs a name");
+    }
+    LocalDate start = split.date();
+    if (start == null) {
+      throw new IllegalArgumentException("A template needs a start date");
+    }
+    CadenceUnit unit = CadenceUnit.fromCode(form.cadenceUnit());
+    int every = whole(form.cadenceN(), "The cadence", 1);
+    // The schedule's own checks refuse an end date before the start.
+    Schedule schedule = new Schedule(start, unit, every, endDate(form, start, unit, every));
+    String confirmation = blankToNull(form.confirmation());
+    return new RecurringTemplateDraft(
+        name.strip(),
+        schedule.startDate(),
+        schedule.unit().code(),
+        schedule.every(),
+        schedule.endDate(),
+        blankToNull(form.leadDays()) == null ? 0 : whole(form.leadDays(), "The lead time", 0),
+        confirmation == null ? RecurringScheduleForm.AUTO : confirmation,
+        false,
+        null,
+        managementUrl(form.managementUrl()),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        List.of());
+  }
+
+  private static LocalDate endDate(
+      RecurringScheduleForm form, LocalDate start, CadenceUnit unit, int every) {
+    String mode = blankToNull(form.endMode());
+    if (RecurringScheduleForm.END_DATE.equals(mode)) {
+      String text = blankToNull(form.endDate());
+      if (text == null) {
+        throw new IllegalArgumentException("Pick the end date, or choose no end");
+      }
+      try {
+        return LocalDate.parse(text.strip());
+      } catch (DateTimeParseException e) {
+        throw new IllegalArgumentException("The end date is not a date", e);
+      }
+    }
+    if (RecurringScheduleForm.END_AFTER.equals(mode)) {
+      int count = whole(form.endAfter(), "The number of occurrences", 1);
+      return Schedule.endDateAfter(start, unit, every, count);
+    }
+    return null;
+  }
+
+  /** A whole number of at least {@code min}, or a message naming {@code what}. */
+  private static int whole(String text, String what, int min) {
+    int value;
+    try {
+      value = Integer.parseInt(text == null ? "" : text.strip());
+    } catch (NumberFormatException e) {
+      value = min - 1;
+    }
+    if (value < min) {
+      throw new IllegalArgumentException(what + " must be a whole number of at least " + min);
+    }
+    return value;
+  }
+
+  /**
+   * The management link, which opens in a new tab: only a web address is accepted, so a stored
+   * value can never be a {@code javascript:} link.
+   */
+  private static String managementUrl(String text) {
+    String url = blankToNull(text);
+    if (url == null) {
+      return null;
+    }
+    String stripped = url.strip();
+    String lower = stripped.toLowerCase(Locale.ROOT);
+    if (!lower.startsWith("https://") && !lower.startsWith("http://")) {
+      throw new IllegalArgumentException("The management link must start with https:// or http://");
+    }
+    return stripped;
+  }
+
+  /**
+   * Fill the draft's entry from the validated form: the payee and every named person are resolved
+   * (created, or revived as the operator chose) so the template can store their ids.
+   */
+  private RecurringTemplateDraft withEntry(
+      RecurringTemplateDraft schedule,
+      SplitForm split,
+      List<SplitLineDraft> lines,
+      String spending) {
+    Long personId =
+        split.hasFundingPerson()
+            ? personId(split.fundingPersonName(), split.fundingPersonRevive())
+            : null;
+    List<RecurringTemplateLineDraft> storedLines = new ArrayList<>();
+    for (SplitLineDraft line : lines) {
+      boolean personLine = blankToNull(line.personName()) != null;
+      storedLines.add(
+          new RecurringTemplateLineDraft(
+              personLine ? null : line.categoryId(),
+              personLine ? null : blankToNull(line.transferDirection()),
+              personLine ? personId(line.personName(), line.personRevive()) : null,
+              personLine ? line.personDirection() : null,
+              SplitLineAmounts.parseSignedAmount(line.amount()),
+              line.note(),
+              line.tagIds()));
+    }
+    return new RecurringTemplateDraft(
+        schedule.name(),
+        schedule.startDate(),
+        schedule.cadenceUnit(),
+        schedule.cadenceN(),
+        schedule.endDate(),
+        schedule.leadDays(),
+        schedule.confirmation(),
+        schedule.endReminder(),
+        schedule.endReminderDays(),
+        schedule.managementUrl(),
+        personId == null ? split.accountId() : null,
+        personId,
+        personId == null ? null : split.fundingPersonDirection(),
+        payeeService.resolvePayee(null, split.payeeText()),
+        blankToNull(split.note()),
+        spending,
+        split.tagId(),
+        storedLines);
+  }
+
+  private long personId(String name, String revive) {
+    return personProvisioningService
+        .ensurePerson(name, "true".equalsIgnoreCase(blankToNull(revive)))
+        .personId();
+  }
+
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value;
+  }
+}

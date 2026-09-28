@@ -1,0 +1,53 @@
+/* The recurring page and the template editor (recurring sub-plan slice b). The editor is the split
+   panel in template mode, styled by register.css; only its schedule block and the list are here. */
+
+.recurring-list {
+  overflow-x: auto;
+}
+
+table.recurring {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+}
+
+table.recurring thead th {
+  text-align: left;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border-bottom: 2px solid var(--rule);
+  padding: 0.3rem 0.5rem;
+}
+
+table.recurring tbody td {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--feint);
+  vertical-align: middle;
+}
+
+.recurring__dates {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.recurring-schedule {
+  margin-bottom: 0.8rem;
+}
+
+.recurring-schedule__cadence {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.recurring-schedule__end {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.8rem;
+  align-items: center;
+}

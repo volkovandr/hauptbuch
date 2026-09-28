@@ -104,6 +104,27 @@ public class SplitCurrencyService {
    * single-currency by construction).
    */
   public SplitTotals proposeTotals(SplitTotalsQuery query) {
+    return proposeTotalsFor(query);
+  }
+
+  /**
+   * The split panel's form with its blank header totals proposed ({@link #proposeTotals}) — what
+   * the panel's currency round-trip shows, and what a recurring template's dry run commits.
+   */
+  public SplitForm withProposedTotals(SplitForm form) {
+    SplitTotals totals =
+        proposeTotalsFor(
+            new SplitTotalsQuery(
+                form.accountId(),
+                form.spendingCurrencyCode(),
+                form.date(),
+                form.total(),
+                form.fundingTotal(),
+                form.baseTotal()));
+    return SplitFormBinder.withTotals(form, totals);
+  }
+
+  private SplitTotals proposeTotalsFor(SplitTotalsQuery query) {
     String spending = blankToNull(query.spendingCurrencyCode());
     String funding =
         query.accountId() == null

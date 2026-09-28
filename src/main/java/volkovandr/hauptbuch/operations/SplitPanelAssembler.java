@@ -29,9 +29,12 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
  * agrees to the minor unit once the lines balance. That whole rule lives in {@link
  * SplitCurrencyService} (issue receipts/23, decision 4), which the receipt post-process editor
  * reads too, so the two surfaces' headers cannot drift apart.
+ *
+ * <p>Public because the recurring template editor is the split panel in template mode (data-model
+ * §14.1) and assembles its panel here too.
  */
 @Component
-class SplitPanelAssembler {
+public class SplitPanelAssembler {
 
   /** German entry is to the minor unit; two places covers EUR/CHF/USD. */
   private static final int FRACTION_DIGITS = 2;
@@ -53,7 +56,7 @@ class SplitPanelAssembler {
   }
 
   /** Build the panel view model for the current form state, optionally carrying a message. */
-  SplitPanel panel(SplitForm form, String error) {
+  public SplitPanel panel(SplitForm form, String error) {
     SplitCurrencyContext ctx =
         splitCurrencyService.resolve(
             new SplitCurrencyQuery(
@@ -158,7 +161,7 @@ class SplitPanelAssembler {
    * spending currency (register §3.10) — so the last line closes the gap. Returns a new form; the
    * caller re-renders it.
    */
-  SplitForm addLine(SplitForm form) {
+  public SplitForm addLine(SplitForm form) {
     SplitPanel current = panel(form, null);
     BigDecimal remaining = lenientParse(current.remaining());
     String rest = remaining.signum() > 0 ? current.remaining() : "";
@@ -166,7 +169,7 @@ class SplitPanelAssembler {
   }
 
   /** Remove the line at {@code index} across every aligned array. Returns a new form. */
-  SplitForm removeLine(SplitForm form, int index) {
+  public SplitForm removeLine(SplitForm form, int index) {
     return SplitLineArrays.removedLine(form, index);
   }
 

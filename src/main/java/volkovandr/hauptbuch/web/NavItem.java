@@ -23,6 +23,7 @@ public record NavItem(String label, String path, boolean current) {
           new NavItem("Accounts", "/accounts", false),
           new NavItem("Categories", "/categories", false),
           new NavItem("People", "/people", false),
+          new NavItem("Recurring", "/recurring", false),
           new NavItem("Receipts", "/receipts", false),
           new NavItem("Import", "/import", false),
           new NavItem("Reports", "/reports", false),

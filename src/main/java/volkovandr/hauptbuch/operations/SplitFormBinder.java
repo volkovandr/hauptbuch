@@ -20,8 +20,11 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
  * {@code 20,50} — and free text) and Spring's collection binding would split one {@code
  * lineAmount=20,50} value into two, misaligning every line array (the "one comma spawns extra
  * lines" fix).
+ *
+ * <p>Public because the recurring template editor is the split panel in template mode (data-model
+ * §14.1): it binds the same form and reads the same lines, so there is no second entry form.
  */
-final class SplitFormBinder {
+public final class SplitFormBinder {
 
   /** German entry is to the minor unit; two places covers EUR/CHF/USD. */
   private static final int FRACTION_DIGITS = 2;
@@ -32,7 +35,7 @@ final class SplitFormBinder {
    * Bind the panel form from the raw request parameters (see the class note on why
    * not @ModelAttribute).
    */
-  static SplitForm bind(MultiValueMap<String, String> p) {
+  public static SplitForm bind(MultiValueMap<String, String> p) {
     List<String> categoryText = orEmpty(p.get("categoryText"));
     List<String> lineCategoryId = orEmpty(p.get("lineCategoryId"));
     List<String> lineCategoryType = orEmpty(p.get("lineCategoryType"));
@@ -113,7 +116,7 @@ final class SplitFormBinder {
    * just proposed them — each either what the operator typed or, when that was blank, the
    * rate-derived value they are being asked to confirm (issue receipts/23, decision 6).
    */
-  static SplitForm withTotals(SplitForm form, SplitTotals totals) {
+  public static SplitForm withTotals(SplitForm form, SplitTotals totals) {
     return new SplitForm(
         form.transactionId(),
         form.date(),
@@ -163,7 +166,7 @@ final class SplitFormBinder {
    * its counterpart is the person's debt leaf, which does not exist until commit provisions it — so
    * the "needs a category" refusal applies only to a line that named no person either.
    */
-  static List<SplitLineDraft> linesOf(SplitForm form) {
+  public static List<SplitLineDraft> linesOf(SplitForm form) {
     List<SplitLineDraft> lines = new ArrayList<>();
     int count =
         Math.max(

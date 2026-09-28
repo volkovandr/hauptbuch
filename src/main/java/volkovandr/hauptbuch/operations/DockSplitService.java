@@ -5,7 +5,9 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.debts.PersonProvisioningService;
@@ -119,6 +121,24 @@ public class DockSplitService {
     }
     ledgerService.editTransaction(entry.transactionId(), draft);
     return entry.transactionId();
+  }
+
+  /**
+   * Check that {@link #commit} would accept {@code entry}, without keeping anything it wrote: the
+   * commit runs behind a savepoint that is always rolled back (a transaction of its own when the
+   * caller has none), so it sees the caller's uncommitted rows and leaves the caller's transaction
+   * usable whatever the commit threw. The recurring template editor saves through this (data-model
+   * §14.1), so whatever the dock refuses, the template editor refuses with the same message, and
+   * nothing the dry run provisions (a payee, a person, a currency leaf) survives it.
+   *
+   * <p>It throws exactly what {@link #commit} throws for {@code entry}: an {@link
+   * IllegalArgumentException} or {@link IllegalStateException}, or the engine's {@code
+   * UnbalancedTransactionException}.
+   */
+  @Transactional(propagation = Propagation.NESTED)
+  public void validate(SplitEntry entry) {
+    commit(entry);
+    TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
   }
 
   /**
