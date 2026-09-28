@@ -75,7 +75,7 @@ the code.
 
 ---
 
-## b — The recurring page and the template editor
+## b — The recurring page and the template editor ✅ **complete**
 
 - A **Recurring** nav entry and page listing the live templates. Each row shows the name, the
   cadence in words ("every 2 months on the 31st"), the amount and account, the confirmation mode,
