@@ -42,7 +42,7 @@ move earlier if the owner wants the cost overview first. That would be a reorder
 
 ---
 
-## a — Model and schedule math
+## a — Model and schedule math ✅ **complete**
 
 The model slice is the one exception to "every slice ends in a UI change". The owner reviews it in
 the code.
