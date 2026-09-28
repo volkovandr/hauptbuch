@@ -1,8 +1,8 @@
 # Personal Finance Manager — UI: Transaction Register & Entry Dock
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.7
-**Date:** 2026-09-26
+**Status:** Draft v0.8
+**Date:** 2026-09-28
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
@@ -20,6 +20,8 @@
 > pinning them now would be premature.
 
 **Changelog**
+- **v0.8 (2026-09-28):** Recurring (data-model §14): a **Pending only** filter (§2.3); §2.10 review
+  gestures on a pending row, and the recurring marker shares the receipt paperclip's slot.
 - **v0.7 (2026-09-26):** §3.8a: a cross-currency split's shared rate is taken over the lines' net,
   so a line in the other direction keeps its sign in base; lines netting to zero are refused. (The
   split panel had allocated by summed magnitudes, mis-valuing mixed-direction splits.)
@@ -119,6 +121,7 @@ layout's "→ top" slice.
 | Date range | **Last 12 months** | The natural bounded view; keeps render + worst-case re-fetch to hundreds of rows. |
 | Accounts | **Last used** picker, all ticked | A one-line tab strip of five pickers (below); multi-account by default (Money showed one at a time — rejected, see §2.5). |
 | Payees | none (all) | Free filter. |
+| Pending only | off | Shows only `pending_review` rows (recurring occurrences awaiting review, zero-amount receipt placeholders). The main page's "pending to review" link opens the register with it on. |
 | Order | **Date, ascending** | Changeable; non-date sorts change balance behaviour (§2.7). |
 
 **The account picker** (issue transaction-register-ui/22). The filter is a one-line **tab strip**
@@ -300,11 +303,16 @@ misleading.
 
 ### 2.10 Lifecycle & status indicators
 
-- **`pending_review` rows** (recurring pre-registrations, review-pending captures) render **muted /
-  dashed** and show **no balance** (`—`) — they do not move the confirmed balance.
+- **`pending_review` rows** (recurring occurrences under `review`, review-pending captures) render
+  **muted / dashed** and show **no balance** (`—`) — they do not move the confirmed balance.
+  Selecting one opens it in the dock: **Save** confirms it (even future-dated), **Cancel** leaves it
+  pending, voiding skips it (data-model §14.3).
 - Small trailing **status icons**: reconciliation state (unreconciled / cleared / reconciled),
-  a **receipt** paperclip when an attachment is linked, a **recurring/subscription** marker, a
-  **pending** clock. Kept subtle (FR-UX-04).
+  a **receipt** paperclip when an attachment is linked, a **recurring** marker linking to the
+  template, a **pending** clock. Kept subtle (FR-UX-04). The paperclip and the recurring marker
+  **share one slot** with distinct glyphs: a transaction booked from a template has no receipt, so
+  the two never compete (if one ever had both, the paperclip wins). The recurring marker stays
+  when the row is edited, because where a row came from is a fact.
 
 ---
 

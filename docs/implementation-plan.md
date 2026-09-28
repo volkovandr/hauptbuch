@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.50
-**Date:** 2026-09-26
+**Status:** Draft v0.51
+**Date:** 2026-09-28
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md`, `import.md`, `reporting.md`
@@ -28,6 +28,10 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.51 (2026-09-28):** **Recurring templates grilled, designed, and sequenced** into the sub-plan
+  `implementation-plan-recurring.md` (slices a–g). The
+  subscription entity is dropped: a subscription is a recurring template. Pre-registration becomes
+  lead time + auto/review confirmation (data-model §14, ADR 0002). §3's bullet rewritten.
 - **v0.50 (2026-09-26):** **Reporting complete** (slices a–f, owner-confirmed). No scope change
   (routine). The sub-plan `implementation-plan-reporting.md` is deleted; its summary is folded into
   §3's Reporting bullet (the stage-7/9/import pattern).
@@ -655,7 +659,7 @@ shipped; everything after it is unbuilt.
 - **Register follow-ons:** column re-sorting with the balance-hide rule (register §2.7) — deferred
   from stage 7a until missed.
 - **Bank statement reconciliation:** the `statements` module (§5.8) — PDF-first extraction, matching
-  statement lines against existing transactions (manual/receipt/pre-registered), flag-and-create for
+  statement lines against existing transactions (manual/receipt/recurring), flag-and-create for
   unmatched, manual override, mark reconciled. Money flow covered by MockMvc acceptance (Playwright
   dropped, below). Builds the matcher receipt duplicate detection (next bullet) shares.
 - **Receipt follow-ons:** duplicate detection at confirm (merchant+date+total) + link-to-existing
@@ -674,8 +678,26 @@ shipped; everything after it is unbuilt.
   (ARCH-04) and is the prerequisite for any non-localhost exposure.
 - **Currency follow-ons:** ECB rate-feed automation (§1.2 — the engine is already multi-currency;
   this only automates rate lookup/proposal).
-- **Recurring & subscriptions:** recurring templates generating `pending_review` transactions
-  (FR-REC); subscriptions manager + renewal overview (FR-SUB).
+- **Recurring templates** (FR-REC, FR-SUB; grilled 2026-09-28). Sequenced in the sub-plan
+  **`implementation-plan-recurring.md`** (slices a–g, the stage-7/9/import/reporting pattern;
+  deleted on completion, summary folded back here). The model and
+  booking rules are ratified in **data-model §14** (rationale: ADR 0002); the register gains the
+  Pending only filter and the shared paperclip/recurring slot (register §2.3/§2.10). Scope:
+  - the `recurring` module: template + line tables, the transaction stamp
+    `(recurring_template_id, occurrence_date)`, the booked-through run (startup, midnight, on save)
+    booking through the dock's `operations` path;
+  - the **recurring page**: template list with per-template schedule-math figures, the Recurring cost
+    summary, and the editor as the **dock in template mode** (no second entry form); the
+    past-occurrences question on create and the keep-pending question on end/delete;
+  - **main page:** "N pending to review" (overdue called out) → register Pending only; end reminders
+    (dismiss switches the reminder off); booking-failure warnings;
+  - `operations` merges/reassignments rewrite template references; deleting an account or category
+    a live template uses is refused.
+  *Module cycle:* `recurring` calls `operations` to book, while `operations` merges must rewrite
+  `recurring`'s references. The proposed resolution, an interface `operations` owns and `recurring`
+  implements, is in the sub-plan's slice f.
+  *Deferred:* forecasting from templates (FR-FC-01), MCP tools, matching occurrences against
+  statement lines, price-change reminders.
 - **Planning:** budgets on the category taxonomy (FR-BUD) — and with it the **monthly narrative
   report** (FR-RPT, Q12: comparison against the previous month and a multi-month average, fact
   against budget, anomalies, prose); forecasting — scheduled + trend (FR-FC).

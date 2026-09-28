@@ -1,8 +1,8 @@
 # Hauptbuch — Core Data Model
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.14
-**Date:** 2026-09-12
+**Status:** Draft v0.15
+**Date:** 2026-09-28
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.8),
 `tech-stack.md` (v0.3), `reporting.md`
@@ -13,10 +13,16 @@
 > their reasoning so the _why_ survives long after the _what_ is code.**
 >
 > Scope note: this is the *core* (the double-entry engine, money valuation, and the tag dimension),
-> plus the ratified **receipt** model (§13). Recurring templates, subscriptions, budgets, statement
+> plus the ratified **receipt** model (§13) and **recurring templates** (§14). Budgets, statement
 > attachments, and holdings are deliberately **not modeled here yet** — see §12.
 
 **Changelog**
+- **v0.15 (2026-09-28):** New **§14 Recurring templates** (grilled with the owner; leaves §12).
+  A template is a stored dock entry plus a schedule. Occurrences are booked as ordinary transactions
+  stamped `(recurring_template_id, occurrence_date)`, driven by a per-template `booked_through`
+  cursor, `lead_days` ahead, `auto`→confirmed / `review`→`pending_review`. A template save
+  hard-deletes its own future pending rows and rebooks them. There is no subscription entity.
+  Rationale in ADR 0002.
 - **v0.13 (2026-08-04):** §13.4 **paying-account detection widened to a label vocabulary** after
   owner testing found it almost never fired (`account.card_last4` → `detection_labels`, V16): a
   comma-separated substring list, matched case-insensitively, first match wins in a defined
@@ -294,7 +300,7 @@ create table transaction (
 - **No `amount`.** The amount lives in the postings; a transaction-level amount would be a second
   source of truth that drifts on splits. Total is `sum` of the relevant postings.
 - **`lifecycle` and `deleted_at` are orthogonal axes** — two columns, never one merged enum.
-  `lifecycle` = where it is in review (`pending_review` for recurring pre-registrations and
+  `lifecycle` = where it is in review (`pending_review` for recurring occurrences awaiting review and
   review-pending captures → `confirmed`); `deleted_at` = whether it's live, and *when* it was
   removed (needed for reversible soft-delete). Folding "deleted" into `lifecycle` would destroy the
   prior state required to restore it.
@@ -887,7 +893,6 @@ every multiply-tagged posting. Per-tag figures are valid; a total across tags is
 These are real entities from the requirements, intentionally **out of scope for this core doc** and
 to be designed next:
 
-- **Recurring templates & subscriptions** (§5.3, §5.5) — generate `pending_review` transactions.
 - **Budgets** (§5.13) — on the same category (account) taxonomy and/or tags; no separate budget
   table of categories.
 - **Statement attachments** (bank statements on the Pi filesystem, ARCH-07) — designed with
@@ -1132,6 +1137,130 @@ slips** in both directions: a withdrawal is `card → cash`, a deposit `cash →
 alter table account add column detection_labels text;                        -- 'card, 1234'
 alter table account add column cash_account boolean not null default false;  -- matches 'Bar'/cash
 ```
+
+---
+
+## 14. Recurring templates (ratified 2026-09-28)
+
+Requirements §5.3/§5.5 (FR-REC, FR-SUB). The rationale for booking occurrences as real transactions
+from a per-template cursor is in `docs/adr/0002-recurring-occurrences-booked-by-cursor.md`. There is
+**no separate subscription entity**: a subscription is a recurring template, and FR-SUB's view is
+the recurring page.
+
+### 14.1 What a template is
+
+- **A stored dock entry plus a schedule.** A template holds anything the split panel can enter
+  (register §3.10): funding account *or* funding person (`by Son` — pocket money is
+  `Pocket money +50, Son-EUR −50`), payee, note, header tags, and lines with semantic category or
+  transfer or `for`/`by` person, amount, note, and tags. It stores the **entry**, not postings. Each
+  booking resolves the entry into postings **through the same `operations` path the dock uses**, so
+  currency-leaf routing, leaf provisioning, the sign model (register §3.8) and the base-amount
+  proposal (`rate_as_of` on the occurrence date, the latest known rate for a future date) all apply
+  unchanged. There is no private booking path.
+- **Schedule.** Every N days / weeks / months / years from `start_date`. Days and weeks step by
+  N or 7N days. Monthly repeats on the start date's **day-of-month**, or on the month's last day
+  where that day does not exist; the anchor never drifts (31 Jan → 28 Feb → 31 Mar). Yearly
+  repeats on the start date's day and month, and a 29 Feb start falls back to 28 Feb. No
+  business-day shifting.
+- **End.** None, or `end_date`. "After K occurrences" is a form convenience that stores the K-th
+  occurrence's date.
+- **Per-template settings:** `lead_days` (book this many days ahead, 0 = on the day);
+  `confirmation` `auto` (book `confirmed`) | `review` (book `pending_review`); the **end reminder**
+  (`end_reminder` flag + `end_reminder_days`); an optional `management_url` (e.g. the provider's
+  subscription page).
+
+### 14.2 Schema (sketch — the implementing stage finalises column detail)
+
+```sql
+create table recurring_template (
+  recurring_template_id bigint generated always as identity primary key,
+  name              text not null,
+  -- schedule
+  start_date        date not null,
+  cadence_unit      text not null check (cadence_unit in ('day','week','month','year')),
+  cadence_n         int  not null check (cadence_n >= 1),
+  end_date          date,
+  lead_days         int  not null default 0 check (lead_days >= 0),
+  confirmation      text not null check (confirmation in ('auto','review')),
+  booked_through    date not null,             -- the cursor (§14.3)
+  end_reminder      boolean not null default false,
+  end_reminder_days int,
+  management_url    text,
+  -- the entry: the split panel's header (SplitEntry); lines + tags in child tables
+  account_id        bigint references account(account_id),   -- funding account, or …
+  person_id         bigint references person(person_id),     -- … funding person (by <person>)
+  payee_id          bigint references payee(payee_id),
+  note              text,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  deleted_at        timestamptz
+);
+-- recurring_template_line (+ recurring_template_line_tag, recurring_template_tag):
+-- one row per split line, mirroring SplitLineDraft; the category references the semantic node
+
+alter table transaction add column recurring_template_id bigint
+  references recurring_template(recurring_template_id);
+alter table transaction add column occurrence_date date;
+-- both null (hand-entered) or both set (booked from a template); never changed by editing the
+-- transaction, not even its date
+alter table transaction add constraint transaction_occurrence_stamp
+  check ((recurring_template_id is null) = (occurrence_date is null));
+create unique index transaction_occurrence_uq
+  on transaction (recurring_template_id, occurrence_date);
+```
+
+The `(template, occurrence date)` **stamp** on the transaction is the only record an occurrence
+leaves. An occurrence is computed from the schedule and never stored on its own.
+
+### 14.3 Booking — the booked-through date
+
+- **The cursor is a date in occurrence-date space.** `booked_through` is the latest occurrence date
+  the template has handled. A **run** over a template on day T books every occurrence in
+  `(booked_through, min(T + lead_days, end_date)]` and then sets `booked_through = T + lead_days`
+  (capped at the end date). Nothing is ever booked with an occurrence date ≤ `booked_through`.
+  Downtime is just a wider window, and a voided occurrence is never revisited by a run.
+- **One DB transaction per template.** The bookings and the cursor advance commit together, so a
+  crash cannot double-book. A failing template rolls back alone and does not block the others.
+- **Triggers:** application startup, every midnight, and a save of that template.
+- **A new template** starts with `booked_through = start_date − 1` when the operator, asked on save,
+  chooses to book past occurrences. Otherwise it starts at `T − 1`, which books nothing past but
+  still books a future occurrence already inside its lead time, without asking.
+- **Saving an existing template:**
+  1. **hard-deletes** the template's live `pending_review` transactions dated ≥ T. These are
+     untouched forecasts, because Save in the dock confirms. This is the one hard delete of a
+     transaction in the app (ADR 0002);
+  2. sets `booked_through = min(booked_through, T − 1)`. A start date moved into the past therefore
+     books nothing, while a template stuck on a failure (below) still books what it owed;
+  3. runs, **skipping** any occurrence date for which the template already has a transaction that is
+     `confirmed` or voided (`deleted_at` set). Confirmed rows are the operator's facts; voided rows
+     are the operator's skips.
+  A future row the operator confirmed under the old schedule may coexist with a rebooked one on a
+  new date. That is accepted as the operator's responsibility; lead time 0 with `auto` avoids it.
+- **Ending or deleting.** Setting `end_date` earlier so that it cuts off existing pending rows, or
+  deleting the template (a soft delete), asks the operator: *keep all pending* / *keep only those
+  dated before today* / *remove all pending*. Removed rows are hard-deleted like the save wipe.
+  Confirmed transactions always stay. There is no pause; an end date is the stop.
+- **Booked transactions are ordinary.** A booked transaction is dated on its occurrence date. Past rows are never touched by a template edit, whatever
+  their lifecycle. Save in the dock confirms a pending occurrence (even a future-dated one); Cancel
+  leaves it pending; voiding it skips that occurrence for good.
+- **Failure.** If an occurrence cannot book (paying account closed or deleted, base currency unset,
+  a referenced category, tag or person gone), that template's run rolls back and its cursor stays.
+  The run retries every time and logs WARN, and the main page names the template and the reason.
+  An occurrence is never silently skipped. `operations` merges and reassignments rewrite template
+  references as they rewrite postings, and deleting an account or category a live template uses is
+  refused.
+
+### 14.4 Figures are schedule math, never bookkeeping
+
+A template's cost figures come from its schedule × its funding-leg amount alone. They never read
+booked postings. Figures are per month and per year: days/weeks cadences are normalised through
+365 days a year, and months/years divide exactly. When an end date is set there are also "already"
+(occurrences from the start through today, booked or not), "yet to pay" (after today through the
+end) and the total. Native currency, plus base at today's rate where different. The recurring page's
+**Recurring cost summary** adds up the live templates per month and per year in base, classifying
+each non-funding leg: expense category → **expense** (broken down by top-level category), income
+category → **income**, own account or person → **transfer**, plus a net grand total
+(income − expense − transfer). It is not an engine Report (reporting.md aggregates postings).
 
 ---
 
