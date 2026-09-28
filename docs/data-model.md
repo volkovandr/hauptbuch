@@ -1175,8 +1175,11 @@ The template stores **one shape, the split panel's** (`SplitEntry`/`SplitLineDra
 entry is a one-line split whose line carries the header tags. That line reproduces the simple dock's
 "tags on every leg". A one-line split books what the simple dock books, with one exception: a
 person-funded transfer into an account in another currency cannot be a template (owner decision
-2026-09-28). A cross-currency entry's header totals (`funding_total`, `base_total`) are stored as
-entered, like every other panel field.
+2026-09-28). A cross-currency entry's header totals are **not stored**: the line amounts stay fixed
+in the spending currency, and each booking proposes the funding and base totals from the latest
+rate on or before the occurrence date. The operator corrects a pending occurrence to the actual
+charge, so the next occurrence proposes from a fresher rate than the day the template was created
+(owner decision 2026-09-28).
 
 ```sql
 create table recurring_template (
@@ -1200,8 +1203,6 @@ create table recurring_template (
   payee_id               bigint references payee(payee_id),
   note                   text,
   spending_currency_code text references currency(currency_code), -- NULL = funding currency
-  funding_total          numeric(19, 4),       -- cross-currency: the funding-currency total
-  base_total             numeric(19, 4),       -- cross-currency, neither leg base: the base total
   created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now(),
   deleted_at             timestamptz,

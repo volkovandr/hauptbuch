@@ -4,7 +4,8 @@
 -- resolves it through the dock's operations path, so leaf routing, provisioning, the sign model and
 -- the base-amount proposal apply unchanged (§14.1). There is one stored shape, the split panel's
 -- (SplitEntry/SplitLineDraft): a simple dock entry is a one-line split. A cross-currency entry's
--- header totals are stored as entered; how a booking uses them is the booking run's concern.
+-- header totals are not stored: each booking proposes them from the latest rate on or before the
+-- occurrence date, so the template tracks the rate (§14.1).
 --
 -- An occurrence is never stored on its own. The only record it leaves is the (template, occurrence
 -- date) stamp on the transaction it booked (§14.2).
@@ -31,8 +32,6 @@ create table recurring_template (
   payee_id               bigint references payee(payee_id),
   note                   text,
   spending_currency_code text references currency(currency_code), -- NULL = the funding currency
-  funding_total          numeric(19, 4),   -- cross-currency only: the funding-currency total
-  base_total             numeric(19, 4),   -- cross-currency, neither leg base: the base total
   created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now(),
   deleted_at             timestamptz,                     -- soft delete
