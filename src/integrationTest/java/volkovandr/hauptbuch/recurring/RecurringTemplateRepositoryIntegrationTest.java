@@ -99,8 +99,6 @@ class RecurringTemplateRepositoryIntegrationTest {
         null,
         null,
         null,
-        null,
-        null,
         List.of(),
         lines);
   }
@@ -132,8 +130,6 @@ class RecurringTemplateRepositoryIntegrationTest {
             payeeId,
             "monthly plan",
             "CHF",
-            new BigDecimal("10.95"),
-            new BigDecimal("10.20"),
             List.of(tagOneId, tagTwoId, tagOneId),
             List.of(categoryLine("9.99")));
 
@@ -158,8 +154,6 @@ class RecurringTemplateRepositoryIntegrationTest {
     assertThat(stored.payeeId()).isEqualTo(payeeId);
     assertThat(stored.note()).isEqualTo("monthly plan");
     assertThat(stored.spendingCurrencyCode()).isEqualTo("CHF");
-    assertThat(stored.fundingTotal()).isEqualByComparingTo("10.95");
-    assertThat(stored.baseTotal()).isEqualByComparingTo("10.20");
     assertThat(stored.createdAt()).isNotNull();
     assertThat(stored.updatedAt()).isNotNull();
     assertThat(stored.deletedAt()).isNull();
@@ -259,8 +253,6 @@ class RecurringTemplateRepositoryIntegrationTest {
             null,
             null,
             null,
-            null,
-            null,
             List.of(tagOneId),
             List.of(
                 new RecurringTemplateLineDraft(
@@ -286,8 +278,6 @@ class RecurringTemplateRepositoryIntegrationTest {
             payeeId,
             "upgraded",
             "USD",
-            new BigDecimal("16.10"),
-            null,
             List.of(tagTwoId),
             List.of(
                 new RecurringTemplateLineDraft(
@@ -318,8 +308,6 @@ class RecurringTemplateRepositoryIntegrationTest {
     assertThat(stored.payeeId()).isEqualTo(payeeId);
     assertThat(stored.note()).isEqualTo("upgraded");
     assertThat(stored.spendingCurrencyCode()).isEqualTo("USD");
-    assertThat(stored.fundingTotal()).isEqualByComparingTo("16.10");
-    assertThat(stored.baseTotal()).isNull();
     assertThat(stored.bookedThrough()).isEqualTo(LocalDate.of(2026, 3, 31));
     assertThat(repository.findTagIds(id)).containsExactly(tagTwoId);
 
@@ -423,8 +411,6 @@ class RecurringTemplateRepositoryIntegrationTest {
             null,
             null,
             bankAccountId,
-            null,
-            null,
             null,
             null,
             null,

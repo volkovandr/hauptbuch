@@ -1,6 +1,5 @@
 package volkovandr.hauptbuch.recurring;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -28,10 +27,6 @@ import java.util.List;
  * @param payeeId the payee, or null
  * @param note the transaction-level note, or null
  * @param spendingCurrencyCode the one currency the lines are in; null means the funding currency
- * @param fundingTotal the funding-currency total, as the split panel's header takes it; set only
- *     when cross-currency
- * @param baseTotal the base-currency total; set only when cross-currency and neither the funding
- *     nor the spending currency is base
  * @param tagIds the header tags, which land on the funding leg; never null
  * @param lines the split lines in order; never null
  */
@@ -52,8 +47,6 @@ public record RecurringTemplateDraft(
     Long payeeId,
     String note,
     String spendingCurrencyCode,
-    BigDecimal fundingTotal,
-    BigDecimal baseTotal,
     List<Long> tagIds,
     List<RecurringTemplateLineDraft> lines) {
 

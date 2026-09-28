@@ -31,7 +31,7 @@ public class RecurringTemplateRepository {
       select recurring_template_id, name, start_date, cadence_unit, cadence_n, end_date,
              lead_days, confirmation, booked_through, end_reminder, end_reminder_days,
              management_url, account_id, person_id, funding_person_direction, payee_id, note,
-             spending_currency_code, funding_total, base_total, created_at, updated_at, deleted_at
+             spending_currency_code, created_at, updated_at, deleted_at
       from recurring_template
       """;
 
@@ -53,13 +53,11 @@ public class RecurringTemplateRepository {
                 insert into recurring_template
                   (name, start_date, cadence_unit, cadence_n, end_date, lead_days, confirmation,
                    booked_through, end_reminder, end_reminder_days, management_url, account_id,
-                   person_id, funding_person_direction, payee_id, note, spending_currency_code,
-                   funding_total, base_total)
+                   person_id, funding_person_direction, payee_id, note, spending_currency_code)
                 values
                   (:name, :startDate, :cadenceUnit, :cadenceN, :endDate, :leadDays, :confirmation,
                    :bookedThrough, :endReminder, :endReminderDays, :managementUrl, :accountId,
-                   :personId, :fundingPersonDirection, :payeeId, :note, :spendingCurrencyCode,
-                   :fundingTotal, :baseTotal)
+                   :personId, :fundingPersonDirection, :payeeId, :note, :spendingCurrencyCode)
                 returning recurring_template_id
                 """)
             .params(headerParams(draft))
@@ -89,7 +87,7 @@ public class RecurringTemplateRepository {
                     account_id = :accountId, person_id = :personId,
                     funding_person_direction = :fundingPersonDirection, payee_id = :payeeId,
                     note = :note, spending_currency_code = :spendingCurrencyCode,
-                    funding_total = :fundingTotal, base_total = :baseTotal, updated_at = now()
+                    updated_at = now()
                 where recurring_template_id = :recurringTemplateId and deleted_at is null
                 """)
             .params(headerParams(draft))
@@ -200,8 +198,6 @@ public class RecurringTemplateRepository {
     params.put("payeeId", draft.payeeId());
     params.put("note", draft.note());
     params.put("spendingCurrencyCode", draft.spendingCurrencyCode());
-    params.put("fundingTotal", draft.fundingTotal());
-    params.put("baseTotal", draft.baseTotal());
     return params;
   }
 
