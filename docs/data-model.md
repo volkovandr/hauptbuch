@@ -1169,34 +1169,65 @@ the recurring page.
   (`end_reminder` flag + `end_reminder_days`); an optional `management_url` (e.g. the provider's
   subscription page).
 
-### 14.2 Schema (sketch — the implementing stage finalises column detail)
+### 14.2 Schema (V31)
+
+The template stores **one shape, the split panel's** (`SplitEntry`/`SplitLineDraft`). A simple dock
+entry is a one-line split whose line carries the header tags. That line reproduces the simple dock's
+"tags on every leg". A one-line split books what the simple dock books, with one exception: a
+person-funded transfer into an account in another currency cannot be a template (owner decision
+2026-09-28). A cross-currency entry's header totals (`funding_total`, `base_total`) are stored as
+entered, like every other panel field.
 
 ```sql
 create table recurring_template (
-  recurring_template_id bigint generated always as identity primary key,
-  name              text not null,
+  recurring_template_id  bigint generated always as identity primary key,
+  name                   text not null,
   -- schedule
-  start_date        date not null,
-  cadence_unit      text not null check (cadence_unit in ('day','week','month','year')),
-  cadence_n         int  not null check (cadence_n >= 1),
-  end_date          date,
-  lead_days         int  not null default 0 check (lead_days >= 0),
-  confirmation      text not null check (confirmation in ('auto','review')),
-  booked_through    date not null,             -- the cursor (§14.3)
-  end_reminder      boolean not null default false,
-  end_reminder_days int,
-  management_url    text,
-  -- the entry: the split panel's header (SplitEntry); lines + tags in child tables
-  account_id        bigint references account(account_id),   -- funding account, or …
-  person_id         bigint references person(person_id),     -- … funding person (by <person>)
-  payee_id          bigint references payee(payee_id),
-  note              text,
-  created_at        timestamptz not null default now(),
-  updated_at        timestamptz not null default now(),
-  deleted_at        timestamptz
+  start_date             date not null,
+  cadence_unit           text not null check (cadence_unit in ('day','week','month','year')),
+  cadence_n              int  not null check (cadence_n >= 1),
+  end_date               date,                 -- inclusive; "after K" stores the K-th date
+  lead_days              int  not null default 0 check (lead_days >= 0),
+  confirmation           text not null check (confirmation in ('auto','review')),
+  booked_through         date not null,        -- the cursor (§14.3)
+  end_reminder           boolean not null default false,
+  end_reminder_days      int check (end_reminder_days >= 0),
+  management_url         text,
+  -- the entry: the split panel's header
+  account_id             bigint references account(account_id),  -- funding account, or …
+  person_id              bigint references person(person_id),    -- … funding person
+  funding_person_direction text check (funding_person_direction in ('FOR','BY')),
+  payee_id               bigint references payee(payee_id),
+  note                   text,
+  spending_currency_code text references currency(currency_code), -- NULL = funding currency
+  funding_total          numeric(19, 4),       -- cross-currency: the funding-currency total
+  base_total             numeric(19, 4),       -- cross-currency, neither leg base: the base total
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now(),
+  deleted_at             timestamptz,
+  check (end_date is null or end_date >= start_date),
+  check ((account_id is null) <> (person_id is null)),             -- exactly one funding source
+  check ((person_id is null) = (funding_person_direction is null))
 );
--- recurring_template_line (+ recurring_template_line_tag, recurring_template_tag):
--- one row per split line, mirroring SplitLineDraft; the category references the semantic node
+
+-- one row per split line, mirroring SplitLineDraft: a category (account_id = the semantic node),
+-- a transfer (account_id + transfer_direction) or a person (person_id + person_direction)
+create table recurring_template_line (
+  recurring_template_line_id bigint generated always as identity primary key,
+  recurring_template_id      bigint not null references recurring_template(recurring_template_id),
+  account_id                 bigint references account(account_id),
+  transfer_direction         text check (transfer_direction in ('TO','FROM')),
+  person_id                  bigint references person(person_id),
+  person_direction           text check (person_direction in ('FOR','BY')),
+  amount                     numeric(19, 4) not null,   -- magnitude; negative = storno (register §3.8)
+  note                       text,
+  sort_order                 int not null,
+  check ((account_id is null) <> (person_id is null)),
+  check ((person_id is null) = (person_direction is null)),
+  check (transfer_direction is null or account_id is not null)
+);
+-- recurring_template_tag (header tags → the funding leg) and recurring_template_line_tag (a
+-- line's tags → its own leg) mirror posting_tag: own PK, unique (owner, tag_id)
 
 alter table transaction add column recurring_template_id bigint
   references recurring_template(recurring_template_id);
@@ -1205,7 +1236,7 @@ alter table transaction add column occurrence_date date;
 -- transaction, not even its date
 alter table transaction add constraint transaction_occurrence_stamp
   check ((recurring_template_id is null) = (occurrence_date is null));
-create unique index transaction_occurrence_uq
+create unique index transaction_occurrence_uq  -- covers voided rows: a skip blocks its date
   on transaction (recurring_template_id, occurrence_date);
 ```
 
