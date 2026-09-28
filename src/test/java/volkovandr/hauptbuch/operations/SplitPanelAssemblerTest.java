@@ -317,6 +317,36 @@ class SplitPanelAssemblerTest {
   }
 
   @Test
+  void restGoesIntoTheFirstLineWithNoAmount() {
+    // A panel opened blank: the total typed first fills its one empty line.
+    SplitForm filled = assembler.restIntoBlankLine(form("12,99", List.of(""), List.of("")));
+
+    assertThat(filled.lineAmount()).containsExactly("12,99");
+  }
+
+  @Test
+  void restGoesIntoTheBlankLineAfterTheAllocatedOnes() {
+    SplitForm filled =
+        assembler.restIntoBlankLine(form("20,00", List.of("expense", ""), List.of("15", "")));
+
+    assertThat(filled.lineAmount()).containsExactly("15", "5,00");
+  }
+
+  @Test
+  void linesThatAllHaveAmountsAreLeftAlone() {
+    SplitForm form = form("20,00", List.of("expense"), List.of("15"));
+
+    assertThat(assembler.restIntoBlankLine(form)).isEqualTo(form);
+  }
+
+  @Test
+  void noRestLeavesTheBlankLineBlank() {
+    SplitForm form = form("15,00", List.of("expense", ""), List.of("15", ""));
+
+    assertThat(assembler.restIntoBlankLine(form).lineAmount()).containsExactly("15", "");
+  }
+
+  @Test
   void removeLineDropsTheChosenIndexAcrossEveryArray() {
     SplitForm shrunk =
         assembler.removeLine(form("20,00", List.of("expense", "income"), List.of("20", "3")), 0);

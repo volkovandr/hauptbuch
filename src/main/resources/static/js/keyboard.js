@@ -367,14 +367,16 @@
   // After the split panel opens or gains a line, put the cursor where the user will type next:
   // opening a split → the first line's amount (its category is already pre-selected); adding a line
   // → the new line's category (its amount is pre-filled from "the rest"). Keyed on the request path
-  // so ordinary swaps (category resolve, commit, register repaint) never steal focus.
+  // so ordinary swaps (category resolve, commit, register repaint) never steal focus. Add-line is
+  // matched by its last segment: the recurring template editor hosts the same panel under
+  // /recurring/editor (data-model §14.1).
   function focusAfterSplitSwap(path) {
     const panel = document.querySelector("[data-split-panel]");
     if (!panel) return;
     if (path === "/register/split") {
       const amount = panel.querySelector("[data-split-amount]");
       if (amount) amount.focus();
-    } else if (path === "/register/split/add-line") {
+    } else if (path && path.endsWith("/add-line")) {
       const categories = panel.querySelectorAll('input[name="categoryText"]');
       const last = categories[categories.length - 1];
       if (last) last.focus();

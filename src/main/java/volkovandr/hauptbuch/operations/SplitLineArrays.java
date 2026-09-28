@@ -113,6 +113,13 @@ final class SplitLineArrays {
         .applyTo(form);
   }
 
+  /** Set line {@code index}'s amount, leaving every other array as it is. Returns a new form. */
+  static SplitForm withLineAmount(SplitForm form, int index, String amount) {
+    List<String> amounts = new ArrayList<>(form.lineAmount());
+    amounts.set(index, amount);
+    return new Lines(form).withAmount(amounts).applyTo(form);
+  }
+
   /** Drop the line at {@code index} from every aligned array in step. Returns a new form. */
   static SplitForm removedLine(SplitForm form, int index) {
     return new Lines(form)
