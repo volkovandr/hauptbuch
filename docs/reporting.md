@@ -304,7 +304,7 @@ case-sensitivity here is a trap, not a feature.
 |------|---------|--------|
 | **Closed accounts** | **included** — their history is real, and a zero balance row is suppressed anyway (§7.3) | yes |
 | **Soft-deleted** accounts, transactions, postings | **excluded, permanently** | **no** |
-| **`pending_review` transactions** | **excluded** — recurring pre-registrations and unreviewed captures are not yet facts, and including them inflates the current period | yes, and the Report is **marked** while it is on |
+| **`pending_review` transactions** | **excluded** — recurring occurrences awaiting review and unreviewed captures are not yet facts, and including them inflates the current period | yes, and the Report is **marked** while it is on |
 | **Voided transactions** | excluded (`deleted_at`, same as soft-deleted) | no |
 
 The resolved scope is printed as **one muted line in the Report header**, not buried in a settings
@@ -393,7 +393,7 @@ endpoints are expressions, not dates.
 
 **An end endpoint may resolve into the future** (`month, 0, end` on the 12th), and the report then
 includes future-dated transactions. `pending_review` is already out by default (§6.4), so
-pre-registered recurring entries do not leak in; a *confirmed* future-dated transaction is a fact the
+recurring occurrences awaiting review do not leak in; a *confirmed* future-dated transaction is a fact the
 owner entered deliberately. Clamping to today was rejected because the report would then silently
 disagree with the range printed in its own header.
 

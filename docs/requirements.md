@@ -1,8 +1,8 @@
 # Hauptbuch — Requirements Document
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.9
-**Date:** 2026-09-13
+**Status:** Draft v0.10
+**Date:** 2026-09-28
 **Owner:** volkovandr
 **Type:** Self-hosted, single-user, web-based personal finance application
 
@@ -11,6 +11,11 @@
 > Priorities use MoSCoW: **Must**, **Should**, **Could**, **Won't (this version)**.
 
 **Changelog**
+- **v0.10 (2026-09-28):** Recurring grilling (data-model §14, ADR 0002). **FR-REC-02 rewritten**
+  from "pre-registered ahead" to lead time + per-template auto/review confirmation with catch-up;
+  FR-REC-01/03/04 sharpened; new **FR-REC-05** (no silent skips). **Subscription is no longer a
+  separate entity**, so FR-SUB re-pointed at recurring templates, and FR-SUB-05 becomes the end
+  reminder.
 - **v0.9 (2026-09-13):** Reporting editor grilling (`reporting.md` v0.2). The chart/table
   swap is removed — the renderer control on a Report's page replaces it — so **FR-UX-03 and
   FR-ANA-08 amended** from "one click in the same frame" to "a renderer change on the Report's
@@ -108,7 +113,7 @@ broader* exposure discussed there. See NFR-09.
 Double-entry bookkeeping. Conceptual entities: **Account**, **Transaction**, **Split/line item**
 (with category, tags, and an optional **beneficiary**), **Category** (hierarchical, shared with
 budgets), **Tag/Label** (many-to-many), **Currency** + **Exchange rate** (+ base currency),
-**Payee/Merchant**, **Recurring template**, **Subscription**, **Person (contact)** with an
+**Payee/Merchant**, **Recurring template** (a subscription is one), **Person (contact)** with an
 auto-managed signed receivable/payable balance, **Shared-expense group/trip**, **Attachment**
 (on the Pi), **Holding/Position**, **Profile** (own database).
 
@@ -156,10 +161,11 @@ fails in apps like ezBookkeeping.
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-REC-01 | Recurring templates with flexible schedules. | Must |
-| FR-REC-02 | Auto-generate **pre-registered** transactions ahead of time. | Must |
-| FR-REC-03 | Pre-registered items confirmed/matched on actual occurrence (§5.8). | Should |
-| FR-REC-04 | Handle variable amounts — estimate now, correct on confirmation. | Should |
+| FR-REC-01 | Recurring templates: anything the dock can enter (splits, tags, person-funded) on an every-N-days/weeks/months/years schedule with an optional end (data-model §14). | Must |
+| FR-REC-02 | Book each occurrence automatically, a per-template **lead time** ahead, as `confirmed` (**auto**) or `pending_review` (**review**) per template; occurrences missed while the app was down are caught up on the next run. | Must |
+| FR-REC-03 | Pending occurrences reviewed in the register (Save confirms, Cancel leaves pending, void skips), reached from a main-page "pending to review" link; matching against statement lines (§5.8) is deferred. | Should |
+| FR-REC-04 | Handle variable amounts — estimate now, correct on confirmation (a **review** template). | Should |
+| FR-REC-05 | An occurrence that cannot book (closed account, missing category…) is never skipped silently: it retries and the main page names the template and the reason. | Must |
 
 ### 5.4 Categories & tags
 
@@ -175,11 +181,11 @@ fails in apps like ezBookkeeping.
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-SUB-01 | Dedicated view of all subscriptions / recurring services. | Must |
-| FR-SUB-02 | Per-subscription metadata (price, cycle, next renewal, account, currency, start date, category, cancellation notes). | Should |
-| FR-SUB-03 | Modeled as recurring transactions + metadata, flowing into the ledger and analytics. | Should |
-| FR-SUB-04 | Upcoming-renewal overview and total monthly/annual cost (base currency). | Should |
-| FR-SUB-05 | Optional renewal/price-change reminders. | Could |
+| FR-SUB-01 | Dedicated view of all subscriptions / recurring services — the recurring page; a subscription **is** a recurring template, no separate entity. | Must |
+| FR-SUB-02 | Per-template schedule-math figures: cost per month and per year; with an end date also already paid, yet to pay, and total — computed from the schedule, not from booked postings. An optional management link (the provider's cancellation page). | Should |
+| FR-SUB-03 | Modeled as recurring templates, flowing into the ledger and analytics through their booked transactions. | Should |
+| FR-SUB-04 | Recurring cost summary: monthly/annual totals in base currency for expense (per top-level category), income, transfer, and net. | Should |
+| FR-SUB-05 | End reminder: an optional per-template main-page warning N days before the end date, dismissible (dismiss switches it off). Price-change reminders deferred. | Should |
 
 ### 5.6 Shared "between-friends" debts — per-person auto-managed ledger
 
@@ -216,7 +222,7 @@ fails in apps like ezBookkeeping.
 |----|-------------|----------|
 | FR-STMT-01 | Upload a statement as **PDF** (primary) or CSV (recent-12-months shortcut). | Must |
 | FR-STMT-02 | AI extracts transactions, including from **historical PDFs**. | Must |
-| FR-STMT-03 | **Match** statement lines against existing transactions (manual, receipt-parsed, pre-registered). | Must |
+| FR-STMT-03 | **Match** statement lines against existing transactions (manual, receipt-parsed, recurring). | Must |
 | FR-STMT-04 | Flag unmatched statement lines; offer to create them. | Must |
 | FR-STMT-05 | Flag ledger transactions with no statement match. | Should |
 | FR-STMT-06 | Manual override of any match; nothing committed without confirmation. | Must |

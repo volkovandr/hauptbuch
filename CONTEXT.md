@@ -195,3 +195,54 @@ than merely empty: a closing balance summed along the time axis, an account-curr
 two currencies, a grand total across overlapping tags (data-model §10.4). Distinct from an empty
 cell (no postings, rendered blank) and from a real zero (rendered `0,00`).
 _Avoid_: n/a, null, error, invalid
+
+### Recurring
+
+**Recurring template**:
+A stored transaction shape — anything the dock can enter, splits and tags included, categories chosen
+semantically — plus a schedule that says when it repeats. It produces occurrences; it is not itself a
+transaction and moves no balance. Its funding side may be a person, exactly as in the dock (`by Son`):
+pocket money is an expense funded by the child's account, so the operator owes the child.
+_Avoid_: subscription (a subscription is just a recurring template), schedule (for the whole thing),
+standing order, rule, recurring transaction
+
+**Occurrence**:
+One dated instance a recurring template produces. Every N days/weeks steps from the start date; monthly
+repeats on the start date's day-of-month, falling back to the month's last day where that day does not
+exist (31 Jan → 28 Feb → 31 Mar — the anchor never drifts); yearly repeats on the start date's day and
+month, a 29 Feb start falling back to 28 Feb in non-leap years. Booking an occurrence yields an
+ordinary transaction that remembers which template and occurrence it came from.
+_Avoid_: instance, installment, pre-registration
+An occurrence is computed from the schedule, never kept as a record of its own.
+
+**Lead time**:
+How many days before its date an occurrence is booked (`0` = on the day). The booked transaction
+carries the occurrence's date, so with a lead time it sits in the register as a future-dated row.
+_Avoid_: notice period, advance, horizon
+
+**Confirmation (auto / review)**:
+Per recurring template: `auto` books each occurrence `confirmed`; `review` books it `pending_review`
+for the operator to check and Save (which confirms it) — e.g. a foreign-currency charge whose real
+base amount is only known from the statement. The operator's choice; a long lead time with `auto`
+deliberately puts confirmed future rows in the ledger.
+_Avoid_: auto-commit, approval
+
+**End reminder**:
+An optional per-template warning on the main page, starting a chosen number of days before the
+template's end date and linking to the template. Dismissing it switches it off for that template.
+_Avoid_: notice period, notification, renewal reminder
+
+**Booked-through date**:
+Per recurring template, the latest occurrence date it has already handled. Each run books every
+occurrence after it up to today + lead time, then moves it forward; nothing is ever booked on or
+before it, so downtime just means a longer catch-up and a voided occurrence never comes back. Saving
+a template pulls it back to no later than yesterday, so a changed schedule or lead time takes effect
+at once while past occurrences are never booked retroactively.
+_Avoid_: watermark, last run, cursor (in docs and UI)
+
+**Recurring cost summary**:
+The fixed table on the recurring page that shows, per month and per year in the base currency, what the
+live templates move. It classifies each non-funding leg as expense (broken down by top-level
+category), income, or transfer (to an own account or a person), plus a net grand total. It is
+calculated from the schedules alone, not from booked postings, so it is not an engine Report.
+_Avoid_: subscription report, recurring report, cost report
