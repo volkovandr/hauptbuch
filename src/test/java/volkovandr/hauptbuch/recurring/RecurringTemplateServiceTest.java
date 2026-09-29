@@ -79,7 +79,8 @@ class RecurringTemplateServiceTest {
   }
 
   private static RecurringScheduleForm schedule(Long id, String name) {
-    return new RecurringScheduleForm(id, name, "1", "month", "none", "", "", "3", "review", "", "");
+    return new RecurringScheduleForm(
+        id, name, "1", "month", "none", "", "", "3", "review", "", "", "");
   }
 
   private static SplitForm split(Long accountId, String fundingPerson, String amount) {
@@ -227,7 +228,7 @@ class RecurringTemplateServiceTest {
     when(repository.insert(any(), any())).thenReturn(1L);
     RecurringScheduleForm afterThree =
         new RecurringScheduleForm(
-            null, "Loan", "1", "month", "after", "", "3", "0", "auto", "", "");
+            null, "Loan", "1", "month", "after", "", "3", "0", "auto", "", "", "");
 
     service.save(afterThree, split(BANK_ID, "", "100"));
 
@@ -240,7 +241,7 @@ class RecurringTemplateServiceTest {
     proposesNothing();
     when(repository.insert(any(), any())).thenReturn(1L);
     RecurringScheduleForm defaults =
-        new RecurringScheduleForm(null, "Gym", "1", "month", "none", "", "", "", "", "", "");
+        new RecurringScheduleForm(null, "Gym", "1", "month", "none", "", "", "", "", "", "", "");
 
     service.save(defaults, split(BANK_ID, "", "30"));
 
@@ -263,7 +264,8 @@ class RecurringTemplateServiceTest {
   @Test
   void refusesCadenceBelowOne() {
     RecurringScheduleForm zero =
-        new RecurringScheduleForm(null, "Gym", "0", "month", "none", "", "", "0", "auto", "", "");
+        new RecurringScheduleForm(
+            null, "Gym", "0", "month", "none", "", "", "0", "auto", "", "", "");
 
     assertThatIllegalArgumentException()
         .isThrownBy(() -> service.save(zero, split(BANK_ID, "", "30")))
@@ -274,7 +276,7 @@ class RecurringTemplateServiceTest {
   void refusesEndDateBeforeTheStart() {
     RecurringScheduleForm backwards =
         new RecurringScheduleForm(
-            null, "Gym", "1", "month", "date", "2026-10-01", "", "0", "auto", "", "");
+            null, "Gym", "1", "month", "date", "2026-10-01", "", "0", "auto", "", "", "");
 
     assertThatIllegalArgumentException()
         .isThrownBy(() -> service.save(backwards, split(BANK_ID, "", "30")))
@@ -285,7 +287,7 @@ class RecurringTemplateServiceTest {
   void refusesManagementLinkThatIsNotWebAddress() {
     RecurringScheduleForm script =
         new RecurringScheduleForm(
-            null, "Gym", "1", "month", "none", "", "", "0", "auto", "javascript:alert(1)", "");
+            null, "Gym", "1", "month", "none", "", "", "0", "auto", "javascript:alert(1)", "", "");
 
     assertThatIllegalArgumentException()
         .isThrownBy(() -> service.save(script, split(BANK_ID, "", "30")))
@@ -317,7 +319,7 @@ class RecurringTemplateServiceTest {
 
   private static RecurringScheduleForm answering(String pastOccurrences) {
     return new RecurringScheduleForm(
-        null, "Gym", "1", "month", "none", "", "", "0", "auto", "", pastOccurrences);
+        null, "Gym", "1", "month", "none", "", "", "0", "auto", "", pastOccurrences, "");
   }
 
   @Test
@@ -380,13 +382,73 @@ class RecurringTemplateServiceTest {
   }
 
   @Test
-  void editRunsTheBookingForThatTemplate() {
+  void editRebooksThatTemplateAfterUpdatingIt() {
     proposesNothing();
     when(repository.update(eq(42L), any())).thenReturn(1);
 
     service.save(schedule(42L, "Streaming"), split(BANK_ID, "", "12,99"));
 
-    verify(bookingService).run(42L);
+    // Unasked, nothing is newly cut off: rows already beyond the end were kept by an answer.
+    InOrder order = inOrder(repository, bookingService);
+    order.verify(repository).update(eq(42L), any());
+    order.verify(bookingService).rebook(42L, PendingRows.KEEP_ALL);
+    verify(bookingService, never()).run(42L);
+  }
+
+  @Test
+  void editCarriesTheAnswerForRowsTheEndDateCutsOff() {
+    proposesNothing();
+    when(repository.update(eq(42L), any())).thenReturn(1);
+    RecurringScheduleForm ended =
+        new RecurringScheduleForm(
+            42L,
+            "Gym",
+            "1",
+            "month",
+            "date",
+            "2026-11-30",
+            "",
+            "0",
+            "review",
+            "",
+            "",
+            "remove-all");
+
+    service.save(ended, split(BANK_ID, "", "30"));
+
+    verify(bookingService).rebook(42L, PendingRows.REMOVE_ALL);
+  }
+
+  // ── pending rows an end date or a delete leaves behind ──────────────────────
+
+  private static RecurringScheduleForm endingOn(Long id, String endDate) {
+    return new RecurringScheduleForm(
+        id, "Gym", "1", "month", "date", endDate, "", "0", "review", "", "", "");
+  }
+
+  @Test
+  void countsThePendingRowsBetweenTheNewAndTheStoredEndDate() {
+    LocalDate storedEnd = LocalDate.of(2027, 3, 31);
+    when(repository.findById(42L)).thenReturn(java.util.Optional.of(storedTemplate(storedEnd)));
+    when(bookingService.pendingRowsCutOff(42L, LocalDate.of(2026, 11, 30), storedEnd))
+        .thenReturn(2);
+
+    assertThat(service.cutOffPending(endingOn(42L, "2026-11-30"), split(BANK_ID, "", "30")))
+        .isEqualTo(2);
+  }
+
+  private static RecurringTemplate storedTemplate(LocalDate endDate) {
+    return new RecurringTemplate(
+        42L, "Gym", START, "month", 1, endDate, 0, "review", TODAY, false, null, null, BANK_ID,
+        null, null, null, null, null, null, null, null);
+  }
+
+  @Test
+  void noEndDateOrNewTemplateCutsNothingOff() {
+    assertThat(service.cutOffPending(schedule(42L, "Gym"), split(BANK_ID, "", "30"))).isZero();
+    assertThat(service.cutOffPending(endingOn(null, "2026-11-30"), split(BANK_ID, "", "30")))
+        .isZero();
+    verify(bookingService, never()).pendingRowsCutOff(eq(42L), any(), any());
   }
 
   // ── edit and delete ─────────────────────────────────────────────────────────
@@ -412,18 +474,22 @@ class RecurringTemplateServiceTest {
   }
 
   @Test
-  void deleteSoftDeletes() {
+  void deleteSoftDeletesThenRemovesPendingRowsAsAnswered() {
     when(repository.softDelete(42L)).thenReturn(1);
 
-    service.delete(42L);
+    service.delete(42L, PendingRows.KEEP_PAST);
 
-    verify(repository).softDelete(42L);
+    InOrder order = inOrder(repository, bookingService);
+    order.verify(repository).softDelete(42L);
+    order.verify(bookingService).removePending(42L, PendingRows.KEEP_PAST);
   }
 
   @Test
   void deleteOfMissingTemplateIsRefused() {
     when(repository.softDelete(42L)).thenReturn(0);
 
-    assertThatIllegalArgumentException().isThrownBy(() -> service.delete(42L));
+    assertThatIllegalArgumentException()
+        .isThrownBy(() -> service.delete(42L, PendingRows.KEEP_ALL));
+    verify(bookingService, never()).removePending(eq(42L), any());
   }
 }

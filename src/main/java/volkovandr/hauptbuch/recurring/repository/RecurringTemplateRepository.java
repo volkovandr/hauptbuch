@@ -152,6 +152,24 @@ public class RecurringTemplateRepository {
         .update();
   }
 
+  /**
+   * Pull a live template's cursor back to {@code latest} when it is past it, else leave it (data-
+   * model §14.3): a save rebooks from no later than yesterday, but never books the past again.
+   *
+   * @return the number of templates matched (0 when unknown or soft-deleted)
+   */
+  public int rewindBookedThrough(long recurringTemplateId, LocalDate latest) {
+    return jdbcClient
+        .sql(
+            """
+            update recurring_template set booked_through = least(booked_through, :latest)
+            where recurring_template_id = :recurringTemplateId and deleted_at is null
+            """)
+        .param(TEMPLATE_ID, recurringTemplateId)
+        .param("latest", latest)
+        .update();
+  }
+
   /** A template's header tags, which land on the funding leg. */
   public List<Long> findTagIds(long recurringTemplateId) {
     return jdbcClient

@@ -16,6 +16,9 @@
     <section class="panel">
       <p class="eyebrow"><a th:href="@{/recurring}">Recurring</a></p>
       <th:block th:replace="~{:: editorPanel}"></th:block>
+      <!-- The delete question's slot (data-model §14.3), outside the panel's form so its answers
+           can be forms of their own. Delete retargets its question here. -->
+      <div id="recurring-dialog"></div>
     </section>
   </main>
 
@@ -162,7 +165,7 @@
          the answer rides along hidden, so a refused save does not ask again. -->
     <div
       th:if="${pastOccurrences != null}"
-      class="recurring-past"
+      class="recurring-question"
       role="alert"
       th:with="plural=${pastOccurrences != 1}"
     >
@@ -189,5 +192,69 @@
       name="pastOccurrences"
       th:value="${template.pastOccurrences()}"
     />
+    <!-- An existing template whose new end date cuts off pending rows (data-model §14.3): the save
+         asks whether to keep them, and each button saves with its answer, which then rides along
+         hidden like the one above. -->
+    <div
+      th:if="${cutOffPending != null}"
+      class="recurring-question"
+      role="alert"
+      th:with="plural=${cutOffPending != 1}"
+    >
+      <p th:text="'The new end date cuts off ' + ${cutOffPending}
+                  + (${plural} ? ' pending rows' : ' pending row')
+                  + '. Confirmed transactions always stay.'">
+        The new end date cuts off 2 pending rows. Confirmed transactions always stay.
+      </p>
+      <button
+        th:each="choice : ${pendingChoices}"
+        type="submit"
+        th:class="${choice.buttonClass()}"
+        name="pendingRows"
+        th:value="${choice.code()}"
+        th:text="${choice.label()}"
+      >
+        Keep all pending
+      </button>
+    </div>
+    <input
+      th:unless="${cutOffPending != null}"
+      type="hidden"
+      name="pendingRows"
+      th:value="${template.pendingRows()}"
+    />
   </th:block>
+
+  <!-- The delete question (data-model §14.3), swapped into #recurring-dialog when the template has
+       pending rows. Each answer posts the delete again, carrying it as deleteAnswer — not the panel's
+       pendingRows, which the panel's own Delete sends along with the rest of its form. -->
+  <div
+    th:fragment="deleteDialog"
+    class="recurring-question"
+    role="alert"
+    th:with="plural=${pendingCount != 1}"
+  >
+    <p th:text="'This template has ' + ${pendingCount}
+                + (${plural} ? ' pending rows' : ' pending row')
+                + '. Confirmed transactions it booked always stay.'">
+      This template has 2 pending rows. Confirmed transactions it booked always stay.
+    </p>
+    <form
+      th:each="choice : ${pendingChoices}"
+      th:attr="hx-post=@{/recurring/{id}/delete(id=${recurringTemplateId})}"
+    >
+      <input type="hidden" name="deleteAnswer" th:value="${choice.code()}" />
+      <button
+        type="submit"
+        th:class="${choice.buttonClass()}"
+        th:text="${choice.label()}"
+      >
+        Keep all pending
+      </button>
+    </form>
+    <a class="btn btn--ghost" th:href="@{/recurring/{id}(id=${recurringTemplateId})}">Cancel</a>
+  </div>
+
+  <!-- A delete's response body: nothing, since HX-Redirect navigates away. -->
+  <th:block th:fragment="deleted"></th:block>
 </html>

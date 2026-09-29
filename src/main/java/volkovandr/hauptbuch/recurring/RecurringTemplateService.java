@@ -27,7 +27,8 @@ import volkovandr.hauptbuch.recurring.repository.RecurringTemplateRepository;
  * takes the split panel's form plus the schedule block, and refuses whatever the dock would refuse:
  * it dry-runs the entry through {@link DockSplitService#validate} on the start date before storing
  * anything. It then runs the booking for that template, in the same transaction, so a template
- * whose occurrences cannot book is not saved either.
+ * whose occurrences cannot book is not saved either. Saving an existing template rebooks it (data-
+ * model §14.3): its untouched future pending rows are replaced under the new settings.
  */
 @Service
 class RecurringTemplateService {
@@ -82,9 +83,32 @@ class RecurringTemplateService {
   }
 
   /**
+   * How many of an existing template's pending rows the end date in {@code schedule} newly cuts
+   * off, for the save to ask whether to keep them (data-model §14.3): those after the new end and
+   * not after the stored one. Zero for a new template and for no end.
+   *
+   * @throws IllegalArgumentException if the schedule is incomplete, carrying the message to show
+   */
+  int cutOffPending(RecurringScheduleForm schedule, SplitForm split) {
+    LocalDate end = scheduleOf(schedule, split).endDate();
+    Long id = schedule.recurringTemplateId();
+    if (id == null || end == null) {
+      return 0;
+    }
+    LocalDate storedEnd = repository.findById(id).map(RecurringTemplate::endDate).orElse(null);
+    return bookingService.pendingRowsCutOff(id, end, storedEnd);
+  }
+
+  /** How many pending rows a template has, for its delete to ask whether to keep them. */
+  int pendingRowCount(long recurringTemplateId) {
+    return bookingService.pendingRowCount(recurringTemplateId);
+  }
+
+  /**
    * Validate and store a template, then book what it has due (data-model §14.3). A new one starts
    * its cursor the day before its start when the operator chose to book its past occurrences, else
-   * at yesterday, so nothing past is booked; an edit leaves the cursor alone.
+   * at yesterday, so nothing past is booked. An edit is rebooked: its future pending rows are
+   * replaced, and pending rows the end date cuts off are kept or removed as the operator answered.
    *
    * @return the template's id
    * @throws IllegalArgumentException if the schedule is incomplete or the dock refuses the entry,
@@ -119,21 +143,25 @@ class RecurringTemplateService {
       throw new IllegalArgumentException("No live recurring template with id " + id);
     }
     LOG.debug("Recurring template saved: id={}", id);
-    bookingService.run(id);
+    // Unasked, no row is newly cut off: rows already beyond the end were kept by an earlier answer.
+    PendingRows answer = schedule.pendingRowsAnswer();
+    bookingService.rebook(id, answer == null ? PendingRows.KEEP_ALL : answer);
     return id;
   }
 
   /**
-   * Soft-delete a template. Transactions it already booked stay (data-model §14.3).
+   * Soft-delete a template and remove its pending rows as the operator answered (data-model §14.3).
+   * Confirmed transactions it booked always stay.
    *
    * @throws IllegalArgumentException if there is no live template with that id
    */
   @Transactional
-  void delete(long recurringTemplateId) {
+  void delete(long recurringTemplateId, PendingRows answer) {
     if (repository.softDelete(recurringTemplateId) == 0) {
       throw new IllegalArgumentException(
           "No live recurring template with id " + recurringTemplateId);
     }
+    bookingService.removePending(recurringTemplateId, answer);
     LOG.info("Recurring template deleted: id={}", recurringTemplateId);
   }
 

@@ -167,7 +167,8 @@ class RecurringBookingServiceTest {
     int count = serviceOn(today).run(TEMPLATE_ID);
 
     assertThat(count).isZero();
-    verifyNoInteractions(dockSplitService, ledgerService);
+    verifyNoInteractions(dockSplitService);
+    verify(ledgerService, never()).stampOccurrence(anyLong(), anyLong(), any());
     verify(repository).advanceBookedThrough(TEMPLATE_ID, today);
   }
 

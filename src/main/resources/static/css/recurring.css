@@ -61,9 +61,10 @@ table.recurring tbody td {
   width: 5rem;
 }
 
-/* The new-template question (data-model §14.3): the start is in the past, so the save asks whether
-   to book the occurrences before today. The caution edge of the register's pending rows. */
-.recurring-past {
+/* The editor's questions (data-model §14.3): a new template's past occurrences, pending rows a new
+   end date cuts off, and pending rows a delete leaves behind. The caution edge of the register's
+   pending rows. */
+.recurring-question {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
@@ -73,7 +74,12 @@ table.recurring tbody td {
   border-left: 3px solid var(--amber-ink, #b26a00);
 }
 
-.recurring-past p {
+.recurring-question p {
   margin: 0;
   flex: 1 1 100%;
+}
+
+/* The delete dialog's answers are one small form each (it sits outside the panel's form). */
+.recurring-question form {
+  margin: 0;
 }
