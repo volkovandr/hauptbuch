@@ -102,7 +102,7 @@ the next-dates column matches their expectation.
 
 ---
 
-## c — The booking run
+## c — The booking run ✅ **complete**
 
 - **The run** over one template, in one DB transaction:
   1. Lock the template row.
