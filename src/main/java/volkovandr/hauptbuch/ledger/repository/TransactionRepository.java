@@ -11,6 +11,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.ledger.OpeningBalanceView;
+import volkovandr.hauptbuch.ledger.PendingOccurrence;
 import volkovandr.hauptbuch.ledger.Posting;
 import volkovandr.hauptbuch.ledger.Transaction;
 
@@ -28,6 +29,19 @@ import volkovandr.hauptbuch.ledger.Transaction;
 public class TransactionRepository {
 
   private static final String TRANSACTION_ID = "transactionId";
+  private static final String RECURRING_TEMPLATE_ID = "recurringTemplateId";
+
+  /**
+   * The guard every statement of {@link #deletePendingOccurrence} carries, on the transaction
+   * aliased {@code t}: only a live, pending, stamped row may be hard-deleted.
+   */
+  private static final String PENDING_OCCURRENCE =
+      """
+        and t.lifecycle = 'pending_review'
+        and t.recurring_template_id is not null
+        and t.deleted_at is null
+      """;
+
   private static final String DATE = "date";
   private static final String PAYEE_ID = "payeeId";
   private static final String NOTE = "note";
@@ -341,8 +355,88 @@ public class TransactionRepository {
             where transaction_id = :transactionId and recurring_template_id is null
             """)
         .param(TRANSACTION_ID, transactionId)
-        .param("recurringTemplateId", recurringTemplateId)
+        .param(RECURRING_TEMPLATE_ID, recurringTemplateId)
         .param("occurrenceDate", occurrenceDate)
+        .update();
+  }
+
+  /**
+   * A recurring template's live {@code pending_review} transactions, in date order (data-model
+   * §14.3) — what a save of the template may remove and rebook.
+   */
+  public List<PendingOccurrence> findPendingOccurrences(long recurringTemplateId) {
+    return jdbcClient
+        .sql(
+            """
+            select transaction_id, date from transaction
+            where recurring_template_id = :recurringTemplateId
+              and lifecycle = 'pending_review'
+              and deleted_at is null
+            order by date, transaction_id
+            """)
+        .param(RECURRING_TEMPLATE_ID, recurringTemplateId)
+        .query(PendingOccurrence.class)
+        .list();
+  }
+
+  /**
+   * Every occurrence date a recurring template has a transaction for, whatever its lifecycle and
+   * voided ones included (data-model §14.3): a booking run skips them, since the stamp's unique
+   * index admits one transaction per occurrence.
+   */
+  public List<LocalDate> findOccurrenceDates(long recurringTemplateId) {
+    return jdbcClient
+        .sql(
+            """
+            select occurrence_date from transaction
+            where recurring_template_id = :recurringTemplateId
+            """)
+        .param(RECURRING_TEMPLATE_ID, recurringTemplateId)
+        .query(LocalDate.class)
+        .list();
+  }
+
+  /**
+   * Hard-delete a live, {@code pending_review} transaction a recurring template booked, with its
+   * postings and their tags (ADR 0002 — the only hard delete of a transaction). Anything else — a
+   * confirmed, voided or unstamped transaction — is left untouched.
+   *
+   * @return the number of transactions deleted (0 when the row is not a live pending occurrence)
+   */
+  public int deletePendingOccurrence(long transactionId) {
+    jdbcClient
+        .sql(
+            """
+            delete from posting_tag
+            where posting_id in (
+              select p.posting_id from posting p
+              join transaction t on p.transaction_id = t.transaction_id
+              where t.transaction_id = :transactionId
+            """
+                + PENDING_OCCURRENCE
+                + ")")
+        .param(TRANSACTION_ID, transactionId)
+        .update();
+    jdbcClient
+        .sql(
+            """
+            delete from posting
+            where transaction_id in (
+              select t.transaction_id from transaction t
+              where t.transaction_id = :transactionId
+            """
+                + PENDING_OCCURRENCE
+                + ")")
+        .param(TRANSACTION_ID, transactionId)
+        .update();
+    return jdbcClient
+        .sql(
+            """
+            delete from transaction t
+            where t.transaction_id = :transactionId
+            """
+                + PENDING_OCCURRENCE)
+        .param(TRANSACTION_ID, transactionId)
         .update();
   }
 

@@ -1264,13 +1264,16 @@ leaves. An occurrence is computed from the schedule and never stored on its own.
   2. sets `booked_through = min(booked_through, T − 1)`. A start date moved into the past therefore
      books nothing, while a template stuck on a failure (below) still books what it owed;
   3. runs, **skipping** any occurrence date for which the template already has a transaction that is
-     `confirmed` or voided (`deleted_at` set). Confirmed rows are the operator's facts; voided rows
-     are the operator's skips.
+     `confirmed` or voided (`deleted_at` set), or still pending because the operator kept it.
+     Confirmed rows are the operator's facts; voided rows are the operator's skips.
   A future row the operator confirmed under the old schedule may coexist with a rebooked one on a
   new date. That is accepted as the operator's responsibility; lead time 0 with `auto` avoids it.
 - **Ending or deleting.** Setting `end_date` earlier so that it cuts off existing pending rows, or
   deleting the template (a soft delete), asks the operator: *keep all pending* / *keep only those
   dated before today* / *remove all pending*. Removed rows are hard-deleted like the save wipe.
+  For an end date, the answer governs only the pending rows dated after the new end, overriding
+  the save wipe for them (*keep all* keeps even future ones); rows inside the end follow the save
+  rule. Only rows the move newly cuts off are asked about; rows kept beyond an earlier end stay.
   Confirmed transactions always stay. There is no pause; an end date is the stop.
 - **Booked transactions are ordinary.** A booked transaction is dated on its occurrence date. Past rows are never touched by a template edit, whatever
   their lifecycle. Save in the dock confirms a pending occurrence (even a future-dated one); Cancel

@@ -343,6 +343,23 @@ class LedgerServiceTest {
         .isThrownBy(() -> ledgerService.stampOccurrence(42L, 7L, occurrence));
   }
 
+  @Test
+  void deletingPendingOccurrenceHardDeletesIt() {
+    when(transactionRepository.deletePendingOccurrence(42L)).thenReturn(1);
+
+    ledgerService.deletePendingOccurrence(42L);
+
+    verify(transactionRepository).deletePendingOccurrence(42L);
+  }
+
+  @Test
+  void deletingAnythingButPendingOccurrenceFails() {
+    when(transactionRepository.deletePendingOccurrence(42L)).thenReturn(0);
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> ledgerService.deletePendingOccurrence(42L));
+  }
+
   /**
    * The batched sibling to {@link LedgerService#findTransaction}'s single-id liveness check (issue
    * tracker #08): a plain pass-through to the repository's batched query, wrapped in a {@link

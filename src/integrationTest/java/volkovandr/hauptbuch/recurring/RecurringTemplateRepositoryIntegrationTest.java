@@ -408,6 +408,19 @@ class RecurringTemplateRepositoryIntegrationTest {
     assertThat(repository.findById(id).orElseThrow().bookedThrough()).isEqualTo(START.plusDays(3));
   }
 
+  @Test
+  void rewindBookedThroughOnlyEverMovesTheCursorBack() {
+    long id =
+        repository.insert(
+            draft("Gym", bankAccountId, null, List.of(categoryLine("30"))), START.plusDays(5));
+
+    assertThat(repository.rewindBookedThrough(id, START.plusDays(9))).isEqualTo(1);
+    assertThat(repository.findById(id).orElseThrow().bookedThrough()).isEqualTo(START.plusDays(5));
+
+    assertThat(repository.rewindBookedThrough(id, START)).isEqualTo(1);
+    assertThat(repository.findById(id).orElseThrow().bookedThrough()).isEqualTo(START);
+  }
+
   // ── schema guards ───────────────────────────────────────────────────────────
 
   @Test

@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseBody;
 import volkovandr.hauptbuch.ledger.CurrencyService;
 import volkovandr.hauptbuch.ledger.RegisterService;
 import volkovandr.hauptbuch.ledger.RegisterView;
@@ -33,6 +32,7 @@ class RecurringController {
   private static final String BASE_PATH = "/recurring";
   private static final String PANEL_FRAGMENT = "recurring-editor :: editorPanel";
   private static final String EDITOR_URL = BASE_PATH + "/editor";
+  private static final String PENDING_CHOICES = "pendingChoices";
   private static final String TOTALS_HELP =
       "Each occurrence proposes these totals from the latest rate on or before its date. They are"
           + " not stored with the template.";
@@ -117,8 +117,9 @@ class RecurringController {
 
   /**
    * Save the template and go back to the recurring page. A refused save re-renders the panel with
-   * the message, keeping everything typed. A new template starting in the past is not saved until
-   * the operator answers whether to book its past occurrences (data-model §14.3): the panel comes
+   * the message, keeping everything typed. Two questions hold a save back until answered (data-
+   * model §14.3): a new template starting in the past asks whether to book its past occurrences,
+   * and an end date that cuts off existing pending rows asks whether to keep them. The panel comes
    * back with the question, and the answer rides along on the next save.
    */
   @PostMapping(EDITOR_URL + "/save")
@@ -136,6 +137,14 @@ class RecurringController {
           return panel(split, schedule, null, model);
         }
       }
+      if (schedule.pendingRowsAnswer() == null) {
+        int cutOff = templateService.cutOffPending(schedule, split);
+        if (cutOff > 0) {
+          model.addAttribute("cutOffPending", cutOff);
+          model.addAttribute(PENDING_CHOICES, PendingRows.values());
+          return panel(split, schedule, null, model);
+        }
+      }
       templateService.save(schedule, split);
     } catch (IllegalArgumentException | IllegalStateException | UnbalancedTransactionException e) {
       return panel(split, schedule, e.getMessage(), model);
@@ -144,13 +153,36 @@ class RecurringController {
     return panel(split, schedule, null, model);
   }
 
-  /** Soft-delete a template and go back to the recurring page. */
+  /**
+   * Soft-delete a template and go back to the recurring page. A template with pending rows is not
+   * deleted until the operator answers what becomes of them (data-model §14.3): the question opens
+   * in the editor's dialog slot, and each answer posts here again.
+   *
+   * @param deleteAnswer a {@link PendingRows#code()}, blank while unasked. Not {@code pendingRows}:
+   *     the panel's Delete posts its whole form, which may carry the end-date question's answer
+   */
   @PostMapping(BASE_PATH + "/{id}/delete")
-  @ResponseBody
-  String delete(@PathVariable long id, HttpServletResponse response) {
-    templateService.delete(id);
+  String delete(
+      @PathVariable long id,
+      @RequestParam(required = false) String deleteAnswer,
+      Model model,
+      HttpServletResponse response) {
+    PendingRows answer = PendingRows.fromCode(deleteAnswer);
+    if (answer == null) {
+      int pending = templateService.pendingRowCount(id);
+      if (pending > 0) {
+        model.addAttribute("recurringTemplateId", id);
+        model.addAttribute("pendingCount", pending);
+        model.addAttribute(PENDING_CHOICES, PendingRows.values());
+        response.setHeader("HX-Retarget", "#recurring-dialog");
+        response.setHeader("HX-Reswap", "innerHTML");
+        return "recurring-editor :: deleteDialog";
+      }
+    }
+    // With no pending rows there is nothing to keep or remove; the answer is moot.
+    templateService.delete(id, answer == null ? PendingRows.KEEP_ALL : answer);
     response.setHeader("HX-Redirect", BASE_PATH);
-    return "";
+    return "recurring-editor :: deleted";
   }
 
   /** The split panel hosted by the editor: its endpoints, Start, and Cancel/Delete to this page. */

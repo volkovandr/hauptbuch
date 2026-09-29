@@ -125,6 +125,40 @@ public class LedgerService {
   }
 
   /**
+   * A recurring template's live {@code pending_review} transactions, in date order (data-model
+   * §14.3) — what a template save or delete decides to keep or remove.
+   */
+  public List<PendingOccurrence> pendingOccurrences(long recurringTemplateId) {
+    return transactionRepository.findPendingOccurrences(recurringTemplateId);
+  }
+
+  /**
+   * Every occurrence date a recurring template has a transaction for — confirmed, pending or voided
+   * (data-model §14.3). A booking run skips them: confirmed rows are the operator's facts, voided
+   * rows the operator's skips.
+   */
+  public Set<LocalDate> bookedOccurrenceDates(long recurringTemplateId) {
+    return Set.copyOf(transactionRepository.findOccurrenceDates(recurringTemplateId));
+  }
+
+  /**
+   * Hard-delete a pending occurrence with its postings and their tags (ADR 0002). This is the only
+   * hard delete of a transaction in the app, and only the {@code recurring} module's template save
+   * and delete call it: an untouched pending occurrence is a forecast, not the operator's data.
+   *
+   * @throws IllegalArgumentException if the transaction is not a live, {@code pending_review},
+   *     stamped occurrence
+   */
+  @Transactional
+  public void deletePendingOccurrence(long transactionId) {
+    if (transactionRepository.deletePendingOccurrence(transactionId) == 0) {
+      throw new IllegalArgumentException(
+          "No pending recurring occurrence with id " + transactionId + " to delete");
+    }
+    LOG.info("Pending recurring occurrence deleted: id={}", transactionId);
+  }
+
+  /**
    * A live (not soft-deleted) transaction by id, for loading it into the entry dock's edit mode
    * (register §3.1). A read the dock needs before it can re-thread; pairs with {@link
    * #findPostings}. Returns empty for a missing or voided transaction.

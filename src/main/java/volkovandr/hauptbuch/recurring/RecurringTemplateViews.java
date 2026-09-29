@@ -181,6 +181,7 @@ class RecurringTemplateViews {
         String.valueOf(template.leadDays()),
         template.confirmation(),
         template.managementUrl() == null ? "" : template.managementUrl(),
+        "",
         "");
   }
 
