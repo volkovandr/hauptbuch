@@ -160,7 +160,7 @@ each one with the dock.
 
 ---
 
-## e — Editing and ending a template once rows exist
+## e — Editing and ending a template once rows exist ✅ **complete**
 
 - **Save on an existing template** (data-model §14.3):
   1. Hard-delete its live `pending_review` rows dated ≥ today.
