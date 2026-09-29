@@ -74,7 +74,8 @@ class DockAmountFieldsServiceTest {
         null,
         null,
         null,
-        null);
+        null,
+        false);
   }
 
   private CrossCurrencyFieldsQuery captureQuery() {

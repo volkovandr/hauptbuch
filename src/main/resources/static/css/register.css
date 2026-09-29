@@ -123,6 +123,11 @@
   gap: 0.75rem 1.25rem;
 }
 
+/* The Pending only toggle sits on the inputs' baseline, not the labels' above them. */
+.register-filter__pending {
+  padding-bottom: 0.45rem;
+}
+
 /* The scroll box: the register scrolls inside its own frame so the page body never scrolls
    horizontally, and newest-at-bottom can anchor to the bottom (keyboard.js [data-scroll-bottom]). */
 .register-scroll {

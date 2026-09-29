@@ -152,6 +152,17 @@
             </option>
           </select>
         </div>
+        <!-- Pending only (register §2.3): just the pending_review rows — recurring occurrences
+             awaiting review and zero-amount receipt placeholders. -->
+        <label class="check register-filter__pending">
+          <input
+            type="checkbox"
+            name="pendingOnly"
+            value="true"
+            th:checked="${register.filter().pendingOnly()}"
+          />
+          <span>Pending only</span>
+        </label>
         <p class="actions">
           <!-- Applies the picker carried by the hidden field inside #register-filter-control,
                which a tab switch keeps current. -->
@@ -215,7 +226,7 @@
       th:if="${selectedTransactionId != null}"
       th:attr="hx-get=@{/register/edit/{id}(id=${selectedTransactionId})}"
       hx-trigger="load"
-      hx-include="[name='viewAccountId'], [name='viewPicker'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
+      hx-include="[name='viewAccountId'], [name='viewPicker'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId'], [name='viewPendingOnly']"
       hx-target="#entry-dock"
       hx-swap="outerHTML"
     ></span>

@@ -28,6 +28,7 @@ public class RegisterRepository {
   private static final String FROM_DATE = "fromDate";
   private static final String TO_DATE = "toDate";
   private static final String PAYEE_ID = "payeeId";
+  private static final String PENDING_ONLY = "pendingOnly";
   private static final String BASE_CURRENCY = "baseCurrency";
   private static final String TRANSACTION_IDS = "transactionIds";
 
@@ -89,13 +90,14 @@ public class RegisterRepository {
    * <p>The running balance is a windowed sum over the account's <em>entire</em> live history
    * (computed in the {@code threaded} CTE before any display filter), so a row's "balance after"
    * stays correct as-of even when older rows fall outside {@code fromDate} or the payee filter
-   * hides intervening rows. The date-range and payee filters are applied only in the outer select,
-   * to what is <em>shown</em> — never to what the balance accumulates over (register §2.7).
+   * hides intervening rows. The date-range, payee and pending-only filters apply only in the outer
+   * select, to what is <em>shown</em> — never to what the balance accumulates over (register §2.7).
    *
    * @param accountIds the viewed accounts; an empty list yields no rows
    * @param fromDate inclusive lower bound on the shown rows' dates; null for no lower bound
    * @param toDate inclusive upper bound on the shown rows' dates; null for no upper bound
    * @param payeeId show only rows whose transaction has this payee; null for all payees
+   * @param pendingOnly show only {@code pending_review} rows (register §2.3, Pending only)
    * @param baseCurrency the book's base currency, to flag base vs non-base rows for display
    */
   public List<RegisterRow> findRows(
@@ -103,6 +105,7 @@ public class RegisterRepository {
       LocalDate fromDate,
       LocalDate toDate,
       Long payeeId,
+      boolean pendingOnly,
       String baseCurrency) {
     if (accountIds.isEmpty()) {
       return List.of();
@@ -140,12 +143,14 @@ public class RegisterRepository {
             where (cast(:fromDate as date) is null or threaded.date >= :fromDate)
               and (cast(:toDate as date) is null or threaded.date <= :toDate)
               and (cast(:payeeId as bigint) is null or threaded.payee_id = :payeeId)
+              and (not :pendingOnly or threaded.lifecycle = 'pending_review')
             order by threaded.date, threaded.transaction_id, threaded.posting_id
             """)
         .param(ACCOUNT_IDS, accountIds)
         .param(FROM_DATE, fromDate)
         .param(TO_DATE, toDate)
         .param(PAYEE_ID, payeeId)
+        .param(PENDING_ONLY, pendingOnly)
         .param(BASE_CURRENCY, baseCurrency)
         .query(RegisterRow.class)
         .list();

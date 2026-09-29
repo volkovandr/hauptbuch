@@ -360,7 +360,8 @@ class RegisterEntryController {
         RegisterPicker.fromParam(form.viewPicker()),
         form.viewFromDate(),
         form.viewToDate(),
-        form.viewPayeeId());
+        form.viewPayeeId(),
+        form.viewPendingOnly());
   }
 
   /**

@@ -71,6 +71,7 @@ import volkovandr.hauptbuch.debts.PersonTarget;
  * @param viewFromDate the active filter's lower date bound; nullable
  * @param viewToDate the active filter's upper date bound; nullable
  * @param viewPayeeId the active filter's payee; nullable
+ * @param viewPendingOnly the active filter's Pending only toggle (register §2.3)
  */
 public record SplitForm(
     Long transactionId,
@@ -100,7 +101,8 @@ public record SplitForm(
     String viewPicker,
     LocalDate viewFromDate,
     LocalDate viewToDate,
-    Long viewPayeeId) {
+    Long viewPayeeId,
+    boolean viewPendingOnly) {
 
   /** Defensively copy the mutable list fields (null-safe) so the form cannot be mutated after. */
   public SplitForm {
@@ -156,7 +158,8 @@ public record SplitForm(
         null,
         null,
         null,
-        null);
+        null,
+        false);
   }
 
   /** Null-safe immutable copy of one line's tag-id list (an unresolved line may bind a null). */

@@ -73,6 +73,7 @@
       <input type="hidden" name="viewFromDate" th:value="${register.filter().fromDate()}" />
       <input type="hidden" name="viewToDate" th:value="${register.filter().toDate()}" />
       <input type="hidden" name="viewPayeeId" th:value="${register.filter().payeeId()}" />
+      <input type="hidden" name="viewPendingOnly" th:value="${register.filter().pendingOnly()}" />
 
       <div class="entry-dock__fields">
         <!-- 1 · Date -->
@@ -348,7 +349,7 @@
             type="button"
             class="btn btn--ghost"
             hx-get="/register/dock"
-            hx-include="[name='viewAccountId'], [name='viewPicker'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
+            hx-include="[name='viewAccountId'], [name='viewPicker'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId'], [name='viewPendingOnly']"
             hx-target="#entry-dock"
             hx-swap="outerHTML"
           >

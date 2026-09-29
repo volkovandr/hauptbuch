@@ -28,6 +28,25 @@
         th:attr="hx-get=@{/overview/tracking-stats}"
         hx-trigger="load"
       ></div>
+      <!--
+        The review line (register §2.3, recurring plan slice d): how many live pending_review rows
+        there are — recurring occurrences awaiting review and zero-amount receipt placeholders —
+        with those dated before today called out. The link opens the register with Pending only
+        on, every account ticked, and the range starting at the earliest pending row, so it shows
+        exactly the rows counted here. `pendingReview` is present only when something is pending.
+      -->
+      <p class="lede" th:if="${pendingReview}">
+        <a
+          th:href="@{/register(picker='all', pendingOnly=true, fromDate=${pendingReview.earliestDate()})}"
+          th:text="${pendingReview.pending()} + ' pending to review'"
+          >3 pending to review</a
+        ><span
+          class="warning"
+          th:if="${pendingReview.overdue() > 0}"
+          th:text="' · ' + ${pendingReview.overdue()} + ' overdue'"
+          > · 1 overdue</span
+        >
+      </p>
     </div>
 
     <!--

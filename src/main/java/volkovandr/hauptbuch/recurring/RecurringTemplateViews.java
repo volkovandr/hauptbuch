@@ -161,7 +161,8 @@ class RecurringTemplateViews {
             null,
             null,
             null,
-            null);
+            null,
+            false);
     return new RecurringEditor(
         splitCurrencyService.withProposedTotals(split), scheduleOf(template));
   }

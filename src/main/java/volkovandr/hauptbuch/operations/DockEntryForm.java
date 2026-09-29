@@ -46,6 +46,8 @@ import java.util.List;
  * @param viewFromDate the active filter's lower date bound; nullable
  * @param viewToDate the active filter's upper date bound; nullable
  * @param viewPayeeId the active filter's payee; nullable
+ * @param viewPendingOnly the active filter's Pending only toggle (register §2.3); an absent param
+ *     binds as {@code false} — boxed only because a missing primitive fails constructor binding
  */
 public record DockEntryForm(
     Long transactionId,
@@ -70,12 +72,17 @@ public record DockEntryForm(
     String viewPicker,
     LocalDate viewFromDate,
     LocalDate viewToDate,
-    Long viewPayeeId) {
+    Long viewPayeeId,
+    Boolean viewPendingOnly) {
 
-  /** Defensively copy the list fields (null-safe) so the record cannot be mutated after. */
+  /**
+   * Defensively copy the list fields (null-safe) so the record cannot be mutated after, and read an
+   * absent Pending only toggle as off.
+   */
   public DockEntryForm {
     tagId = tagId == null ? null : List.copyOf(tagId);
     viewAccountId = viewAccountId == null ? null : List.copyOf(viewAccountId);
+    viewPendingOnly = Boolean.TRUE.equals(viewPendingOnly);
   }
 
   /**

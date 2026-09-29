@@ -60,6 +60,8 @@ class RegisterController {
    *     blank
    * @param toDate inclusive upper date bound
    * @param payeeId show only this payee's rows; null for all
+   * @param pendingOnly show only {@code pending_review} rows (register §2.3) — the main page's
+   *     "pending to review" link turns it on
    * @param selected jump to this transaction (register §7, plan stage 9g) — the committed receipt's
    *     "Edit transaction". The filter is then derived from the transaction and every other param
    *     is discarded, so the row is guaranteed visible; the view marks it selected and loads it
@@ -72,11 +74,12 @@ class RegisterController {
       @RequestParam(required = false) LocalDate fromDate,
       @RequestParam(required = false) LocalDate toDate,
       @RequestParam(required = false) Long payeeId,
+      @RequestParam(required = false) boolean pendingOnly,
       @RequestParam(required = false) Long selected,
       Model model) {
     Optional<RegisterFilter> jump = jumpFilter(selected);
     RegisterFilter filter =
-        jump.orElseGet(() -> filterFrom(accountId, picker, fromDate, toDate, payeeId));
+        jump.orElseGet(() -> filterFrom(accountId, picker, fromDate, toDate, payeeId, pendingOnly));
     RegisterView register = registerService.view(filter);
 
     model.addAttribute("register", register);
@@ -120,7 +123,8 @@ class RegisterController {
             RegisterPicker.fromParam(picker),
             defaultFrom(fromDate, toDate),
             toDate,
-            null);
+            null,
+            false);
     model.addAttribute("filterView", registerFilterViewAssembler.filterView(filter, true));
     return VIEW + " :: filterControl";
   }
@@ -133,7 +137,12 @@ class RegisterController {
    * whole picker" when every member is ticked.
    */
   private RegisterFilter filterFrom(
-      List<Long> accountId, String picker, LocalDate fromDate, LocalDate toDate, Long payeeId) {
+      List<Long> accountId,
+      String picker,
+      LocalDate fromDate,
+      LocalDate toDate,
+      Long payeeId,
+      boolean pendingOnly) {
     List<Long> submitted = accountId == null ? List.of() : accountId;
     RegisterPicker active =
         picker != null
@@ -141,7 +150,7 @@ class RegisterController {
             : (submitted.isEmpty() ? RegisterPicker.DEFAULT : RegisterPicker.ALL);
     LocalDate from = defaultFrom(fromDate, toDate);
     List<Long> selection = registerPickerService.resolveSelection(active, submitted, from, toDate);
-    return new RegisterFilter(selection, active, from, toDate, payeeId);
+    return new RegisterFilter(selection, active, from, toDate, payeeId, pendingOnly);
   }
 
   /** The transaction-derived filter for a {@code selected=} jump; empty when there is no jump. */

@@ -50,13 +50,14 @@ public class RegisterJumpService {
       RegisterOwnLeg leading = legs.get(0);
       return Optional.of(
           new RegisterFilter(
-              List.of(leading.accountId()), RegisterPicker.ALL, leading.date(), null, null));
+              List.of(leading.accountId()), RegisterPicker.ALL, leading.date(), null, null, false));
     }
     return transactionRepository
         .findById(transactionId)
         .filter(transaction -> transaction.deletedAt() == null)
         .map(
             transaction ->
-                new RegisterFilter(List.of(), RegisterPicker.ALL, transaction.date(), null, null));
+                new RegisterFilter(
+                    List.of(), RegisterPicker.ALL, transaction.date(), null, null, false));
   }
 }
