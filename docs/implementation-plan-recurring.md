@@ -140,7 +140,7 @@ missed month catches up, nothing ever double-books, and `./gradlew check` is gre
 
 ---
 
-## d — Reviewing pending occurrences
+## d — Reviewing pending occurrences ✅ **complete**
 
 - **Register Pending only filter** (register §2.3). This covers recurring `review` rows and receipt
   zero-amount placeholders alike.
