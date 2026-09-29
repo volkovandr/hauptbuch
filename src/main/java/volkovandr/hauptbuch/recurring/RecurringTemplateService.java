@@ -171,6 +171,24 @@ class RecurringTemplateService {
   }
 
   /**
+   * The live templates whose end the main page reminds of today (recurring sub-plan slice g), by
+   * name: those with the reminder ticked, from {@code end_date − days} on, until dismissed.
+   */
+  List<RecurringTemplate> endReminders() {
+    LocalDate today = LocalDate.now(clock);
+    return repository.findLive().stream().filter(t -> t.remindsOfEndOn(today)).toList();
+  }
+
+  /**
+   * Switch a template's end reminder off: the main page's Dismiss (recurring sub-plan slice g). A
+   * template already gone has nothing to remind of, so that is no error.
+   */
+  @Transactional
+  void dismissEndReminder(long recurringTemplateId) {
+    repository.dismissEndReminder(recurringTemplateId);
+  }
+
+  /**
    * The entry as the dock would commit it on the start date, in the currency the template stores.
    * Cross-currency totals the operator left blank are proposed from the rate first, as each
    * occurrence's booking will propose them.

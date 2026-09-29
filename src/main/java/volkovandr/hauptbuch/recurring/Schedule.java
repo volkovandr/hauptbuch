@@ -1,5 +1,7 @@
 package volkovandr.hauptbuch.recurring;
 
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +21,10 @@ import java.util.List;
  * @param endDate the last date an occurrence may fall on, or {@code null} for no end
  */
 public record Schedule(LocalDate startDate, CadenceUnit unit, int every, LocalDate endDate) {
+
+  private static final BigDecimal DAYS_PER_YEAR = BigDecimal.valueOf(365);
+  private static final BigDecimal DAYS_PER_WEEK = BigDecimal.valueOf(7);
+  private static final BigDecimal MONTHS_PER_YEAR = BigDecimal.valueOf(12);
 
   /** Validate the cadence and the end date. */
   public Schedule {
@@ -75,6 +81,28 @@ public record Schedule(LocalDate startDate, CadenceUnit unit, int every, LocalDa
       }
     }
     return dates;
+  }
+
+  /**
+   * {@code amount} per occurrence, as a yearly figure (data-model §14.4): days and weeks through a
+   * year of 365 days, months and years exactly. Schedule math only; the end date plays no part.
+   */
+  public BigDecimal perYear(BigDecimal amount) {
+    BigDecimal step = BigDecimal.valueOf(every);
+    return switch (unit) {
+      case DAY -> amount.multiply(DAYS_PER_YEAR).divide(step, MathContext.DECIMAL64);
+      case WEEK ->
+          amount
+              .multiply(DAYS_PER_YEAR)
+              .divide(step.multiply(DAYS_PER_WEEK), MathContext.DECIMAL64);
+      case MONTH -> amount.multiply(MONTHS_PER_YEAR).divide(step, MathContext.DECIMAL64);
+      case YEAR -> amount.divide(step, MathContext.DECIMAL64);
+    };
+  }
+
+  /** {@code amount} per occurrence, as a monthly figure: a twelfth of {@link #perYear}. */
+  public BigDecimal perMonth(BigDecimal amount) {
+    return perYear(amount).divide(MONTHS_PER_YEAR, MathContext.DECIMAL64);
   }
 
   /** The occurrence at {@code index} (0 = the start date), always stepped from the start. */

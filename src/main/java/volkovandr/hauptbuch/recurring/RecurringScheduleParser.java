@@ -33,6 +33,8 @@ final class RecurringScheduleParser {
     // The schedule's own checks refuse an end date before the start.
     Schedule schedule = new Schedule(start, unit, every, endDate(form, start, unit, every));
     String confirmation = blankToNull(form.confirmation());
+    // A reminder needs an end to remind of; with none, a ticked box is simply not stored.
+    boolean reminds = form.endReminderTicked() && schedule.endDate() != null;
     return new RecurringTemplateDraft(
         name.strip(),
         schedule.startDate(),
@@ -41,8 +43,8 @@ final class RecurringScheduleParser {
         schedule.endDate(),
         blankToNull(form.leadDays()) == null ? 0 : whole(form.leadDays(), "The lead time", 0),
         confirmation == null ? RecurringScheduleForm.AUTO : confirmation,
-        false,
-        null,
+        reminds,
+        reminds ? whole(form.endReminderDays(), "The reminder days", 0) : null,
         managementUrl(form.managementUrl()),
         null,
         null,

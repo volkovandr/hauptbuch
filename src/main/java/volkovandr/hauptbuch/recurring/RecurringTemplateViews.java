@@ -182,7 +182,11 @@ class RecurringTemplateViews {
         template.confirmation(),
         template.managementUrl() == null ? "" : template.managementUrl(),
         "",
-        "");
+        "",
+        template.endReminder() ? RecurringScheduleForm.TICKED : "",
+        template.endReminderDays() == null
+            ? RecurringScheduleForm.DEFAULT_REMINDER_DAYS
+            : String.valueOf(template.endReminderDays()));
   }
 
   /**

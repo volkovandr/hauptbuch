@@ -421,6 +421,41 @@ class RecurringTemplateRepositoryIntegrationTest {
     assertThat(repository.findById(id).orElseThrow().bookedThrough()).isEqualTo(START);
   }
 
+  // ── the end reminder (slice g) ──────────────────────────────────────────────
+
+  @Test
+  void dismissEndReminderSwitchesItOffAndKeepsTheDays() {
+    RecurringTemplateDraft reminding =
+        new RecurringTemplateDraft(
+            "Gym",
+            START,
+            "month",
+            1,
+            START.plusMonths(6),
+            0,
+            "auto",
+            true,
+            30,
+            null,
+            bankAccountId,
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            List.of(categoryLine("30")));
+    long id = repository.insert(reminding, START.minusDays(1));
+
+    assertThat(repository.dismissEndReminder(id)).isEqualTo(1);
+
+    RecurringTemplate dismissed = repository.findById(id).orElseThrow();
+    assertThat(dismissed.endReminder()).isFalse();
+    assertThat(dismissed.endReminderDays()).isEqualTo(30);
+    repository.softDelete(id);
+    assertThat(repository.dismissEndReminder(id)).isZero();
+  }
+
   // ── booking failures (slice f) ────────────────────────────────────────────
 
   @Test

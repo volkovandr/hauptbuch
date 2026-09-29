@@ -281,6 +281,23 @@ public class RecurringTemplateRepository {
         .list();
   }
 
+  /**
+   * Switch a live template's end reminder off (recurring sub-plan slice g): the main page's
+   * Dismiss. The reminder days are kept, so ticking it again restores them.
+   *
+   * @return the number of templates updated (0 when unknown or soft-deleted)
+   */
+  public int dismissEndReminder(long recurringTemplateId) {
+    return jdbcClient
+        .sql(
+            """
+            update recurring_template set end_reminder = false, updated_at = now()
+            where recurring_template_id = :recurringTemplateId and deleted_at is null
+            """)
+        .param(TEMPLATE_ID, recurringTemplateId)
+        .update();
+  }
+
   /** A template's header tags, which land on the funding leg. */
   public List<Long> findTagIds(long recurringTemplateId) {
     return jdbcClient

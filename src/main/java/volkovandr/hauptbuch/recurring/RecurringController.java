@@ -33,6 +33,7 @@ class RecurringController {
   private static final String PANEL_FRAGMENT = "recurring-editor :: editorPanel";
   private static final String EDITOR_URL = BASE_PATH + "/editor";
   private static final String PENDING_CHOICES = "pendingChoices";
+  private static final String WARNINGS_FRAGMENT = "fragments/recurring-warnings :: warnings";
   private static final String TOTALS_HELP =
       "Each occurrence proposes these totals from the latest rate on or before its date. They are"
           + " not stored with the template.";
@@ -40,6 +41,7 @@ class RecurringController {
   private final RecurringTemplateService templateService;
   private final RecurringTemplateViews views;
   private final RecurringBookingService bookingService;
+  private final RecurringCosts costs;
   private final RegisterService registerService;
   private final CurrencyService currencyService;
   private final SplitPanelAssembler assembler;
@@ -49,6 +51,7 @@ class RecurringController {
       RecurringTemplateService templateService,
       RecurringTemplateViews views,
       RecurringBookingService bookingService,
+      RecurringCosts costs,
       RegisterService registerService,
       CurrencyService currencyService,
       SplitPanelAssembler assembler,
@@ -56,6 +59,7 @@ class RecurringController {
     this.templateService = templateService;
     this.views = views;
     this.bookingService = bookingService;
+    this.costs = costs;
     this.registerService = registerService;
     this.currencyService = currencyService;
     this.assembler = assembler;
@@ -63,26 +67,39 @@ class RecurringController {
   }
 
   /**
-   * The recurring page: the live templates with their cadence and next three dates, and why any of
-   * them cannot book (slice f).
+   * The recurring page: the live templates with their cadence and next three dates, why any of them
+   * cannot book (slice f), what each costs, and the Recurring cost summary (slice g).
    */
   @GetMapping(BASE_PATH)
   String list(Model model) {
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("templates", views.rows());
     model.addAttribute("failures", bookingService.failures());
+    model.addAttribute("figures", costs.figures());
+    model.addAttribute("summary", costs.summary());
     return "recurring";
   }
 
   /**
-   * The main page's booking-failure warnings (data-model §14.3, slice f), lazy-loaded by the
-   * landing page: one line per live template that cannot book, linking to its editor. Empty when
-   * every template books.
+   * The main page's recurring lines, lazy-loaded by the landing page: one warning per live template
+   * that cannot book (data-model §14.3, slice f) and one reminder per template nearing its end
+   * (slice g), each linking to the template. Empty when there is nothing to say.
    */
   @GetMapping("/overview/recurring-warnings")
   String warnings(Model model) {
     model.addAttribute("failures", bookingService.failures().values());
-    return "fragments/recurring-warnings :: warnings";
+    model.addAttribute("reminders", templateService.endReminders());
+    return WARNINGS_FRAGMENT;
+  }
+
+  /**
+   * Dismiss a template's end reminder from the main page: it switches the reminder off and
+   * re-renders the recurring lines in place.
+   */
+  @PostMapping(BASE_PATH + "/{id}/dismiss-reminder")
+  String dismissReminder(@PathVariable long id, Model model) {
+    templateService.dismissEndReminder(id);
+    return warnings(model);
   }
 
   /** The editor for a new template. */

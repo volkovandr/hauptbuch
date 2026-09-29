@@ -22,6 +22,8 @@ import org.springframework.util.MultiValueMap;
  *     §14.3): {@code book} or {@code skip}, blank while unasked
  * @param pendingRows an existing template's answer for the pending rows a new end date cuts off
  *     (data-model §14.3): a {@link PendingRows#code()}, blank while unasked
+ * @param endReminder {@code true} when the main page should remind of the end date, else blank
+ * @param endReminderDays how many days before the end date the reminder starts
  */
 public record RecurringScheduleForm(
     Long recurringTemplateId,
@@ -35,7 +37,9 @@ public record RecurringScheduleForm(
     String confirmation,
     String managementUrl,
     String pastOccurrences,
-    String pendingRows) {
+    String pendingRows,
+    String endReminder,
+    String endReminderDays) {
 
   static final String END_NONE = "none";
   static final String END_DATE = "date";
@@ -44,6 +48,8 @@ public record RecurringScheduleForm(
   static final String REVIEW = "review";
   static final String BOOK_PAST = "book";
   static final String SKIP_PAST = "skip";
+  static final String DEFAULT_REMINDER_DAYS = "30";
+  static final String TICKED = "true";
 
   /** Whether the operator has answered the past-occurrences question (either way). */
   boolean pastOccurrencesAnswered() {
@@ -59,10 +65,31 @@ public record RecurringScheduleForm(
     return PendingRows.fromCode(pendingRows);
   }
 
-  /** A blank schedule for a new template: every month, no end, booked on the day, automatic. */
+  /** Whether the operator ticked the end reminder. */
+  public boolean endReminderTicked() {
+    return TICKED.equalsIgnoreCase(endReminder);
+  }
+
+  /**
+   * A blank schedule for a new template: every month, no end, booked on the day, automatic. An end
+   * reminder, once an end is picked, starts {@value #DEFAULT_REMINDER_DAYS} days ahead.
+   */
   static RecurringScheduleForm blank() {
     return new RecurringScheduleForm(
-        null, "", "1", CadenceUnit.MONTH.code(), END_NONE, "", "", "0", AUTO, "", "", "");
+        null,
+        "",
+        "1",
+        CadenceUnit.MONTH.code(),
+        END_NONE,
+        "",
+        "",
+        "0",
+        AUTO,
+        "",
+        "",
+        "",
+        "",
+        DEFAULT_REMINDER_DAYS);
   }
 
   /** Bind the schedule block from the editor's raw request parameters. */
@@ -80,6 +107,8 @@ public record RecurringScheduleForm(
         params.getFirst("confirmation"),
         params.getFirst("managementUrl"),
         params.getFirst("pastOccurrences"),
-        params.getFirst("pendingRows"));
+        params.getFirst("pendingRows"),
+        params.getFirst("endReminder"),
+        params.getFirst("endReminderDays"));
   }
 }

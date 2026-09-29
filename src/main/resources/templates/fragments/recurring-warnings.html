@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <!--
-  The main page's recurring booking-failure warnings (data-model §14.3, recurring sub-plan slice f).
-  Lazy-loaded by landing.html via hx-get on load. One line per live template whose occurrences
-  cannot book, naming the reason and linking to the template's editor; it renders nothing while
-  every template books. A line clears itself on the first run that completes.
+  The main page's recurring lines, lazy-loaded by landing.html via hx-get on load into its
+  #recurring-warnings slot. One warning per live template whose occurrences cannot book (data-model
+  §14.3, slice f), naming the reason; it clears on the first run that completes. One reminder per
+  template nearing its end (slice g), from the end date minus its reminder days; Dismiss switches the
+  reminder off and re-renders this fragment in place. Each line links to the template's editor, and
+  the fragment renders nothing while there is nothing to say.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
   <body>
@@ -20,6 +22,22 @@
           th:text="'(since ' + ${#temporals.format(f.since(), 'dd.MM.yyyy')} + ')'"
           >(since 01.10.2026)</span
         >
+      </p>
+      <p class="lede" th:each="r : ${reminders}">
+        <a th:href="@{/recurring/{id}(id=${r.recurringTemplateId()})}" th:text="${r.name()}"
+          >Streaming</a
+        >
+        <span th:text="'ends on ' + ${#temporals.format(r.endDate(), 'dd.MM.yyyy')}"
+          >ends on 31.12.2026</span
+        >
+        <button
+          type="button"
+          class="btn btn--ghost"
+          th:attr="hx-post=@{/recurring/{id}/dismiss-reminder(id=${r.recurringTemplateId()})}"
+          hx-target="#recurring-warnings"
+        >
+          Dismiss
+        </button>
       </p>
     </th:block>
   </body>

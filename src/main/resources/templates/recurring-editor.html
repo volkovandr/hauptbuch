@@ -129,6 +129,37 @@
           />
         </span>
       </div>
+      <!-- End reminder (slice g): only once an end is picked, since it reminds of the end date;
+           with no end its values ride along hidden, like the other end mode's. -->
+      <div class="field" th:unless="${template.endMode() == 'none'}">
+        <label class="field__label" for="recurring-reminder">Remind before end</label>
+        <span class="recurring-schedule__inline">
+          <input
+            id="recurring-reminder"
+            type="checkbox"
+            name="endReminder"
+            value="true"
+            th:checked="${template.endReminderTicked()}"
+          />
+          <input
+            name="endReminderDays"
+            class="input num recurring-schedule__count"
+            inputmode="numeric"
+            aria-label="Days before the end"
+            th:value="${template.endReminderDays()}"
+          />
+          <span>days</span>
+        </span>
+      </div>
+      <th:block th:if="${template.endMode() == 'none'}">
+        <input
+          th:if="${template.endReminderTicked()}"
+          type="hidden"
+          name="endReminder"
+          value="true"
+        />
+        <input type="hidden" name="endReminderDays" th:value="${template.endReminderDays()}" />
+      </th:block>
       <div class="field">
         <label class="field__label" for="recurring-lead">Book days ahead</label>
         <input

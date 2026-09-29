@@ -82,7 +82,7 @@ class RecurringTemplateServiceTest {
 
   private static RecurringScheduleForm schedule(Long id, String name) {
     return new RecurringScheduleForm(
-        id, name, "1", "month", "none", "", "", "3", "review", "", "", "");
+        id, name, "1", "month", "none", "", "", "3", "review", "", "", "", "", "");
   }
 
   private static SplitForm split(Long accountId, String fundingPerson, String amount) {
@@ -230,7 +230,7 @@ class RecurringTemplateServiceTest {
     when(repository.insert(any(), any())).thenReturn(1L);
     RecurringScheduleForm afterThree =
         new RecurringScheduleForm(
-            null, "Loan", "1", "month", "after", "", "3", "0", "auto", "", "", "");
+            null, "Loan", "1", "month", "after", "", "3", "0", "auto", "", "", "", "", "");
 
     service.save(afterThree, split(BANK_ID, "", "100"));
 
@@ -243,13 +243,109 @@ class RecurringTemplateServiceTest {
     proposesNothing();
     when(repository.insert(any(), any())).thenReturn(1L);
     RecurringScheduleForm defaults =
-        new RecurringScheduleForm(null, "Gym", "1", "month", "none", "", "", "", "", "", "", "");
+        new RecurringScheduleForm(
+            null, "Gym", "1", "month", "none", "", "", "", "", "", "", "", "", "");
 
     service.save(defaults, split(BANK_ID, "", "30"));
 
     RecurringTemplateDraft draft = insertedDraft(TODAY.minusDays(1));
     assertThat(draft.leadDays()).isZero();
     assertThat(draft.confirmation()).isEqualTo("auto");
+  }
+
+  private static RecurringScheduleForm reminding(String endMode, String days) {
+    return new RecurringScheduleForm(
+        null,
+        "Gym",
+        "1",
+        "month",
+        endMode,
+        "2026-12-31",
+        "",
+        "0",
+        "auto",
+        "",
+        "",
+        "",
+        "true",
+        days);
+  }
+
+  @Test
+  void endReminderIsStoredWithItsDays() {
+    proposesNothing();
+    when(repository.insert(any(), any())).thenReturn(1L);
+
+    service.save(reminding("date", "14"), split(BANK_ID, "", "30"));
+
+    RecurringTemplateDraft draft = insertedDraft(TODAY.minusDays(1));
+    assertThat(draft.endReminder()).isTrue();
+    assertThat(draft.endReminderDays()).isEqualTo(14);
+  }
+
+  @Test
+  void endReminderWithoutEndIsNotStored() {
+    proposesNothing();
+    when(repository.insert(any(), any())).thenReturn(1L);
+
+    service.save(reminding("none", "14"), split(BANK_ID, "", "30"));
+
+    RecurringTemplateDraft draft = insertedDraft(TODAY.minusDays(1));
+    assertThat(draft.endReminder()).isFalse();
+    assertThat(draft.endReminderDays()).isNull();
+  }
+
+  @Test
+  void rejectsEndReminderWithoutWholeDays() {
+    RecurringScheduleForm schedule = reminding("date", "soon");
+    SplitForm split = split(BANK_ID, "", "30");
+
+    assertThatIllegalArgumentException()
+        .isThrownBy(() -> service.save(schedule, split))
+        .withMessage("The reminder days must be a whole number of at least 0");
+  }
+
+  private static RecurringTemplate ending(long id, LocalDate end, boolean reminder) {
+    return new RecurringTemplate(
+        id,
+        "Gym",
+        LocalDate.of(2026, 1, 31),
+        "month",
+        1,
+        end,
+        0,
+        "auto",
+        TODAY,
+        reminder,
+        30,
+        null,
+        BANK_ID,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  @Test
+  void endRemindersAreTheTemplatesInsideTheirReminderDays() {
+    RecurringTemplate soon = ending(1L, TODAY.plusDays(30), true);
+    when(repository.findLive())
+        .thenReturn(
+            List.of(
+                soon, ending(2L, TODAY.plusDays(31), true), ending(3L, TODAY.plusDays(5), false)));
+
+    assertThat(service.endReminders()).containsExactly(soon);
+  }
+
+  @Test
+  void dismissSwitchesTheReminderOff() {
+    service.dismissEndReminder(42L);
+
+    verify(repository).dismissEndReminder(42L);
   }
 
   // ── refusals ────────────────────────────────────────────────────────────────
@@ -267,7 +363,7 @@ class RecurringTemplateServiceTest {
   void refusesCadenceBelowOne() {
     RecurringScheduleForm zero =
         new RecurringScheduleForm(
-            null, "Gym", "0", "month", "none", "", "", "0", "auto", "", "", "");
+            null, "Gym", "0", "month", "none", "", "", "0", "auto", "", "", "", "", "");
 
     assertThatIllegalArgumentException()
         .isThrownBy(() -> service.save(zero, split(BANK_ID, "", "30")))
@@ -278,7 +374,7 @@ class RecurringTemplateServiceTest {
   void refusesEndDateBeforeTheStart() {
     RecurringScheduleForm backwards =
         new RecurringScheduleForm(
-            null, "Gym", "1", "month", "date", "2026-10-01", "", "0", "auto", "", "", "");
+            null, "Gym", "1", "month", "date", "2026-10-01", "", "0", "auto", "", "", "", "", "");
 
     assertThatIllegalArgumentException()
         .isThrownBy(() -> service.save(backwards, split(BANK_ID, "", "30")))
@@ -289,7 +385,20 @@ class RecurringTemplateServiceTest {
   void refusesManagementLinkThatIsNotWebAddress() {
     RecurringScheduleForm script =
         new RecurringScheduleForm(
-            null, "Gym", "1", "month", "none", "", "", "0", "auto", "javascript:alert(1)", "", "");
+            null,
+            "Gym",
+            "1",
+            "month",
+            "none",
+            "",
+            "",
+            "0",
+            "auto",
+            "javascript:alert(1)",
+            "",
+            "",
+            "",
+            "");
 
     assertThatIllegalArgumentException()
         .isThrownBy(() -> service.save(script, split(BANK_ID, "", "30")))
@@ -321,7 +430,7 @@ class RecurringTemplateServiceTest {
 
   private static RecurringScheduleForm answering(String pastOccurrences) {
     return new RecurringScheduleForm(
-        null, "Gym", "1", "month", "none", "", "", "0", "auto", "", pastOccurrences, "");
+        null, "Gym", "1", "month", "none", "", "", "0", "auto", "", pastOccurrences, "", "", "");
   }
 
   @Test
@@ -414,7 +523,9 @@ class RecurringTemplateServiceTest {
             "review",
             "",
             "",
-            "remove-all");
+            "remove-all",
+            "",
+            "");
 
     service.save(ended, split(BANK_ID, "", "30"));
 
@@ -425,7 +536,7 @@ class RecurringTemplateServiceTest {
 
   private static RecurringScheduleForm endingOn(Long id, String endDate) {
     return new RecurringScheduleForm(
-        id, "Gym", "1", "month", "date", endDate, "", "0", "review", "", "", "");
+        id, "Gym", "1", "month", "date", endDate, "", "0", "review", "", "", "", "", "");
   }
 
   @Test

@@ -53,6 +53,25 @@ public record RecurringTemplate(
     OffsetDateTime updatedAt,
     OffsetDateTime deletedAt) {
 
+  /**
+   * The first day the main page reminds that the template ends (recurring sub-plan slice g): {@code
+   * endReminderDays} before the end date. Null when the reminder is off or there is no end.
+   */
+  public LocalDate endReminderFrom() {
+    if (!endReminder || endDate == null || endReminderDays == null) {
+      return null;
+    }
+    return endDate.minusDays(endReminderDays);
+  }
+
+  /**
+   * Whether the main page reminds of the end on {@code today}: from the reminder's first day on.
+   */
+  public boolean remindsOfEndOn(LocalDate today) {
+    LocalDate from = endReminderFrom();
+    return from != null && !today.isBefore(from);
+  }
+
   /** The template's schedule, for the occurrence math. */
   public Schedule schedule() {
     return new Schedule(startDate, CadenceUnit.fromCode(cadenceUnit), cadenceN, endDate);
