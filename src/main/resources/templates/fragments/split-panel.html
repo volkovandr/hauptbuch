@@ -67,6 +67,7 @@
         <input type="hidden" name="viewFromDate" th:value="${register.filter().fromDate()}" />
         <input type="hidden" name="viewToDate" th:value="${register.filter().toDate()}" />
         <input type="hidden" name="viewPayeeId" th:value="${register.filter().payeeId()}" />
+        <input type="hidden" name="viewPendingOnly" th:value="${register.filter().pendingOnly()}" />
       </th:block>
 
       <div class="entry-dock__fields">

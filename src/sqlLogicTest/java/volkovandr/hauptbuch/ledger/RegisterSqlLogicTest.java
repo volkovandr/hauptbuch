@@ -145,7 +145,8 @@ class RegisterSqlLogicTest {
     spend(JAN_5, null, cash, food, THIRTY);
     spend(JAN_10, null, cash, food, "20.00");
 
-    List<RegisterRow> rows = registerRepository.findRows(List.of(cash), null, null, null, EUR);
+    List<RegisterRow> rows =
+        registerRepository.findRows(List.of(cash), null, null, null, false, EUR);
 
     assertThat(rows)
         .extracting(RegisterRow::amount, RegisterRow::runningBalance)
@@ -168,7 +169,7 @@ class RegisterSqlLogicTest {
     spend("2026-01-04", null, giro, food, "5.00"); // Giro: -45
 
     List<RegisterRow> rows =
-        registerRepository.findRows(List.of(cash, giro), null, null, null, EUR);
+        registerRepository.findRows(List.of(cash, giro), null, null, null, false, EUR);
 
     // Interleaved by date, but each account keeps its own balance thread.
     assertThat(rows)
@@ -191,7 +192,7 @@ class RegisterSqlLogicTest {
 
     // Only February rows are shown, but the balance carries the January opening forward.
     List<RegisterRow> rows =
-        registerRepository.findRows(List.of(cash), LocalDate.parse(FEB_1), null, null, EUR);
+        registerRepository.findRows(List.of(cash), LocalDate.parse(FEB_1), null, null, false, EUR);
 
     assertThat(rows)
         .extracting(RegisterRow::date, RegisterRow::runningBalance)
@@ -210,7 +211,8 @@ class RegisterSqlLogicTest {
     // A backdated row slots in between the two existing rows.
     spend(JAN_5, null, cash, food, "20.00");
 
-    List<RegisterRow> rows = registerRepository.findRows(List.of(cash), null, null, null, EUR);
+    List<RegisterRow> rows =
+        registerRepository.findRows(List.of(cash), null, null, null, false, EUR);
 
     assertThat(rows)
         .extracting(RegisterRow::date, RegisterRow::runningBalance)
@@ -230,7 +232,8 @@ class RegisterSqlLogicTest {
     spend(JAN_10, null, cash, food, "20.00");
     softDeleteTxn(voided);
 
-    List<RegisterRow> rows = registerRepository.findRows(List.of(cash), null, null, null, EUR);
+    List<RegisterRow> rows =
+        registerRepository.findRows(List.of(cash), null, null, null, false, EUR);
 
     // The voided row is gone and never counted in the running balance.
     assertThat(rows)
@@ -250,7 +253,7 @@ class RegisterSqlLogicTest {
     insertPosting(txn, cash, "200.00");
 
     List<RegisterRow> rows =
-        registerRepository.findRows(List.of(cash, giro), null, null, null, EUR);
+        registerRepository.findRows(List.of(cash, giro), null, null, null, false, EUR);
 
     // Both legs of the same transaction appear, each on its own account thread.
     assertThat(rows)
@@ -267,7 +270,8 @@ class RegisterSqlLogicTest {
     insertPosting(txn, giro, MINUS_200);
     insertPosting(txn, cash, "200.00");
 
-    List<RegisterRow> rows = registerRepository.findRows(List.of(cash), null, null, null, EUR);
+    List<RegisterRow> rows =
+        registerRepository.findRows(List.of(cash), null, null, null, false, EUR);
 
     assertThat(rows).extracting(RegisterRow::accountName).containsExactly(CASH);
   }
@@ -282,7 +286,8 @@ class RegisterSqlLogicTest {
     spend("2026-01-02", lidl, cash, food, "20.00");
     spend("2026-01-03", rewe, cash, food, THIRTY);
 
-    List<RegisterRow> rows = registerRepository.findRows(List.of(cash), null, null, rewe, EUR);
+    List<RegisterRow> rows =
+        registerRepository.findRows(List.of(cash), null, null, rewe, false, EUR);
 
     assertThat(rows)
         .extracting(RegisterRow::payeeName, RegisterRow::amount)
@@ -300,7 +305,7 @@ class RegisterSqlLogicTest {
 
     List<RegisterRow> rows =
         registerRepository.findRows(
-            List.of(cash), LocalDate.parse(JAN_1), LocalDate.parse("2026-01-31"), null, EUR);
+            List.of(cash), LocalDate.parse(JAN_1), LocalDate.parse("2026-01-31"), null, false, EUR);
 
     assertThat(rows)
         .extracting(RegisterRow::date)
@@ -316,7 +321,8 @@ class RegisterSqlLogicTest {
     insertPosting(txn, visa, "-80.00");
     insertPosting(txn, food, "80.00");
 
-    List<RegisterRow> rows = registerRepository.findRows(List.of(visa), null, null, null, EUR);
+    List<RegisterRow> rows =
+        registerRepository.findRows(List.of(visa), null, null, null, false, EUR);
 
     assertThat(rows)
         .singleElement()
@@ -330,7 +336,7 @@ class RegisterSqlLogicTest {
 
   @Test
   void emptyAccountSelectionYieldsNoRows() {
-    assertThat(registerRepository.findRows(List.of(), null, null, null, EUR)).isEmpty();
+    assertThat(registerRepository.findRows(List.of(), null, null, null, false, EUR)).isEmpty();
   }
 
   @Test
@@ -341,9 +347,33 @@ class RegisterSqlLogicTest {
     insertPosting(txn, cash, "-10.00");
     insertPosting(txn, food, TEN);
 
-    List<RegisterRow> rows = registerRepository.findRows(List.of(cash), null, null, null, EUR);
+    List<RegisterRow> rows =
+        registerRepository.findRows(List.of(cash), null, null, null, false, EUR);
 
     assertThat(rows).singleElement().extracting(RegisterRow::lifecycle).isEqualTo("pending_review");
+  }
+
+  @Test
+  void pendingOnlyShowsOnlyPendingRowsWhileTheBalanceStillThreadsEveryRow() {
+    long cash = insertAccount(CASH, ASSET, EUR, 210);
+    long food = insertAccount(FOOD, EXPENSE, EUR, null);
+    spend(JAN_1, null, cash, food, TEN);
+    long pending = insertTxn(JAN_5, null, "pending_review");
+    insertPosting(pending, cash, "-20.00");
+    insertPosting(pending, food, "20.00");
+    spend(JAN_10, null, cash, food, THIRTY);
+
+    List<RegisterRow> rows =
+        registerRepository.findRows(List.of(cash), null, null, null, true, EUR);
+
+    // The filter hides rows from what is shown, never from what the balance accumulates over.
+    assertThat(rows)
+        .singleElement()
+        .satisfies(
+            r -> {
+              assertThat(r.transactionId()).isEqualTo(pending);
+              assertThat(r.runningBalance()).isEqualByComparingTo("-30.00");
+            });
   }
 
   // ── findTransactionLegs: the Category-cell material ───────────────────────
@@ -426,7 +456,7 @@ class RegisterSqlLogicTest {
     long txn = spend(JAN_1, null, cash, food, HUNDRED);
     long receipt = insertReceipt(txn);
 
-    assertThat(registerRepository.findRows(List.of(cash), null, null, null, EUR))
+    assertThat(registerRepository.findRows(List.of(cash), null, null, null, false, EUR))
         .singleElement()
         .extracting(RegisterRow::receiptId)
         .isEqualTo(receipt);
@@ -438,7 +468,7 @@ class RegisterSqlLogicTest {
     long food = insertAccount(FOOD, EXPENSE, EUR, null);
     spend(JAN_1, null, cash, food, HUNDRED);
 
-    assertThat(registerRepository.findRows(List.of(cash), null, null, null, EUR))
+    assertThat(registerRepository.findRows(List.of(cash), null, null, null, false, EUR))
         .singleElement()
         .extracting(RegisterRow::receiptId)
         .isNull();
@@ -457,7 +487,7 @@ class RegisterSqlLogicTest {
         .param("r", receipt)
         .update();
 
-    assertThat(registerRepository.findRows(List.of(cash), null, null, null, EUR))
+    assertThat(registerRepository.findRows(List.of(cash), null, null, null, false, EUR))
         .singleElement()
         .extracting(RegisterRow::receiptId)
         .isNull();
@@ -473,7 +503,7 @@ class RegisterSqlLogicTest {
     insertReceipt(txn);
     insertReceipt(txn);
 
-    assertThat(registerRepository.findRows(List.of(cash), null, null, null, EUR)).hasSize(1);
+    assertThat(registerRepository.findRows(List.of(cash), null, null, null, false, EUR)).hasSize(1);
   }
 
   // ── findRowsByPostingIds: a Report drill-down's rows (reporting.md §12) ─────

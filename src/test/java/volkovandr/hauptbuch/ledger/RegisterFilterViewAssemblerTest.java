@@ -92,7 +92,7 @@ class RegisterFilterViewAssemblerTest {
   }
 
   private RegisterFilter filter(RegisterPicker picker, Long... ticked) {
-    return new RegisterFilter(List.of(ticked), picker, null, null, null);
+    return new RegisterFilter(List.of(ticked), picker, null, null, null, false);
   }
 
   /**

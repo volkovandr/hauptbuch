@@ -132,7 +132,8 @@ class RegisterSplitController {
             form.viewPicker(),
             form.viewFromDate(),
             form.viewToDate(),
-            form.viewPayeeId());
+            form.viewPayeeId(),
+            form.viewPendingOnly());
     return renderPanel(seedForm, null, PANEL_DIRECT, model);
   }
 

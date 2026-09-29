@@ -77,7 +77,7 @@ class RegisterServiceTest {
     lenient().when(postToAccountService.postToAccounts()).thenReturn(List.of());
     lenient().when(registerPickerService.membership(any(), any(), any())).thenReturn(List.of());
     lenient()
-        .when(registerRepository.findRows(anyList(), any(), any(), any(), anyString()))
+        .when(registerRepository.findRows(anyList(), any(), any(), any(), eq(false), anyString()))
         .thenReturn(List.of());
     lenient().when(rowRenderer.render(anyList())).thenReturn(List.of());
   }
@@ -90,7 +90,7 @@ class RegisterServiceTest {
   }
 
   private RegisterFilter defaultFilter() {
-    return new RegisterFilter(List.of(), null, null, null, null);
+    return new RegisterFilter(List.of(), null, null, null, null, false);
   }
 
   @Test
@@ -100,14 +100,17 @@ class RegisterServiceTest {
 
     registerService.view(defaultFilter());
 
-    verify(registerRepository).findRows(eq(List.of(CASH, GIRO)), any(), any(), any(), anyString());
+    verify(registerRepository)
+        .findRows(eq(List.of(CASH, GIRO)), any(), any(), any(), eq(false), anyString());
   }
 
   @Test
   void anExplicitTickSelectionIsUsedVerbatim() {
-    registerService.view(new RegisterFilter(List.of(GIRO), RegisterPicker.OPEN, null, null, null));
+    registerService.view(
+        new RegisterFilter(List.of(GIRO), RegisterPicker.OPEN, null, null, null, false));
 
-    verify(registerRepository).findRows(eq(List.of(GIRO)), any(), any(), any(), anyString());
+    verify(registerRepository)
+        .findRows(eq(List.of(GIRO)), any(), any(), any(), eq(false), anyString());
   }
 
   @Test
@@ -127,7 +130,8 @@ class RegisterServiceTest {
     RegisterView view = registerService.view(defaultFilter());
 
     assertThat(view.rows()).isEmpty();
-    verify(registerRepository, never()).findRows(anyList(), any(), any(), any(), anyString());
+    verify(registerRepository, never())
+        .findRows(anyList(), any(), any(), any(), eq(false), anyString());
   }
 
   @Test
@@ -201,6 +205,7 @@ class RegisterServiceTest {
 
     verify(settingsService, never()).baseCurrency();
     verify(registerPickerService, never()).membership(any(), any(), any());
-    verify(registerRepository, never()).findRows(anyList(), any(), any(), any(), anyString());
+    verify(registerRepository, never())
+        .findRows(anyList(), any(), any(), any(), eq(false), anyString());
   }
 }

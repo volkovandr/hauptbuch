@@ -202,6 +202,28 @@ public class TransactionRepository {
   }
 
   /**
+   * The live {@code pending_review} transactions — recurring occurrences awaiting review and
+   * zero-amount receipt placeholders — counted, with those dated before {@code today} counted apart
+   * as overdue, and the earliest one's date (the main page's "pending to review" line, register
+   * §2.3).
+   */
+  public PendingReviewCount countPendingReview(LocalDate today) {
+    return jdbcClient
+        .sql(
+            """
+            select count(*)                              as pending,
+                   count(*) filter (where date < :today) as overdue,
+                   min(date)                             as earliest_date
+            from transaction
+            where deleted_at is null
+              and lifecycle = 'pending_review'
+            """)
+        .param("today", today)
+        .query(PendingReviewCount.class)
+        .single();
+  }
+
+  /**
    * The earliest booking date among live transactions, or empty when there are none — the anchor
    * for the landing-page "keeping track for X" span (CONTEXT.md "Tracking stats"). A plain
    * ordered-limit read rather than {@code min(date)} so a book with no transactions yields no row

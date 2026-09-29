@@ -187,6 +187,33 @@ class RegisterScreenIntegrationTest {
         .andExpect(content().string(not(containsString("999,00"))));
   }
 
+  @Test
+  void pendingOnlyFilterShowsOnlyThePendingRows() throws Exception {
+    long cash = openAccount(CASH, EUR, "500");
+    long food = insertCategory(FOOD, EUR);
+    spend("2026-02-01", cash, food, "12.34");
+    ledgerService.recordTransaction(
+        TransactionDraft.pendingReview(
+            LocalDate.parse("2026-02-02"),
+            null,
+            "occurrence",
+            List.of(
+                PostingDraft.of(cash, new BigDecimal("-56.78")),
+                PostingDraft.of(food, new BigDecimal("56.78")))));
+
+    mockMvc
+        .perform(get(REGISTER_PATH).param("pendingOnly", "true").param("fromDate", OPEN_DAY))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("56,78")))
+        .andExpect(content().string(not(containsString("12,34"))))
+        .andExpect(content().string(not(containsString("500,00"))))
+        // The toggle renders on, and the dock carries it so a commit repaints the same view.
+        .andExpect(
+            content()
+                .string(matchesRegex("(?s).*name=\"pendingOnly\"\\s+value=\"true\"\\s+checked.*")))
+        .andExpect(content().string(containsString("name=\"viewPendingOnly\" value=\"true\"")));
+  }
+
   // ── Person legs (register §2.6, plan stage 8c) ────────────────────────────
 
   /** Auto-provision a person's per-currency debt leaf and return its account id. */

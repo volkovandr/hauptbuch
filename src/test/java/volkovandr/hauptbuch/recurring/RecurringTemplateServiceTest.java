@@ -116,7 +116,8 @@ class RecurringTemplateServiceTest {
         null,
         null,
         null,
-        null);
+        null,
+        false);
   }
 
   private RecurringTemplateDraft insertedDraft(LocalDate bookedThrough) {

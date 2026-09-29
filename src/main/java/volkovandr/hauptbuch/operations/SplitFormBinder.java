@@ -84,7 +84,8 @@ public final class SplitFormBinder {
         p.getFirst("viewPicker"),
         parseDate(p.getFirst("viewFromDate")),
         parseDate(p.getFirst("viewToDate")),
-        parseLong(p.getFirst("viewPayeeId")));
+        parseLong(p.getFirst("viewPayeeId")),
+        Boolean.parseBoolean(p.getFirst("viewPendingOnly")));
   }
 
   /**
@@ -145,7 +146,8 @@ public final class SplitFormBinder {
         form.viewPicker(),
         form.viewFromDate(),
         form.viewToDate(),
-        form.viewPayeeId());
+        form.viewPayeeId(),
+        form.viewPendingOnly());
   }
 
   /** The reference total a freshly-opened panel counts against — the seed line's magnitude. */
@@ -218,7 +220,8 @@ public final class SplitFormBinder {
         RegisterPicker.fromParam(form.viewPicker()),
         form.viewFromDate(),
         form.viewToDate(),
-        form.viewPayeeId());
+        form.viewPayeeId(),
+        form.viewPendingOnly());
   }
 
   static String orEmpty(String value) {

@@ -12,9 +12,9 @@ import volkovandr.hauptbuch.web.PhoneQrCodeService;
 /**
  * The landing page (plan stage 5) — the "Hello, %name%" greeting that reads the display name from
  * the book's {@link Settings}, the lazy-loaded tracking-stats line, the Balances panel of pinned
- * accounts (CONTEXT.md "Balances panel", issue landing-page/01) when one or more is pinned, and the
- * phone QR panel (CONTEXT.md "Phone QR panel", issue landing-page/03) when a public base URL
- * resolves.
+ * accounts (CONTEXT.md "Balances panel", issue landing-page/01) when one or more is pinned, the "N
+ * pending to review" line (register §2.3) when anything is pending, and the phone QR panel
+ * (CONTEXT.md "Phone QR panel", issue landing-page/03) when a public base URL resolves.
  *
  * <p>Lives in {@code ledger}, not {@code web}, because it reads settings and the shell module
  * ({@code web}) must not depend on feature modules — feature controllers depend on the shell's
@@ -27,14 +27,17 @@ class LandingController {
 
   private final SettingsService settingsService;
   private final BalancesPanelService balancesPanelService;
+  private final PendingReviewService pendingReviewService;
   private final PhoneQrCodeService phoneQrCodeService;
 
   LandingController(
       SettingsService settingsService,
       BalancesPanelService balancesPanelService,
+      PendingReviewService pendingReviewService,
       PhoneQrCodeService phoneQrCodeService) {
     this.settingsService = settingsService;
     this.balancesPanelService = balancesPanelService;
+    this.pendingReviewService = pendingReviewService;
     this.phoneQrCodeService = phoneQrCodeService;
   }
 
@@ -57,6 +60,9 @@ class LandingController {
     model.addAttribute("displayName", settings.displayName());
     model.addAttribute("baseCurrencySet", settings.baseCurrency() != null);
     balancesPanelService.current().ifPresent(panel -> model.addAttribute("balancesPanel", panel));
+    pendingReviewService
+        .current()
+        .ifPresent(pending -> model.addAttribute("pendingReview", pending));
     phoneQrCodeService.forRequest(request).ifPresent(qr -> model.addAttribute("phoneQrCode", qr));
     model.addAttribute("nav", NavItem.sectionsFor("/"));
     model.addAttribute("title", "Hauptbuch");

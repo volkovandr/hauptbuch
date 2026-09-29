@@ -36,7 +36,7 @@ class RegisterJumpServiceTest {
         .thenReturn(List.of(new RegisterOwnLeg(JAN_5, 3L), new RegisterOwnLeg(JAN_5, 4L)));
 
     assertThat(service.filterForTransaction(7L))
-        .contains(new RegisterFilter(List.of(3L), RegisterPicker.ALL, JAN_5, null, null));
+        .contains(new RegisterFilter(List.of(3L), RegisterPicker.ALL, JAN_5, null, null, false));
   }
 
   @Test
@@ -46,7 +46,7 @@ class RegisterJumpServiceTest {
     when(transactionRepository.findById(7L)).thenReturn(Optional.of(transaction(null)));
 
     assertThat(service.filterForTransaction(7L))
-        .contains(new RegisterFilter(List.of(), RegisterPicker.ALL, JAN_5, null, null));
+        .contains(new RegisterFilter(List.of(), RegisterPicker.ALL, JAN_5, null, null, false));
   }
 
   @Test

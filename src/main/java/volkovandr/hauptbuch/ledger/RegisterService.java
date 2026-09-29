@@ -41,7 +41,7 @@ public class RegisterService {
 
   /** The filter {@link #datalists()} reports on a view that never resolves or shows any rows. */
   private static final RegisterFilter NO_FILTER =
-      new RegisterFilter(List.of(), null, null, null, null);
+      new RegisterFilter(List.of(), null, null, null, null, false);
 
   private final RegisterRepository registerRepository;
   private final PayeeRepository payeeRepository;
@@ -188,7 +188,12 @@ public class RegisterService {
       List<Long> viewed, RegisterFilter filter, String baseCurrency) {
     List<RegisterRow> rows =
         registerRepository.findRows(
-            viewed, filter.fromDate(), filter.toDate(), filter.payeeId(), baseCurrency);
+            viewed,
+            filter.fromDate(),
+            filter.toDate(),
+            filter.payeeId(),
+            filter.pendingOnly(),
+            baseCurrency);
     return rowRenderer.render(rows);
   }
 

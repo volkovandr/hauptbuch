@@ -106,7 +106,8 @@ class SplitPanelAssemblerTest {
         null,
         null,
         null,
-        null);
+        null,
+        false);
   }
 
   /** A single-currency form with explicit header + per-line tag ids, for the inheritance tests. */
@@ -141,7 +142,8 @@ class SplitPanelAssemblerTest {
         null,
         null,
         null,
-        null);
+        null,
+        false);
   }
 
   private static SplitForm crossForm(
@@ -304,7 +306,8 @@ class SplitPanelAssemblerTest {
         null,
         null,
         null,
-        null);
+        null,
+        false);
   }
 
   @Test

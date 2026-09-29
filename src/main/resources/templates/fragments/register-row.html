@@ -110,7 +110,7 @@
               class="register__edit"
               title="Edit transaction"
               th:attr="hx-get=@{/register/edit/{id}(id=${r.transactionId()})}"
-              hx-include="[name='viewAccountId'], [name='viewPicker'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId']"
+              hx-include="[name='viewAccountId'], [name='viewPicker'], [name='viewFromDate'], [name='viewToDate'], [name='viewPayeeId'], [name='viewPendingOnly']"
               hx-target="#entry-dock"
               hx-swap="outerHTML"
             >
