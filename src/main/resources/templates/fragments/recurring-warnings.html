@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!--
+  The main page's recurring booking-failure warnings (data-model §14.3, recurring sub-plan slice f).
+  Lazy-loaded by landing.html via hx-get on load. One line per live template whose occurrences
+  cannot book, naming the reason and linking to the template's editor; it renders nothing while
+  every template books. A line clears itself on the first run that completes.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <th:block th:fragment="warnings">
+      <p class="lede" th:each="f : ${failures}">
+        <span class="warning">Could not book</span>
+        <a
+          th:href="@{/recurring/{id}(id=${f.recurringTemplateId()})}"
+          th:text="${f.name()}"
+          >Streaming</a
+        >: <span th:text="${f.reason()}">Account 'BankAaa-EUR' is closed</span>
+        <span
+          class="muted"
+          th:text="'(since ' + ${#temporals.format(f.since(), 'dd.MM.yyyy')} + ')'"
+          >(since 01.10.2026)</span
+        >
+      </p>
+    </th:block>
+  </body>
+</html>

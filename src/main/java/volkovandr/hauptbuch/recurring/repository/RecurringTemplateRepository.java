@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import volkovandr.hauptbuch.recurring.RecurringBookingFailure;
 import volkovandr.hauptbuch.recurring.RecurringTemplate;
 import volkovandr.hauptbuch.recurring.RecurringTemplateDraft;
 import volkovandr.hauptbuch.recurring.RecurringTemplateLine;
@@ -170,6 +171,116 @@ public class RecurringTemplateRepository {
         .update();
   }
 
+  /**
+   * Record why a live template could not book (data-model §14.3). The reason is the latest one; the
+   * time it started failing is kept from the first failure.
+   *
+   * @return the number of templates updated (0 when unknown or soft-deleted)
+   */
+  public int recordBookingFailure(long recurringTemplateId, String reason) {
+    return jdbcClient
+        .sql(
+            """
+            update recurring_template
+            set booking_failure = :reason,
+                booking_failed_since = coalesce(booking_failed_since, now())
+            where recurring_template_id = :recurringTemplateId and deleted_at is null
+            """)
+        .param(TEMPLATE_ID, recurringTemplateId)
+        .param("reason", reason)
+        .update();
+  }
+
+  /**
+   * Clear a template's booking failure, once a run over it has completed.
+   *
+   * @return the number of templates that were failing (0 when it was not)
+   */
+  public int clearBookingFailure(long recurringTemplateId) {
+    return jdbcClient
+        .sql(
+            """
+            update recurring_template set booking_failure = null, booking_failed_since = null
+            where recurring_template_id = :recurringTemplateId and booking_failure is not null
+            """)
+        .param(TEMPLATE_ID, recurringTemplateId)
+        .update();
+  }
+
+  /** The live templates that cannot book, by name. */
+  public List<RecurringBookingFailure> findLiveBookingFailures() {
+    return jdbcClient
+        .sql(
+            """
+            select recurring_template_id, name, booking_failure as reason,
+                   booking_failed_since as since
+            from recurring_template
+            where deleted_at is null and booking_failure is not null
+            order by lower(name), recurring_template_id
+            """)
+        .query(RecurringBookingFailure.class)
+        .list();
+  }
+
+  /**
+   * Point every template reference to one person at another, in the header and the lines, live and
+   * soft-deleted templates alike: a person merge moves the postings the same way.
+   *
+   * @return the number of header and line rows rewritten
+   */
+  public int reassignPerson(long fromPersonId, long toPersonId) {
+    return reassign(
+            "update recurring_template set person_id = :to where person_id = :from",
+            fromPersonId,
+            toPersonId)
+        + reassign(
+            "update recurring_template_line set person_id = :to where person_id = :from",
+            fromPersonId,
+            toPersonId);
+  }
+
+  /**
+   * Point every template reference to one account at another, in the header and the lines, live and
+   * soft-deleted templates alike: a subdivision moves the postings the same way.
+   *
+   * @return the number of header and line rows rewritten
+   */
+  public int reassignAccount(long fromAccountId, long toAccountId) {
+    return reassign(
+            "update recurring_template set account_id = :to where account_id = :from",
+            fromAccountId,
+            toAccountId)
+        + reassign(
+            "update recurring_template_line set account_id = :to where account_id = :from",
+            fromAccountId,
+            toAccountId);
+  }
+
+  /**
+   * The names of the live templates that name any of {@code accountIds}, as the funding account or
+   * on a line, by name: a deletion of those accounts is refused while any is listed.
+   */
+  public List<String> findLiveNamesUsingAccounts(List<Long> accountIds) {
+    if (accountIds.isEmpty()) {
+      return List.of();
+    }
+    return jdbcClient
+        .sql(
+            """
+            select t.name
+            from recurring_template t
+            where t.deleted_at is null
+              and (t.account_id in (:accountIds)
+                   or exists (select 1 from recurring_template_line l
+                              where l.recurring_template_id = t.recurring_template_id
+                                and l.account_id in (:accountIds)))
+            order by lower(t.name), t.recurring_template_id
+            """)
+        .param("accountIds", accountIds)
+        .query(String.class)
+        .list();
+  }
+
   /** A template's header tags, which land on the funding leg. */
   public List<Long> findTagIds(long recurringTemplateId) {
     return jdbcClient
@@ -250,6 +361,11 @@ public class RecurringTemplateRepository {
     params.put("note", draft.note());
     params.put("spendingCurrencyCode", draft.spendingCurrencyCode());
     return params;
+  }
+
+  /** Run one of the reassignment updates, which bind {@code :from} and {@code :to}. */
+  private int reassign(String sql, long from, long to) {
+    return jdbcClient.sql(sql).param("from", from).param("to", to).update();
   }
 
   private void insertTagsAndLines(long recurringTemplateId, RecurringTemplateDraft draft) {

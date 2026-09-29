@@ -55,6 +55,7 @@ class RecurringTemplateServiceTest {
   @Mock private PersonProvisioningService personProvisioningService;
   @Mock private TransactionCurrencyResolver transactionCurrencyResolver;
   @Mock private RecurringBookingService bookingService;
+  @Mock private RecurringBookingRunner runner;
 
   private RecurringTemplateService service;
 
@@ -70,6 +71,7 @@ class RecurringTemplateServiceTest {
             personProvisioningService,
             transactionCurrencyResolver,
             bookingService,
+            runner,
             clock);
   }
 
@@ -376,9 +378,9 @@ class RecurringTemplateServiceTest {
 
     service.save(schedule(null, "Streaming"), split(BANK_ID, "", "9,99"));
 
-    InOrder order = inOrder(repository, bookingService);
+    InOrder order = inOrder(repository, runner);
     order.verify(repository).insert(any(), any());
-    order.verify(bookingService).run(42L);
+    order.verify(runner).book(42L);
   }
 
   @Test
@@ -389,10 +391,10 @@ class RecurringTemplateServiceTest {
     service.save(schedule(42L, "Streaming"), split(BANK_ID, "", "12,99"));
 
     // Unasked, nothing is newly cut off: rows already beyond the end were kept by an answer.
-    InOrder order = inOrder(repository, bookingService);
+    InOrder order = inOrder(repository, bookingService, runner);
     order.verify(repository).update(eq(42L), any());
-    order.verify(bookingService).rebook(42L, PendingRows.KEEP_ALL);
-    verify(bookingService, never()).run(42L);
+    order.verify(bookingService).rewind(42L, PendingRows.KEEP_ALL);
+    order.verify(runner).book(42L);
   }
 
   @Test
@@ -416,7 +418,7 @@ class RecurringTemplateServiceTest {
 
     service.save(ended, split(BANK_ID, "", "30"));
 
-    verify(bookingService).rebook(42L, PendingRows.REMOVE_ALL);
+    verify(bookingService).rewind(42L, PendingRows.REMOVE_ALL);
   }
 
   // ── pending rows an end date or a delete leaves behind ──────────────────────

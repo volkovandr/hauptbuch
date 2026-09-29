@@ -43,12 +43,15 @@ class SubdivisionServiceTest {
 
   @Mock private AccountService accountService;
   @Mock private PostingReassignmentRepository postingReassignmentRepository;
+  @Mock private ReferenceHolder referenceHolder;
 
   private SubdivisionService subdivisionService;
 
   @BeforeEach
   void setUp() {
-    subdivisionService = new SubdivisionService(accountService, postingReassignmentRepository);
+    subdivisionService =
+        new SubdivisionService(
+            accountService, postingReassignmentRepository, List.of(referenceHolder));
   }
 
   private static Account account(long id, String name, String type, Long parentId) {
@@ -76,6 +79,8 @@ class SubdivisionServiceTest {
     assertThat(result.child()).isEqualTo(child);
     assertThat(result.catchAll()).isEqualTo(catchAll);
     verify(postingReassignmentRepository).reassignPostings(LEAF_ID, CATCH_ALL_ID);
+    // A recurring template on the leaf follows its postings (data-model §14.3).
+    verify(referenceHolder).reassignAccount(LEAF_ID, CATCH_ALL_ID);
   }
 
   @Test
@@ -93,6 +98,7 @@ class SubdivisionServiceTest {
     assertThat(result.catchAll()).isNull();
     verify(accountService, never()).insertLeaf(UNCATEGORIZED, EXPENSE, LEAF_ID, EUR);
     verify(postingReassignmentRepository, never()).reassignPostings(anyLong(), anyLong());
+    verify(referenceHolder, never()).reassignAccount(anyLong(), anyLong());
   }
 
   @Test

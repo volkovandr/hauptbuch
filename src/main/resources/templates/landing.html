@@ -47,6 +47,12 @@
           > · 1 overdue</span
         >
       </p>
+      <!--
+        Recurring booking failures (data-model §14.3, recurring plan slice f): one line per template
+        whose occurrences cannot book, linking to it. Lazy-loaded like the tracking-stats line; the
+        fragment is empty while every template books.
+      -->
+      <div th:attr="hx-get=@{/overview/recurring-warnings}" hx-trigger="load"></div>
     </div>
 
     <!--

@@ -1203,12 +1203,15 @@ create table recurring_template (
   payee_id               bigint references payee(payee_id),
   note                   text,
   spending_currency_code text references currency(currency_code), -- NULL = funding currency
+  booking_failure        text,                 -- why the latest run could not book (§14.3, V32)
+  booking_failed_since   timestamptz,          -- first failure; both cleared by a completed run
   created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now(),
   deleted_at             timestamptz,
   check (end_date is null or end_date >= start_date),
   check ((account_id is null) <> (person_id is null)),             -- exactly one funding source
-  check ((person_id is null) = (funding_person_direction is null))
+  check ((person_id is null) = (funding_person_direction is null)),
+  check ((booking_failure is null) = (booking_failed_since is null))
 );
 
 -- one row per split line, mirroring SplitLineDraft: a category (account_id = the semantic node),
@@ -1279,11 +1282,13 @@ leaves. An occurrence is computed from the schedule and never stored on its own.
   their lifecycle. Save in the dock confirms a pending occurrence (even a future-dated one); Cancel
   leaves it pending; voiding it skips that occurrence for good.
 - **Failure.** If an occurrence cannot book (paying account closed or deleted, base currency unset,
-  a referenced category, tag or person gone), that template's run rolls back and its cursor stays.
+  a referenced category, tag or person gone, or a category that has since gained subcategories),
+  that template's run rolls back and its cursor stays. A save whose booking fails still saves the
+  template; only the run rolls back.
   The run retries every time and logs WARN, and the main page names the template and the reason.
-  An occurrence is never silently skipped. `operations` merges and reassignments rewrite template
-  references as they rewrite postings, and deleting an account or category a live template uses is
-  refused.
+  An occurrence is never silently skipped. `operations` merges and reassignments (a subdivision's
+  catch-all included) rewrite template references as they rewrite postings, and deleting an account
+  or category a live template uses is refused.
 
 ### 14.4 Figures are schedule math, never bookkeeping
 

@@ -39,6 +39,7 @@ class RecurringController {
 
   private final RecurringTemplateService templateService;
   private final RecurringTemplateViews views;
+  private final RecurringBookingService bookingService;
   private final RegisterService registerService;
   private final CurrencyService currencyService;
   private final SplitPanelAssembler assembler;
@@ -47,24 +48,41 @@ class RecurringController {
   RecurringController(
       RecurringTemplateService templateService,
       RecurringTemplateViews views,
+      RecurringBookingService bookingService,
       RegisterService registerService,
       CurrencyService currencyService,
       SplitPanelAssembler assembler,
       SplitCurrencyService splitCurrencyService) {
     this.templateService = templateService;
     this.views = views;
+    this.bookingService = bookingService;
     this.registerService = registerService;
     this.currencyService = currencyService;
     this.assembler = assembler;
     this.splitCurrencyService = splitCurrencyService;
   }
 
-  /** The recurring page: the live templates with their cadence and next three dates. */
+  /**
+   * The recurring page: the live templates with their cadence and next three dates, and why any of
+   * them cannot book (slice f).
+   */
   @GetMapping(BASE_PATH)
   String list(Model model) {
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("templates", views.rows());
+    model.addAttribute("failures", bookingService.failures());
     return "recurring";
+  }
+
+  /**
+   * The main page's booking-failure warnings (data-model §14.3, slice f), lazy-loaded by the
+   * landing page: one line per live template that cannot book, linking to its editor. Empty when
+   * every template books.
+   */
+  @GetMapping("/overview/recurring-warnings")
+  String warnings(Model model) {
+    model.addAttribute("failures", bookingService.failures().values());
+    return "fragments/recurring-warnings :: warnings";
   }
 
   /** The editor for a new template. */

@@ -201,7 +201,8 @@ public class CategoryService {
             .filter(n -> !subtree.contains(n.account().accountId()))
             .filter(n -> hasNoSubcategoriesAfterDeletion(n.account().accountId(), subtree))
             .toList();
-    return new CategoryDeletePanel(accountService.hasAnyPostings(subtreeIds), targets);
+    return new CategoryDeletePanel(
+        accountService.hasAnyPostings(subtreeIds), targets, deletionService.usersOf(subtreeIds));
   }
 
   /**

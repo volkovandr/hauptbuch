@@ -42,14 +42,17 @@ public class DeletionService {
   private final AccountService accountService;
   private final CurrencyLeafService currencyLeafService;
   private final PostingReassignmentRepository postingReassignmentRepository;
+  private final List<ReferenceHolder> referenceHolders;
 
   DeletionService(
       AccountService accountService,
       CurrencyLeafService currencyLeafService,
-      PostingReassignmentRepository postingReassignmentRepository) {
+      PostingReassignmentRepository postingReassignmentRepository,
+      List<ReferenceHolder> referenceHolders) {
     this.accountService = accountService;
     this.currencyLeafService = currencyLeafService;
     this.postingReassignmentRepository = postingReassignmentRepository;
+    this.referenceHolders = List.copyOf(referenceHolders);
   }
 
   /**
@@ -63,10 +66,11 @@ public class DeletionService {
    * @param subtreeRootId the category to delete; its whole subtree goes with it
    * @param targetLeafId the surviving category that receives the reassigned postings, or {@code
    *     null} when the subtree carries no postings
-   * @throws IllegalArgumentException if the subtree root is not a live category, the target is
-   *     absent while the subtree carries postings, or the target does not exist, is not a live
-   *     category of the same type, still has real subcategories, or is the subtree root or one of
-   *     its descendants
+   * @throws IllegalArgumentException if the subtree root is not a live category, a {@link
+   *     ReferenceHolder} still uses the subtree (a live recurring template, data-model §14.3), the
+   *     target is absent while the subtree carries postings, or the target does not exist, is not a
+   *     live category of the same type, still has real subcategories, or is the subtree root or one
+   *     of its descendants
    */
   @Transactional
   public void deleteCategory(long subtreeRootId, Long targetLeafId) {
@@ -89,6 +93,7 @@ public class DeletionService {
           "'" + root.name() + "' is a " + root.type() + " account, not a category");
     }
     List<Long> subtreeIds = subtree.stream().map(Account::accountId).toList();
+    requireUnused(root, subtreeIds);
 
     if (targetLeafId == null) {
       if (accountService.hasAnyPostings(subtreeIds)) {
@@ -106,6 +111,34 @@ public class DeletionService {
     // down with it. Both halves are in one transaction, so nothing is ever observed half-moved.
     accountService.softDelete(subtreeIds);
     reassignPerCurrency(subtree, target);
+  }
+
+  /**
+   * What outside the postings still uses any of {@code accountIds} (a live recurring template,
+   * data-model §14.3), each named for the operator. A category deletion is refused while this is
+   * not empty, so the delete panel lists them up front.
+   */
+  public List<String> usersOf(List<Long> accountIds) {
+    return referenceHolders.stream()
+        .flatMap(holder -> holder.usersOf(accountIds).stream())
+        .toList();
+  }
+
+  /**
+   * Nothing outside the postings may still name the subtree (data-model §14.3): a live recurring
+   * template would be left pointing at a deleted category. Moving the postings is not enough — a
+   * template is the operator's intent, so the operator changes it.
+   */
+  private void requireUnused(Account root, List<Long> subtreeIds) {
+    List<String> users = usersOf(subtreeIds);
+    if (!users.isEmpty()) {
+      throw new IllegalArgumentException(
+          "'"
+              + root.name()
+              + "' is used by "
+              + String.join(", ", users)
+              + " — change or delete that first");
+    }
   }
 
   /**

@@ -421,6 +421,156 @@ class RecurringTemplateRepositoryIntegrationTest {
     assertThat(repository.findById(id).orElseThrow().bookedThrough()).isEqualTo(START);
   }
 
+  // ── booking failures (slice f) ────────────────────────────────────────────
+
+  @Test
+  void bookingFailureKeepsTheLatestReasonAndTheFirstTime() {
+    long id =
+        repository.insert(
+            draft("Gym", bankAccountId, null, List.of(categoryLine("30"))), START.minusDays(1));
+    final long healthy =
+        repository.insert(
+            draft("Club", bankAccountId, null, List.of(categoryLine("5"))), START.minusDays(1));
+
+    assertThat(repository.recordBookingFailure(id, "Account 'BankAaa-EUR' is closed")).isEqualTo(1);
+    RecurringBookingFailure first = repository.findLiveBookingFailures().getFirst();
+    jdbcClient
+        .sql(
+            "update recurring_template set booking_failed_since = booking_failed_since - interval"
+                + " '1 day' where recurring_template_id = :id")
+        .param("id", id)
+        .update();
+    repository.recordBookingFailure(id, "No rate for CHF");
+
+    assertThat(repository.findLiveBookingFailures())
+        .singleElement()
+        .satisfies(
+            failure -> {
+              assertThat(failure.recurringTemplateId()).isEqualTo(id);
+              assertThat(failure.name()).isEqualTo("Gym");
+              assertThat(failure.reason()).isEqualTo("No rate for CHF");
+              assertThat(failure.since()).isBefore(first.since());
+            });
+    assertThat(repository.findLiveBookingFailures())
+        .extracting(RecurringBookingFailure::recurringTemplateId)
+        .doesNotContain(healthy);
+  }
+
+  @Test
+  void clearBookingFailureClearsOnlyFailingTemplate() {
+    long id =
+        repository.insert(
+            draft("Gym", bankAccountId, null, List.of(categoryLine("30"))), START.minusDays(1));
+
+    assertThat(repository.clearBookingFailure(id)).isZero();
+    repository.recordBookingFailure(id, "Account 'BankAaa-EUR' is closed");
+
+    assertThat(repository.clearBookingFailure(id)).isEqualTo(1);
+    assertThat(repository.findLiveBookingFailures()).isEmpty();
+  }
+
+  @Test
+  void deletedTemplateNeitherRecordsNorListsFailure() {
+    long id =
+        repository.insert(
+            draft("Gym", bankAccountId, null, List.of(categoryLine("30"))), START.minusDays(1));
+    repository.recordBookingFailure(id, "Account 'BankAaa-EUR' is closed");
+    repository.softDelete(id);
+
+    assertThat(repository.findLiveBookingFailures()).isEmpty();
+    assertThat(repository.recordBookingFailure(id, "again")).isZero();
+  }
+
+  @Test
+  void failureNeedsBothReasonAndTime() {
+    long id =
+        repository.insert(
+            draft("Gym", bankAccountId, null, List.of(categoryLine("30"))), START.minusDays(1));
+
+    assertThatThrownBy(
+            () ->
+                jdbcClient
+                    .sql(
+                        "update recurring_template set booking_failure = 'x'"
+                            + " where recurring_template_id = :id")
+                    .param("id", id)
+                    .update())
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  // ── references rewritten by merges and subdivision (slice f) ────────────────
+
+  @Test
+  void reassignPersonRewritesFundingPersonAndPersonLines() {
+    long otherPersonId =
+        jdbcClient
+            .sql("insert into person (name) values ('Roe') returning person_id")
+            .query(Long.class)
+            .single();
+    RecurringTemplateLineDraft personLine =
+        new RecurringTemplateLineDraft(
+            null, null, personId, "FOR", BigDecimal.TEN, null, List.of());
+    long funded =
+        repository.insert(
+            draft("Pocket money", null, personId, List.of(categoryLine("50"))), START.minusDays(1));
+    long shared =
+        repository.insert(
+            draft("Dinner", bankAccountId, null, List.of(categoryLine("20"), personLine)),
+            START.minusDays(1));
+    repository.softDelete(shared);
+
+    assertThat(repository.reassignPerson(personId, otherPersonId)).isEqualTo(2);
+
+    assertThat(repository.findById(funded).orElseThrow().personId()).isEqualTo(otherPersonId);
+    assertThat(repository.findLines(shared))
+        .extracting(RecurringTemplateLine::personId)
+        .containsExactly(null, otherPersonId);
+  }
+
+  @Test
+  void reassignAccountRewritesFundingAccountAndLines() {
+    long catchAllId = account("Uncategorized", "expense");
+    long id =
+        repository.insert(
+            draft(
+                "Gym",
+                bankAccountId,
+                null,
+                List.of(
+                    categoryLine("30"),
+                    new RecurringTemplateLineDraft(
+                        otherAccountId, "TO", null, null, new BigDecimal("5"), null, List.of()))),
+            START.minusDays(1));
+
+    assertThat(repository.reassignAccount(streamingId, catchAllId)).isEqualTo(1);
+    assertThat(repository.reassignAccount(bankAccountId, otherAccountId)).isEqualTo(1);
+
+    assertThat(repository.findById(id).orElseThrow().accountId()).isEqualTo(otherAccountId);
+    assertThat(repository.findLines(id))
+        .extracting(RecurringTemplateLine::accountId)
+        .containsExactly(catchAllId, otherAccountId);
+  }
+
+  @Test
+  void findLiveNamesUsingAccountsMatchesFundingAccountAndLinesOfLiveTemplatesOnly() {
+    final long unusedId = account("Books", "expense");
+    repository.insert(
+        draft("gym", bankAccountId, null, List.of(categoryLine("30"))), START.minusDays(1));
+    repository.insert(
+        draft("Anime", otherAccountId, null, List.of(categoryLine("8"))), START.minusDays(1));
+    long gone =
+        repository.insert(
+            draft("Club", otherAccountId, null, List.of(categoryLine("5"))), START.minusDays(1));
+    repository.softDelete(gone);
+
+    assertThat(repository.findLiveNamesUsingAccounts(List.of(streamingId, unusedId)))
+        .containsExactly("Anime", "gym");
+    assertThat(repository.findLiveNamesUsingAccounts(List.of(bankAccountId)))
+        .containsExactly("gym");
+    assertThat(repository.findLiveNamesUsingAccounts(List.of(unusedId))).isEmpty();
+    assertThat(repository.findLiveNamesUsingAccounts(List.of())).isEmpty();
+  }
+
   // ── schema guards ───────────────────────────────────────────────────────────
 
   @Test

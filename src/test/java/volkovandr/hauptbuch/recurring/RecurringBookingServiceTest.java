@@ -1,20 +1,25 @@
 package volkovandr.hauptbuch.recurring;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,12 +45,14 @@ class RecurringBookingServiceTest {
 
   @Mock private RecurringTemplateRepository repository;
   @Mock private RecurringOccurrenceEntries entries;
+  @Mock private RecurringBookability bookability;
   @Mock private DockSplitService dockSplitService;
   @Mock private LedgerService ledgerService;
 
   private RecurringBookingService serviceOn(LocalDate today) {
     Clock clock = Clock.fixed(today.atStartOfDay().toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
-    return new RecurringBookingService(repository, entries, dockSplitService, ledgerService, clock);
+    return new RecurringBookingService(
+        repository, entries, bookability, dockSplitService, ledgerService, clock);
   }
 
   private static RecurringTemplate template(
@@ -246,5 +253,68 @@ class RecurringBookingServiceTest {
     assertThat(count).isZero();
     verifyNoInteractions(entries, dockSplitService, ledgerService);
     verify(repository, never()).advanceBookedThrough(eq(TEMPLATE_ID), any());
+  }
+
+  // ── failures (slice f) ──────────────────────────────────────────────────────
+
+  @Test
+  void runChecksTheTemplateIsBookableBeforeBookingAndClearsAnyFailure() {
+    LocalDate today = LocalDate.of(2026, 2, 28);
+    RecurringTemplate template = template(JAN_31, "month", 1, null, 0, JAN_31.minusDays(1));
+    locks(template);
+    booksEachOccurrence();
+
+    serviceOn(today).run(TEMPLATE_ID);
+
+    InOrder order = inOrder(repository, bookability, dockSplitService);
+    order.verify(repository).clearBookingFailure(TEMPLATE_ID);
+    order.verify(bookability).requireBookable(template);
+    order.verify(dockSplitService, times(2)).commit(any());
+  }
+
+  @Test
+  void unbookableTemplateThrowsBeforeBookingOrMovingTheCursor() {
+    RecurringTemplate template = template(JAN_31, "month", 1, null, 0, JAN_31.minusDays(1));
+    locks(template);
+    doThrow(new IllegalStateException("Account 'BankAaa-EUR' is closed"))
+        .when(bookability)
+        .requireBookable(template);
+    RecurringBookingService service = serviceOn(JAN_31);
+
+    assertThatIllegalStateException()
+        .isThrownBy(() -> service.run(TEMPLATE_ID))
+        .withMessage("Account 'BankAaa-EUR' is closed");
+    verifyNoInteractions(dockSplitService);
+    verify(repository, never()).advanceBookedThrough(anyLong(), any());
+  }
+
+  @Test
+  void nothingDueNeedsNoCheckButStillClearsTheFailure() {
+    LocalDate today = LocalDate.of(2026, 2, 10);
+    locks(template(JAN_31, "month", 1, null, 0, LocalDate.of(2026, 2, 5)));
+
+    serviceOn(today).run(TEMPLATE_ID);
+
+    verifyNoInteractions(bookability);
+    verify(repository).clearBookingFailure(TEMPLATE_ID);
+  }
+
+  @Test
+  void recordFailureStoresTheReasonOnTheTemplate() {
+    serviceOn(JAN_31).recordFailure(TEMPLATE_ID, "No rate for CHF");
+
+    verify(repository).recordBookingFailure(TEMPLATE_ID, "No rate for CHF");
+  }
+
+  @Test
+  void failuresAreKeyedByTemplateInNameOrder() {
+    RecurringBookingFailure anime =
+        new RecurringBookingFailure(9L, "Anime", "No rate for CHF", OffsetDateTime.now());
+    RecurringBookingFailure gym =
+        new RecurringBookingFailure(3L, "Gym", "Account 'BankAaa-EUR' is closed", null);
+    when(repository.findLiveBookingFailures()).thenReturn(List.of(anime, gym));
+
+    assertThat(serviceOn(JAN_31).failures())
+        .containsExactly(Map.entry(9L, anime), Map.entry(3L, gym));
   }
 }

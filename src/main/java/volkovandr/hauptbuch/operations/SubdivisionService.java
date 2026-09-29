@@ -32,11 +32,15 @@ public class SubdivisionService {
 
   private final AccountService accountService;
   private final PostingReassignmentRepository postingReassignmentRepository;
+  private final List<ReferenceHolder> referenceHolders;
 
   SubdivisionService(
-      AccountService accountService, PostingReassignmentRepository postingReassignmentRepository) {
+      AccountService accountService,
+      PostingReassignmentRepository postingReassignmentRepository,
+      List<ReferenceHolder> referenceHolders) {
     this.accountService = accountService;
     this.postingReassignmentRepository = postingReassignmentRepository;
+    this.referenceHolders = List.copyOf(referenceHolders);
   }
 
   /**
@@ -45,7 +49,9 @@ public class SubdivisionService {
    * leaves of its own (data-model §6.5), also create {@code catchAllName} as a sibling child: the
    * leaf's own postings move onto it, and its existing currency leaves are re-parented onto it
    * unchanged (they already hold the real postings, so nothing needs reassigning) — the leaf itself
-   * becomes a pure rollup (leaves-only, data-model §5).
+   * becomes a pure rollup (leaves-only, data-model §5). Every {@link ReferenceHolder} follows the
+   * postings onto the catch-all, so a recurring template on the leaf keeps booking where its
+   * history now lives (data-model §14.3).
    *
    * @param leafId the account to subdivide; must currently have no <em>real</em> children (currency
    *     leaves don't count)
@@ -88,6 +94,9 @@ public class SubdivisionService {
     }
     for (Account currencyLeaf : currencyLeaves) {
       accountService.reparent(currencyLeaf.accountId(), catchAll.accountId());
+    }
+    for (ReferenceHolder holder : referenceHolders) {
+      holder.reassignAccount(leafId, catchAll.accountId());
     }
     return new SubdivisionResult(child, catchAll);
   }

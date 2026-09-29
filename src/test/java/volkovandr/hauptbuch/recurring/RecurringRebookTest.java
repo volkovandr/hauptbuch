@@ -49,6 +49,7 @@ class RecurringRebookTest {
 
   @Mock private RecurringTemplateRepository repository;
   @Mock private RecurringOccurrenceEntries entries;
+  @Mock private RecurringBookability bookability;
   @Mock private DockSplitService dockSplitService;
   @Mock private LedgerService ledgerService;
 
@@ -177,7 +178,15 @@ class RecurringRebookTest {
 
   private RecurringBookingService on(LocalDate today) {
     Clock clock = Clock.fixed(today.atStartOfDay().toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
-    return new RecurringBookingService(repository, entries, dockSplitService, ledgerService, clock);
+    return new RecurringBookingService(
+        repository, entries, bookability, dockSplitService, ledgerService, clock);
+  }
+
+  /** A save's rebooking, as the template service runs it: the rewind, then the run. */
+  private void rebook(LocalDate today, PendingRows answer) {
+    RecurringBookingService service = on(today);
+    service.rewind(TEMPLATE_ID, answer);
+    service.run(TEMPLATE_ID);
   }
 
   private Row rowOn(LocalDate occurrence) {
@@ -204,7 +213,7 @@ class RecurringRebookTest {
     assertThat(rowOn(MAR_15).amount).isEqualTo(OLD_AMOUNT);
 
     save(MAR_15, null, 20, NEW_AMOUNT);
-    on(MAR_1).rebook(TEMPLATE_ID, PendingRows.KEEP_PAST);
+    rebook(MAR_1, PendingRows.KEEP_PAST);
 
     assertThat(pendingDates()).containsExactly(MAR_15);
     assertThat(rowOn(MAR_15).amount).isEqualTo(NEW_AMOUNT);
@@ -215,11 +224,11 @@ class RecurringRebookTest {
     on(MAR_1).run(TEMPLATE_ID);
 
     save(MAR_16, null, 20, OLD_AMOUNT);
-    on(MAR_1).rebook(TEMPLATE_ID, PendingRows.KEEP_PAST);
+    rebook(MAR_1, PendingRows.KEEP_PAST);
     assertThat(pendingDates()).containsExactly(MAR_16);
 
     save(MAR_15, null, 20, OLD_AMOUNT);
-    on(MAR_1).rebook(TEMPLATE_ID, PendingRows.KEEP_PAST);
+    rebook(MAR_1, PendingRows.KEEP_PAST);
     assertThat(pendingDates()).containsExactly(MAR_15);
     assertThat(rows).hasSize(1);
   }
@@ -230,7 +239,7 @@ class RecurringRebookTest {
     rowOn(MAR_15).voided = true;
 
     save(MAR_15, null, 20, NEW_AMOUNT);
-    on(MAR_1).rebook(TEMPLATE_ID, PendingRows.KEEP_PAST);
+    rebook(MAR_1, PendingRows.KEEP_PAST);
 
     assertThat(pendingDates()).isEmpty();
     assertThat(rows).hasSize(1);
@@ -243,7 +252,7 @@ class RecurringRebookTest {
 
     // Lead 45 reaches April: March is the operator's fact, April books anew.
     save(MAR_15, null, 45, NEW_AMOUNT);
-    on(MAR_1).rebook(TEMPLATE_ID, PendingRows.KEEP_PAST);
+    rebook(MAR_1, PendingRows.KEEP_PAST);
 
     assertThat(rowOn(MAR_15).amount).isEqualTo(OLD_AMOUNT);
     assertThat(pendingDates()).containsExactly(APR_15);
@@ -256,7 +265,7 @@ class RecurringRebookTest {
     rowOn(MAR_15).lifecycle = CONFIRMED;
 
     save(MAR_16, null, 20, OLD_AMOUNT);
-    on(MAR_1).rebook(TEMPLATE_ID, PendingRows.KEEP_PAST);
+    rebook(MAR_1, PendingRows.KEEP_PAST);
 
     assertThat(rowOn(MAR_15).lifecycle).isEqualTo(CONFIRMED);
     assertThat(pendingDates()).containsExactly(MAR_16);
@@ -267,7 +276,7 @@ class RecurringRebookTest {
     on(MAR_1).run(TEMPLATE_ID);
 
     save(LocalDate.of(2025, 11, 15), null, 20, OLD_AMOUNT);
-    on(MAR_1).rebook(TEMPLATE_ID, PendingRows.KEEP_PAST);
+    rebook(MAR_1, PendingRows.KEEP_PAST);
 
     assertThat(pendingDates()).containsExactly(MAR_15);
   }
@@ -279,7 +288,7 @@ class RecurringRebookTest {
     assertThat(rows).isEmpty();
 
     save(MAR_15, null, 14, OLD_AMOUNT);
-    on(MAR_1).rebook(TEMPLATE_ID, PendingRows.KEEP_PAST);
+    rebook(MAR_1, PendingRows.KEEP_PAST);
 
     assertThat(pendingDates()).containsExactly(MAR_15);
   }
@@ -290,7 +299,7 @@ class RecurringRebookTest {
     Row march = rowOn(MAR_15);
 
     save(MAR_15, null, 20, NEW_AMOUNT);
-    on(APR_16).rebook(TEMPLATE_ID, PendingRows.KEEP_PAST);
+    rebook(APR_16, PendingRows.KEEP_PAST);
 
     // The March row is still pending and past on Apr 16: kept as it was.
     assertThat(rows.values()).contains(march);
@@ -308,7 +317,7 @@ class RecurringRebookTest {
     assertThat(pendingDates()).containsExactly(MAR_15, APR_15, LocalDate.of(2026, 5, 15));
 
     save(MAR_15, LocalDate.of(2026, 3, 31), 40, OLD_AMOUNT);
-    on(LocalDate.of(2026, 4, 20)).rebook(TEMPLATE_ID, answer);
+    rebook(LocalDate.of(2026, 4, 20), answer);
   }
 
   @Test
