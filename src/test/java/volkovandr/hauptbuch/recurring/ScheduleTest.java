@@ -3,6 +3,8 @@ package volkovandr.hauptbuch.recurring;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 
@@ -258,5 +260,52 @@ class ScheduleTest {
   @Test
   void cadenceUnitRejectsUnknownCode() {
     assertThatIllegalArgumentException().isThrownBy(() -> CadenceUnit.fromCode("fortnight"));
+  }
+
+  // ── the cost normalisation (data-model §14.4) ───────────────────────────────
+
+  private static BigDecimal cents(BigDecimal value) {
+    return value.setScale(2, RoundingMode.HALF_UP);
+  }
+
+  @Test
+  void monthsAndYearsNormaliseExactly() {
+    BigDecimal amount = new BigDecimal("30");
+
+    assertThat(open(date(2026, 1, 31), CadenceUnit.MONTH, 1).perMonth(amount))
+        .isEqualByComparingTo("30");
+    assertThat(open(date(2026, 1, 31), CadenceUnit.MONTH, 1).perYear(amount))
+        .isEqualByComparingTo("360");
+    assertThat(open(date(2026, 1, 31), CadenceUnit.MONTH, 3).perMonth(amount))
+        .isEqualByComparingTo("10");
+    assertThat(open(date(2026, 1, 31), CadenceUnit.MONTH, 3).perYear(amount))
+        .isEqualByComparingTo("120");
+    assertThat(open(date(2026, 1, 31), CadenceUnit.YEAR, 1).perYear(amount))
+        .isEqualByComparingTo("30");
+    assertThat(open(date(2026, 1, 31), CadenceUnit.YEAR, 2).perMonth(amount))
+        .isEqualByComparingTo("1.25");
+  }
+
+  @Test
+  void daysAndWeeksNormaliseThroughYearOfDays() {
+    // A year is 365 days for this.
+    BigDecimal amount = BigDecimal.TEN;
+
+    assertThat(open(date(2026, 1, 1), CadenceUnit.DAY, 1).perYear(amount))
+        .isEqualByComparingTo("3650");
+    assertThat(cents(open(date(2026, 1, 1), CadenceUnit.DAY, 1).perMonth(amount)))
+        .isEqualByComparingTo("304.17");
+    assertThat(cents(open(date(2026, 1, 1), CadenceUnit.DAY, 10).perYear(amount)))
+        .isEqualByComparingTo("365.00");
+    assertThat(cents(open(date(2026, 1, 1), CadenceUnit.WEEK, 1).perYear(amount)))
+        .isEqualByComparingTo("521.43");
+    assertThat(cents(open(date(2026, 1, 1), CadenceUnit.WEEK, 2).perMonth(amount)))
+        .isEqualByComparingTo("21.73");
+  }
+
+  @Test
+  void signOfTheAmountCarriesThrough() {
+    assertThat(open(date(2026, 1, 31), CadenceUnit.MONTH, 1).perYear(new BigDecimal("-9.99")))
+        .isEqualByComparingTo("-119.88");
   }
 }

@@ -5,7 +5,8 @@
   words and the next three occurrence dates, which come from the template's schedule, so the
   schedule math can be checked by eye. The name opens the editor (the split panel in template
   mode); the management link opens the provider's page in a new tab. A template that cannot book
-  names the reason under its name (slice f). No bespoke JS.
+  names the reason under its name (slice f). Each row shows what the template costs, and the
+  Recurring cost summary below adds them up (slice g). No bespoke JS.
 -->
 <html
   lang="en"
@@ -26,6 +27,11 @@
               <th>Name</th>
               <th>Cadence</th>
               <th class="num">Amount</th>
+              <th class="num">
+                Cost<span
+                  th:replace="~{fragments/help-marker :: marker('Schedule math, not bookkeeping: the amount times how often it recurs, whatever has been booked. Days and weeks count through 365 days a year. Already counts every occurrence from the start through today.')}"
+                ></span>
+              </th>
               <th>Account</th>
               <th>Confirmation</th>
               <th>Booked</th>
@@ -54,6 +60,15 @@
               </td>
               <td th:text="${t.cadence()}">every month on the 31st</td>
               <td class="num" th:text="${t.amount()}">-9,99</td>
+              <td class="num recurring__cost" th:with="c=${figures.get(t.recurringTemplateId())}">
+                <div><span th:text="${c.perMonth()}">-9,99</span> / month</div>
+                <div><span th:text="${c.perYear()}">-119,88</span> / year</div>
+                <div class="muted" th:if="${c.total() != null}">
+                  already <span th:text="${c.already()}">-29,97</span> · yet to pay
+                  <span th:text="${c.yetToPay()}">-89,91</span> · total
+                  <span th:text="${c.total()}">-119,88</span>
+                </div>
+              </td>
               <td th:text="${t.account()}">BankAaa-EUR</td>
               <td th:text="${t.confirmation()}">Automatic</td>
               <td th:text="${t.leadTime()}">on the day</td>
@@ -80,6 +95,51 @@
           </tbody>
         </table>
       </div>
+    </section>
+
+    <!--
+      The Recurring cost summary (data-model §14.4, slice g): the live templates per month and per
+      year in base at today's rate, each non-funding leg an expense (by top-level category), income
+      or a transfer. Schedule math, not an engine Report.
+    -->
+    <section class="panel" th:unless="${#lists.isEmpty(templates)}">
+      <p class="eyebrow">
+        Recurring cost<span
+          th:replace="~{fragments/help-marker :: marker('Schedule math over the live templates, in the base currency at the latest rate: each leg is an expense, income, or a transfer to an own account or a person. Net is income minus expenses minus transfers.')}"
+        ></span>
+      </p>
+      <table class="recurring recurring-summary">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="num">Per month</th>
+            <th class="num">Per year</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="line : ${summary.expenses()}">
+            <td class="recurring-summary__category" th:text="${line.label()}">Media</td>
+            <td class="num" th:text="${line.perMonth()}">9,99</td>
+            <td class="num" th:text="${line.perYear()}">119,88</td>
+          </tr>
+          <tr
+            th:each="line : ${ {summary.expenseTotal(), summary.income(), summary.transfer()} }"
+          >
+            <td th:text="${line.label()}">Expenses</td>
+            <td class="num" th:text="${line.perMonth()}">150,00</td>
+            <td class="num" th:text="${line.perYear()}">1.800,00</td>
+          </tr>
+          <tr class="recurring-summary__net">
+            <td th:text="${summary.net().label()}">Net</td>
+            <td class="num" th:text="${summary.net().perMonth()}">2.450,00</td>
+            <td class="num" th:text="${summary.net().perYear()}">29.400,00</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted" th:unless="${#lists.isEmpty(summary.leftOut())}">
+        Left out for want of an exchange rate:
+        <span th:text="${#strings.listJoin(summary.leftOut(), ', ')}">Streaming</span>.
+      </p>
     </section>
   </main>
 </html>
