@@ -33,10 +33,12 @@ import java.time.LocalDate;
  * @param receiptId the live receipt this transaction was booked from (register §7, plan stage 9g),
  *     or null — the paperclip's target. Read straight out of the SQL rather than through a {@code
  *     receipts} service call, which would close a {@code ledger → receipts} module cycle
- * @param recurringTemplateId the live recurring template this transaction was booked from (register
- *     §2.10, data-model §14.2), or null — the recurring marker's target. Read straight out of the
- *     SQL for the same reason as {@code receiptId}: {@code recurring} depends on {@code ledger},
- *     never the other way
+ * @param recurringTemplateId the recurring template this transaction was booked from (register
+ *     §2.10, data-model §14.2), or null — the recurring marker. Read straight out of the SQL for
+ *     the same reason as {@code receiptId}: {@code recurring} depends on {@code ledger}, never the
+ *     other way
+ * @param recurringTemplateLive whether that template is still live, so the marker can link to it;
+ *     false for a deleted template and for an unstamped row
  */
 public record RegisterRow(
     long postingId,
@@ -53,4 +55,5 @@ public record RegisterRow(
     String lifecycle,
     String reconciliation,
     Long receiptId,
-    Long recurringTemplateId) {}
+    Long recurringTemplateId,
+    boolean recurringTemplateLive) {}

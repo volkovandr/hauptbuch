@@ -296,6 +296,22 @@ class RecurringScreenIntegrationTest {
   }
 
   @Test
+  void deletedTemplateKeepsItsMarkerGreyedWithoutLink() throws Exception {
+    mockMvc
+        .perform(saveWeeklyFromThePast("auto").param("pastOccurrences", "book"))
+        .andExpect(header().string("HX-Redirect", "/recurring"));
+    long templateId = onlyTemplateId();
+
+    mockMvc.perform(post("/recurring/" + templateId + "/delete")).andExpect(status().isOk());
+
+    mockMvc
+        .perform(get("/register").param("accountId", String.valueOf(bankId)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("register__recurring--deleted")))
+        .andExpect(content().string(not(containsString("href=\"/recurring/" + templateId + "\""))));
+  }
+
+  @Test
   void startingFromTheNextBooksNothingPast() throws Exception {
     mockMvc
         .perform(saveWeeklyFromThePast("auto").param("pastOccurrences", "skip"))

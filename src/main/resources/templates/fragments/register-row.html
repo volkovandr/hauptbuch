@@ -143,14 +143,24 @@
               >📎</a
             >
             <!-- The recurring marker (register §2.10): this row was booked from a recurring
-                 template. It shares the paperclip's slot; a row with both shows the paperclip. -->
-            <a
-              class="register__receipt register__recurring"
-              th:if="${r.receiptId() == null and r.recurringTemplateId() != null}"
-              th:href="@{/recurring/{id}(id=${r.recurringTemplateId()})}"
-              title="Open the recurring template this was booked from"
-              >↻</a
-            >
+                 template. It shares the paperclip's slot; a row with both shows the paperclip.
+                 Where a row came from is a fact, so a deleted template keeps the marker, greyed
+                 and without a link. -->
+            <th:block th:if="${r.receiptId() == null and r.recurringTemplateId() != null}">
+              <a
+                th:if="${r.recurringTemplateLive()}"
+                class="register__receipt register__recurring"
+                th:href="@{/recurring/{id}(id=${r.recurringTemplateId()})}"
+                title="Open the recurring template this was booked from"
+                >↻</a
+              >
+              <span
+                th:unless="${r.recurringTemplateLive()}"
+                class="register__receipt register__recurring register__recurring--deleted"
+                title="Booked from a recurring template that has since been deleted"
+                >↻</span
+              >
+            </th:block>
           </td>
         </tr>
       </tbody>

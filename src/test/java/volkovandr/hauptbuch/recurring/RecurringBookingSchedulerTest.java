@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.recurring;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,9 +53,21 @@ class RecurringBookingSchedulerTest {
     when(repository.findLive()).thenReturn(List.of(template(1L), template(2L)));
     when(bookingService.run(1L)).thenThrow(new IllegalArgumentException("account closed"));
 
-    new RecurringBookingScheduler(repository, bookingService).bookDueOccurrences();
+    new RecurringBookingScheduler(repository, bookingService).bookDueOccurrences("scheduled");
 
     verify(bookingService).run(1L);
     verify(bookingService).run(2L);
+  }
+
+  @Test
+  void runCountsTheTransactionsBookedAcrossTemplates() {
+    when(repository.findLive()).thenReturn(List.of(template(1L), template(2L)));
+    when(bookingService.run(1L)).thenReturn(3);
+    when(bookingService.run(2L)).thenReturn(1);
+
+    int booked =
+        new RecurringBookingScheduler(repository, bookingService).bookDueOccurrences("startup");
+
+    assertThat(booked).isEqualTo(4);
   }
 }
