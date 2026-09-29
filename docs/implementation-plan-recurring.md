@@ -191,7 +191,7 @@ it immediately.
 
 ---
 
-## f — Booking failures and referential integrity
+## f — Booking failures and referential integrity ✅ **complete**
 
 - **Failure handling:** a template whose occurrence can't book rolls back alone. Its cursor stays,
   it logs WARN, and it retries on every run. The failure is recorded on the template (reason + since
