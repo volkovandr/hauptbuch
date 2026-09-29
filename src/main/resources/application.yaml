@@ -59,6 +59,10 @@ hauptbuch:
     keep-automatic: 30
     automatic: false
     daily-cron: "0 0 3 * * *"
+  # Recurring templates (data-model §14.3): besides startup and a template's own save, every live
+  # template's due occurrences are booked on this schedule.
+  recurring:
+    booking-cron: "0 0 0 * * *"
   receipts:
     storage-root: ./.local-receipts
     # Receipt-parse max_tokens (stage 9e/9h). On Sonnet-family models this budget is shared with

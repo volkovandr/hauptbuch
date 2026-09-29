@@ -68,7 +68,8 @@ class RegisterRowRendererTest {
         CONFIRMED,
         "unreconciled",
         null,
-        null);
+        null,
+        false);
   }
 
   private RegisterCounterpartLeg leg(long txnId, String name, String type, String amount) {
@@ -249,7 +250,8 @@ class RegisterRowRendererTest {
             "pending_review",
             "unreconciled",
             null,
-            null);
+            null,
+            false);
 
     RegisterRowView view = renderOne(pending);
 
@@ -296,7 +298,8 @@ class RegisterRowRendererTest {
             threaded.lifecycle(),
             threaded.reconciliation(),
             threaded.receiptId(),
-            threaded.recurringTemplateId());
+            threaded.recurringTemplateId(),
+            threaded.recurringTemplateLive());
 
     RegisterRowView view = renderOne(unthreaded);
 

@@ -546,3 +546,11 @@ th.register__spine {
 .split-status__direction {
   font-size: 0.72rem;
 }
+
+/* The recurring marker of a row whose template was deleted (register §2.10): the marker stays,
+   since where a row came from is a fact, but greyed and without a link. */
+.register__recurring--deleted {
+  opacity: 0.4;
+  filter: grayscale(1);
+  cursor: default;
+}

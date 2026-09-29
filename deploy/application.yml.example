@@ -19,6 +19,10 @@ hauptbuch:
     keep-automatic: 30
     automatic: true
     daily-cron: "0 0 3 * * *"
+  # Recurring templates book their due occurrences at startup and on this schedule (midnight by
+  # default, so an occurrence dated today is in the register when the day starts).
+  recurring:
+    booking-cron: "0 0 0 * * *"
   receipts:
     storage-root: /var/lib/hauptbuch/receipts
   # The URL encoded in the landing page's "Open on your phone" QR panel. Leave it unset: the app

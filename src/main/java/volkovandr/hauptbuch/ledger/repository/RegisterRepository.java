@@ -63,12 +63,13 @@ public class RegisterRepository {
              (select min(rcpt.receipt_id) from receipt rcpt
                where rcpt.transaction_id = threaded.transaction_id
                  and rcpt.deleted_at is null) as receipt_id,
-             -- The recurring marker (register §2.10, data-model §14.2): the live template this
-             -- transaction was booked from. The stamp itself never changes; a deleted template
-             -- simply has no page left to link to.
-             (select rt.recurring_template_id from recurring_template rt
-               where rt.recurring_template_id = threaded.recurring_template_id
-                 and rt.deleted_at is null) as recurring_template_id
+             -- The recurring marker (register §2.10, data-model §14.2): the template this
+             -- transaction was booked from. The stamp never changes, so the marker stays even
+             -- once the template is deleted; only its link goes, having no page left to open.
+             threaded.recurring_template_id,
+             exists (select 1 from recurring_template rt
+                     where rt.recurring_template_id = threaded.recurring_template_id
+                       and rt.deleted_at is null) as recurring_template_live
       from threaded
       left join payee pay on threaded.payee_id = pay.payee_id
       left join country pay_country on pay.country_code = pay_country.country_code

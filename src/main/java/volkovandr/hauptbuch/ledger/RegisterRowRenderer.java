@@ -148,7 +148,8 @@ class RegisterRowRenderer {
         row.reconciliation(),
         tags,
         row.receiptId(),
-        row.recurringTemplateId());
+        row.recurringTemplateId(),
+        row.recurringTemplateLive());
   }
 
   /**
