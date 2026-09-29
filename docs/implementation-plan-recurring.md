@@ -168,7 +168,7 @@ each one with the dock.
   3. Run, skipping occurrence dates that already hold a confirmed or voided row from this template.
 
   The hard delete is a **new `ledger` operation**, scoped to pending, stamped rows only, and logged
-  at INFO with the transaction id. It removes postings and posting tags with the transaction. No
+  at DEBUG with the transaction id. It removes postings and posting tags with the transaction. No
   other caller may use it.
 - **End or delete dialog:** if a save moves the end date earlier and cuts off existing pending rows,
   or on delete, ask *keep all pending* / *keep only those dated before today* / *remove all
@@ -248,8 +248,8 @@ year", and an ending template warns on the main page as configured.
 ## Cross-cutting, not a slice
 
 - **No fourth JS leaf** (CLAUDE.md §1.6). Template mode reuses the dock and its leaves as they are.
-- **Logging** (CLAUDE.md §5): creating or deleting a template and the hard delete are INFO; each
-  booked occurrence is DEBUG, as any transaction record is; a booking failure is WARN.
+- **Logging** (CLAUDE.md §5): creating or deleting a template is INFO; each booked occurrence and
+  each hard-deleted pending row is DEBUG, as any transaction record is; a booking failure is WARN.
 - **Deferred, out of every slice:**
   - forecasting from templates (FR-FC-01);
   - MCP tools;
