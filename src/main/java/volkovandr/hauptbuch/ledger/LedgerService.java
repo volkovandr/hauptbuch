@@ -155,7 +155,7 @@ public class LedgerService {
       throw new IllegalArgumentException(
           "No pending recurring occurrence with id " + transactionId + " to delete");
     }
-    LOG.info("Pending recurring occurrence deleted: id={}", transactionId);
+    LOG.debug("Pending recurring occurrence deleted: id={}", transactionId);
   }
 
   /**
