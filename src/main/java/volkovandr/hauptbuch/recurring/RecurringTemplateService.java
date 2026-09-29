@@ -2,10 +2,8 @@ package volkovandr.hauptbuch.recurring;
 
 import java.time.Clock;
 import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -24,11 +22,13 @@ import volkovandr.hauptbuch.recurring.repository.RecurringTemplateRepository;
 
 /**
  * Saves and deletes recurring templates (data-model §14, recurring sub-plan slices b and c). A save
- * takes the split panel's form plus the schedule block, and refuses whatever the dock would refuse:
- * it dry-runs the entry through {@link DockSplitService#validate} on the start date before storing
- * anything. It then runs the booking for that template, in the same transaction, so a template
- * whose occurrences cannot book is not saved either. Saving an existing template rebooks it (data-
- * model §14.3): its untouched future pending rows are replaced under the new settings.
+ * takes the split panel's form plus the schedule block ({@link RecurringScheduleParser} parses the
+ * latter), and refuses whatever the dock would refuse: it dry-runs the entry through {@link
+ * DockSplitService#validate} on the start date before storing anything. It then runs the booking
+ * for that template, in the same transaction; an occurrence that cannot book rolls back only the
+ * run and is recorded on the template (slice f), so the save itself stands. Saving an existing
+ * template rebooks it (data-model §14.3): its untouched future pending rows are replaced under the
+ * new settings.
  */
 @Service
 class RecurringTemplateService {
@@ -42,6 +42,7 @@ class RecurringTemplateService {
   private final PersonProvisioningService personProvisioningService;
   private final TransactionCurrencyResolver transactionCurrencyResolver;
   private final RecurringBookingService bookingService;
+  private final RecurringBookingRunner runner;
   private final Clock clock;
 
   RecurringTemplateService(
@@ -52,6 +53,7 @@ class RecurringTemplateService {
       PersonProvisioningService personProvisioningService,
       TransactionCurrencyResolver transactionCurrencyResolver,
       RecurringBookingService bookingService,
+      RecurringBookingRunner runner,
       Clock clock) {
     this.repository = repository;
     this.dockSplitService = dockSplitService;
@@ -60,6 +62,7 @@ class RecurringTemplateService {
     this.personProvisioningService = personProvisioningService;
     this.transactionCurrencyResolver = transactionCurrencyResolver;
     this.bookingService = bookingService;
+    this.runner = runner;
     this.clock = clock;
   }
 
@@ -71,7 +74,7 @@ class RecurringTemplateService {
    * @throws IllegalArgumentException if the schedule is incomplete, carrying the message to show
    */
   int pastOccurrences(RecurringScheduleForm schedule, SplitForm split) {
-    RecurringTemplateDraft draft = scheduleOf(schedule, split);
+    RecurringTemplateDraft draft = RecurringScheduleParser.parse(schedule, split.date());
     LocalDate today = LocalDate.now(clock);
     if (schedule.recurringTemplateId() != null || !draft.startDate().isBefore(today)) {
       return 0;
@@ -90,7 +93,7 @@ class RecurringTemplateService {
    * @throws IllegalArgumentException if the schedule is incomplete, carrying the message to show
    */
   int cutOffPending(RecurringScheduleForm schedule, SplitForm split) {
-    LocalDate end = scheduleOf(schedule, split).endDate();
+    LocalDate end = RecurringScheduleParser.parse(schedule, split.date()).endDate();
     Long id = schedule.recurringTemplateId();
     if (id == null || end == null) {
       return 0;
@@ -109,6 +112,7 @@ class RecurringTemplateService {
    * its cursor the day before its start when the operator chose to book its past occurrences, else
    * at yesterday, so nothing past is booked. An edit is rebooked: its future pending rows are
    * replaced, and pending rows the end date cuts off are kept or removed as the operator answered.
+   * A booking that fails is recorded on the template, and the template is saved all the same.
    *
    * @return the template's id
    * @throws IllegalArgumentException if the schedule is incomplete or the dock refuses the entry,
@@ -117,7 +121,7 @@ class RecurringTemplateService {
    */
   @Transactional
   long save(RecurringScheduleForm schedule, SplitForm split) {
-    RecurringTemplateDraft unresolved = scheduleOf(schedule, split);
+    RecurringTemplateDraft unresolved = RecurringScheduleParser.parse(schedule, split.date());
     if (split.accountId() == null && !split.hasFundingPerson()) {
       throw new IllegalArgumentException("An account or person is required");
     }
@@ -136,7 +140,7 @@ class RecurringTemplateService {
               : LocalDate.now(clock).minusDays(1);
       long created = repository.insert(draft, bookedThrough);
       LOG.info("Recurring template created: id={}, name={}", created, draft.name());
-      bookingService.run(created);
+      runner.book(created);
       return created;
     }
     if (repository.update(id, draft) == 0) {
@@ -145,7 +149,8 @@ class RecurringTemplateService {
     LOG.debug("Recurring template saved: id={}", id);
     // Unasked, no row is newly cut off: rows already beyond the end were kept by an earlier answer.
     PendingRows answer = schedule.pendingRowsAnswer();
-    bookingService.rebook(id, answer == null ? PendingRows.KEEP_ALL : answer);
+    bookingService.rewind(id, answer == null ? PendingRows.KEEP_ALL : answer);
+    runner.book(id);
     return id;
   }
 
@@ -203,94 +208,6 @@ class RecurringTemplateService {
       return picked;
     }
     return transactionCurrencyResolver.forFundingPerson(split.fundingPersonName(), null);
-  }
-
-  /** The schedule part of the draft, parsed and checked; the entry part is still empty. */
-  private static RecurringTemplateDraft scheduleOf(RecurringScheduleForm form, SplitForm split) {
-    String name = blankToNull(form.name());
-    if (name == null) {
-      throw new IllegalArgumentException("A template needs a name");
-    }
-    LocalDate start = split.date();
-    if (start == null) {
-      throw new IllegalArgumentException("A template needs a start date");
-    }
-    CadenceUnit unit = CadenceUnit.fromCode(form.cadenceUnit());
-    int every = whole(form.cadenceN(), "The cadence", 1);
-    // The schedule's own checks refuse an end date before the start.
-    Schedule schedule = new Schedule(start, unit, every, endDate(form, start, unit, every));
-    String confirmation = blankToNull(form.confirmation());
-    return new RecurringTemplateDraft(
-        name.strip(),
-        schedule.startDate(),
-        schedule.unit().code(),
-        schedule.every(),
-        schedule.endDate(),
-        blankToNull(form.leadDays()) == null ? 0 : whole(form.leadDays(), "The lead time", 0),
-        confirmation == null ? RecurringScheduleForm.AUTO : confirmation,
-        false,
-        null,
-        managementUrl(form.managementUrl()),
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        List.of(),
-        List.of());
-  }
-
-  private static LocalDate endDate(
-      RecurringScheduleForm form, LocalDate start, CadenceUnit unit, int every) {
-    String mode = blankToNull(form.endMode());
-    if (RecurringScheduleForm.END_DATE.equals(mode)) {
-      String text = blankToNull(form.endDate());
-      if (text == null) {
-        throw new IllegalArgumentException("Pick the end date, or choose no end");
-      }
-      try {
-        return LocalDate.parse(text.strip());
-      } catch (DateTimeParseException e) {
-        throw new IllegalArgumentException("The end date is not a date", e);
-      }
-    }
-    if (RecurringScheduleForm.END_AFTER.equals(mode)) {
-      int count = whole(form.endAfter(), "The number of occurrences", 1);
-      return Schedule.endDateAfter(start, unit, every, count);
-    }
-    return null;
-  }
-
-  /** A whole number of at least {@code min}, or a message naming {@code what}. */
-  private static int whole(String text, String what, int min) {
-    int value;
-    try {
-      value = Integer.parseInt(text == null ? "" : text.strip());
-    } catch (NumberFormatException e) {
-      value = min - 1;
-    }
-    if (value < min) {
-      throw new IllegalArgumentException(what + " must be a whole number of at least " + min);
-    }
-    return value;
-  }
-
-  /**
-   * The management link, which opens in a new tab: only a web address is accepted, so a stored
-   * value can never be a {@code javascript:} link.
-   */
-  private static String managementUrl(String text) {
-    String url = blankToNull(text);
-    if (url == null) {
-      return null;
-    }
-    String stripped = url.strip();
-    String lower = stripped.toLowerCase(Locale.ROOT);
-    if (!lower.startsWith("https://") && !lower.startsWith("http://")) {
-      throw new IllegalArgumentException("The management link must start with https:// or http://");
-    }
-    return stripped;
   }
 
   /**

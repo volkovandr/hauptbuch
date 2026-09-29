@@ -2,13 +2,16 @@ package volkovandr.hauptbuch.recurring;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PendingOccurrence;
@@ -25,7 +28,10 @@ import volkovandr.hauptbuch.recurring.repository.RecurringTemplateRepository;
  *
  * <p>A run skips any occurrence date the template already has a transaction for — confirmed,
  * pending or voided — since confirmed rows are the operator's facts and voided rows the operator's
- * skips. That only matters after {@link #rebook} has pulled the cursor back over them.
+ * skips. That only matters after {@link #rewind} has pulled the cursor back over them.
+ *
+ * <p>A run that cannot book throws, and everything it wrote rolls back with it, the cursor included
+ * (slice f). {@link RecurringBookingRunner} records the failure on the template instead.
  */
 @Service
 class RecurringBookingService {
@@ -34,6 +40,7 @@ class RecurringBookingService {
 
   private final RecurringTemplateRepository repository;
   private final RecurringOccurrenceEntries entries;
+  private final RecurringBookability bookability;
   private final DockSplitService dockSplitService;
   private final LedgerService ledgerService;
   private final Clock clock;
@@ -41,28 +48,37 @@ class RecurringBookingService {
   RecurringBookingService(
       RecurringTemplateRepository repository,
       RecurringOccurrenceEntries entries,
+      RecurringBookability bookability,
       DockSplitService dockSplitService,
       LedgerService ledgerService,
       Clock clock) {
     this.repository = repository;
     this.entries = entries;
+    this.bookability = bookability;
     this.dockSplitService = dockSplitService;
     this.ledgerService = ledgerService;
     this.clock = clock;
   }
 
   /**
-   * Book a live template's due occurrences and advance its cursor. An unknown or deleted template
-   * books nothing.
+   * Book a live template's due occurrences, advance its cursor, and clear any failure recorded on
+   * it. An unknown or deleted template books nothing.
+   *
+   * <p>It runs behind a savepoint (a transaction of its own when the caller has none), so a
+   * template save keeps the template when its booking fails: only the run's own writes roll back.
    *
    * @return how many occurrences were booked
+   * @throws RuntimeException whatever made an occurrence unbookable: a reference {@link
+   *     RecurringBookability} refuses, or a dock or engine refusal
    */
-  @Transactional
+  @Transactional(propagation = Propagation.NESTED)
   int run(long recurringTemplateId) {
     Optional<RecurringTemplate> locked = repository.lockLive(recurringTemplateId);
     if (locked.isEmpty()) {
       return 0;
     }
+    // Cleared up front: a run that fails rolls the clearing back with everything else.
+    repository.clearBookingFailure(recurringTemplateId);
     RecurringTemplate template = locked.get();
     LocalDate through = LocalDate.now(clock).plusDays(template.leadDays());
     if (template.endDate() != null && template.endDate().isBefore(through)) {
@@ -76,6 +92,9 @@ class RecurringBookingService {
         template.schedule().occurrencesBetween(template.bookedThrough(), through).stream()
             .filter(occurrence -> !booked.contains(occurrence))
             .toList();
+    if (!due.isEmpty()) {
+      bookability.requireBookable(template);
+    }
     for (LocalDate occurrence : due) {
       long transactionId = dockSplitService.commit(entries.entryFor(template, occurrence));
       ledgerService.stampOccurrence(transactionId, recurringTemplateId, occurrence);
@@ -90,26 +109,34 @@ class RecurringBookingService {
   }
 
   /**
-   * Rebook a live template after a save (data-model §14.3, ADR 0002): remove its pending rows dated
-   * today or later, pull its cursor back to no later than yesterday, and run. Past rows are never
-   * touched, and a start moved into the past books nothing. Pending rows dated after the template's
-   * end date are kept or removed as the operator answered instead.
+   * Prepare a live template's rebooking after a save (data-model §14.3, ADR 0002): remove its
+   * pending rows dated today or later and pull its cursor back to no later than yesterday, for the
+   * {@link #run} that follows. Past rows are never touched, and a start moved into the past books
+   * nothing. Pending rows dated after the template's end date are kept or removed as the operator
+   * answered instead.
    *
    * @param beyondEnd the operator's answer for pending rows dated after the end date
-   * @return how many occurrences were booked
    */
   @Transactional
-  int rebook(long recurringTemplateId, PendingRows beyondEnd) {
+  void rewind(long recurringTemplateId, PendingRows beyondEnd) {
     Optional<RecurringTemplate> locked = repository.lockLive(recurringTemplateId);
     if (locked.isEmpty()) {
-      return 0;
+      return;
     }
     LocalDate end = locked.get().endDate();
     removeAsAnswered(
         recurringTemplateId,
         date -> end != null && date.isAfter(end) ? beyondEnd : PendingRows.KEEP_PAST);
     repository.rewindBookedThrough(recurringTemplateId, LocalDate.now(clock).minusDays(1));
-    return run(recurringTemplateId);
+  }
+
+  /**
+   * Record on a live template why its run could not book (data-model §14.3), for the main page and
+   * the recurring page to name it until a run completes.
+   */
+  @Transactional
+  void recordFailure(long recurringTemplateId, String reason) {
+    repository.recordBookingFailure(recurringTemplateId, reason);
   }
 
   /**
@@ -119,6 +146,18 @@ class RecurringBookingService {
   @Transactional
   void removePending(long recurringTemplateId, PendingRows answer) {
     removeAsAnswered(recurringTemplateId, date -> answer);
+  }
+
+  /**
+   * The live templates that cannot book (data-model §14.3), by name, keyed by template id: the main
+   * page lists them, and the recurring page names each on its row.
+   */
+  Map<Long, RecurringBookingFailure> failures() {
+    Map<Long, RecurringBookingFailure> failures = new LinkedHashMap<>();
+    for (RecurringBookingFailure failure : repository.findLiveBookingFailures()) {
+      failures.put(failure.recurringTemplateId(), failure);
+    }
+    return failures;
   }
 
   /** How many pending rows a template has, for its delete to ask whether to keep them. */

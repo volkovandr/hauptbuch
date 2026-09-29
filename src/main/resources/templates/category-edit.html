@@ -117,11 +117,20 @@
         are no postings to move.
       </p>
       <p class="warning">This cannot be undone.</p>
-      <p class="muted" th:if="${deletePanel.needsTarget() and #lists.isEmpty(deletePanel.targets())}">
+      <!-- Recurring slice f: a category a live template uses cannot be deleted. -->
+      <p class="muted" th:unless="${#lists.isEmpty(deletePanel.usedBy())}">
+        In use by <span th:text="${#strings.listJoin(deletePanel.usedBy(), ', ')}"
+          >recurring template 'Streaming'</span
+        > — change or delete that first.
+      </p>
+      <p
+        class="muted"
+        th:if="${#lists.isEmpty(deletePanel.usedBy()) and deletePanel.lacksTarget()}"
+      >
         No other category of this type to move the postings to — create one first.
       </p>
       <form
-        th:unless="${deletePanel.needsTarget() and #lists.isEmpty(deletePanel.targets())}"
+        th:if="${deletePanel.deletable()}"
         method="post"
         th:action="@{/categories/{id}/delete(id=${category.accountId()})}"
         class="form"

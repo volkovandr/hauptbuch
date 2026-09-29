@@ -48,6 +48,7 @@ class PersonMergeServiceTest {
   @Mock private PostingReassignmentRepository postingReassignmentRepository;
   @Mock private SettingsService settingsService;
   @Mock private AccountService accountService;
+  @Mock private ReferenceHolder referenceHolder;
 
   private PersonMergeService service;
 
@@ -59,7 +60,8 @@ class PersonMergeServiceTest {
             personProvisioningService,
             postingReassignmentRepository,
             settingsService,
-            accountService);
+            accountService,
+            List.of(referenceHolder));
   }
 
   private static Account leaf(long id, String currency) {
@@ -102,6 +104,21 @@ class PersonMergeServiceTest {
     InOrder inOrder = inOrder(postingReassignmentRepository, accountService, personService);
     inOrder.verify(postingReassignmentRepository).reassignPostings(11L, 21L);
     inOrder.verify(accountService).softDelete(List.of(10L, 11L));
+    inOrder.verify(personService).softDeleteIfZeroBalance(SOURCE);
+  }
+
+  @Test
+  void pointsEveryReferenceHolderAtTheTarget() {
+    stubLive(SOURCE, "Max");
+    stubLive(TARGET, "Alex");
+    when(personService.leavesOf(SOURCE)).thenReturn(List.of());
+
+    service.merge(SOURCE, TARGET);
+
+    // Before the source is retired, in the same transaction: a template never names a deleted
+    // person (data-model §14.3).
+    InOrder inOrder = inOrder(referenceHolder, personService);
+    inOrder.verify(referenceHolder).reassignPerson(SOURCE, TARGET);
     inOrder.verify(personService).softDeleteIfZeroBalance(SOURCE);
   }
 

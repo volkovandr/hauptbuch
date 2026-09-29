@@ -13,13 +13,29 @@ import volkovandr.hauptbuch.accounts.AccountNode;
  * subtree that carries postings needs one, and only then is an empty {@code targets} list a reason
  * to refuse ("create one first").
  *
+ * <p>A subtree a live recurring template still uses cannot be deleted at all (data-model §14.3):
+ * {@code usedBy} names those templates, and the panel shows them instead of the delete button.
+ *
  * @param needsTarget whether any posting — live or voided — has ever hit the subtree being deleted
  * @param targets the live leaves that may receive those postings (empty when none qualifies)
+ * @param usedBy what still uses the subtree, e.g. {@code recurring template 'Streaming'}
  */
-public record CategoryDeletePanel(boolean needsTarget, List<AccountNode> targets) {
+public record CategoryDeletePanel(
+    boolean needsTarget, List<AccountNode> targets, List<String> usedBy) {
 
-  /** Defensive copy of the target list (the house pattern for record lists). */
+  /** Defensive copies of the lists (the house pattern for record lists). */
   public CategoryDeletePanel {
     targets = List.copyOf(targets);
+    usedBy = List.copyOf(usedBy);
+  }
+
+  /** The postings need a target and none qualifies ("create one first"). */
+  public boolean lacksTarget() {
+    return needsTarget && targets.isEmpty();
+  }
+
+  /** Whether the panel offers the delete button: nothing uses the subtree, and a target exists. */
+  public boolean deletable() {
+    return usedBy.isEmpty() && !lacksTarget();
   }
 }

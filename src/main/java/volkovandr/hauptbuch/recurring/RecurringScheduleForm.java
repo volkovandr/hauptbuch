@@ -6,7 +6,7 @@ import org.springframework.util.MultiValueMap;
  * The template editor's schedule block as submitted (data-model §14.1): everything a template adds
  * to the split panel's entry. The start date is not here; it is the panel's own Date field,
  * labelled Start in template mode. Every field is the raw text, so a refused save redisplays
- * exactly what was typed; {@link RecurringTemplateService} parses and validates it.
+ * exactly what was typed; {@link RecurringScheduleParser} parses and validates it.
  *
  * @param recurringTemplateId the template being edited, or null for a new one
  * @param name the operator's name for the template

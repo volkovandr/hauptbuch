@@ -299,6 +299,19 @@ class CategoryServiceTest {
   }
 
   @Test
+  void deletePanelNamesWhatStillUsesTheSubtree() {
+    when(accountService.findById(FOOD_ID))
+        .thenReturn(Optional.of(account(FOOD_ID, FOOD, EXPENSE, null)));
+    List<Long> subtree = List.of(FOOD_ID, MILK_ID);
+    when(accountService.findSubtreeAccountIds(FOOD_ID)).thenReturn(subtree);
+    when(accountService.findLiveByTypesWithDepth(List.of(INCOME, EXPENSE))).thenReturn(List.of());
+    when(deletionService.usersOf(subtree)).thenReturn(List.of("recurring template 'Milk box'"));
+
+    assertThat(categoryService.deletePanel(FOOD_ID).usedBy())
+        .containsExactly("recurring template 'Milk box'");
+  }
+
+  @Test
   void deletePanelRefusesAccountsThisScreenDoesNotManage() {
     when(accountService.findById(FOOD_ID))
         .thenReturn(Optional.of(account(FOOD_ID, "Giro", "asset", null)));

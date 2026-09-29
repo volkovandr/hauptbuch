@@ -4,7 +4,8 @@
   subscriptions, standing orders and pocket money the book repeats. Each row shows the cadence in
   words and the next three occurrence dates, which come from the template's schedule, so the
   schedule math can be checked by eye. The name opens the editor (the split panel in template
-  mode); the management link opens the provider's page in a new tab. No bespoke JS.
+  mode); the management link opens the provider's page in a new tab. A template that cannot book
+  names the reason under its name (slice f). No bespoke JS.
 -->
 <html
   lang="en"
@@ -38,6 +39,18 @@
                 <a th:href="@{/recurring/{id}(id=${t.recurringTemplateId()})}" th:text="${t.name()}"
                   >Streaming</a
                 >
+                <!-- Slice f: why it cannot book; clears on the first run that completes. -->
+                <div
+                  class="recurring__failure"
+                  th:if="${failures.containsKey(t.recurringTemplateId())}"
+                  th:with="f=${failures.get(t.recurringTemplateId())}"
+                >
+                  <span class="warning">Could not book:</span>
+                  <span th:text="${f.reason()}">Account 'BankAaa-EUR' is closed</span>
+                  <span class="muted" th:text="'(since ' + ${#temporals.format(f.since(), 'dd.MM.yyyy')} + ')'"
+                    >(since 01.10.2026)</span
+                  >
+                </div>
               </td>
               <td th:text="${t.cadence()}">every month on the 31st</td>
               <td class="num" th:text="${t.amount()}">-9,99</td>

@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.operations;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -50,13 +51,18 @@ class DeletionServiceTest {
   @Mock private AccountService accountService;
   @Mock private CurrencyLeafService currencyLeafService;
   @Mock private PostingReassignmentRepository postingReassignmentRepository;
+  @Mock private ReferenceHolder referenceHolder;
 
   private DeletionService deletionService;
 
   @BeforeEach
   void setUp() {
     deletionService =
-        new DeletionService(accountService, currencyLeafService, postingReassignmentRepository);
+        new DeletionService(
+            accountService,
+            currencyLeafService,
+            postingReassignmentRepository,
+            List.of(referenceHolder));
   }
 
   private static Account account(long id, String name, Long parentId) {
@@ -89,6 +95,31 @@ class DeletionServiceTest {
     when(accountService.findById(TARGET_ID))
         .thenReturn(Optional.of(account(TARGET_ID, GROCERIES, null)));
     when(accountService.findChildrenOf(TARGET_ID)).thenReturn(List.of());
+  }
+
+  @Test
+  void refusesWhileReferenceHolderStillUsesTheSubtreeNamingIt() {
+    List<Account> subtree =
+        List.of(account(FOOD_ID, "Food", null), currencyLeaf(MILK_ID, EUR, FOOD_ID));
+    when(accountService.findSubtreeAccounts(FOOD_ID)).thenReturn(subtree);
+    when(referenceHolder.usersOf(List.of(FOOD_ID, MILK_ID)))
+        .thenReturn(List.of("recurring template 'Groceries box'"));
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> deletionService.deleteCategory(FOOD_ID, TARGET_ID))
+        .withMessage(
+            "'Food' is used by recurring template 'Groceries box' — change or delete that first");
+    verify(accountService, never()).softDelete(anyList());
+    verify(postingReassignmentRepository, never()).reassignPostings(anyList(), anyLong());
+  }
+
+  @Test
+  void usersOfGathersEveryReferenceHolder() {
+    when(referenceHolder.usersOf(List.of(FOOD_ID)))
+        .thenReturn(List.of("recurring template 'A'", "recurring template 'B'"));
+
+    assertThat(deletionService.usersOf(List.of(FOOD_ID)))
+        .containsExactly("recurring template 'A'", "recurring template 'B'");
   }
 
   @Test

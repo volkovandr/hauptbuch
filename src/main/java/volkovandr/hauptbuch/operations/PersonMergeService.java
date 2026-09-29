@@ -46,18 +46,21 @@ class PersonMergeService {
   private final PostingReassignmentRepository postingReassignmentRepository;
   private final SettingsService settingsService;
   private final AccountService accountService;
+  private final List<ReferenceHolder> referenceHolders;
 
   PersonMergeService(
       PersonService personService,
       PersonProvisioningService personProvisioningService,
       PostingReassignmentRepository postingReassignmentRepository,
       SettingsService settingsService,
-      AccountService accountService) {
+      AccountService accountService,
+      List<ReferenceHolder> referenceHolders) {
     this.personService = personService;
     this.personProvisioningService = personProvisioningService;
     this.postingReassignmentRepository = postingReassignmentRepository;
     this.settingsService = settingsService;
     this.accountService = accountService;
+    this.referenceHolders = List.copyOf(referenceHolders);
   }
 
   /**
@@ -82,8 +85,9 @@ class PersonMergeService {
   /**
    * Merge the source person into the target: reassign every source leaf's postings onto the
    * target's leaf in the same currency (provisioning that leaf if the target has none yet),
-   * soft-delete the now-empty source leaves, then soft-delete the source person. Atomic — the whole
-   * fold is one transaction.
+   * soft-delete the now-empty source leaves, point every {@link ReferenceHolder} (a recurring
+   * template) at the target, then soft-delete the source person. Atomic — the whole fold is one
+   * transaction.
    *
    * <p>The source leaves are retired, not left live-but-empty: a soft-deleted person's live leaves
    * surface in the register's Closed and All filter panels (issue transaction-register-ui/23), and
@@ -108,6 +112,9 @@ class PersonMergeService {
       sourceLeafIds.add(leaf.accountId());
     }
     accountService.softDelete(sourceLeafIds);
+    for (ReferenceHolder holder : referenceHolders) {
+      holder.reassignPerson(sourcePersonId, targetPersonId);
+    }
 
     // Every source leaf is now empty, so this succeeds; it also asserts the fold left nothing
     // behind.
