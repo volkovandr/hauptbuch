@@ -44,8 +44,21 @@ table.recurring-summary {
   min-width: 24rem;
 }
 
-table.recurring tbody td.recurring-summary__category {
-  padding-left: 1.5rem;
+/* A row indents by its level under its section's total (depth 0); a parent's row is the subtotal
+   of the rows under it. */
+table.recurring tbody td.recurring-summary__label {
+  padding-left: calc(0.5rem + var(--depth, 0) * 1.25rem);
+}
+
+.recurring-summary__total td {
+  font-weight: 600;
+}
+
+/* Who owes whom, beside a person's name: a quiet aside, not part of the bold subtotal. */
+.recurring-summary__note {
+  margin-left: 0.4rem;
+  font-weight: 400;
+  font-size: 0.85rem;
 }
 
 .recurring-summary__net td {
@@ -53,6 +66,24 @@ table.recurring tbody td.recurring-summary__category {
   border-top: 2px solid var(--rule);
 }
 
+/* The list scrolls sideways inside its own box, which clips a header marker's upward-opening
+   bubble (base.css) — open it downward, over the rows, instead. */
+table.recurring thead .help__text {
+  top: 100%;
+  bottom: auto;
+  margin-top: 0.3rem;
+  margin-bottom: 0;
+}
+
+/* A caption's marker sits at the panel's left edge, where the default right-anchored bubble
+   (base.css) runs off the window — grow it rightward instead. */
+.eyebrow .help__text {
+  right: auto;
+  left: 0;
+}
+
+/* The dates wrap inside a block of their own: a flex <td> stops being a table cell and loses the
+   row's height. */
 .recurring__dates {
   display: flex;
   gap: 0.6rem;

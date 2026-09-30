@@ -1294,13 +1294,21 @@ leaves. An occurrence is computed from the schedule and never stored on its own.
 
 A template's cost figures come from its schedule × its funding-leg amount alone. They never read
 booked postings. Figures are per month and per year: days/weeks cadences are normalised through
-365 days a year, and months/years divide exactly. When an end date is set there are also "already"
-(occurrences from the start through today, booked or not), "yet to pay" (after today through the
-end) and the total. Native currency, plus base at today's rate where different. The recurring page's
-**Recurring cost summary** adds up the live templates per month and per year in base, classifying
-each non-funding leg: expense category → **expense** (broken down by top-level category), income
-category → **income**, own account or person → **transfer**, plus a net grand total
-(income − expense − transfer). It is not an engine Report (reporting.md aggregates postings).
+365 days a year, and months/years divide exactly. "Already" counts the occurrences from the start
+through today, booked or not; when an end date is set there are also "yet to pay" (after today
+through the end) and the total. Native currency, plus base at today's rate where different. The recurring page's
+**Recurring cost summary** adds up the live, unended templates per month and per year as three
+tables, reading each leg as the booked entry would post it:
+- **Recurring cost** — expense and income category legs in base, each a total above the category
+  hierarchy the templates touch with a subtotal on every level; **Net = income − expense**. A
+  person-funded expense counts here like any other.
+- **Transfers** — legs between two own accounts, one row per "source → destination" pair in the
+  direction the money moves; the total is the funds moved and is not part of Net. Shown only when
+  a template has one.
+- **People** — every leg on a person (funding or line), per person and currency: a subtotal saying
+  who owes whom, then that person's templates; the total is the overall debt change in base. A
+  template between two people shows under both, netting to zero. Shown only when a template has
+  one. It is not an engine Report (reporting.md aggregates postings).
 
 ---
 

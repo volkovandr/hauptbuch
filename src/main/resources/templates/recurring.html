@@ -63,23 +63,25 @@
               <td class="num recurring__cost" th:with="c=${figures.get(t.recurringTemplateId())}">
                 <div><span th:text="${c.perMonth()}">-9,99</span> / month</div>
                 <div><span th:text="${c.perYear()}">-119,88</span> / year</div>
-                <div class="muted" th:if="${c.total() != null}">
-                  already <span th:text="${c.already()}">-29,97</span> · yet to pay
-                  <span th:text="${c.yetToPay()}">-89,91</span> · total
-                  <span th:text="${c.total()}">-119,88</span>
-                </div>
+                <div class="muted">already <span th:text="${c.already()}">-29,97</span></div>
+                <th:block th:if="${c.total() != null}">
+                  <div class="muted">yet to pay <span th:text="${c.yetToPay()}">-89,91</span></div>
+                  <div class="muted">total <span th:text="${c.total()}">-119,88</span></div>
+                </th:block>
               </td>
               <td th:text="${t.account()}">BankAaa-EUR</td>
               <td th:text="${t.confirmation()}">Automatic</td>
               <td th:text="${t.leadTime()}">on the day</td>
-              <td class="recurring__dates">
-                <span
-                  th:each="d : ${t.nextDates()}"
-                  class="num"
-                  th:text="${#temporals.format(d, 'dd.MM.yyyy')}"
-                  >31.10.2026</span
-                >
-                <span th:if="${#lists.isEmpty(t.nextDates())}" class="muted">ended</span>
+              <td>
+                <div class="recurring__dates">
+                  <span
+                    th:each="d : ${t.nextDates()}"
+                    class="num"
+                    th:text="${#temporals.format(d, 'dd.MM.yyyy')}"
+                    >31.10.2026</span
+                  >
+                  <span th:if="${#lists.isEmpty(t.nextDates())}" class="muted">ended</span>
+                </div>
               </td>
               <td>
                 <a
@@ -99,13 +101,15 @@
 
     <!--
       The Recurring cost summary (data-model §14.4, slice g): the live templates per month and per
-      year in base at today's rate, each non-funding leg an expense (by top-level category), income
-      or a transfer. Schedule math, not an engine Report.
+      year. Expenses and income in base at today's rate, each its total above the category
+      hierarchy the templates touch, a subtotal on every level; Net is income − expenses. Then the
+      Transfers between own accounts and the People's debts, each shown only when a template has
+      one and neither part of Net. Schedule math, not an engine Report.
     -->
     <section class="panel" th:unless="${#lists.isEmpty(templates)}">
       <p class="eyebrow">
         Recurring cost<span
-          th:replace="~{fragments/help-marker :: marker('Schedule math over the live templates, in the base currency at the latest rate: each leg is an expense, income, or a transfer to an own account or a person. Net is income minus expenses minus transfers.')}"
+          th:replace="~{fragments/help-marker :: marker('Schedule math over the live templates, in the base currency at the latest rate: the expense and income categories they book to. Net is income minus expenses.')}"
         ></span>
       </p>
       <table class="recurring recurring-summary">
@@ -117,17 +121,19 @@
           </tr>
         </thead>
         <tbody>
-          <tr th:each="line : ${summary.expenses()}">
-            <td class="recurring-summary__category" th:text="${line.label()}">Media</td>
+          <tr
+            th:each="line : ${summary.rows()}"
+            th:classappend="${line.depth() == 0} ? 'recurring-summary__total'"
+          >
+            <td
+              class="recurring-summary__label"
+              th:style="|--depth: ${line.depth()}|"
+              th:text="${line.label()}"
+            >
+              Media
+            </td>
             <td class="num" th:text="${line.perMonth()}">9,99</td>
             <td class="num" th:text="${line.perYear()}">119,88</td>
-          </tr>
-          <tr
-            th:each="line : ${ {summary.expenseTotal(), summary.income(), summary.transfer()} }"
-          >
-            <td th:text="${line.label()}">Expenses</td>
-            <td class="num" th:text="${line.perMonth()}">150,00</td>
-            <td class="num" th:text="${line.perYear()}">1.800,00</td>
           </tr>
           <tr class="recurring-summary__net">
             <td th:text="${summary.net().label()}">Net</td>
@@ -140,6 +146,77 @@
         Left out for want of an exchange rate:
         <span th:text="${#strings.listJoin(summary.leftOut(), ', ')}">Streaming</span>.
       </p>
+    </section>
+
+    <section class="panel" th:unless="${#lists.isEmpty(summary.transfers())}">
+      <p class="eyebrow">
+        Transfers<span
+          th:replace="~{fragments/help-marker :: marker('Money the live templates move between your own accounts, in the direction it moves. The total is the funds moved; it is not part of Net, since a transfer leaves your net worth unchanged.')}"
+        ></span>
+      </p>
+      <table class="recurring recurring-summary">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="num">Per month</th>
+            <th class="num">Per year</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="line : ${summary.transfers()}">
+            <td th:text="${line.label()}">BankAaa-EUR (EUR) → Cash (EUR)</td>
+            <td class="num" th:text="${line.perMonth()}">200,00</td>
+            <td class="num" th:text="${line.perYear()}">2.400,00</td>
+          </tr>
+          <tr class="recurring-summary__net" th:with="line=${summary.transferTotal()}">
+            <td th:text="${line.label()}">Transfers</td>
+            <td class="num" th:text="${line.perMonth()}">200,00</td>
+            <td class="num" th:text="${line.perYear()}">2.400,00</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" th:unless="${#lists.isEmpty(summary.people())}">
+      <p class="eyebrow">
+        People<span
+          th:replace="~{fragments/help-marker :: marker('How the live templates move the debt of each person: positive, they owe you more; negative, you owe them more. An expense a person pays also counts under Expenses; a template between two people shows under both.')}"
+        ></span>
+      </p>
+      <table class="recurring recurring-summary">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="num">Per month</th>
+            <th class="num">Per year</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            th:each="line : ${summary.people()}"
+            th:classappend="${line.depth() == 0} ? 'recurring-summary__total'"
+          >
+            <td class="recurring-summary__label" th:style="|--depth: ${line.depth()}|">
+              <span th:text="${line.label()}">Max (EUR)</span>
+              <span class="recurring-summary__note muted" th:if="${line.note() != null}" th:text="${line.note()}"
+                >you owe Max more</span
+              >
+            </td>
+            <td class="num" th:text="${line.perMonth()}">-86,67</td>
+            <td class="num" th:text="${line.perYear()}">-1.040,00</td>
+          </tr>
+          <tr class="recurring-summary__net" th:with="line=${summary.peopleTotal()}">
+            <td>
+              <span th:text="${line.label()}">People</span>
+              <span class="recurring-summary__note muted" th:if="${line.note() != null}" th:text="${line.note()}"
+                >you owe more</span
+              >
+            </td>
+            <td class="num" th:text="${line.perMonth()}">-86,67</td>
+            <td class="num" th:text="${line.perYear()}">-1.040,00</td>
+          </tr>
+        </tbody>
+      </table>
     </section>
   </main>
 </html>
