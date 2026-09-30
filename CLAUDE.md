@@ -286,6 +286,17 @@ Full detail in `docs/data-model.md`. The traps:
 
 ## 7. Workflow for a change
 
+0. **Discussing is not authorising.** When the owner describes a problem, asks "why", or asks for
+   options or a proposal, answer with analysis and proposals **only — touch no code, docs, or
+   branches**. Implement only after the owner has explicitly accepted a specific proposed solution.
+   "I like option 2" is acceptance of that option; describing a bug, or asking what to do about it,
+   is not. When unsure whether a message is an approval, ask.
+0a. **Document before coding.** Once a solution is accepted, first record the issue as a file under
+   `.scratch/<feature-slug>/issues/` (`docs/agents/issue-tracker.md`): the symptom, the root cause,
+   the accepted solution, and the owner's decisions (e.g. "overwrite an existing rate"). Commit it
+   before, or together with, the code. The owner works in a separate local session that only sees
+   the repo, so a change whose *why* lives solely in this conversation is unexplained to it. Mark the
+   issue `Status: resolved` when done.
 1. **Read** the relevant `docs/` file for any domain rule you are about to touch.
 2. **Write the test first** (the right tier per §6).
 3. **Implement** following the existing patterns in that module.
