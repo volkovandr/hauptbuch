@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.51
-**Date:** 2026-09-28
+**Status:** Draft v0.52
+**Date:** 2026-09-30
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md`, `import.md`, `reporting.md`
@@ -28,6 +28,10 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.52 (2026-09-30):** **Recurring templates complete** (slices a–g, owner-confirmed). The
+  sub-plan `implementation-plan-recurring.md` is deleted; its summary is folded into §3's Recurring
+  templates bullet. Scope change from review: the Recurring cost summary became three tables
+  (Recurring cost with Net = income − expense, Transfers, People), data-model §14.4.
 - **v0.51 (2026-09-28):** **Recurring templates grilled, designed, and sequenced** into the sub-plan
   `implementation-plan-recurring.md` (slices a–g). The
   subscription entity is dropped: a subscription is a recurring template. Pre-registration becomes
@@ -678,24 +682,29 @@ shipped; everything after it is unbuilt.
   (ARCH-04) and is the prerequisite for any non-localhost exposure.
 - **Currency follow-ons:** ECB rate-feed automation (§1.2 — the engine is already multi-currency;
   this only automates rate lookup/proposal).
-- **Recurring templates** (FR-REC, FR-SUB; grilled 2026-09-28). Sequenced in the sub-plan
-  **`implementation-plan-recurring.md`** (slices a–g, the stage-7/9/import/reporting pattern;
-  deleted on completion, summary folded back here). The model and
-  booking rules are ratified in **data-model §14** (rationale: ADR 0002); the register gains the
-  Pending only filter and the shared paperclip/recurring slot (register §2.3/§2.10). Scope:
-  - the `recurring` module: template + line tables, the transaction stamp
-    `(recurring_template_id, occurrence_date)`, the booked-through run (startup, midnight, on save)
-    booking through the dock's `operations` path;
-  - the **recurring page**: template list with per-template schedule-math figures, the Recurring cost
-    summary, and the editor as the **dock in template mode** (no second entry form); the
-    past-occurrences question on create and the keep-pending question on end/delete;
-  - **main page:** "N pending to review" (overdue called out) → register Pending only; end reminders
-    (dismiss switches the reminder off); booking-failure warnings;
-  - `operations` merges/reassignments rewrite template references; deleting an account or category
-    a live template uses is refused.
-  *Module cycle:* `recurring` calls `operations` to book, while `operations` merges must rewrite
-  `recurring`'s references. The proposed resolution, an interface `operations` owns and `recurring`
-  implements, is in the sub-plan's slice f.
+- **Recurring templates** (FR-REC, FR-SUB; grilled 2026-09-28). ✅ **Complete** (owner-confirmed
+  2026-09-30). The model and booking rules are ratified in **data-model §14** (rationale: ADR 0002);
+  the register gained the Pending only filter and the shared paperclip/recurring slot (register
+  §2.3/§2.10). Built in slices:
+  - **a — model and schedule math.** The template, line and tag tables, the transaction stamp
+    `(recurring_template_id, occurrence_date)`, and `Schedule` (month-end clamping, 29 Feb, every-N,
+    end date or "after K").
+  - **b — the recurring page and the editor.** The template list with cadence in words and the next
+    three dates; the editor is the **dock in template mode**, no second entry form.
+  - **c — the booking run.** Per template, locked, through the dock's `operations` path, on startup,
+    at midnight and on save; the past-occurrences question on create; the register's recurring
+    marker.
+  - **d — reviewing pending occurrences.** Register Pending only; Save confirms; the main page's
+    "N pending to review".
+  - **e — editing and ending.** Save replaces future pending rows and rebooks (ADR 0002); the
+    keep-pending question on an earlier end or a delete.
+  - **f — failures and integrity.** A failing template rolls back alone, retries, and warns on the
+    main page and its row; person merges rewrite template references through an interface
+    `operations` owns and `recurring` implements; deleting an account or category a live template
+    uses is refused.
+  - **g — figures and the end reminder.** Per-template schedule-math figures; the Recurring cost,
+    Transfers and People tables (data-model §14.4); the end reminder on the main page.
+
   *Deferred:* forecasting from templates (FR-FC-01), MCP tools, matching occurrences against
   statement lines, price-change reminders.
 - **Planning:** budgets on the category taxonomy (FR-BUD) — and with it the **monthly narrative
