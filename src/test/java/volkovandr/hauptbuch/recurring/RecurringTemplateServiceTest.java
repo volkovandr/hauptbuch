@@ -56,6 +56,7 @@ class RecurringTemplateServiceTest {
   @Mock private TransactionCurrencyResolver transactionCurrencyResolver;
   @Mock private RecurringBookingService bookingService;
   @Mock private RecurringBookingRunner runner;
+  @Mock private RecurringEnteredRate enteredRate;
 
   private RecurringTemplateService service;
 
@@ -72,6 +73,7 @@ class RecurringTemplateServiceTest {
             transactionCurrencyResolver,
             bookingService,
             runner,
+            enteredRate,
             clock);
   }
 
@@ -166,6 +168,7 @@ class RecurringTemplateServiceTest {
     assertThat(line.amount()).isEqualByComparingTo("9.99");
     assertThat(line.note()).isEqualTo("line note");
     assertThat(line.tagIds()).containsExactly(5L, 6L);
+    verify(enteredRate).record(START, split(BANK_ID, "", "9,99"), null);
   }
 
   @Test

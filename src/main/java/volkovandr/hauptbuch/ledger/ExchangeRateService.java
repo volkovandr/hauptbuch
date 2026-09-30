@@ -36,6 +36,9 @@ public class ExchangeRateService {
   /** {@code exchange_rate.source} for a rate implied by a real observed event, not the ECB feed. */
   private static final String OBSERVED_SOURCE = "import";
 
+  /** {@code exchange_rate.source} for a rate the operator entered as the amounts of a transaction. */
+  private static final String ENTERED_SOURCE = "manual";
+
   private final ExchangeRateRepository exchangeRateRepository;
   private final SettingsService settingsService;
 
@@ -93,6 +96,28 @@ public class ExchangeRateService {
         date,
         rate,
         inserted ? "recorded" : "already on file, kept");
+  }
+
+  /**
+   * Record the rate stated by amounts the operator entered: {@code nativeAmount} of {@code
+   * currencyCode} was worth {@code baseAmount} in base on {@code date}. Unlike {@link
+   * #recordObservedRate} it <strong>replaces</strong> a rate already on file for that {@code
+   * (currency_code, date)} — what was just typed is the newest word on that day. A no-op for the
+   * base currency itself, or when either amount is missing or zero (no usable rate).
+   */
+  public void recordEnteredRate(
+      LocalDate date, String currencyCode, BigDecimal nativeAmount, BigDecimal baseAmount) {
+    Optional<String> base = settingsService.baseCurrency();
+    if (base.isEmpty() || base.get().equals(currencyCode)) {
+      return;
+    }
+    ForeignLeg leg = new ForeignLeg(currencyCode, nativeAmount, baseAmount);
+    if (!leg.isUsable()) {
+      return;
+    }
+    BigDecimal rate = baseAmount.abs().divide(nativeAmount.abs(), RATE_SCALE, RoundingMode.HALF_UP);
+    exchangeRateRepository.upsert(new ExchangeRate(null, currencyCode, date, rate, ENTERED_SOURCE));
+    LOG.debug("Entered rate for {} on {}: {}", currencyCode, date, rate);
   }
 
   /**

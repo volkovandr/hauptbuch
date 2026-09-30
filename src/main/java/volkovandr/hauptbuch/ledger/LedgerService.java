@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -61,16 +62,19 @@ public class LedgerService {
   private static final int SINGLE_CURRENCY = 1;
 
   private final SettingsService settingsService;
+  private final ExchangeRateService exchangeRateService;
   private final AccountService accountService;
   private final TransactionRepository transactionRepository;
   private final TagReadRepository tagReadRepository;
 
   LedgerService(
       SettingsService settingsService,
+      ExchangeRateService exchangeRateService,
       AccountService accountService,
       TransactionRepository transactionRepository,
       TagReadRepository tagReadRepository) {
     this.settingsService = settingsService;
+    this.exchangeRateService = exchangeRateService;
     this.accountService = accountService;
     this.transactionRepository = transactionRepository;
     this.tagReadRepository = tagReadRepository;
@@ -102,6 +106,7 @@ public class LedgerService {
                 null,
                 null));
     insertLegs(transactionId, balanced.legs());
+    recordEnteredRates(draft.date(), balanced.legs(), baseCurrency);
     LOG.debug("Transaction recorded: id={}, total={}", transactionId, balanced.debitTotal());
     return transactionId;
   }
@@ -292,6 +297,7 @@ public class LedgerService {
             null));
     transactionRepository.deletePostings(transactionId);
     insertLegs(transactionId, balanced.legs());
+    recordEnteredRates(draft.date(), balanced.legs(), baseCurrency);
     LOG.debug("Transaction edited: id={}, total={}", transactionId, balanced.debitTotal());
   }
 
@@ -435,6 +441,34 @@ public class LedgerService {
       long postingId = transactionRepository.insertPosting(toPosting(transactionId, leg));
       transactionRepository.insertPostingTags(postingId, leg.tagIds());
     }
+  }
+
+  /**
+   * Write back the rates a cross-currency transaction states (data-model §3.7): per non-base
+   * currency, the net base amount over the net native amount of its legs on the transaction's date,
+   * replacing any rate already on file for that day. Nothing for a single-currency transaction,
+   * whose legs carry no base amount.
+   */
+  private void recordEnteredRates(LocalDate date, List<PostingDraft> legs, String baseCurrency) {
+    Map<String, BigDecimal[]> netByCurrency = new LinkedHashMap<>();
+    for (PostingDraft leg : legs) {
+      if (leg.baseAmount() == null) {
+        continue;
+      }
+      String currency = accountService.findById(leg.accountId()).orElseThrow().currencyCode();
+      if (currency.equals(baseCurrency)) {
+        continue;
+      }
+      BigDecimal[] net = netByCurrency.computeIfAbsent(currency, c -> zeroPair());
+      net[0] = net[0].add(leg.amount());
+      net[1] = net[1].add(leg.baseAmount());
+    }
+    netByCurrency.forEach(
+        (currency, net) -> exchangeRateService.recordEnteredRate(date, currency, net[0], net[1]));
+  }
+
+  private static BigDecimal[] zeroPair() {
+    return new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO};
   }
 
   private static Posting toPosting(long transactionId, PostingDraft leg) {

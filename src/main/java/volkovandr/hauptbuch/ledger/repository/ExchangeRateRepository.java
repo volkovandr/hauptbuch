@@ -89,4 +89,26 @@ public class ExchangeRateRepository {
             .update();
     return rows > 0;
   }
+
+  /**
+   * Insert a rate row, replacing the rate and source of one already on file for that {@code
+   * (currency_code, date)}. Used by {@link
+   * volkovandr.hauptbuch.ledger.ExchangeRateService#recordEnteredRate}: a rate the operator just
+   * entered is the newest word on that day.
+   */
+  public void upsert(ExchangeRate rate) {
+    jdbcClient
+        .sql(
+            """
+            insert into exchange_rate (currency_code, date, rate, source)
+            values (:currencyCode, :date, :rate, :source)
+            on conflict (currency_code, date)
+            do update set rate = excluded.rate, source = excluded.source
+            """)
+        .param(CURRENCY_CODE, rate.currencyCode())
+        .param(DATE, rate.date())
+        .param(RATE, rate.rate())
+        .param(SOURCE, rate.source())
+        .update();
+  }
 }
