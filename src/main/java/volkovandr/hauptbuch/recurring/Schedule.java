@@ -12,8 +12,10 @@ import java.util.List;
  *
  * <p>The k-th occurrence is always computed from the start, never from the previous occurrence, so
  * the anchor cannot drift. A monthly schedule repeats on the start date's day-of-month, or on the
- * month's last day where that day does not exist (31 Jan → 28 Feb → 31 Mar). A yearly schedule
- * started on 29 Feb falls back to 28 Feb in non-leap years. There is no business-day shifting.
+ * month's last day where that day does not exist (30 Jan → 28 Feb → 30 Mar); one started on a
+ * month's last day repeats on the last day of every month (30 Sep → 31 Oct → 30 Nov). A yearly
+ * schedule started on 29 Feb falls back to 28 Feb in non-leap years. There is no business-day
+ * shifting.
  *
  * @param startDate the first occurrence
  * @param unit the cadence unit
@@ -111,8 +113,16 @@ public record Schedule(LocalDate startDate, CadenceUnit unit, int every, LocalDa
     return switch (unit) {
       case DAY -> startDate.plusDays(steps);
       case WEEK -> startDate.plusWeeks(steps);
-      case MONTH -> startDate.plusMonths(steps);
+      case MONTH -> monthOccurrence(steps);
       case YEAR -> startDate.plusYears(steps);
     };
+  }
+
+  /** A month step from the start: the target month's last day when the start is its month's. */
+  private LocalDate monthOccurrence(long steps) {
+    LocalDate date = startDate.plusMonths(steps);
+    return startDate.getDayOfMonth() == startDate.lengthOfMonth()
+        ? date.withDayOfMonth(date.lengthOfMonth())
+        : date;
   }
 }

@@ -90,7 +90,7 @@ class RecurringBookingService {
     Set<LocalDate> booked = ledgerService.bookedOccurrenceDates(recurringTemplateId);
     List<LocalDate> due =
         template.schedule().occurrencesBetween(template.bookedThrough(), through).stream()
-            .filter(occurrence -> !booked.contains(occurrence))
+            .filter(occurrence -> !isBooked(template, booked, occurrence))
             .toList();
     if (!due.isEmpty()) {
       bookability.requireBookable(template);
@@ -106,6 +106,24 @@ class RecurringBookingService {
     }
     repository.advanceBookedThrough(recurringTemplateId, through);
     return due.size();
+  }
+
+  /**
+   * Whether the occurrence is already booked. A month-end monthly start used to repeat on the
+   * start's day-of-month (30 Sep → 30 Oct); a month booked that way is not booked again on its last
+   * day (31 Oct), so the old date counts as the occurrence's booking too.
+   */
+  private static boolean isBooked(
+      RecurringTemplate template, Set<LocalDate> booked, LocalDate occurrence) {
+    if (booked.contains(occurrence)) {
+      return true;
+    }
+    LocalDate start = template.startDate();
+    if (!"month".equals(template.cadenceUnit()) || start.getDayOfMonth() != start.lengthOfMonth()) {
+      return false;
+    }
+    int oldDay = Math.min(start.getDayOfMonth(), occurrence.lengthOfMonth());
+    return booked.contains(occurrence.withDayOfMonth(oldDay));
   }
 
   /**

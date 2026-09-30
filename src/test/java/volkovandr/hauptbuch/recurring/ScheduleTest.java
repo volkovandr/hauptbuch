@@ -89,6 +89,76 @@ class ScheduleTest {
   }
 
   @Test
+  void monthlyFromA30DayMonthEndSticksToMonthEnd() {
+    Schedule monthly = open(date(2026, 9, 30), CadenceUnit.MONTH, 1);
+
+    assertThat(monthly.nextOccurrences(date(2026, 9, 29), 5))
+        .containsExactly(
+            date(2026, 9, 30),
+            date(2026, 10, 31),
+            date(2026, 11, 30),
+            date(2026, 12, 31),
+            date(2027, 1, 31));
+  }
+
+  @Test
+  void monthlyFromNonLeapFebruaryEndSticksToMonthEnd() {
+    Schedule monthly = open(date(2026, 2, 28), CadenceUnit.MONTH, 1);
+
+    assertThat(monthly.nextOccurrences(date(2026, 2, 27), 4))
+        .containsExactly(
+            date(2026, 2, 28), date(2026, 3, 31), date(2026, 4, 30), date(2026, 5, 31));
+  }
+
+  @Test
+  void monthlyFromLeapFebruaryEndSticksToMonthEnd() {
+    Schedule monthly = open(date(2028, 2, 29), CadenceUnit.MONTH, 1);
+
+    assertThat(monthly.nextOccurrences(date(2028, 2, 29), 2))
+        .containsExactly(date(2028, 3, 31), date(2028, 4, 30));
+  }
+
+  @Test
+  void monthEndStartReachesFebruaryOnItsLastDay() {
+    Schedule monthly = open(date(2026, 9, 30), CadenceUnit.MONTH, 1);
+
+    assertThat(monthly.occurrencesBetween(date(2027, 1, 31), date(2027, 3, 31)))
+        .containsExactly(date(2027, 2, 28), date(2027, 3, 31));
+  }
+
+  @Test
+  void everyTwoAndThreeMonthsFromMonthEndStartStickToMonthEnd() {
+    assertThat(open(date(2026, 9, 30), CadenceUnit.MONTH, 2).nextOccurrences(date(2026, 9, 30), 3))
+        .containsExactly(date(2026, 11, 30), date(2027, 1, 31), date(2027, 3, 31));
+    assertThat(
+            open(date(2026, 11, 30), CadenceUnit.MONTH, 3).nextOccurrences(date(2026, 11, 30), 3))
+        .containsExactly(date(2027, 2, 28), date(2027, 5, 31), date(2027, 8, 31));
+  }
+
+  @Test
+  void endDateAfterCountsMonthEndOccurrences() {
+    assertThat(Schedule.endDateAfter(date(2026, 9, 30), CadenceUnit.MONTH, 1, 2))
+        .isEqualTo(date(2026, 10, 31));
+  }
+
+  @Test
+  void monthlyFrom29thOfJanuaryIsNotMonthEnd() {
+    Schedule monthly = open(date(2026, 1, 29), CadenceUnit.MONTH, 1);
+
+    assertThat(monthly.nextOccurrences(date(2026, 1, 29), 2))
+        .containsExactly(date(2026, 2, 28), date(2026, 3, 29));
+  }
+
+  @Test
+  void yearlyFromMonthEndStartKeepsItsDay() {
+    Schedule yearly = open(date(2026, 9, 30), CadenceUnit.YEAR, 1);
+
+    assertThat(yearly.nextOccurrences(date(2026, 9, 30), 1)).containsExactly(date(2027, 9, 30));
+    assertThat(open(date(2026, 2, 28), CadenceUnit.YEAR, 1).nextOccurrences(date(2026, 2, 28), 2))
+        .containsExactly(date(2027, 2, 28), date(2028, 2, 28));
+  }
+
+  @Test
   void everyTwoMonthsOnThe31stClampsEachTime() {
     Schedule schedule = open(date(2026, 8, 31), CadenceUnit.MONTH, 2);
 
