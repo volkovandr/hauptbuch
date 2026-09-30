@@ -361,6 +361,11 @@ create table exchange_rate (
   Monthly ECB rows and occasional manual rows coexist naturally. Manual entry (e.g. "use this rate
   from now on") inserts a `source='manual'` row valid from its date forward until superseded.
   Pivot CHF→USD through base (CHF→base→USD).
+- **Rates are written back from what the operator enters.** Recording or editing a cross-currency
+  transaction upserts, per non-base currency, the net base over the net native amount of its legs
+  as a `source='manual'` row on the transaction's date, **replacing** any rate already on file for
+  that day (owner decision 2026-09-30). The importer's observed-rate write-back
+  (`source='import'`) stays insert-if-absent.
 
 ### 3.8 `settings`  *(single-row root entity)*
 
@@ -1179,7 +1184,8 @@ entry is a one-line split whose line carries the header tags. That line reproduc
 person-funded transfer into an account in another currency cannot be a template (owner decision
 2026-09-28). A cross-currency entry's header totals are **not stored**: the line amounts stay fixed
 in the spending currency, and each booking proposes the funding and base totals from the latest
-rate on or before the occurrence date. The operator corrects a pending occurrence to the actual
+rate on or before the occurrence date. Saving a template does record the rate its *typed* totals
+state, against the start date, so the first booking finds it. The operator corrects a pending occurrence to the actual
 charge, so the next occurrence proposes from a fresher rate than the day the template was created
 (owner decision 2026-09-28).
 

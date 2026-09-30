@@ -46,6 +46,7 @@ class LedgerServiceTest {
   private static final long FOOD_PARENT = 99L;
 
   @Mock private SettingsService settingsService;
+  @Mock private ExchangeRateService exchangeRateService;
   @Mock private AccountService accountService;
   @Mock private TransactionRepository transactionRepository;
   @Mock private TagReadRepository tagReadRepository;
@@ -56,7 +57,11 @@ class LedgerServiceTest {
   void setUp() {
     ledgerService =
         new LedgerService(
-            settingsService, accountService, transactionRepository, tagReadRepository);
+            settingsService,
+            exchangeRateService,
+            accountService,
+            transactionRepository,
+            tagReadRepository);
   }
 
   private void stubBaseCurrency(String code) {
@@ -258,6 +263,55 @@ class LedgerServiceTest {
     // Exactly the two submitted legs — no FX gain/loss leg inserted.
     verify(transactionRepository, times(2)).insertPosting(any());
     verify(accountService, never()).findLeafUnderParentNamed(any(), any());
+  }
+
+  @Test
+  void recordsTheRateAStatedCrossCurrencyTransactionImplies() {
+    stubBaseCurrency(EUR);
+    stubAccount(CARD_CHF, CHF);
+    stubAccount(CASH_EUR, EUR);
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+    when(transactionRepository.insertTransaction(any())).thenReturn(601L);
+
+    ledgerService.recordTransaction(
+        TransactionDraft.confirmed(
+            LocalDate.of(2026, 6, 1),
+            null,
+            "transfer",
+            List.of(
+                PostingDraft.ofCrossCurrency(
+                    CARD_CHF, new BigDecimal("-100.00"), new BigDecimal("-95.00")),
+                PostingDraft.ofCrossCurrency(
+                    CASH_EUR, new BigDecimal(NINETY_FIVE), new BigDecimal(NINETY_FIVE)))));
+
+    // Only the foreign leg states a rate; the base-currency leg is skipped.
+    verify(exchangeRateService)
+        .recordEnteredRate(
+            LocalDate.of(2026, 6, 1),
+            CHF,
+            new BigDecimal("-100.00"),
+            new BigDecimal("-95.00"));
+    verify(exchangeRateService, times(1)).recordEnteredRate(any(), any(), any(), any());
+  }
+
+  @Test
+  void recordsNoRateForASingleCurrencyTransaction() {
+    stubBaseCurrency(EUR);
+    stubAccount(CASH_EUR, EUR);
+    stubAccount(FOOD_EUR, EUR);
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+    when(transactionRepository.insertTransaction(any())).thenReturn(602L);
+
+    ledgerService.recordTransaction(
+        TransactionDraft.confirmed(
+            LocalDate.of(2026, 6, 1),
+            null,
+            "coffee",
+            List.of(
+                PostingDraft.of(CASH_EUR, new BigDecimal(MINUS_5)),
+                PostingDraft.of(FOOD_EUR, new BigDecimal("5.00")))));
+
+    verify(exchangeRateService, never()).recordEnteredRate(any(), any(), any(), any());
   }
 
   @Test

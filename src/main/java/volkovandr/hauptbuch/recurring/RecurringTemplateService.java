@@ -43,6 +43,7 @@ class RecurringTemplateService {
   private final TransactionCurrencyResolver transactionCurrencyResolver;
   private final RecurringBookingService bookingService;
   private final RecurringBookingRunner runner;
+  private final RecurringEnteredRate enteredRate;
   private final Clock clock;
 
   RecurringTemplateService(
@@ -54,6 +55,7 @@ class RecurringTemplateService {
       TransactionCurrencyResolver transactionCurrencyResolver,
       RecurringBookingService bookingService,
       RecurringBookingRunner runner,
+      RecurringEnteredRate enteredRate,
       Clock clock) {
     this.repository = repository;
     this.dockSplitService = dockSplitService;
@@ -63,6 +65,7 @@ class RecurringTemplateService {
     this.transactionCurrencyResolver = transactionCurrencyResolver;
     this.bookingService = bookingService;
     this.runner = runner;
+    this.enteredRate = enteredRate;
     this.clock = clock;
   }
 
@@ -131,6 +134,9 @@ class RecurringTemplateService {
     // and logs no "created" line for rows it then rolls back. A refused save rolls them back too.
     RecurringTemplateDraft draft = withEntry(unresolved, split, lines, spending);
     dockSplitService.validate(entryOf(split, lines, spending));
+    // The dry run keeps nothing, so the rate the typed totals state is recorded for real here, where
+    // the occurrences' proposals will find it.
+    enteredRate.record(draft.startDate(), split, spending);
 
     Long id = schedule.recurringTemplateId();
     if (id == null) {

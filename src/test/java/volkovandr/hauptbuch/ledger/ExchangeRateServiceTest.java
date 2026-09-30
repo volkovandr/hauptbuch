@@ -109,4 +109,48 @@ class ExchangeRateServiceTest {
     verifyNoInteractions(settingsService);
     verify(exchangeRateRepository, never()).insertIfAbsent(any());
   }
+
+  @Test
+  void recordsAnEnteredRateReplacingOneOnFile() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.of("EUR"));
+
+    service().recordEnteredRate(DATE, "USD", new BigDecimal("10.00"), new BigDecimal("9.00"));
+
+    ArgumentCaptor<ExchangeRate> captor = ArgumentCaptor.forClass(ExchangeRate.class);
+    verify(exchangeRateRepository).upsert(captor.capture());
+    assertThat(captor.getValue().currencyCode()).isEqualTo("USD");
+    assertThat(captor.getValue().date()).isEqualTo(DATE);
+    assertThat(captor.getValue().rate()).isEqualByComparingTo("0.9");
+    assertThat(captor.getValue().source()).isEqualTo("manual");
+  }
+
+  @Test
+  void anEnteredRateIsTheMagnitudeRatioWhateverTheSigns() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.of("EUR"));
+
+    service().recordEnteredRate(DATE, "USD", new BigDecimal("-10.00"), new BigDecimal("-9.00"));
+
+    ArgumentCaptor<ExchangeRate> captor = ArgumentCaptor.forClass(ExchangeRate.class);
+    verify(exchangeRateRepository).upsert(captor.capture());
+    assertThat(captor.getValue().rate()).isEqualByComparingTo("0.9");
+  }
+
+  @Test
+  void anEnteredRateForTheBaseCurrencyIsIgnored() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.of("EUR"));
+
+    service().recordEnteredRate(DATE, "EUR", new BigDecimal("10.00"), new BigDecimal("10.00"));
+
+    verify(exchangeRateRepository, never()).upsert(any());
+  }
+
+  @Test
+  void anEnteredRateWithAMissingOrZeroAmountIsIgnored() {
+    when(settingsService.baseCurrency()).thenReturn(Optional.of("EUR"));
+
+    service().recordEnteredRate(DATE, "USD", null, new BigDecimal("9.00"));
+    service().recordEnteredRate(DATE, "USD", new BigDecimal("10.00"), BigDecimal.ZERO);
+
+    verify(exchangeRateRepository, never()).upsert(any());
+  }
 }

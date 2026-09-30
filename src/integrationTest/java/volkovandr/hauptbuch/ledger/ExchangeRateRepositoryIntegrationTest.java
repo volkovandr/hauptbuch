@@ -54,4 +54,28 @@ class ExchangeRateRepositoryIntegrationTest {
     assertThat(exchangeRateRepository.rateAsOf(CHF, LocalDate.of(2026, 6, 6)).orElseThrow())
         .isEqualByComparingTo("0.90");
   }
+
+  @Test
+  void upsertReplacesTheRateAndSourceOfAnExistingRowForThatDay() {
+    exchangeRateRepository.insertIfAbsent(
+        new ExchangeRate(
+            null, CHF, LocalDate.of(2026, 7, 7), new BigDecimal("0.90000000"), "ecb"));
+
+    exchangeRateRepository.upsert(
+        new ExchangeRate(
+            null, CHF, LocalDate.of(2026, 7, 7), new BigDecimal("0.95000000"), "manual"));
+
+    assertThat(exchangeRateRepository.rateAsOf(CHF, LocalDate.of(2026, 7, 7)).orElseThrow())
+        .isEqualByComparingTo("0.95");
+  }
+
+  @Test
+  void upsertInsertsWhenNothingIsOnFileForThatDay() {
+    exchangeRateRepository.upsert(
+        new ExchangeRate(
+            null, CHF, LocalDate.of(2026, 8, 8), new BigDecimal("0.91000000"), "manual"));
+
+    assertThat(exchangeRateRepository.rateAsOf(CHF, LocalDate.of(2026, 8, 8)).orElseThrow())
+        .isEqualByComparingTo("0.91");
+  }
 }
