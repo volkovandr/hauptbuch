@@ -1159,8 +1159,10 @@ the recurring page.
   unchanged. There is no private booking path.
 - **Schedule.** Every N days / weeks / months / years from `start_date`. Days and weeks step by
   N or 7N days. Monthly repeats on the start date's **day-of-month**, or on the month's last day
-  where that day does not exist; the anchor never drifts (31 Jan → 28 Feb → 31 Mar). Yearly
-  repeats on the start date's day and month, and a 29 Feb start falls back to 28 Feb. No
+  where that day does not exist; the anchor never drifts (30 Jan → 28 Feb → 30 Mar). A start on a
+  month's **last day** repeats on the last day of every month (30 Sep → 31 Oct → 30 Nov). Yearly
+  repeats on the start date's day and month (no month-end rule), and a 29 Feb start falls back to
+  28 Feb. No
   business-day shifting.
 - **End.** None, or `end_date`. "After K occurrences" is a form convenience that stores the K-th
   occurrence's date.

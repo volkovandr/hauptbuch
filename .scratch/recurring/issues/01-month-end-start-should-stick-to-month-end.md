@@ -1,6 +1,6 @@
 # A monthly template started on a month's last day should stay on the last day
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Severity: medium
 Area: Recurring — `Schedule.occurrence` (`Schedule.java`), data-model §14.1

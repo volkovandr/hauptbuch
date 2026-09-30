@@ -167,6 +167,36 @@ class RecurringBookingServiceTest {
   }
 
   @Test
+  void monthAlreadyBookedOnTheOldDayIsNotBookedAgainOnTheMonthEnd() {
+    // A 30 Sep monthly template booked 30 Oct before month-end starts stuck to the month's last
+    // day; the cursor sits on 30 Oct, and the 31 Oct occurrence must not book October twice.
+    LocalDate today = LocalDate.of(2026, 10, 30);
+    LocalDate start = LocalDate.of(2026, 9, 30);
+    locks(template(start, "month", 1, null, 1, today));
+    when(ledgerService.bookedOccurrenceDates(TEMPLATE_ID))
+        .thenReturn(Map.of(start, 1, LocalDate.of(2026, 10, 30), 2).keySet());
+
+    int count = serviceOn(today).run(TEMPLATE_ID);
+
+    assertThat(count).isZero();
+    verifyNoInteractions(dockSplitService);
+    verify(repository).advanceBookedThrough(TEMPLATE_ID, today.plusDays(1));
+  }
+
+  @Test
+  void monthEndOccurrenceIsBookedWhenTheMonthHoldsAnUnrelatedDate() {
+    LocalDate today = LocalDate.of(2026, 10, 31);
+    locks(template(LocalDate.of(2026, 9, 30), "month", 1, null, 0, LocalDate.of(2026, 10, 30)));
+    when(ledgerService.bookedOccurrenceDates(TEMPLATE_ID))
+        .thenReturn(Map.of(LocalDate.of(2026, 10, 15), 1).keySet());
+    List<LocalDate> booked = booksEachOccurrence();
+
+    serviceOn(today).run(TEMPLATE_ID);
+
+    assertThat(booked).containsExactly(today);
+  }
+
+  @Test
   void windowWithNoOccurrenceStillAdvancesTheCursor() {
     LocalDate today = LocalDate.of(2026, 2, 10);
     locks(template(JAN_31, "month", 1, null, 0, LocalDate.of(2026, 2, 5)));
