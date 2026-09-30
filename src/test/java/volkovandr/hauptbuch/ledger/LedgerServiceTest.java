@@ -266,7 +266,7 @@ class LedgerServiceTest {
   }
 
   @Test
-  void recordsTheRateAStatedCrossCurrencyTransactionImplies() {
+  void recordsTheRateStatedByCrossCurrencyTransaction() {
     stubBaseCurrency(EUR);
     stubAccount(CARD_CHF, CHF);
     stubAccount(CASH_EUR, EUR);
@@ -287,15 +287,12 @@ class LedgerServiceTest {
     // Only the foreign leg states a rate; the base-currency leg is skipped.
     verify(exchangeRateService)
         .recordEnteredRate(
-            LocalDate.of(2026, 6, 1),
-            CHF,
-            new BigDecimal("-100.00"),
-            new BigDecimal("-95.00"));
+            LocalDate.of(2026, 6, 1), CHF, new BigDecimal("-100.00"), new BigDecimal("-95.00"));
     verify(exchangeRateService, times(1)).recordEnteredRate(any(), any(), any(), any());
   }
 
   @Test
-  void recordsNoRateForASingleCurrencyTransaction() {
+  void recordsNoRateForSingleCurrencyTransaction() {
     stubBaseCurrency(EUR);
     stubAccount(CASH_EUR, EUR);
     stubAccount(FOOD_EUR, EUR);

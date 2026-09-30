@@ -36,7 +36,9 @@ public class ExchangeRateService {
   /** {@code exchange_rate.source} for a rate implied by a real observed event, not the ECB feed. */
   private static final String OBSERVED_SOURCE = "import";
 
-  /** {@code exchange_rate.source} for a rate the operator entered as the amounts of a transaction. */
+  /**
+   * {@code exchange_rate.source} for a rate the operator entered as the amounts of a transaction.
+   */
   private static final String ENTERED_SOURCE = "manual";
 
   private final ExchangeRateRepository exchangeRateRepository;

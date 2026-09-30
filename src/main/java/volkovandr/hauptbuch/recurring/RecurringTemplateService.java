@@ -31,6 +31,7 @@ import volkovandr.hauptbuch.recurring.repository.RecurringTemplateRepository;
  * new settings.
  */
 @Service
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 class RecurringTemplateService {
 
   private static final Logger LOG = LoggerFactory.getLogger(RecurringTemplateService.class);
@@ -46,6 +47,9 @@ class RecurringTemplateService {
   private final RecurringEnteredRate enteredRate;
   private final Clock clock;
 
+  // ExcessiveParameterList: a Spring-injected constructor; each collaborator is a distinct step of
+  // the save
+  @SuppressWarnings("PMD.ExcessiveParameterList")
   RecurringTemplateService(
       RecurringTemplateRepository repository,
       DockSplitService dockSplitService,
@@ -134,7 +138,8 @@ class RecurringTemplateService {
     // and logs no "created" line for rows it then rolls back. A refused save rolls them back too.
     RecurringTemplateDraft draft = withEntry(unresolved, split, lines, spending);
     dockSplitService.validate(entryOf(split, lines, spending));
-    // The dry run keeps nothing, so the rate the typed totals state is recorded for real here, where
+    // The dry run keeps nothing, so the rate the typed totals state is recorded for real here,
+    // where
     // the occurrences' proposals will find it.
     enteredRate.record(draft.startDate(), split, spending);
 

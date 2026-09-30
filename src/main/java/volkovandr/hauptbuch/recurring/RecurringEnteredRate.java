@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.recurring;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import org.springframework.stereotype.Component;
+import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.ExchangeRateService;
 import volkovandr.hauptbuch.ledger.SettingsService;
@@ -42,11 +43,14 @@ class RecurringEnteredRate {
       return;
     }
     String funding =
-        accountService.findById(split.accountId()).map(a -> a.currencyCode()).orElse(null);
+        accountService.findById(split.accountId()).map(Account::currencyCode).orElse(null);
     String base = settingsService.baseCurrency().orElse(null);
     BigDecimal spendingTotal = magnitude(split.total());
     BigDecimal fundingTotal = magnitude(split.fundingTotal());
-    if (funding == null || base == null || funding.equals(spendingCurrency) || fundingTotal == null) {
+    if (funding == null
+        || base == null
+        || funding.equals(spendingCurrency)
+        || fundingTotal == null) {
       return;
     }
     if (funding.equals(base)) {

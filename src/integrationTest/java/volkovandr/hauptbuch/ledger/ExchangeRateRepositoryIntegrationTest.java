@@ -58,8 +58,7 @@ class ExchangeRateRepositoryIntegrationTest {
   @Test
   void upsertReplacesTheRateAndSourceOfAnExistingRowForThatDay() {
     exchangeRateRepository.insertIfAbsent(
-        new ExchangeRate(
-            null, CHF, LocalDate.of(2026, 7, 7), new BigDecimal("0.90000000"), "ecb"));
+        new ExchangeRate(null, CHF, LocalDate.of(2026, 7, 7), new BigDecimal("0.90000000"), "ecb"));
 
     exchangeRateRepository.upsert(
         new ExchangeRate(
