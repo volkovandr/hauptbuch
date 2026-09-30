@@ -8,7 +8,7 @@ package volkovandr.hauptbuch.recurring;
  *
  * @param perMonth the amount per month
  * @param perYear the amount per year
- * @param already every occurrence from the start through today, booked or not; null without an end
+ * @param already every occurrence from the start through today, booked or not
  * @param yetToPay the occurrences after today through the end date; null without an end
  * @param total already plus yet to pay; null without an end
  */

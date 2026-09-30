@@ -23,14 +23,16 @@ import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.accounts.AccountDraft;
 import volkovandr.hauptbuch.accounts.AccountService;
+import volkovandr.hauptbuch.debts.PersonService;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.recurring.repository.RecurringTemplateRepository;
 
 /**
- * Integration tier (CLAUDE.md §6): the recurring page's figures and Recurring cost summary, and the
- * end reminder (data-model §14.4, recurring sub-plan slice g), through MockMvc against real
- * Postgres. The unit tests own the arithmetic; this proves the screens render it, a mixed-currency
- * set included, and that Dismiss unticks the reminder and removes the main-page line.
+ * Integration tier (CLAUDE.md §6): the recurring page's figures, its Recurring cost, Transfers and
+ * People tables, and the end reminder (data-model §14.4, recurring sub-plan slice g), through
+ * MockMvc against real Postgres. The unit tests own the arithmetic; this proves the screens render
+ * it, a mixed-currency set included, and that Dismiss unticks the reminder and removes the
+ * main-page line.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -46,6 +48,7 @@ class RecurringCostScreenIntegrationTest {
   @Autowired SettingsService settingsService;
   @Autowired RecurringTemplateRepository repository;
   @Autowired JdbcClient jdbcClient;
+  @Autowired PersonService personService;
 
   private long bankId;
   private long chfBankId;
@@ -117,9 +120,67 @@ class RecurringCostScreenIntegrationTest {
         .andExpect(content().string(containsString("Recurring cost")))
         // Media: 11,00 + 30,00 a month; income 3.000,00; net 2.959,00.
         .andExpect(content().string(containsString("41,00")))
+        .andExpect(content().string(containsString("--depth: 1")))
         .andExpect(content().string(containsString("3.000,00")))
         .andExpect(content().string(containsString("2.959,00")))
-        .andExpect(content().string(containsString("Schedule math, not bookkeeping")));
+        .andExpect(content().string(containsString("Schedule math, not bookkeeping")))
+        // No transfer and no person: neither table shows.
+        .andExpect(content().string(not(containsString("between your own accounts"))))
+        .andExpect(content().string(not(containsString("the debt of each person"))));
+  }
+
+  @Test
+  void transfersAndPeopleShowInTablesOfTheirOwn() throws Exception {
+    long cashId = open("Cash", EUR);
+    long maxId = personService.create("Max").personId();
+    insertTemplate(
+        "Withdrawal",
+        bankId,
+        null,
+        new RecurringTemplateLineDraft(
+            cashId, "TO", null, null, new BigDecimal("200"), null, List.of()));
+    insertTemplate(
+        "Pocket money",
+        null,
+        maxId,
+        new RecurringTemplateLineDraft(
+            mediaId, null, null, null, new BigDecimal("20"), null, List.of()));
+
+    mockMvc
+        .perform(get("/recurring"))
+        .andExpect(content().string(containsString("between your own accounts")))
+        .andExpect(content().string(containsString("→ Cash")))
+        .andExpect(content().string(containsString("200,00")))
+        .andExpect(content().string(containsString("the debt of each person")))
+        .andExpect(content().string(containsString("Max (EUR)")))
+        .andExpect(content().string(containsString("you owe Max more")))
+        .andExpect(content().string(containsString("-240,00")));
+  }
+
+  /** A monthly template with one line, funded by an account or by a person (BY). */
+  private void insertTemplate(
+      String name, Long accountId, Long personId, RecurringTemplateLineDraft line) {
+    repository.insert(
+        new RecurringTemplateDraft(
+            name,
+            TODAY.plusDays(1),
+            "month",
+            1,
+            null,
+            0,
+            "auto",
+            false,
+            null,
+            null,
+            accountId,
+            personId,
+            personId == null ? null : "BY",
+            null,
+            null,
+            null,
+            List.of(),
+            List.of(line)),
+        TODAY);
   }
 
   @Test
