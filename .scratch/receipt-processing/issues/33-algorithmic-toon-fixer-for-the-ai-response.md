@@ -1,6 +1,6 @@
 # Offer a deterministic "Fix TOON" button next to the edit-and-re-parse textarea
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: medium
 Area: Receipts — processing screen (`receipt-process.html`, `ReceiptProcessingController`) × a new
@@ -69,19 +69,19 @@ multi-tag cell. Count commas outside quoted cells from the right, not raw commas
 
 ## Acceptance criteria
 
-- [ ] A pure, unit-testable repair class in `receipts` (no Spring beans needed beyond wiring) that
+- [x] A pure, unit-testable repair class in `receipts` (no Spring beans needed beyond wiring) that
       returns the repaired text and a list of change descriptions.
-- [ ] Rules 1–4 implemented; the two "flag" cases produce warnings and leave the text unchanged.
-- [ ] The example shape above (one row with an unquoted comma in the name, rest well-formed, count
+- [x] Rules 1–4 implemented; the two "flag" cases produce warnings and leave the text unchanged.
+- [x] The example shape above (one row with an unquoted comma in the name, rest well-formed, count
       correct) repairs to a body `ToonReceiptDecoder` decodes; an already-correct body comes back
       unchanged with "Nothing to fix".
-- [ ] A new endpoint (e.g. `POST /receipts/{id}/fix-toon`) returns the repaired text for the
+- [x] A new endpoint (e.g. `POST /receipts/{id}/fix-toon`) returns the repaired text for the
       textarea and the change list, and **persists nothing** — a controller acceptance test
       asserts the receipt row is unchanged after the call.
-- [ ] The button appears next to the submit on both textareas (`failed` Details block and the
+- [x] The button appears next to the submit on both textareas (`failed` Details block and the
       `processed` re-seed block) and works without bespoke JS (htmx swap, per CLAUDE.md §1.6).
-- [ ] No call to any AI provider, no new setting.
-- [ ] `./gradlew check` green.
+- [x] No call to any AI provider, no new setting.
+- [x] `./gradlew check` green.
 
 ## Tests (per CLAUDE.md §6)
 
