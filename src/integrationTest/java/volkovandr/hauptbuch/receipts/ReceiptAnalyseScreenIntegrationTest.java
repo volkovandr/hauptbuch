@@ -261,6 +261,58 @@ class ReceiptAnalyseScreenIntegrationTest {
     verify(receiptAnalyser).reparse(id, "tags: Trips:France-2026");
   }
 
+  /** Issue 33: the fix button repairs the posted text, shows what changed, and saves nothing. */
+  @Test
+  void fixToonRendersTheRepairedTextAndPersistsNothing() throws Exception {
+    long id = seed("failed");
+    String stored = "merchant:\n  name: ShopAaa\nitems[9]{name,quantity}:\n  Item, One,2";
+    storeRaw(id, stored);
+
+    mockMvc
+        .perform(
+            post("/receipts/" + id + "/fix-toon")
+                .param("rawText", "items[9]{name,quantity}:\n  Item, One,2"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(Matchers.containsString("&quot;Item, One&quot;,2")))
+        .andExpect(content().string(Matchers.containsString("row 1: quoted the name")))
+        .andExpect(content().string(Matchers.containsString("items[9] → items[1]")))
+        .andExpect(content().string(Matchers.containsString("Parse my edited text")));
+
+    org.assertj.core.api.Assertions.assertThat(
+            jdbcClient
+                .sql("select parse_raw from receipt where receipt_id = :id")
+                .param("id", id)
+                .query(String.class)
+                .single())
+        .isEqualTo(stored);
+  }
+
+  @Test
+  void fixToonReportsNothingToFixOnCleanBody() throws Exception {
+    long id = seed("processed");
+
+    mockMvc
+        .perform(
+            post("/receipts/" + id + "/fix-toon")
+                .param("rawText", "items[1]{name,quantity}:\n  Item One,2"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(Matchers.containsString("Nothing to fix")))
+        .andExpect(content().string(Matchers.containsString("Re-seed from this text")));
+  }
+
+  @Test
+  void failedAndProcessedScreensOfferFixButton() throws Exception {
+    long failed = seed("failed");
+    long processed = seed("processed");
+
+    for (long id : new long[] {failed, processed}) {
+      mockMvc
+          .perform(get("/receipts/" + id))
+          .andExpect(content().string(Matchers.containsString("Fix TOON automatically")))
+          .andExpect(content().string(Matchers.containsString("/receipts/" + id + "/fix-toon")));
+    }
+  }
+
   private void storeRaw(long receiptId, String raw) {
     jdbcClient
         .sql("update receipt set parse_raw = :raw where receipt_id = :id")

@@ -49,6 +49,7 @@ class ReceiptProcessingController {
 
   private final ReceiptService receiptService;
   private final ReceiptAnalyser receiptAnalyser;
+  private final ToonRepair toonRepair;
   private final ReceiptAnalysisService receiptAnalysisService;
   private final ReceiptEditorService receiptEditorService;
   private final ReceiptCommitService receiptCommitService;
@@ -58,6 +59,7 @@ class ReceiptProcessingController {
   ReceiptProcessingController(
       ReceiptService receiptService,
       ReceiptAnalyser receiptAnalyser,
+      ToonRepair toonRepair,
       ReceiptAnalysisService receiptAnalysisService,
       ReceiptEditorService receiptEditorService,
       ReceiptCommitService receiptCommitService,
@@ -65,6 +67,7 @@ class ReceiptProcessingController {
       CurrencyService currencyService) {
     this.receiptService = receiptService;
     this.receiptAnalyser = receiptAnalyser;
+    this.toonRepair = toonRepair;
     this.receiptAnalysisService = receiptAnalysisService;
     this.receiptEditorService = receiptEditorService;
     this.receiptCommitService = receiptCommitService;
@@ -216,6 +219,39 @@ class ReceiptProcessingController {
       RedirectAttributes redirectAttributes) {
     receiptAnalyser.reparse(id, rawText);
     return redirectToScreen(id, state, range, redirectAttributes);
+  }
+
+  /**
+   * The "Fix TOON automatically" button (issue 33): repair the textarea's current contents and swap
+   * the editor fragment back with the repaired text and what changed. Read-only — nothing is saved;
+   * only the submit beside it ({@link #reparse}) persists, after the operator has reviewed.
+   */
+  @PostMapping("/receipts/{id}/fix-toon")
+  String fixToon(
+      @PathVariable long id,
+      @RequestParam(required = false, defaultValue = "") String rawText,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      Model model) {
+    return receiptService
+        .findById(id)
+        .map(
+            receipt -> {
+              ToonRepair.Result result = toonRepair.repair(rawText);
+              model.addAttribute(RECEIPT, receipt);
+              model.addAttribute(STATE_FILTER, state);
+              model.addAttribute(RANGE_FILTER, range);
+              model.addAttribute("toonText", result.text());
+              model.addAttribute("toonChanges", result.changes());
+              model.addAttribute("toonWarnings", result.warnings());
+              model.addAttribute("toonFixed", true);
+              return VIEW
+                  + " :: toonEditor(receipt=${receipt}, text=${toonText},"
+                  + " submitLabel=${receipt.state() == 'failed' ? 'Parse my edited text'"
+                  + " : 'Re-seed from this text'}, fixed=${toonFixed},"
+                  + " changes=${toonChanges}, warnings=${toonWarnings})";
+            })
+        .orElse(REDIRECT_REGISTER);
   }
 
   /**
