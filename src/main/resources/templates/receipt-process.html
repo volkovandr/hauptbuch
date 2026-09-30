@@ -252,17 +252,9 @@
             The parser's returned text is below. Fix it (for example, double-quote a value that
             contains a comma) and re-parse your edited text — no new request is sent to the model.
           </p>
-          <form method="post" th:action="@{/receipts/{id}/reparse(id=${receipt.receiptId()})}">
-            <input type="hidden" name="state" th:value="${stateFilter}" />
-            <input type="hidden" name="range" th:value="${rangeFilter}" />
-            <textarea
-              name="rawText"
-              rows="40"
-              class="input ai-prompt-preview"
-              th:text="${receipt.parseRaw()}"
-            ></textarea>
-            <p class="actions"><button type="submit" class="btn">Parse my edited text</button></p>
-          </form>
+          <th:block
+            th:replace="~{:: toonEditor(${receipt}, ${receipt.parseRaw()}, 'Parse my edited text', false, ${null}, ${null})}"
+          ></th:block>
         </details>
       </div>
     </section>
@@ -444,18 +436,47 @@
         them. If your edited text cannot be decoded, the receipt moves to Failed — keeping the text,
         so you can fix it there.
       </p>
-      <form method="post" th:action="@{/receipts/{id}/reparse(id=${receipt.receiptId()})}">
-        <input type="hidden" name="state" th:value="${stateFilter}" />
-        <input type="hidden" name="range" th:value="${rangeFilter}" />
-        <textarea
-          name="rawText"
-          rows="40"
-          class="input ai-prompt-preview"
-          th:text="${receipt.parseRaw()}"
-        ></textarea>
-        <p class="actions"><button type="submit" class="btn">Re-seed from this text</button></p>
-      </form>
+      <th:block
+        th:replace="~{:: toonEditor(${receipt}, ${receipt.parseRaw()}, 'Re-seed from this text', false, ${null}, ${null})}"
+      ></th:block>
     </details>
+  </div>
+
+  <!-- ── The AI-response editor (issue 33): the textarea + its two buttons. "Fix TOON automatically"
+       posts the textarea as it stands and swaps this whole block back with the repaired text and the
+       change list; it saves nothing. Only the submit persists (reparse). ── -->
+  <div th:fragment="toonEditor(receipt, text, submitLabel, fixed, changes, warnings)" class="toon-editor">
+    <form method="post" th:action="@{/receipts/{id}/reparse(id=${receipt.receiptId()})}">
+      <input type="hidden" name="state" th:value="${stateFilter}" />
+      <input type="hidden" name="range" th:value="${rangeFilter}" />
+      <textarea name="rawText" rows="40" class="input ai-prompt-preview" th:text="${text}"></textarea>
+      <div th:if="${fixed}" class="toon-editor__notes">
+        <p th:if="${#lists.isEmpty(changes) and #lists.isEmpty(warnings)}" class="muted">
+          Nothing to fix.
+        </p>
+        <ul th:if="${!#lists.isEmpty(changes)}">
+          <li th:each="change : ${changes}" th:text="${change}">row 1: quoted the name</li>
+        </ul>
+        <ul th:if="${!#lists.isEmpty(warnings)}" class="warning">
+          <li th:each="warning : ${warnings}" th:text="${warning}">row 2: has fewer fields</li>
+        </ul>
+        <p th:if="${!#lists.isEmpty(changes)}" class="muted">
+          Not saved yet — review the text, then use the button on the right.
+        </p>
+      </div>
+      <p class="actions">
+        <button
+          type="button"
+          class="btn"
+          hx-target="closest .toon-editor"
+          hx-swap="outerHTML"
+          th:attr="hx-post=@{/receipts/{id}/fix-toon(id=${receipt.receiptId()})}"
+        >
+          Fix TOON automatically
+        </button>
+        <button type="submit" class="btn" th:text="${submitLabel}">Parse my edited text</button>
+      </p>
+    </form>
   </div>
 
   <!-- The Confirm / Reopen response: the pane (the primary swap) plus the chrome out-of-band, so the
