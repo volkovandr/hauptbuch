@@ -1,6 +1,6 @@
 # Mobile capture grid shows every receipt, not just the working queue
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: high
 Area: Receipts — mobile capture (`ReceiptCaptureController`, `receipt-capture.html`) ×
@@ -105,4 +105,4 @@ the filter option into issue 28 and moved this to ready-for-agent.
 `ReceiptRepository.findForMobile` takes a `states` list (same `state in (:states)` shape as
 `findForRegister`); `ReceiptService.forMobile()` passes `ReceiptState.WORK_QUEUE`;
 `ReceiptCaptureController`/`receipt-capture.html` drop the now-dead `voidedReceiptIds` wiring.
-`./gradlew check` green. Not yet owner-confirmed or merged.
+`./gradlew check` green. Owner-confirmed 2026-09-30: old receipts no longer appear on mobile.
