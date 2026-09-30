@@ -145,7 +145,7 @@ class ExchangeRateServiceTest {
   }
 
   @Test
-  void anEnteredRateWithAMissingOrZeroAmountIsIgnored() {
+  void enteredRateWithMissingOrZeroAmountIsIgnored() {
     when(settingsService.baseCurrency()).thenReturn(Optional.of("EUR"));
 
     service().recordEnteredRate(DATE, "USD", null, new BigDecimal("9.00"));

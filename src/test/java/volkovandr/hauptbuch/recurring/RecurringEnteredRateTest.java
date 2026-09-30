@@ -64,8 +64,34 @@ class RecurringEnteredRateTest {
 
   private static SplitForm split(String total, String fundingTotal, String baseTotal) {
     return new SplitForm(
-        null, START, ACCOUNT_ID, "", "", "", "", "", total, null, fundingTotal, baseTotal, null,
-        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null,
+        START,
+        ACCOUNT_ID,
+        "",
+        "",
+        "",
+        "",
+        "",
+        total,
+        null,
+        fundingTotal,
+        baseTotal,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         false);
   }
 
@@ -105,7 +131,7 @@ class RecurringEnteredRateTest {
   }
 
   @Test
-  void aBlankFundingTotalIsAProposalAndStatesNothing() {
+  void blankFundingTotalIsProposalAndStatesNothing() {
     accountIn(EUR);
     when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
 
@@ -115,7 +141,7 @@ class RecurringEnteredRateTest {
   }
 
   @Test
-  void aSingleCurrencyEntryStatesNothing() {
+  void singleCurrencyEntryStatesNothing() {
     accountIn(EUR);
     when(settingsService.baseCurrency()).thenReturn(Optional.of(EUR));
 
