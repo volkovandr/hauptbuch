@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.operations;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.matchesRegex;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -67,6 +68,11 @@ class RegisterPayeeCurrencyIntegrationTest {
     return accountService.insertLeaf(name, "expense", null, EUR).accountId();
   }
 
+  /** Thymeleaf renders the option over several lines: {@code value="CHF"\n selected="selected"}. */
+  private static String selectedOption(String code) {
+    return "(?s).*value=\"" + code + "\"\\s+selected=\"selected\".*";
+  }
+
   @Test
   void payeeChangePreselectsTheCurrencyLastUsedWithThatPayeeOnThatAccount() throws Exception {
     long cash = openAccount("Cash", "500");
@@ -94,7 +100,7 @@ class RegisterPayeeCurrencyIntegrationTest {
                 .param("accountId", String.valueOf(cash))
                 .param("payeeText", "ShopAaa"))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("value=\"CHF\" selected")))
+        .andExpect(content().string(matchesRegex(selectedOption("CHF"))))
         .andExpect(content().string(containsString("name=\"categoryAmount\"")));
   }
 
@@ -109,7 +115,7 @@ class RegisterPayeeCurrencyIntegrationTest {
                 .param("accountId", String.valueOf(cash))
                 .param("payeeText", "ShopBbb"))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("value=\"EUR\" selected")))
+        .andExpect(content().string(matchesRegex(selectedOption("EUR"))))
         .andExpect(content().string(not(containsString("name=\"categoryAmount\""))));
   }
 
