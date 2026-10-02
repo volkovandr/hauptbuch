@@ -712,7 +712,8 @@ class RegisterEntryScreenIntegrationTest {
         .andExpect(status().isOk())
         // The Currency picker follows the target account and relabels the Amount, keeping the
         // typed value (issue transaction-register-ui/04, option a); Off account is the EUR side.
-        .andExpect(content().string(containsString("value=\"CHF\" selected")))
+        .andExpect(
+            content().string(matchesPattern("(?s).*value=\"CHF\"\\s+selected=\"selected\".*")))
         .andExpect(content().string(containsString("Amount (CHF)")))
         .andExpect(content().string(containsString("value=\"20\"")))
         .andExpect(content().string(containsString("Off account (EUR)")));
