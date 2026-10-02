@@ -171,6 +171,23 @@ class PayeeCurrencySuggestionSqlLogicTest {
   }
 
   @Test
+  void ignoresTransactionsAwaitingReview() {
+    long cash = insertAccount("Cash", ASSET, EUR);
+    long foodEur = insertAccount("Food", EXPENSE, EUR);
+    long foodUsd = insertAccount("Food USD", EXPENSE, USD);
+    long shop = insertPayee("ShopAaa");
+    spend("2026-01-05", shop, cash, foodEur, "12");
+    long pending = crossSpend("2026-02-01", shop, cash, foodUsd);
+    jdbcClient
+        .sql("update transaction set lifecycle = 'pending_review' where transaction_id = :t")
+        .param("t", pending)
+        .update();
+
+    // The later USD spend is an unreviewed occurrence, so the confirmed EUR one is the latest.
+    assertThat(ghostSuggestionRepository.suggestCurrencyFor(shop, cash)).contains(EUR);
+  }
+
+  @Test
   void returnsEmptyForPayeeWithNoTransactions() {
     long cash = insertAccount("Cash", ASSET, EUR);
     long shop = insertPayee("ShopBbb");
