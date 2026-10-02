@@ -221,4 +221,22 @@ class CrossCurrencyFieldsServiceTest {
 
     assertThat(service.prefillFundingTotal(EUR, CHF, DATE, "+10")).isEqualTo("9,50");
   }
+
+  // ── The base proposal from a transaction-currency amount (issue transaction-register-ui/27) ──
+
+  @Test
+  void proposesBaseFromAnAmountAtTheCarriedForwardRate() {
+    when(exchangeRateService.rateAsOf(USD, DATE)).thenReturn(Optional.of(new BigDecimal("0.90")));
+
+    assertThat(service.proposeBase(USD, DATE, "−10")).isEqualTo("9,00");
+  }
+
+  @Test
+  void proposesNoBaseWithoutRateOrParseableAmount() {
+    when(exchangeRateService.rateAsOf(USD, DATE)).thenReturn(Optional.empty());
+
+    assertThat(service.proposeBase(USD, DATE, "10")).isNull();
+    assertThat(service.proposeBase(USD, DATE, "ten")).isNull();
+    assertThat(service.proposeBase(USD, null, "10")).isNull();
+  }
 }

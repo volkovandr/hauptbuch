@@ -69,9 +69,60 @@ class DockAmountFieldsService {
             fundingCurrency,
             counterpartCurrency(form),
             form.date(),
-            form.offAccountAmount(),
+            null,
             DockAmountTexts.counterpartText(form.amount()),
             form.baseAmount()));
+  }
+
+  /**
+   * The amount fields to redisplay for a submitted dock form, with the rate-feed proposals filled
+   * in (issue transaction-register-ui/27). Both proposals derive from the {@code Amount} in the
+   * transaction currency, as of the transaction date: {@code Off account} converts it into the
+   * funding account's currency (through base), {@code Base} into the base currency. A field is
+   * (re-)proposed only while it is blank or still holds the previous proposal; a value the operator
+   * typed is kept. With no rate on file the proposal is blank, never a guess.
+   */
+  DockAmounts amountsFor(DockEntryForm form) {
+    CrossCurrencyFields layout = forForm(form);
+    if (!layout.crossCurrency()) {
+      return new DockAmounts(layout, null, null, null);
+    }
+    String transactionCurrency = layout.categoryCurrencyCode();
+    boolean proposeOffAccount = isSuggestion(form.offAccountAmount(), form.offAccountSuggestion());
+    String offAccountSuggestion =
+        proposeOffAccount
+            ? crossCurrencyFieldsService.prefillFundingTotal(
+                layout.fundingCurrencyCode(), transactionCurrency, form.date(), form.amount())
+            : null;
+    String offAccountText = proposeOffAccount ? offAccountSuggestion : form.offAccountAmount();
+    String baseSuggestion = null;
+    String baseText = null;
+    if (layout.neitherIsBase()) {
+      boolean proposeBase = isSuggestion(form.baseAmount(), form.baseSuggestion());
+      baseSuggestion =
+          proposeBase
+              ? crossCurrencyFieldsService.proposeBase(
+                  transactionCurrency, form.date(), form.amount())
+              : null;
+      baseText = proposeBase ? baseSuggestion : form.baseAmount();
+    }
+    return new DockAmounts(
+        new CrossCurrencyFields(
+            layout.fundingCurrencyCode(),
+            transactionCurrency,
+            true,
+            layout.neitherIsBase(),
+            layout.categoryAmountText(),
+            baseText),
+        offAccountText,
+        offAccountSuggestion,
+        baseSuggestion);
+  }
+
+  /** Whether a field still holds a proposal the server may replace: blank, or the last one. */
+  private static boolean isSuggestion(String current, String lastSuggestion) {
+    String value = current == null ? "" : current.strip();
+    return value.isEmpty() || value.equals(lastSuggestion == null ? "" : lastSuggestion.strip());
   }
 
   /**
