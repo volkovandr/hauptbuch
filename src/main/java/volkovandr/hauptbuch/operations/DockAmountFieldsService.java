@@ -122,8 +122,8 @@ class DockAmountFieldsService {
 
   /**
    * The currency last used with the form's payee on its funding account (issue
-   * transaction-register-ui/17), or null when there is no funding account, the payee is new, or
-   * the pair has no history — the caller then falls back to the funding account's currency.
+   * transaction-register-ui/17), or null when there is no funding account, the payee is new, or the
+   * pair has no history — the caller then falls back to the funding account's currency.
    */
   private String suggestedCurrency(DockEntryForm form) {
     if (form.accountId() == null) {

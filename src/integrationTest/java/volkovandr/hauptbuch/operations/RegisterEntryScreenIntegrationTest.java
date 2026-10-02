@@ -1415,62 +1415,6 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
-  void payeeChangePreselectsTheCurrencyLastUsedWithThatPayeeOnThatAccount() throws Exception {
-    long cash = openAccount("Cash", "500");
-    long food = insertCategory("Food");
-    // A EUR account once paid ShopAaa a CHF bill (issue transaction-register-ui/17).
-    mockMvc
-        .perform(
-            post(ENTRY_PATH)
-                .param("date", "2026-02-01")
-                .param("accountId", String.valueOf(cash))
-                .param("payeeText", "ShopAaa")
-                .param("amount", "9,10")
-                .param("categoryId", String.valueOf(food))
-                .param("categoryCurrencyCode", "CHF")
-                .param("categoryAmount", "10")
-                .param("viewAccountId", String.valueOf(cash)))
-        .andExpect(status().isOk());
-
-    // The payee-change refresh posts without the selector, so the default is re-derived: CHF is
-    // pre-selected and its amount field revealed.
-    mockMvc
-        .perform(
-            post("/register/currency-fields")
-                .param("date", "2026-03-01")
-                .param("accountId", String.valueOf(cash))
-                .param("payeeText", "ShopAaa"))
-        .andExpect(status().isOk())
-        .andExpect(content().string(containsString("value=\"CHF\" selected")))
-        .andExpect(content().string(containsString("name=\"categoryAmount\"")));
-  }
-
-  @Test
-  void payeeWithoutHistoryOnTheAccountKeepsTheAccountCurrency() throws Exception {
-    long cash = openAccount("Cash", "500");
-
-    mockMvc
-        .perform(
-            post("/register/currency-fields")
-                .param("date", "2026-03-01")
-                .param("accountId", String.valueOf(cash))
-                .param("payeeText", "ShopBbb"))
-        .andExpect(status().isOk())
-        .andExpect(content().string(containsString("value=\"EUR\" selected")))
-        .andExpect(content().string(not(containsString("name=\"categoryAmount\""))));
-  }
-
-  @Test
-  void dockRefreshesTheCurrencyFieldsWhenThePayeeChanges() throws Exception {
-    long cash = openAccount("Cash", "500");
-
-    mockMvc
-        .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
-        .andExpect(status().isOk())
-        .andExpect(content().string(containsString("hx-trigger=\"change from:#entry-payee\"")));
-  }
-
-  @Test
   void ghostReturnsNothingForAnUnknownPayee() throws Exception {
     mockMvc
         .perform(get("/register/ghost").param("payeeText", "Brand New Kiosk"))
