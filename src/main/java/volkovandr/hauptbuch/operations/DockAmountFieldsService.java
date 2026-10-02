@@ -69,9 +69,57 @@ class DockAmountFieldsService {
             fundingCurrency,
             counterpartCurrency(form),
             form.date(),
-            form.amount(),
-            form.categoryAmount(),
+            form.offAccountAmount(),
+            DockAmountTexts.counterpartText(form.amount()),
             form.baseAmount()));
+  }
+
+  /**
+   * The {@link DockEntry} a submitted dock form commits (issue transaction-register-ui/04): the
+   * form's fields mapped onto the two legs. A single-currency entry's {@code Amount} is the funding
+   * leg's; a cross-currency entry's {@code Amount} is the counterpart's and its {@code Off account}
+   * the funding leg's, the explicit sign moving with it ({@link DockAmountTexts}). Whether the
+   * entry is cross-currency is decided exactly as the field layout the operator saw was ({@link
+   * #forForm}), so the mapping always matches the fields on screen.
+   *
+   * @throws IllegalArgumentException if a cross-currency entry's {@code Off account} is blank
+   */
+  DockEntry entryFrom(DockEntryForm form) {
+    String fundingAmount = form.amount();
+    String categoryAmount = null;
+    CrossCurrencyFields layout = forForm(form);
+    if (layout.crossCurrency()) {
+      if (form.offAccountAmount() == null || form.offAccountAmount().isBlank()) {
+        throw new IllegalArgumentException(
+            "An Off account (" + layout.fundingCurrencyCode() + ") amount is required");
+      }
+      fundingAmount = DockAmountTexts.fundingText(form.amount(), form.offAccountAmount());
+      categoryAmount = DockAmountTexts.counterpartText(form.amount());
+    }
+    return new DockEntry(
+        form.transactionId(),
+        form.date(),
+        form.accountId(),
+        form.fundingPersonName(),
+        form.fundingPersonDirection(),
+        form.fundingPersonRevive(),
+        null,
+        blankToNull(form.payeeText()),
+        form.categoryId() == null ? 0L : form.categoryId(),
+        form.categoryCurrencyCode(),
+        fundingAmount,
+        categoryAmount,
+        form.baseAmount(),
+        form.note(),
+        form.transferDirection(),
+        form.personName(),
+        form.personDirection(),
+        form.personRevive(),
+        form.tagId());
+  }
+
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   /**

@@ -1,8 +1,8 @@
 # Personal Finance Manager — UI: Transaction Register & Entry Dock
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.8
-**Date:** 2026-09-28
+**Status:** Draft v0.9
+**Date:** 2026-10-02
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
 `tech-stack.md` (v0.1),
@@ -20,6 +20,10 @@
 > pinning them now would be premature.
 
 **Changelog**
+- **v0.9 (2026-10-02):** §3.2/§3.5/§3.8a: one fixed dock order — **Currency moves before the
+  amounts**, the **Amount is typed in the transaction currency**, and the account's own amount
+  follows it as **Off account** (the split header's name), then **Base**; the split header keeps the
+  same order (issue transaction-register-ui/04).
 - **v0.8 (2026-09-28):** Recurring (data-model §14): a **Pending only** filter (§2.3); §2.10 review
   gestures on a pending row, and the recurring marker shares the receipt paperclip's slot.
 - **v0.7 (2026-09-26):** §3.8a: a cross-currency split's shared rate is taken over the lines' net,
@@ -330,12 +334,17 @@ and most edits are of recent (near-bottom) rows anyway. The bottom dock wins.
 
 ### 3.2 Field order — optimised for entry, not for reading
 
-Dock order: **Date · Account · Payee · Amount · Category · Tags · Note · Add.**
+Dock order: **Date · Account · Payee · Currency · Amount · Off account · Base · Category · Note ·
+Tags · Add** — one fixed order, whatever the currencies. Off account and Base appear only when
+cross-currency (§3.8a), in place, so nothing before them moves. The split panel's header keeps the
+same order; Split only removes Category (§3.10).
 
-This **intentionally differs** from the register's column order (which keeps Category left of Amount
-for reading). The dock is a distinct UI element and is felt as one, so the mismatch is a non-issue.
-The order is driven by the autofill rule (§3.9): the amount is entered **before** the category
-commits.
+The Currency comes **before** the amounts so they are typed knowing their currency: the **Amount is
+in the transaction currency**, and the account's own amount follows it (issue
+transaction-register-ui/04). This **intentionally differs** from the register's column order (which
+keeps Category left of Amount for reading). The dock is a distinct UI element and is felt as one, so
+the mismatch is a non-issue. The amounts are entered **before** the category commits — the autofill
+rule (§3.9).
 
 ### 3.3 Account chosen at entry; re-threading on change
 
@@ -396,10 +405,11 @@ text** (no gazetteer). The pre-filled mini-form is the safety net for any mis-cl
   `Food - Milk` → parent `Food`, new leaf `Milk`, type `expense`.
 - **Currency defaults, but is selectable.** The per-currency leaf (`Milk-EUR` etc.) **defaults to the
   paying account's currency** (data-model §6.5) — the single-currency path, where the user picks the
-  category *semantically* and never touches currency. A **currency selector beside the category** lets
-  the user override it to another currency; doing so **declares the transaction cross-currency** and
+  category *semantically* and never touches currency. A **currency selector after the Payee** (§3.2)
+  lets the user override it to another currency; doing so **declares the transaction cross-currency** and
   reveals the extra amount field(s) (§3.8). On a **transfer** both legs are real accounts, so their
-  currencies are fixed and no selector is shown.
+  currencies are fixed: picking the target account switches the selector to its currency, keeping
+  the amounts already typed (issue transaction-register-ui/04).
 - **Subdivision tie-in:** if the chosen parent was itself a **leaf** (or had only hidden currency
   leaves, data-model §6.5), creating a child under it is exactly the §5 **subdivision domain
   operation** — the parent is promoted and its existing postings (and currency leaves) move to an
@@ -563,9 +573,11 @@ When the counterpart's currency differs from the funding account's (the category
 was overridden, §3.5, or a transfer targets a differently-denominated account), the transaction is
 **cross-currency** and the single Amount field **splits into one field per distinct currency present**
 — because the legs no longer sum to zero natively; they must balance in **base** (data-model §6.4).
+The **Amount** stays first and is in the transaction currency; **Off account** (the paying account's
+own amount) and **Base** follow it.
 
-- **One foreign side, base present** (EUR card → CHF food): **two** fields — the paying account's
-  amount and the counterpart's amount. The base-currency leg's `base_amount` equals its own amount, so
+- **One foreign side, base present** (EUR card → CHF food): **two** fields — the counterpart's
+  amount and the paying account's (Off account). The base-currency leg's `base_amount` equals its own amount, so
   no separate base field is shown.
 - **Neither side is base** (CHF card → USD goods, base EUR): **three** fields — each native amount
   plus a single **base amount**. The base is **pre-filled from `rate_as_of`** on one leg and is

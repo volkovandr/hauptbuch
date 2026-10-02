@@ -46,6 +46,7 @@ class RegisterEntryController {
   private static final String REGISTER = "register";
   private static final String AMOUNT_FIELDS = "amountFields";
   private static final String CURRENCIES = "currencies";
+  private static final String OFF_ACCOUNT_TEXT = "offAccountText";
 
   /** OOB-replace only the dock (carrying an error); the rows region is left untouched. */
   private static final String DOCK_ERROR =
@@ -131,27 +132,7 @@ class RegisterEntryController {
           response);
     }
     try {
-      dockCommitService.commit(
-          new DockEntry(
-              form.transactionId(),
-              form.date(),
-              form.accountId(),
-              form.fundingPersonName(),
-              form.fundingPersonDirection(),
-              form.fundingPersonRevive(),
-              null,
-              blankToNull(form.payeeText()),
-              form.categoryId() == null ? 0L : form.categoryId(),
-              form.categoryCurrencyCode(),
-              form.amount(),
-              form.categoryAmount(),
-              form.baseAmount(),
-              form.note(),
-              form.transferDirection(),
-              form.personName(),
-              form.personDirection(),
-              form.personRevive(),
-              form.tagId()));
+      dockCommitService.commit(dockAmountFieldsService.entryFrom(form));
     } catch (IllegalArgumentException | IllegalStateException | UnbalancedTransactionException e) {
       // UnbalancedTransactionException is the engine's balance-invariant signal: show it in the
       // dock rather than let it 500 into an empty swap that reads as a no-op commit.
@@ -260,10 +241,11 @@ class RegisterEntryController {
   @PostMapping("/register/currency-fields")
   String currencyFields(@ModelAttribute DockEntryForm form, Model model) {
     addCurrencyAttributes(model, dockAmountFieldsService.forForm(form));
-    model.addAttribute("fundingAmountText", form.amount());
+    model.addAttribute("amountText", form.amount());
+    model.addAttribute(OFF_ACCOUNT_TEXT, form.offAccountAmount());
     return DOCK_FRAGMENT
-        + " :: currencyFieldsResponse(fields=${amountFields},"
-        + " fundingAmountText=${fundingAmountText})";
+        + " :: currencyFieldsResponse(fields=${amountFields}, amountText=${amountText},"
+        + " offAccountText=${offAccountText})";
   }
 
   /**
@@ -337,6 +319,7 @@ class RegisterEntryController {
     RegisterView register = registerService.view(filter);
     model.addAttribute(REGISTER, register);
     model.addAttribute("entryError", message);
+    model.addAttribute(OFF_ACCOUNT_TEXT, form.offAccountAmount());
     addCurrencyAttributes(model, dockAmountFieldsService.forForm(form));
     return DOCK_ERROR;
   }

@@ -21,13 +21,16 @@ import java.util.List;
  * @param fundingPersonRevive the revival decision for {@code fundingPersonName}, exactly as {@code
  *     personRevive} carries it for the counterpart
  * @param payeeText the payee text (a picked datalist value or a create-new string); nullable
- * @param amount the funding leg's sign-free magnitude with an optional leading {@code +}/{@code −}
- *     (§3.8)
+ * @param amount the {@code Amount} field: the magnitude in the transaction currency, with an
+ *     optional leading {@code +}/{@code −} (§3.8). For a single-currency entry this is the funding
+ *     leg's amount; for a cross-currency one it is the counterpart leg's, and {@code
+ *     offAccountAmount} is the funding leg's ({@link DockAmountTexts}, issue
+ *     transaction-register-ui/04)
  * @param categoryId the category id the {@code categories} resolve step produced
  * @param categoryCurrencyCode the (possibly overridden) leaf currency; null/blank defaults to the
  *     funding account's currency (§3.5)
- * @param categoryAmount the category leg's own native magnitude; present only when cross-currency
- *     (§3.8a)
+ * @param offAccountAmount the {@code Off account} field: the funding account's own magnitude;
+ *     present only when cross-currency (§3.8a)
  * @param baseAmount the frozen base-currency magnitude; present only when neither leg is base
  * @param note transaction note; nullable
  * @param transferDirection {@code TO}/{@code FROM} when the counterpart resolver matched a transfer
@@ -60,7 +63,7 @@ public record DockEntryForm(
     String amount,
     Long categoryId,
     String categoryCurrencyCode,
-    String categoryAmount,
+    String offAccountAmount,
     String baseAmount,
     String note,
     String transferDirection,
