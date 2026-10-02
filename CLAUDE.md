@@ -291,7 +291,8 @@ Full detail in `docs/data-model.md`. The traps:
    branches**. Implement only after the owner has explicitly accepted a specific proposed solution.
    "I like option 2" is acceptance of that option; describing a bug, or asking what to do about it,
    is not. When unsure whether a message is an approval, ask.
-0a. **Document before coding.** Once a solution is accepted, first record the issue as a file under
+0a. **Document before coding.** Once a solution is accepted, first record the decisions as a scoping
+   document (e.g. reporting.md) when it is a big feature set, or, when it is rather small, as an issue as a file under
    `.scratch/<feature-slug>/issues/` (`docs/agents/issue-tracker.md`): the symptom, the root cause,
    the accepted solution, and the owner's decisions (e.g. "overwrite an existing rate"). Commit it
    before, or together with, the code. The owner works in a separate local session that only sees
