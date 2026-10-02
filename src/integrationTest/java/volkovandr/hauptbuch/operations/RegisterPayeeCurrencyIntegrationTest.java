@@ -41,6 +41,8 @@ class RegisterPayeeCurrencyIntegrationTest {
   private static final String ENTRY_PATH = "/register/entry";
   private static final String CURRENCY_FIELDS_PATH = "/register/currency-fields";
   private static final String EUR = "EUR";
+  private static final String BLANKS_CURRENCY_OVERRIDE =
+      "(?s).*change from:#entry-payee.*hx-vals='\\{\"categoryCurrencyCode\": \"\"\\}'.*";
 
   @Autowired MockMvc mockMvc;
   @Autowired AccountService accountService;
@@ -126,6 +128,9 @@ class RegisterPayeeCurrencyIntegrationTest {
     mockMvc
         .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("hx-trigger=\"change from:#entry-payee\"")));
+        .andExpect(content().string(containsString("hx-trigger=\"change from:#entry-payee\"")))
+        // htmx adds the enclosing form's values to every POST, so the picker's current value would
+        // pin the override; the refresh must blank it explicitly (found in the browser, not here).
+        .andExpect(content().string(matchesRegex(BLANKS_CURRENCY_OVERRIDE)));
   }
 }
