@@ -9,7 +9,10 @@ import volkovandr.hauptbuch.ledger.CrossCurrencyFieldsQuery;
 import volkovandr.hauptbuch.ledger.CrossCurrencyFieldsService;
 import volkovandr.hauptbuch.ledger.Currency;
 import volkovandr.hauptbuch.ledger.CurrencyService;
+import volkovandr.hauptbuch.ledger.Payee;
+import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.RegisterView;
+import volkovandr.hauptbuch.operations.repository.GhostSuggestionRepository;
 
 /**
  * The dock's amount-field state, for both its controllers (register §3.5/§3.8a, plan stage 7d.1):
@@ -25,16 +28,22 @@ class DockAmountFieldsService {
   private final CurrencyService currencyService;
   private final CrossCurrencyFieldsService crossCurrencyFieldsService;
   private final TransactionCurrencyResolver transactionCurrencyResolver;
+  private final PayeeService payeeService;
+  private final GhostSuggestionRepository ghostSuggestionRepository;
 
   DockAmountFieldsService(
       AccountService accountService,
       CurrencyService currencyService,
       CrossCurrencyFieldsService crossCurrencyFieldsService,
-      TransactionCurrencyResolver transactionCurrencyResolver) {
+      TransactionCurrencyResolver transactionCurrencyResolver,
+      PayeeService payeeService,
+      GhostSuggestionRepository ghostSuggestionRepository) {
     this.accountService = accountService;
     this.currencyService = currencyService;
     this.crossCurrencyFieldsService = crossCurrencyFieldsService;
     this.transactionCurrencyResolver = transactionCurrencyResolver;
+    this.payeeService = payeeService;
+    this.ghostSuggestionRepository = ghostSuggestionRepository;
   }
 
   /** Every currency the book knows, for the category-currency picker's options. */
@@ -91,7 +100,10 @@ class DockAmountFieldsService {
   /**
    * The counterpart leg's currency for the field layout: a transfer's counterpart account fixes it
    * (register §3.8, plan stage 7d.3), so it is looked up from the resolved account id; otherwise it
-   * is the category-currency selector's value (null/blank = the funding account's, no override).
+   * is the category-currency selector's value. A blank selector means the form was posted without
+   * it — the Account or Payee field changed, so the currency default is re-derived: the currency
+   * last used with this payee on this account (issue transaction-register-ui/17), else the funding
+   * account's own (null, no override).
    */
   private String counterpartCurrency(DockEntryForm form) {
     if (form.transferDirection() != null
@@ -102,7 +114,26 @@ class DockAmountFieldsService {
           .map(Account::currencyCode)
           .orElse(form.categoryCurrencyCode());
     }
+    if (form.categoryCurrencyCode() == null || form.categoryCurrencyCode().isBlank()) {
+      return suggestedCurrency(form);
+    }
     return form.categoryCurrencyCode();
+  }
+
+  /**
+   * The currency last used with the form's payee on its funding account (issue
+   * transaction-register-ui/17), or null when there is no funding account, the payee is new, or
+   * the pair has no history — the caller then falls back to the funding account's currency.
+   */
+  private String suggestedCurrency(DockEntryForm form) {
+    if (form.accountId() == null) {
+      return null;
+    }
+    return payeeService
+        .findExisting(form.payeeText())
+        .map(Payee::payeeId)
+        .flatMap(payeeId -> ghostSuggestionRepository.suggestCurrencyFor(payeeId, form.accountId()))
+        .orElse(null);
   }
 
   /**

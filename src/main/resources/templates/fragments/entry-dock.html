@@ -140,7 +140,7 @@
           hidden
           hx-post="/register/currency-fields"
           hx-trigger="account-resolved from:body"
-          hx-include="[name='date'], [name='accountId'], [name='amount'],
+          hx-include="[name='date'], [name='accountId'], [name='amount'], [name='payeeText'],
                       [name='fundingPersonName'], [name='fundingPersonDirection']"
           hx-target="#entry-currency-amount"
           hx-swap="outerHTML"
@@ -171,6 +171,19 @@
             ></option>
           </datalist>
         </div>
+        <!-- Payee currency default (issue transaction-register-ui/17): changing the payee re-derives
+             the currency default exactly as an Account change does (same include, no
+             categoryCurrencyCode) — the server pre-selects the currency last used with this payee
+             on this account, else the account's own. -->
+        <span
+          hidden
+          hx-post="/register/currency-fields"
+          hx-trigger="change from:#entry-payee"
+          hx-include="[name='date'], [name='accountId'], [name='amount'], [name='payeeText'],
+                      [name='fundingPersonName'], [name='fundingPersonDirection']"
+          hx-target="#entry-currency-amount"
+          hx-swap="outerHTML"
+        ></span>
 
         <!-- 4 · Amount (sign-free magnitude; a leading − flips the counterpart's direction, + is
              redundant — §3.8). Labelled with the
