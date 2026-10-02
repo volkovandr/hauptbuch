@@ -144,7 +144,24 @@
           hx-swap="outerHTML"
         ></span>
 
-        <!-- Spending currency (register §3.5/§3.8a): the one currency the receipt is billed in and
+        <div class="field">
+          <label class="field__label" for="split-payee">Payee</label>
+          <input
+            id="split-payee"
+            name="payeeText"
+            class="input"
+            list="entry-payee-options"
+            autocomplete="off"
+            placeholder="Rewe - Dortmund - Germany"
+            th:value="${panel.payeeText()}"
+          />
+          <datalist id="entry-payee-options">
+            <option th:each="p : ${register.payees()}" th:value="${p.entryValue()}"></option>
+          </datalist>
+        </div>
+
+        <!-- Spending currency (register §3.5/§3.8a) — after Payee, in the same place as the dock's
+             Currency (issue transaction-register-ui/04): the one currency the receipt is billed in and
              the lines are entered in. Defaults to the funding account's currency (single-currency
              split); overriding it declares the split cross-currency and reveals the funding & base
              total fields plus the per-line derived columns below. A change re-renders the panel. -->
@@ -162,22 +179,6 @@
           ></div>
         </div>
         <div th:replace="~{fragments/currency-picker :: dialogMount('split-spending-currency')}"></div>
-
-        <div class="field">
-          <label class="field__label" for="split-payee">Payee</label>
-          <input
-            id="split-payee"
-            name="payeeText"
-            class="input"
-            list="entry-payee-options"
-            autocomplete="off"
-            placeholder="Rewe - Dortmund - Germany"
-            th:value="${panel.payeeText()}"
-          />
-          <datalist id="entry-payee-options">
-            <option th:each="p : ${register.payees()}" th:value="${p.entryValue()}"></option>
-          </datalist>
-        </div>
 
         <!-- The three header totals (register §3.10/§3.8a) — shared verbatim with the receipts
              post-process editor, the sibling of the shared per-line fragment below. The committed

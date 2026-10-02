@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.operations;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -214,5 +215,72 @@ class DockAmountFieldsServiceTest {
 
     assertThat(captureQuery().categoryCurrencyCode()).isEqualTo(EUR);
     verify(ghostSuggestionRepository, never()).suggestCurrencyFor(PAYEE_ID, CASH_ID);
+  }
+
+  // ── entryFrom: the dock's fields mapped onto the legs (issue transaction-register-ui/04) ──
+
+  private static DockEntryForm amountsForm(
+      String categoryCurrencyCode, String amount, String offAccountAmount) {
+    return new DockEntryForm(
+        null,
+        DATE,
+        CASH_ID,
+        null,
+        null,
+        null,
+        null,
+        amount,
+        9L,
+        categoryCurrencyCode,
+        offAccountAmount,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        List.of(),
+        null,
+        null,
+        null,
+        null,
+        false);
+  }
+
+  private void layoutIs(CrossCurrencyFields fields) {
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(account(CASH_ID, EUR)));
+    when(crossCurrencyFieldsService.resolve(any())).thenReturn(fields);
+  }
+
+  @Test
+  void singleCurrencyEntryCommitsTheAmountAsTheFundingLeg() {
+    layoutIs(CrossCurrencyFields.singleCurrency(EUR));
+
+    DockEntry entry = service.entryFrom(amountsForm(EUR, "−20", null));
+
+    assertThat(entry.amount()).isEqualTo("−20");
+    assertThat(entry.categoryAmount()).isNull();
+  }
+
+  @Test
+  void crossCurrencyEntryCommitsOffAccountAsTheFundingLegAndAmountAsTheCounterpart() {
+    layoutIs(new CrossCurrencyFields(EUR, CHF, true, false, null, null));
+
+    DockEntry entry = service.entryFrom(amountsForm(CHF, "−10", "9,10"));
+
+    // The sign typed on the Amount belongs to the funding leg (register §3.8).
+    assertThat(entry.amount()).isEqualTo("−9,10");
+    assertThat(entry.categoryAmount()).isEqualTo("10");
+    assertThat(entry.categoryCurrencyCode()).isEqualTo(CHF);
+  }
+
+  @Test
+  void crossCurrencyEntryWithoutOffAccountIsRefusedNamingTheField() {
+    layoutIs(new CrossCurrencyFields(EUR, CHF, true, false, null, null));
+
+    assertThatThrownBy(() -> service.entryFrom(amountsForm(CHF, "10", " ")))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("An Off account (EUR) amount is required");
   }
 }

@@ -140,9 +140,9 @@ class RegisterSplitController {
   /**
    * Lift the dock's committed single line into the split panel's first line and header (register
    * §3.9→§3.10). A cross-currency dock line (register §3.8a) carries the currency selector plus the
-   * category (spending) and base amounts: the split seeds its one line in the spending currency and
-   * moves the funding/base totals to the header. A same-currency line seeds its funding amount and
-   * leaves the header currency fields blank.
+   * spending, off-account and base amounts: the split seeds its one line in the spending currency
+   * and moves the funding/base totals to the header. A same-currency line seeds its funding amount
+   * and leaves the header currency fields blank.
    *
    * <p>A person-funded dock entry (register §3.3/§3.5, issue 07) has no real account to compare
    * against, so it is never "cross" in the sense above — the dock's currency selector already
@@ -169,10 +169,12 @@ class RegisterSplitController {
     if (!cross) {
       return new SplitSeed(null, SplitFormBinder.orEmpty(form.amount()), "", "");
     }
+    // The dock's Amount is already in the spending currency and its Off account is the funding
+    // total (issue transaction-register-ui/04), so they lift straight into the line and header.
     return new SplitSeed(
         spending,
-        SplitFormBinder.orEmpty(form.categoryAmount()),
         SplitFormBinder.orEmpty(form.amount()),
+        SplitFormBinder.orEmpty(form.offAccountAmount()),
         SplitFormBinder.orEmpty(form.baseAmount()));
   }
 

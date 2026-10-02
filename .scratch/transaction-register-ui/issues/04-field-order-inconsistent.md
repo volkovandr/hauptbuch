@@ -25,7 +25,8 @@ Fixed tab order, also left-to-right:
 1. **Date**
 2. **Account**
 3. **Payee**
-4. **Currency** (the transaction currency) and the Split (`+`) button. Pre-selected per `17`.
+4. **Currency** (the transaction currency) with its `+` (Add currency) button. Pre-selected per
+   `17`.
 5. **`Amount (<transaction currency>)`** — no default.
 6. **`Off account (<account currency>)`** — only when the account's currency differs from the
    transaction currency. Auto-suggested from the rate feed (`27`).
@@ -64,3 +65,21 @@ Fixed tab order, also left-to-right:
 
 Originally filed with an earlier preferred order (Currency before Payee, account-currency amount
 first). Rewritten 2026-10-02 with the owner's revised order and decisions above.
+
+Implementation split (owner, 2026-10-02): **04a** — order, labels, the Amount/Off account flip;
+**04b** — the transfer currency switch.
+
+**04a implemented** (branch `claude/brave-brown-490kjl`, awaiting owner confirmation):
+- Dock order as above; Note now precedes Tags. The split header swaps Payee before Currency — the
+  same panel is the recurring template editor's form, so this also covers `recurring/02`.
+- The flip is confined to the form boundary: the commit/edit services still work in legs (funding
+  amount + counterpart magnitude). `DockAmountTexts` maps Amount / Off account onto them both ways,
+  moving the explicit sign with the funding leg; `DockAmountFieldsService.entryFrom` decides
+  cross-currency the same way the field layout is decided.
+- Form field `categoryAmount` is renamed `offAccountAmount`; labels are `Amount (CODE)`,
+  `Off account (CODE)`, `Base (CODE)`.
+- 04b turned out to be already in place: resolving a transfer target re-renders the currency fields,
+  which re-selects the picker to the target account's currency and relabels the Amount, keeping the
+  typed value. Now asserted in `RegisterEntryScreenIntegrationTest`.
+- Base is still pre-filled only from Off account on a refresh; suggesting from the Amount as it is
+  typed is `27`.

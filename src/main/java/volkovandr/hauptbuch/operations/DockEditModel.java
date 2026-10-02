@@ -67,6 +67,23 @@ public record DockEditModel(
   }
 
   /**
+   * The value the dock's {@code Amount} field shows (issue transaction-register-ui/04): the amount
+   * in the transaction currency — the funding leg's own text for a single-currency transaction, the
+   * counterpart magnitude carrying the funding leg's explicit sign for a cross-currency one.
+   */
+  public String amountFieldText() {
+    return categoryAmount == null ? amount : DockAmountTexts.amountText(amount, categoryAmount);
+  }
+
+  /**
+   * The value the dock's {@code Off account} field shows: the funding leg's magnitude for a
+   * cross-currency transaction; {@code null} (the field is not shown) for a single-currency one.
+   */
+  public String offAccountFieldText() {
+    return categoryAmount == null ? null : DockAmountTexts.offAccountText(amount);
+  }
+
+  /**
    * The value the dock's Category input shows. For a transfer it is the direction-prefixed label
    * ({@code To → Name} / {@code From ← Name}) so the field both displays the direction and
    * re-resolves back to a transfer if the user edits it; for a plain category it is the bare name.

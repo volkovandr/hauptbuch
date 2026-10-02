@@ -270,11 +270,11 @@ class RegisterEntryScreenIntegrationTest {
         .perform(get(REGISTER_PATH))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("id=\"entry-category-currency\"")))
-        // The Amount label carries the funding account's own currency, unambiguous even before
-        // any override (register §3.8a).
+        // The Amount label carries the transaction currency — the funding account's own until
+        // overridden (register §3.8a).
         .andExpect(content().string(containsString("Amount (EUR)")))
         // No override yet: the ≥95% single-currency path stays a single Amount field.
-        .andExpect(content().string(not(containsString("name=\"categoryAmount\""))))
+        .andExpect(content().string(not(containsString("name=\"offAccountAmount\""))))
         .andExpect(content().string(not(containsString("name=\"baseAmount\""))));
   }
 
@@ -298,7 +298,7 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
-  void currencyFieldsRevealsTheCategoryAmountFieldForTwoSidedOverride() throws Exception {
+  void currencyFieldsRelabelsTheAmountAndRevealsOffAccountForTwoSidedOverride() throws Exception {
     long cash = openAccount("Cash", "500");
     insertCategory("Food");
 
@@ -310,8 +310,12 @@ class RegisterEntryScreenIntegrationTest {
                 .param("amount", "9,10")
                 .param("categoryCurrencyCode", "CHF"))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("name=\"categoryAmount\"")))
+        // The Amount is now typed in CHF, keeping what was typed; the account's own EUR amount
+        // follows it as Off account (issue transaction-register-ui/04).
         .andExpect(content().string(containsString("Amount (CHF)")))
+        .andExpect(content().string(containsString("value=\"9,10\"")))
+        .andExpect(content().string(containsString("name=\"offAccountAmount\"")))
+        .andExpect(content().string(containsString("Off account (EUR)")))
         // The funding account (EUR) is the book's base, so no separate base field is shown (§3.8a).
         .andExpect(content().string(not(containsString("name=\"baseAmount\""))));
   }
@@ -331,11 +335,12 @@ class RegisterEntryScreenIntegrationTest {
             post("/register/currency-fields")
                 .param("date", "2026-02-01")
                 .param("accountId", String.valueOf(chfCard))
-                .param("amount", "10")
+                .param("offAccountAmount", "10")
                 .param("categoryCurrencyCode", "USD"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("name=\"baseAmount\"")))
-        // 10 CHF carried forward at the January rate (0.95) pre-fills 9,50 EUR.
+        .andExpect(content().string(containsString("Base (EUR)")))
+        // 10 CHF off the account, carried forward at the January rate (0.95), pre-fills 9,50 EUR.
         .andExpect(content().string(containsString("value=\"9,50\"")));
   }
 
@@ -349,10 +354,10 @@ class RegisterEntryScreenIntegrationTest {
             post(ENTRY_PATH)
                 .param("date", "2026-02-01")
                 .param("accountId", String.valueOf(cash))
-                .param("amount", "9,10")
+                .param("amount", "10")
                 .param("categoryId", String.valueOf(food))
                 .param("categoryCurrencyCode", "CHF")
-                .param("categoryAmount", "10")
+                .param("offAccountAmount", "9,10")
                 .param("viewAccountId", String.valueOf(cash)))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("id=\"register-rows\"")))
@@ -377,10 +382,10 @@ class RegisterEntryScreenIntegrationTest {
             post(ENTRY_PATH)
                 .param("date", "2026-02-01")
                 .param("accountId", String.valueOf(cash))
-                .param("amount", "9,10")
+                .param("amount", "10")
                 .param("categoryId", String.valueOf(food))
                 .param("categoryCurrencyCode", "CHF")
-                .param("categoryAmount", "10")
+                .param("offAccountAmount", "9,10")
                 .param("viewAccountId", String.valueOf(cash)))
         .andExpect(status().isOk());
     long txnId = latestTransactionId();
@@ -388,11 +393,13 @@ class RegisterEntryScreenIntegrationTest {
     mockMvc
         .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(cash)))
         .andExpect(status().isOk())
-        // The CHF leg's own amount field is revealed and carries the price actually paid...
-        .andExpect(content().string(containsString("name=\"categoryAmount\"")))
+        // The Amount is in CHF and carries the price actually paid...
         .andExpect(content().string(containsString("Amount (CHF)")))
         .andExpect(content().string(containsString("value=\"10,00\"")))
-        // ...beside the funding leg's EUR amount, and the semantic category (never the CHF leaf).
+        // ...followed by the account's own EUR amount as Off account, and the semantic category
+        // (never the CHF leaf).
+        .andExpect(content().string(containsString("name=\"offAccountAmount\"")))
+        .andExpect(content().string(containsString("Off account (EUR)")))
         .andExpect(content().string(containsString("value=\"9,10\"")))
         .andExpect(content().string(containsString("Food")))
         // The funding account (EUR) is the book's base, so no third base field (§3.8a).
@@ -412,10 +419,10 @@ class RegisterEntryScreenIntegrationTest {
             post(ENTRY_PATH)
                 .param("date", "2026-02-01")
                 .param("accountId", String.valueOf(chfCard))
-                .param("amount", "10")
+                .param("amount", "11")
                 .param("categoryId", String.valueOf(shopping))
                 .param("categoryCurrencyCode", "USD")
-                .param("categoryAmount", "11")
+                .param("offAccountAmount", "10")
                 .param("baseAmount", "9,50")
                 .param("viewAccountId", String.valueOf(chfCard)))
         .andExpect(status().isOk());
@@ -448,10 +455,10 @@ class RegisterEntryScreenIntegrationTest {
             post(ENTRY_PATH)
                 .param("date", "2026-02-01")
                 .param("accountId", String.valueOf(cash))
-                .param("amount", "9,10")
+                .param("amount", "10")
                 .param("categoryId", String.valueOf(food))
                 .param("categoryCurrencyCode", "CHF")
-                .param("categoryAmount", "10")
+                .param("offAccountAmount", "9,10")
                 .param("viewAccountId", String.valueOf(cash)))
         .andExpect(status().isOk());
 
@@ -479,10 +486,10 @@ class RegisterEntryScreenIntegrationTest {
             post(ENTRY_PATH)
                 .param("date", "2026-02-01")
                 .param("accountId", String.valueOf(chfCard))
-                .param("amount", "9")
+                .param("amount", "10")
                 .param("categoryId", String.valueOf(shopping))
                 .param("categoryCurrencyCode", "USD")
-                .param("categoryAmount", "10")
+                .param("offAccountAmount", "9")
                 .param("baseAmount", "8,50")
                 .param("viewAccountId", String.valueOf(chfCard)))
         .andExpect(status().isOk())
@@ -494,7 +501,7 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
-  void committingCrossCurrencyWithoutTheCategoryAmountShowsClearErrorAndLeavesRowsUntouched()
+  void committingCrossCurrencyWithoutTheOffAccountAmountShowsClearErrorAndLeavesRowsUntouched()
       throws Exception {
     long cash = openAccount("Cash", "500");
     long food = insertCategory("Food");
@@ -509,7 +516,7 @@ class RegisterEntryScreenIntegrationTest {
                 .param("categoryCurrencyCode", "CHF")
                 .param("viewAccountId", String.valueOf(cash)))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("CHF amount is required")))
+        .andExpect(content().string(containsString("Off account (EUR) amount is required")))
         // HX-Reswap:none keeps htmx from swapping the OOB-only error response into #register-body
         // (which would delete the table — issue 05); the rows are left untouched.
         .andExpect(header().string("HX-Reswap", "none"))
@@ -688,7 +695,7 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
-  void crossCurrencyTransferRevealsTheCounterpartAmountField() throws Exception {
+  void crossCurrencyTransferSwitchesTheCurrencyAndRevealsOffAccount() throws Exception {
     long cash = openAccount("Cash", "500");
     long visaChf = openAccount("Visa CHF", "CHF", "0");
 
@@ -703,8 +710,12 @@ class RegisterEntryScreenIntegrationTest {
                 .param("categoryId", String.valueOf(visaChf))
                 .param("transferDirection", "TO"))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("name=\"categoryAmount\"")))
-        .andExpect(content().string(containsString("Amount (CHF)")));
+        // The Currency picker follows the target account and relabels the Amount, keeping the
+        // typed value (issue transaction-register-ui/04, option a); Off account is the EUR side.
+        .andExpect(content().string(containsString("value=\"CHF\" selected")))
+        .andExpect(content().string(containsString("Amount (CHF)")))
+        .andExpect(content().string(containsString("value=\"20\"")))
+        .andExpect(content().string(containsString("Off account (EUR)")));
   }
 
   @Test
@@ -717,10 +728,10 @@ class RegisterEntryScreenIntegrationTest {
             post(ENTRY_PATH)
                 .param("date", "2026-02-01")
                 .param("accountId", String.valueOf(cash))
-                .param("amount", "20")
+                .param("amount", "25")
                 .param("categoryId", String.valueOf(visaChf))
                 .param("transferDirection", "TO")
-                .param("categoryAmount", "25")
+                .param("offAccountAmount", "20")
                 .param("viewAccountId", String.valueOf(cash))
                 .param("viewAccountId", String.valueOf(visaChf)))
         .andExpect(status().isOk())

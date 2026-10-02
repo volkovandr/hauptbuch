@@ -86,10 +86,10 @@ class RegisterPayeeCurrencyIntegrationTest {
                 .param("date", "2026-02-01")
                 .param("accountId", String.valueOf(cash))
                 .param("payeeText", "ShopAaa")
-                .param("amount", "9,10")
+                .param("amount", "10")
                 .param("categoryId", String.valueOf(food))
                 .param("categoryCurrencyCode", "CHF")
-                .param("categoryAmount", "10")
+                .param("offAccountAmount", "9,10")
                 .param("viewAccountId", String.valueOf(cash)))
         .andExpect(status().isOk());
 
@@ -103,7 +103,7 @@ class RegisterPayeeCurrencyIntegrationTest {
                 .param("payeeText", "ShopAaa"))
         .andExpect(status().isOk())
         .andExpect(content().string(matchesRegex(selectedOption("CHF"))))
-        .andExpect(content().string(containsString("name=\"categoryAmount\"")));
+        .andExpect(content().string(containsString("name=\"offAccountAmount\"")));
   }
 
   @Test
@@ -118,7 +118,7 @@ class RegisterPayeeCurrencyIntegrationTest {
                 .param("payeeText", "ShopBbb"))
         .andExpect(status().isOk())
         .andExpect(content().string(matchesRegex(selectedOption("EUR"))))
-        .andExpect(content().string(not(containsString("name=\"categoryAmount\""))));
+        .andExpect(content().string(not(containsString("name=\"offAccountAmount\""))));
   }
 
   @Test
