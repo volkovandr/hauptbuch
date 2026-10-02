@@ -1,6 +1,6 @@
 # Transaction currency isn't pre-selected based on the chosen Payee
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: low
 Area: Transaction register — entry
