@@ -17,7 +17,7 @@ import volkovandr.hauptbuch.shared.MoneyFormat;
  * <p>The rate proposals live here rather than in either entry surface, so the register's split
  * panel and the receipt editor propose the same number from the same feed (issue receipts/23,
  * decision 6): {@link #prefillFundingTotal} proposes what comes off the account from what the
- * receipt says, and {@code prefillBase} (through {@link #resolve}) proposes the base figure from
+ * receipt says, and {@link #proposeBase} (through {@link #resolve}) proposes the base figure from
  * the funding one. Both are lenient — a blank or malformed input, or a leg with no stored rate on
  * or before the date, yields no proposal rather than a guess.
  */
@@ -62,7 +62,7 @@ public class CrossCurrencyFieldsService {
 
     String resolvedBaseText = query.baseAmountText();
     if (neitherIsBase && isBlank(resolvedBaseText)) {
-      resolvedBaseText = prefillBase(fundingCurrencyCode, query.date(), query.fundingAmountText());
+      resolvedBaseText = proposeBase(fundingCurrencyCode, query.date(), query.fundingAmountText());
     }
     return new CrossCurrencyFields(
         fundingCurrencyCode,
@@ -75,7 +75,7 @@ public class CrossCurrencyFieldsService {
 
   /**
    * Propose the funding-currency total from a spending-currency total (issue receipts/23) — the
-   * sibling of {@link #prefillBase}, in the direction the split panel and the receipt editor need:
+   * sibling of {@link #proposeBase}, in the direction the split panel and the receipt editor need:
    * the operator knows what the receipt says, not yet what came off the card.
    *
    * <p>Rates are stored only against base ({@code units of BASE per 1 unit of currency_code}), so
@@ -140,18 +140,26 @@ public class CrossCurrencyFieldsService {
   }
 
   /**
-   * Propose the base amount from the carry-forward rate feed; blank when nothing can be derived.
+   * Propose the base amount of {@code amountText} in {@code currencyCode} from the carry-forward
+   * rate feed, as of {@code date}; null when nothing can be derived (no date, an unparseable
+   * amount, or no rate on or before the date). Any explicit sign is dropped — the proposal is a
+   * magnitude. The entry dock proposes its Base from the transaction-currency Amount this way
+   * (issue transaction-register-ui/27); {@link #resolve} proposes it from the funding amount.
+   *
+   * @param currencyCode the currency {@code amountText} is in; never the base currency itself
+   * @param date the transaction date, to look the rate up as of it; may be null
+   * @param amountText the amount as typed; may be null or malformed
    */
-  private String prefillBase(String fundingCurrencyCode, LocalDate date, String fundingAmountText) {
+  public String proposeBase(String currencyCode, LocalDate date, String amountText) {
     if (date == null) {
       return null;
     }
-    Optional<BigDecimal> magnitude = tryParseMagnitude(fundingAmountText);
+    Optional<BigDecimal> magnitude = tryParseMagnitude(amountText);
     if (magnitude.isEmpty()) {
       return null;
     }
     return exchangeRateService
-        .rateAsOf(fundingCurrencyCode, date)
+        .rateAsOf(currencyCode, date)
         .map(rate -> MoneyFormat.number(magnitude.get().multiply(rate), AMOUNT_FRACTION_DIGITS))
         .orElse(null);
   }

@@ -47,3 +47,17 @@ With the field order from `04`:
 ## Comments
 
 Filed 2026-10-02 from the owner's walk-through (cases 2 and 4 in `04`).
+
+**Implemented** (branch `claude/brave-brown-490kjl`, awaiting owner confirmation):
+- The Amount and Date inputs now post to `/register/currency-fields` on change (like the Currency
+  picker), with `hx-sync="closest form:abort"` so pressing Enter to save drops the refresh instead
+  of letting a stale response land in the reset dock.
+- `DockAmountFieldsService.amountsFor` proposes Off account via `prefillFundingTotal` and Base via
+  `CrossCurrencyFieldsService.proposeBase` (the former private `prefillBase`, now public), both from
+  the Amount. The dock no longer derives Base from Off account; the split header still does
+  (unchanged, out of scope).
+- "Never overwrite what the user typed" without JS: each proposed field carries a hidden
+  `offAccountSuggestion` / `baseSuggestion` with the value last proposed. A field is re-proposed only
+  while it is blank or still equals that value. Edit mode starts with no suggestions, so a loaded
+  transaction's amounts (including the frozen base) are kept.
+- Register doc v0.10: §3.8a describes the proposals and the write-back is corrected.

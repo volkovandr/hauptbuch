@@ -46,7 +46,6 @@ class RegisterEntryController {
   private static final String REGISTER = "register";
   private static final String AMOUNT_FIELDS = "amountFields";
   private static final String CURRENCIES = "currencies";
-  private static final String OFF_ACCOUNT_TEXT = "offAccountText";
 
   /** OOB-replace only the dock (carrying an error); the rows region is left untouched. */
   private static final String DOCK_ERROR =
@@ -240,12 +239,12 @@ class RegisterEntryController {
    */
   @PostMapping("/register/currency-fields")
   String currencyFields(@ModelAttribute DockEntryForm form, Model model) {
-    addCurrencyAttributes(model, dockAmountFieldsService.forForm(form));
+    addAmountAttributes(model, dockAmountFieldsService.amountsFor(form));
     model.addAttribute("amountText", form.amount());
-    model.addAttribute(OFF_ACCOUNT_TEXT, form.offAccountAmount());
     return DOCK_FRAGMENT
         + " :: currencyFieldsResponse(fields=${amountFields}, amountText=${amountText},"
-        + " offAccountText=${offAccountText})";
+        + " offAccountText=${offAccountText}, offAccountSuggestion=${offAccountSuggestion},"
+        + " baseSuggestion=${baseSuggestion})";
   }
 
   /**
@@ -319,9 +318,19 @@ class RegisterEntryController {
     RegisterView register = registerService.view(filter);
     model.addAttribute(REGISTER, register);
     model.addAttribute("entryError", message);
-    model.addAttribute(OFF_ACCOUNT_TEXT, form.offAccountAmount());
-    addCurrencyAttributes(model, dockAmountFieldsService.forForm(form));
+    addAmountAttributes(model, dockAmountFieldsService.amountsFor(form));
     return DOCK_ERROR;
+  }
+
+  /**
+   * Add the currency picker's options, the amount-field layout and the Off account / Base values
+   * with the suggestions behind them (issue transaction-register-ui/27) to the model.
+   */
+  private void addAmountAttributes(Model model, DockAmounts amounts) {
+    addCurrencyAttributes(model, amounts.fields());
+    model.addAttribute("offAccountText", amounts.offAccountText());
+    model.addAttribute("offAccountSuggestion", amounts.offAccountSuggestion());
+    model.addAttribute("baseSuggestion", amounts.baseSuggestion());
   }
 
   /** Add the currency picker's options and the resolved amount-field layout to the model. */

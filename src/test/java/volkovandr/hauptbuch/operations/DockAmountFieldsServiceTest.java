@@ -38,6 +38,11 @@ class DockAmountFieldsServiceTest {
   private static final long VISA_ID = 2L;
   private static final long PAYEE_ID = 7L;
   private static final String SHOP = "ShopAaa";
+  private static final String USD = "USD";
+  private static final CrossCurrencyFields EUR_TO_CHF =
+      new CrossCurrencyFields(EUR, CHF, true, false, null, null);
+  private static final CrossCurrencyFields CHF_TO_USD =
+      new CrossCurrencyFields(CHF, USD, true, true, null, null);
 
   private final AccountService accountService = mock();
   private final CurrencyService currencyService = mock();
@@ -95,6 +100,8 @@ class DockAmountFieldsServiceTest {
         "20",
         categoryId,
         categoryCurrencyCode,
+        null,
+        null,
         null,
         null,
         null,
@@ -221,6 +228,16 @@ class DockAmountFieldsServiceTest {
 
   private static DockEntryForm amountsForm(
       String categoryCurrencyCode, String amount, String offAccountAmount) {
+    return suggestionForm(categoryCurrencyCode, amount, offAccountAmount, null, null, null);
+  }
+
+  private static DockEntryForm suggestionForm(
+      String categoryCurrencyCode,
+      String amount,
+      String offAccountAmount,
+      String baseAmount,
+      String offAccountSuggestion,
+      String baseSuggestion) {
     return new DockEntryForm(
         null,
         DATE,
@@ -233,7 +250,9 @@ class DockAmountFieldsServiceTest {
         9L,
         categoryCurrencyCode,
         offAccountAmount,
-        null,
+        baseAmount,
+        offAccountSuggestion,
+        baseSuggestion,
         null,
         null,
         null,
@@ -282,5 +301,88 @@ class DockAmountFieldsServiceTest {
     assertThatThrownBy(() -> service.entryFrom(amountsForm(CHF, "10", " ")))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("An Off account (EUR) amount is required");
+  }
+
+  // ── amountsFor: Off account / Base proposed from the Amount (issue transaction-register-ui/27)
+  // ──
+
+  @Test
+  void proposesOffAccountFromTheAmountWhileTheFieldIsBlank() {
+    layoutIs(EUR_TO_CHF);
+    when(crossCurrencyFieldsService.prefillFundingTotal(EUR, CHF, DATE, "10")).thenReturn("9,50");
+
+    DockAmounts amounts = service.amountsFor(suggestionForm(CHF, "10", "", null, "", null));
+
+    assertThat(amounts.offAccountText()).isEqualTo("9,50");
+    assertThat(amounts.offAccountSuggestion()).isEqualTo("9,50");
+  }
+
+  @Test
+  void reproposesOffAccountWhileItStillHoldsTheLastSuggestion() {
+    layoutIs(EUR_TO_CHF);
+    when(crossCurrencyFieldsService.prefillFundingTotal(EUR, CHF, DATE, "20")).thenReturn("19,00");
+
+    // The Amount changed from 10 to 20; Off account still shows the untouched proposal.
+    DockAmounts amounts = service.amountsFor(suggestionForm(CHF, "20", "9,50", null, "9,50", null));
+
+    assertThat(amounts.offAccountText()).isEqualTo("19,00");
+  }
+
+  @Test
+  void keepsOffAccountTheOperatorTyped() {
+    layoutIs(EUR_TO_CHF);
+
+    DockAmounts amounts = service.amountsFor(suggestionForm(CHF, "20", "9,00", null, "9,50", null));
+
+    assertThat(amounts.offAccountText()).isEqualTo("9,00");
+    assertThat(amounts.offAccountSuggestion()).isNull();
+    verify(crossCurrencyFieldsService, never()).prefillFundingTotal(EUR, CHF, DATE, "20");
+  }
+
+  @Test
+  void leavesOffAccountBlankWithoutRate() {
+    layoutIs(EUR_TO_CHF);
+    when(crossCurrencyFieldsService.prefillFundingTotal(EUR, CHF, DATE, "10")).thenReturn(null);
+
+    DockAmounts amounts = service.amountsFor(suggestionForm(CHF, "10", null, null, null, null));
+
+    assertThat(amounts.offAccountText()).isNull();
+  }
+
+  @Test
+  void proposesBaseFromTheAmountWhenNeitherCurrencyIsBase() {
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(account(CASH_ID, CHF)));
+    when(crossCurrencyFieldsService.resolve(any())).thenReturn(CHF_TO_USD);
+    when(crossCurrencyFieldsService.proposeBase(USD, DATE, "10")).thenReturn("9,00");
+
+    DockAmounts amounts = service.amountsFor(suggestionForm(USD, "10", "9,47", null, null, null));
+
+    assertThat(amounts.fields().baseAmountText()).isEqualTo("9,00");
+    assertThat(amounts.baseSuggestion()).isEqualTo("9,00");
+    // Off account was typed, so it is kept — and Base does not follow it.
+    assertThat(amounts.offAccountText()).isEqualTo("9,47");
+  }
+
+  @Test
+  void keepsBaseTheOperatorTyped() {
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(account(CASH_ID, CHF)));
+    when(crossCurrencyFieldsService.resolve(any())).thenReturn(CHF_TO_USD);
+
+    DockAmounts amounts =
+        service.amountsFor(suggestionForm(USD, "10", "9,47", "8,80", null, "9,00"));
+
+    assertThat(amounts.fields().baseAmountText()).isEqualTo("8,80");
+    assertThat(amounts.baseSuggestion()).isNull();
+  }
+
+  @Test
+  void singleCurrencyProposesNothing() {
+    layoutIs(CrossCurrencyFields.singleCurrency(EUR));
+
+    DockAmounts amounts = service.amountsFor(suggestionForm(EUR, "10", null, null, null, null));
+
+    assertThat(amounts.offAccountText()).isNull();
+    assertThat(amounts.offAccountSuggestion()).isNull();
+    assertThat(amounts.baseSuggestion()).isNull();
   }
 }

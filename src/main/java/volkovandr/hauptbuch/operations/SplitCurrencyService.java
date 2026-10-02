@@ -142,7 +142,7 @@ public class SplitCurrencyService {
     if (!isBlank(query.baseTotal())) {
       return new SplitTotals(resolvedFunding, query.baseTotal());
     }
-    // The base proposal rides on ledger's existing prefillBase, reached through resolve() exactly
+    // The base proposal rides on ledger's existing proposeBase, reached through resolve() exactly
     // as the simple dock reaches it — so the number the split header proposes is the dock's number.
     CrossCurrencyFields fields =
         crossCurrencyFieldsService.resolve(

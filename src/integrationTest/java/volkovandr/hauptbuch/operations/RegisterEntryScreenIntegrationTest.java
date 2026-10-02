@@ -327,7 +327,7 @@ class RegisterEntryScreenIntegrationTest {
     jdbcClient
         .sql(
             "insert into exchange_rate (currency_code, date, rate, source)"
-                + " values ('CHF', '2026-01-01', 0.95, 'manual')")
+                + " values ('USD', '2026-01-01', 0.95, 'manual')")
         .update();
 
     mockMvc
@@ -335,12 +335,13 @@ class RegisterEntryScreenIntegrationTest {
             post("/register/currency-fields")
                 .param("date", "2026-02-01")
                 .param("accountId", String.valueOf(chfCard))
-                .param("offAccountAmount", "10")
+                .param("amount", "10")
                 .param("categoryCurrencyCode", "USD"))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("name=\"baseAmount\"")))
         .andExpect(content().string(containsString("Base (EUR)")))
-        // 10 CHF off the account, carried forward at the January rate (0.95), pre-fills 9,50 EUR.
+        // The 10 USD Amount, carried forward at the January rate (0.95), proposes 9,50 EUR (issue
+        // transaction-register-ui/27).
         .andExpect(content().string(containsString("value=\"9,50\"")));
   }
 

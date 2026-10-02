@@ -32,6 +32,12 @@ import java.util.List;
  * @param offAccountAmount the {@code Off account} field: the funding account's own magnitude;
  *     present only when cross-currency (§3.8a)
  * @param baseAmount the frozen base-currency magnitude; present only when neither leg is base
+ * @param offAccountSuggestion the {@code Off account} value the server last proposed (issue
+ *     transaction-register-ui/27), carried in a hidden field; while {@code offAccountAmount} still
+ *     equals it (or is blank) it is a suggestion and is re-proposed, otherwise the operator typed
+ *     it
+ * @param baseSuggestion the {@code Base} value the server last proposed, read like {@code
+ *     offAccountSuggestion}
  * @param note transaction note; nullable
  * @param transferDirection {@code TO}/{@code FROM} when the counterpart resolver matched a transfer
  *     target (register §3.8, plan stage 7d.3); {@code null}/blank for a category counterpart
@@ -65,6 +71,8 @@ public record DockEntryForm(
     String categoryCurrencyCode,
     String offAccountAmount,
     String baseAmount,
+    String offAccountSuggestion,
+    String baseSuggestion,
     String note,
     String transferDirection,
     String personName,

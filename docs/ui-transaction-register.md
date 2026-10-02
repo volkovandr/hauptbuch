@@ -1,7 +1,7 @@
 # Personal Finance Manager — UI: Transaction Register & Entry Dock
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.9
+**Status:** Draft v0.10
 **Date:** 2026-10-02
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.4),
@@ -20,6 +20,9 @@
 > pinning them now would be premature.
 
 **Changelog**
+- **v0.10 (2026-10-02):** §3.8a: Off account and Base are proposed from the Amount and follow it
+  until typed over (issue transaction-register-ui/27); corrected the stale "never written back to
+  the feed" — data-model §3.7 writes the entered rate back.
 - **v0.9 (2026-10-02):** §3.2/§3.5/§3.8a: one fixed dock order — **Currency moves before the
   amounts**, the **Amount is typed in the transaction currency**, and the account's own amount
   follows it as **Off account** (the split header's name), then **Base**; the split header keeps the
@@ -577,13 +580,18 @@ The **Amount** stays first and is in the transaction currency; **Off account** (
 own amount) and **Base** follow it.
 
 - **One foreign side, base present** (EUR card → CHF food): **two** fields — the counterpart's
-  amount and the paying account's (Off account). The base-currency leg's `base_amount` equals its own amount, so
-  no separate base field is shown.
+  amount and the paying account's (Off account). The base-currency leg's `base_amount` equals its
+  own amount, so no separate base field is shown.
 - **Neither side is base** (CHF card → USD goods, base EUR): **three** fields — each native amount
-  plus a single **base amount**. The base is **pre-filled from `rate_as_of`** on one leg and is
-  **confirmable/editable**; it is frozen on both legs so `Σ base_amount = 0`. The implied cross-rate
-  may be shown read-only, but is **never written back to the `exchange_rate` feed** (data-model §6.4:
-  the frozen transaction fact and the revaluation feed are separate sources).
+  plus a single **base amount**, frozen on both legs so `Σ base_amount = 0`.
+- **Off account and Base are proposed from the Amount** at `rate_as_of` the transaction date
+  (through base for Off account) as the Amount, date or currency changes, and are
+  **confirmable/editable**. A field is re-proposed only while it is blank or still holds the last
+  proposal; a typed value is never overwritten, and Base never follows an edited Off account. No
+  rate on file → the field stays blank, never a guess (issue transaction-register-ui/27).
+- **The entered rate feeds back.** Saving upserts the implied rate per non-base currency as a
+  `source='manual'` row on the transaction's date (data-model §3.7); the frozen `base_amount` itself
+  is never recomputed from the feed (data-model §6.4).
 - **The amounts are irreducible facts, not clutter.** Three fields means three real numbers (you paid
   USD, the goods cost CHF, it is worth EUR); progressive disclosure keeps them hidden until a currency
   actually diverges, so the ≥95% single-currency path stays a single field.
