@@ -132,16 +132,19 @@
              the funding leg, so the amount-field layout and the currency default must recompute —
              mirrors the transfer counterpart-resolved chain below.
 
-             The hx-include deliberately omits the (possibly stale) categoryCurrencyCode, exactly as
-             the old Account <select> did: changing the funding leg must always re-derive the
-             currency default — from the new account's currency, or, when the leg is a person, from
-             the transaction-currency rule (§3.5). Including it would pin the old override. -->
+             The hx-include omits the (possibly stale) categoryCurrencyCode and hx-vals blanks it:
+             changing the funding leg must always re-derive the currency default — from the new
+             account's currency, or, when the leg is a person, from the transaction-currency rule
+             (§3.5). Including it would pin the old override. hx-vals is needed because htmx adds the
+             enclosing form's values to every non-GET request regardless of hx-include, so the
+             picker's current value would otherwise be posted anyway. -->
         <span
           hidden
           hx-post="/register/currency-fields"
           hx-trigger="account-resolved from:body"
           hx-include="[name='date'], [name='accountId'], [name='amount'], [name='payeeText'],
                       [name='fundingPersonName'], [name='fundingPersonDirection']"
+          hx-vals='{"categoryCurrencyCode": ""}'
           hx-target="#entry-currency-amount"
           hx-swap="outerHTML"
         ></span>
@@ -181,6 +184,7 @@
           hx-trigger="change from:#entry-payee"
           hx-include="[name='date'], [name='accountId'], [name='amount'], [name='payeeText'],
                       [name='fundingPersonName'], [name='fundingPersonDirection']"
+          hx-vals='{"categoryCurrencyCode": ""}'
           hx-target="#entry-currency-amount"
           hx-swap="outerHTML"
         ></span>
