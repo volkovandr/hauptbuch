@@ -70,12 +70,12 @@ public class GhostSuggestionRepository {
   }
 
   /**
-   * The transaction currency of the most recent live transaction this payee had on this account
-   * (issue transaction-register-ui/17), or empty if the pair has no history. The transaction
-   * currency is the currency of the legs that are <em>not</em> in the account's own currency — a
-   * EUR card paying a USD bill was a USD transaction — and the account's own currency when every
-   * leg shares it. A transaction spans at most two native currencies (register §3.8a), so at most
-   * one other currency can be present; ties on date go to the later-entered transaction.
+   * The transaction currency of the most recent live, confirmed transaction this payee had on this
+   * account (issue transaction-register-ui/17), or empty if the pair has no history. The
+   * transaction currency is the currency of the legs that are <em>not</em> in the account's own
+   * currency — a EUR card paying a USD bill was a USD transaction — and the account's own currency
+   * when every leg shares it. A transaction spans at most two native currencies (register §3.8a),
+   * so at most one other currency can be present; ties on date go to the later-entered transaction.
    *
    * @param payeeId the accepted payee
    * @param accountId the funding account
@@ -91,6 +91,7 @@ public class GhostSuggestionRepository {
               where t.payee_id = :payeeId
                 and p.account_id = :accountId
                 and t.deleted_at is null
+                and t.lifecycle = 'confirmed'
               order by t.date desc, t.transaction_id desc
               limit 1
             )
