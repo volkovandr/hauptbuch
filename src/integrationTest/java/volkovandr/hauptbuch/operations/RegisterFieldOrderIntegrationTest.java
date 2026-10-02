@@ -223,7 +223,7 @@ class RegisterFieldOrderIntegrationTest {
             .andReturn()
             .getResponse()
             .getContentAsString();
-    assertInOrder(html, "Amount (CHF)", "value=\"−10,00\"", "Off account (EUR)", "value=\"9,10\"");
+    assertInOrder(html, "Amount (CHF)", "value=\"-10,00\"", "Off account (EUR)", "value=\"9,10\"");
 
     // Saving the edit exactly as shown books the same legs.
     mockMvc

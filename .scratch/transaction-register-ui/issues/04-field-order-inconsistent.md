@@ -1,6 +1,6 @@
 # One fixed field order for the entry dock, whatever the currencies or split state
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: medium
 Area: Transaction register — entry dock + split panel header; recurring template editor (`recurring/02`)
