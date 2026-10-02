@@ -3,6 +3,8 @@ package volkovandr.hauptbuch.operations;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
@@ -16,6 +18,9 @@ import volkovandr.hauptbuch.ledger.CrossCurrencyFields;
 import volkovandr.hauptbuch.ledger.CrossCurrencyFieldsQuery;
 import volkovandr.hauptbuch.ledger.CrossCurrencyFieldsService;
 import volkovandr.hauptbuch.ledger.CurrencyService;
+import volkovandr.hauptbuch.ledger.Payee;
+import volkovandr.hauptbuch.ledger.PayeeService;
+import volkovandr.hauptbuch.operations.repository.GhostSuggestionRepository;
 
 /**
  * Unit tier (plan §1.5): which currencies the dock's amount-field layout is computed against
@@ -30,14 +35,23 @@ class DockAmountFieldsServiceTest {
   private static final LocalDate DATE = LocalDate.of(2026, 2, 1);
   private static final long CASH_ID = 1L;
   private static final long VISA_ID = 2L;
+  private static final long PAYEE_ID = 7L;
+  private static final String SHOP = "ShopAaa";
 
   private final AccountService accountService = mock();
   private final CurrencyService currencyService = mock();
   private final CrossCurrencyFieldsService crossCurrencyFieldsService = mock();
   private final TransactionCurrencyResolver transactionCurrencyResolver = mock();
+  private final PayeeService payeeService = mock();
+  private final GhostSuggestionRepository ghostSuggestionRepository = mock();
   private final DockAmountFieldsService service =
       new DockAmountFieldsService(
-          accountService, currencyService, crossCurrencyFieldsService, transactionCurrencyResolver);
+          accountService,
+          currencyService,
+          crossCurrencyFieldsService,
+          transactionCurrencyResolver,
+          payeeService,
+          ghostSuggestionRepository);
 
   private static Account account(long id, String currency) {
     return new Account(
@@ -51,6 +65,24 @@ class DockAmountFieldsServiceTest {
       Long categoryId,
       String transferDirection,
       String categoryCurrencyCode) {
+    return form(
+        accountId,
+        fundingPersonName,
+        fundingPersonDirection,
+        categoryId,
+        transferDirection,
+        categoryCurrencyCode,
+        null);
+  }
+
+  private static DockEntryForm form(
+      Long accountId,
+      String fundingPersonName,
+      String fundingPersonDirection,
+      Long categoryId,
+      String transferDirection,
+      String categoryCurrencyCode,
+      String payeeText) {
     return new DockEntryForm(
         null,
         DATE,
@@ -58,7 +90,7 @@ class DockAmountFieldsServiceTest {
         fundingPersonName,
         fundingPersonDirection,
         null,
-        null,
+        payeeText,
         "20",
         categoryId,
         categoryCurrencyCode,
@@ -81,7 +113,7 @@ class DockAmountFieldsServiceTest {
   private CrossCurrencyFieldsQuery captureQuery() {
     ArgumentCaptor<CrossCurrencyFieldsQuery> captor =
         ArgumentCaptor.forClass(CrossCurrencyFieldsQuery.class);
-    org.mockito.Mockito.verify(crossCurrencyFieldsService).resolve(captor.capture());
+    verify(crossCurrencyFieldsService).resolve(captor.capture());
     return captor.getValue();
   }
 
@@ -141,5 +173,46 @@ class DockAmountFieldsServiceTest {
 
     assertThat(service.forForm(form(null, "Max", "BY", 9L, null, null)).fundingCurrencyCode())
         .isEmpty();
+  }
+
+  @Test
+  void blankSelectorPreselectsTheCurrencyLastUsedWithThePayeeOnTheAccount() {
+    // The Account/Payee refresh posts without the selector (issue transaction-register-ui/17).
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(account(CASH_ID, EUR)));
+    when(payeeService.findExisting(SHOP))
+        .thenReturn(Optional.of(new Payee(PAYEE_ID, SHOP, null, null, null)));
+    when(ghostSuggestionRepository.suggestCurrencyFor(PAYEE_ID, CASH_ID))
+        .thenReturn(Optional.of(CHF));
+    when(crossCurrencyFieldsService.resolve(any()))
+        .thenReturn(CrossCurrencyFields.singleCurrency(EUR));
+
+    service.forForm(form(CASH_ID, null, null, null, null, null, SHOP));
+
+    assertThat(captureQuery().categoryCurrencyCode()).isEqualTo(CHF);
+  }
+
+  @Test
+  void blankSelectorWithoutPayeeHistoryFallsBackToTheAccountCurrency() {
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(account(CASH_ID, EUR)));
+    when(payeeService.findExisting(SHOP)).thenReturn(Optional.empty());
+    when(crossCurrencyFieldsService.resolve(any()))
+        .thenReturn(CrossCurrencyFields.singleCurrency(EUR));
+
+    service.forForm(form(CASH_ID, null, null, null, null, null, SHOP));
+
+    // No override: the layout resolves against the funding account's own currency.
+    assertThat(captureQuery().categoryCurrencyCode()).isNull();
+  }
+
+  @Test
+  void explicitSelectorWinsOverThePayeeSuggestion() {
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(account(CASH_ID, EUR)));
+    when(crossCurrencyFieldsService.resolve(any()))
+        .thenReturn(CrossCurrencyFields.singleCurrency(EUR));
+
+    service.forForm(form(CASH_ID, null, null, null, null, EUR, SHOP));
+
+    assertThat(captureQuery().categoryCurrencyCode()).isEqualTo(EUR);
+    verify(ghostSuggestionRepository, never()).suggestCurrencyFor(PAYEE_ID, CASH_ID);
   }
 }
