@@ -69,7 +69,7 @@ class DockAmountFieldsService {
             fundingCurrency,
             counterpartCurrency(form),
             form.date(),
-            null,
+            null, // Off account is proposed from the Amount (amountsFor), not carried in
             DockAmountTexts.counterpartText(form.amount()),
             form.baseAmount()));
   }
@@ -88,7 +88,7 @@ class DockAmountFieldsService {
       return new DockAmounts(layout, null, null, null);
     }
     String transactionCurrency = layout.categoryCurrencyCode();
-    boolean proposeOffAccount = isSuggestion(form.offAccountAmount(), form.offAccountSuggestion());
+    boolean proposeOffAccount = isReplaceable(form.offAccountAmount(), form.offAccountSuggestion());
     String offAccountSuggestion =
         proposeOffAccount
             ? crossCurrencyFieldsService.prefillFundingTotal(
@@ -98,7 +98,7 @@ class DockAmountFieldsService {
     String baseSuggestion = null;
     String baseText = null;
     if (layout.neitherIsBase()) {
-      boolean proposeBase = isSuggestion(form.baseAmount(), form.baseSuggestion());
+      boolean proposeBase = isReplaceable(form.baseAmount(), form.baseSuggestion());
       baseSuggestion =
           proposeBase
               ? crossCurrencyFieldsService.proposeBase(
@@ -120,7 +120,7 @@ class DockAmountFieldsService {
   }
 
   /** Whether a field still holds a proposal the server may replace: blank, or the last one. */
-  private static boolean isSuggestion(String current, String lastSuggestion) {
+  private static boolean isReplaceable(String current, String lastSuggestion) {
     String value = current == null ? "" : current.strip();
     return value.isEmpty() || value.equals(lastSuggestion == null ? "" : lastSuggestion.strip());
   }

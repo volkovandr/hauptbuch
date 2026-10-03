@@ -152,6 +152,30 @@ class RegisterAmountSuggestionIntegrationTest {
   }
 
   @Test
+  void editedTransactionKeepsItsLoadedAmountsWhenTheAmountChanges() throws Exception {
+    long chfCard = openAccount("Cash CHF", "CHF");
+    rate("USD", "0.90");
+    rate("CHF", "0.95");
+
+    // An edit dock starts with no suggestions, so the loaded Off account and frozen Base are the
+    // operator's facts: changing the Amount must not re-propose over them.
+    mockMvc
+        .perform(
+            post(CURRENCY_FIELDS_PATH)
+                .param("date", DATE)
+                .param(ACCOUNT_ID, String.valueOf(chfCard))
+                .param(CURRENCY, "USD")
+                .param("amount", "20")
+                .param("offAccountAmount", "9,50")
+                .param("baseAmount", "9,10"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("value=\"9,50\"")))
+        .andExpect(content().string(containsString("value=\"9,10\"")))
+        .andExpect(content().string(not(containsString("value=\"18,00\""))))
+        .andExpect(content().string(not(containsString("value=\"18,95\""))));
+  }
+
+  @Test
   void noRateOnFileLeavesOffAccountBlank() throws Exception {
     long cash = openAccount("Cash", EUR);
 
