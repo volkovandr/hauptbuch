@@ -1,6 +1,6 @@
 # Cross-currency amounts are not suggested from the rate feed in the simple dock
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: medium
 Area: Transaction register — entry dock (`DockAmountFieldsService`, `CrossCurrencyFieldsService`)
@@ -48,7 +48,7 @@ With the field order from `04`:
 
 Filed 2026-10-02 from the owner's walk-through (cases 2 and 4 in `04`).
 
-**Implemented** (branch `claude/brave-brown-490kjl`, awaiting owner confirmation):
+**Implemented** (branch `claude/brave-brown-490kjl`, owner-confirmed 2026-10-03):
 - The Amount and Date inputs now post to `/register/currency-fields` on change (like the Currency
   picker), with `hx-sync="closest form:abort"` so pressing Enter to save drops the refresh instead
   of letting a stale response land in the reset dock.
