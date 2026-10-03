@@ -580,8 +580,8 @@ The **Amount** stays first and is in the transaction currency; **Off account** (
 own amount) and **Base** follow it.
 
 - **One foreign side, base present** (EUR card → CHF food): **two** fields — the counterpart's
-  amount and the paying account's (Off account). The base-currency leg's `base_amount` equals its
-  own amount, so no separate base field is shown.
+  amount and the paying account's (Off account). The base-currency leg's `base_amount` equals its own amount, so
+  no separate base field is shown.
 - **Neither side is base** (CHF card → USD goods, base EUR): **three** fields — each native amount
   plus a single **base amount**, frozen on both legs so `Σ base_amount = 0`.
 - **Off account and Base are proposed from the Amount** at `rate_as_of` the transaction date
@@ -589,9 +589,10 @@ own amount) and **Base** follow it.
   **confirmable/editable**. A field is re-proposed only while it is blank or still holds the last
   proposal; a typed value is never overwritten, and Base never follows an edited Off account. No
   rate on file → the field stays blank, never a guess (issue transaction-register-ui/27).
-- **The entered rate feeds back.** Saving upserts the implied rate per non-base currency as a
-  `source='manual'` row on the transaction's date (data-model §3.7); the frozen `base_amount` itself
-  is never recomputed from the feed (data-model §6.4).
+- **The entered rate feeds back.** The implied cross-rate may be shown read-only. Saving upserts
+  the implied rate per non-base currency as a `source='manual'` row on the transaction's date
+  (data-model §3.7); the frozen `base_amount` itself is never recomputed from the feed
+  (data-model §6.4).
 - **The amounts are irreducible facts, not clutter.** Three fields means three real numbers (you paid
   USD, the goods cost CHF, it is worth EUR); progressive disclosure keeps them hidden until a currency
   actually diverges, so the ≥95% single-currency path stays a single field.
