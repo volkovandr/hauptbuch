@@ -1,11 +1,11 @@
 # Hauptbuch — Core Data Model
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.15
-**Date:** 2026-09-28
+**Status:** Draft v0.16
+**Date:** 2026-10-04
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.8),
-`tech-stack.md` (v0.3), `reporting.md`
+`tech-stack.md` (v0.3), `reporting.md`, `statements.md`
 
 > This document records the **core data model** — accounts, transactions, postings, currency,
 > exchange rates, FX handling, per-person debts, payees, and tags — together with the conventions
@@ -13,10 +13,16 @@
 > their reasoning so the _why_ survives long after the _what_ is code.**
 >
 > Scope note: this is the *core* (the double-entry engine, money valuation, and the tag dimension),
-> plus the ratified **receipt** model (§13) and **recurring templates** (§14). Budgets, statement
-> attachments, and holdings are deliberately **not modeled here yet** — see §12.
+> plus the ratified **receipt** model (§13), **recurring templates** (§14) and **bank statements**
+> (§15). Budgets and holdings are deliberately **not modeled here yet** — see §12.
 
 **Changelog**
+- **v0.16 (2026-10-04):** New **§15 Bank statements** (statement reconciliation grilling, design in
+  `statements.md`; leaves §12). New **§8 invariant 6 — one leg per real own account per
+  transaction** and **postings edited in place** (§3.6), so `posting_id` and `reconciliation`
+  survive an edit; rationale in ADR 0003. **§13 corrected:** `parse_raw` was documented as
+  immutable, but the operator's re-seed (issue receipt-processing/19) has always overwritten it in
+  place — the doc now says so.
 - **v0.15 (2026-09-28):** New **§14 Recurring templates** (grilled with the owner; leaves §12).
   A template is a stored dock entry plus a schedule. Occurrences are booked as ordinary transactions
   stamped `(recurring_template_id, occurrence_date)`, driven by a per-template `booked_through`
@@ -331,6 +337,13 @@ create table posting (
   never be recomputed."
 - **`reconciliation` is per-posting**, not per-transaction — you reconcile one account against one
   statement at a time; a transfer's two legs clear on different statements on different dates.
+  Statement reconciliation sets `reconciled` (never `cleared`, which stays for manual use and for
+  the `C` values imported from Money); see §15 and `statements.md` §5.
+- **Postings are edited in place** (ADR 0003). Editing a transaction pairs its new legs with the
+  existing ones **by account**: a paired leg keeps its `posting_id` and its `reconciliation` when its
+  amount is unchanged, and drops to `unreconciled` when it changed; an unpaired old leg is deleted, a
+  new one inserted `unreconciled`. Legs on accounts that may repeat (invariant 6) fall back to
+  delete + insert.
 
 ### 3.7 `exchange_rate`
 
@@ -771,6 +784,10 @@ minimum they are tests.
    deletes its postings. All invariants scope to `deleted_at is null`.
 5. **Backdated-insert balance correctness** (from tech-stack §4.2) — running balances of rows above
    a backdated insert are corrected. Explicit test required.
+6. **One leg per real own account** (ADR 0003). A live transaction carries at most one posting per
+   `asset`/`liability`/`equity` account that is not a person leaf. Income and expense accounts and
+   person leaves may repeat. Enforced in `LedgerService` validation (rejected, never merged); verified
+   by test.
 
 ---
 
@@ -900,9 +917,6 @@ to be designed next:
 
 - **Budgets** (§5.13) — on the same category (account) taxonomy and/or tags; no separate budget
   table of categories.
-- **Statement attachments** (bank statements on the Pi filesystem, ARCH-07) — designed with
-  statement reconciliation. *Receipts* are ratified in §13; the two stay separate entities unless
-  that work proves a common shape (Q-RX-3 decision, 2026-07-21).
 - **Holdings / positions** (§5.11) — contribute to net worth via the same `native × rate@D` rule,
   with manually-entered "rates" (prices).
 - **Import canonical representation** (§5.12) — targets this model; idempotency keys live there.
@@ -915,8 +929,10 @@ The receipt is a captured scan moving through a stored lifecycle toward **at mos
 transaction (1:0..1 both ways). The interaction design — lifecycle §2, modes §3, surfaces §4–§6 —
 lives in `ui-receipt-processing.md`; this section owns the entities and their invariants. The
 standing pattern applies twice over: the **original image** is immutable and the edited image is
-derived; the **raw parse** (`parse_raw`) is immutable and the draft lines are the editable
-working copy.
+derived; the **raw parse** (`parse_raw`) is the AI's response as received, and the draft lines are
+the editable working copy. `parse_raw` is **not** immutable: the operator may edit it and *Re-seed*,
+which overwrites it in place and rebuilds the lines (issue receipt-processing/19; corrected v0.16 —
+earlier versions of this doc called it immutable). Statements (§15) follow the same convention.
 
 ### 13.1 `receipt`
 
@@ -935,7 +951,7 @@ create table receipt (
                                           -- original when the user re-edits (receipt doc §6.1)
   ai_note        text,                    -- per-receipt prompt guidance (receipt doc §8)
   batch_id       text,                    -- Batches API id while processing (NULL for single mode)
-  parse_raw      text,                    -- raw AI response, retained immutable (audit). text, not
+  parse_raw      text,                    -- raw AI response; overwritten by an operator re-seed. text, not
                                           -- jsonb: the response format is TOON (settled 2026-08-01,
                                           -- decoded app-side with jtoon), and the model may return
                                           -- malformed output — the column stores whatever came
@@ -1317,6 +1333,124 @@ tables, reading each leg as the booked entry would post it:
   who owes whom, then that person's templates; the total is the overall debt change in base. A
   template between two people shows under both, netting to zero. Shown only when a template has
   one. It is not an engine Report (reporting.md aggregates postings).
+
+---
+
+## 15. Bank statements (ratified 2026-10-04 from `statements.md`)
+
+The design — sources, matching tiers, the statement page, green — lives in `statements.md`; this
+section owns the entities and their invariants. A statement is one uploaded file for one account; its
+lines are matched 1:1 to postings; **the match is the only stored result** — proposals, missing lines,
+extras and balance checks are computed on every view (`statements.md` §4.5).
+
+```sql
+create table statement_profile (
+  statement_profile_id  bigint generated always as identity primary key,
+  name                  text not null,
+  format                text not null check (format in ('csv','pdf')),
+  window_days_before    int  not null default 10 check (window_days_before >= 0), -- ledger date may
+  window_days_after     int  not null default 3  check (window_days_after >= 0),  -- precede/follow
+                                                                                   -- the booking date
+  ai_note               text,          -- pdf: per-bank guidance appended to the parser prompt
+  -- csv dialect
+  csv_delimiter         text,
+  csv_quote             text,
+  csv_encoding          text,
+  csv_skip_rows         int,           -- header rows above the data (the column-name row excluded)
+  csv_has_header        boolean,       -- false: columns below are 1-based indices
+  csv_decimal_separator text,
+  csv_date_format       text,
+  csv_sign_mode         text check (csv_sign_mode in ('signed','debit_credit')),
+  -- csv column map: a header name, or a 1-based index when csv_has_header is false
+  col_booking_date      text,
+  col_value_date        text,
+  col_amount            text,          -- signed mode
+  col_debit             text,          -- debit_credit mode
+  col_credit            text,
+  col_currency          text,
+  col_counterparty      text,
+  col_description       text,
+  col_bank_category     text,
+  col_iban              text,          -- the owner's IBAN, for the account proposal
+  deleted_at            timestamptz
+);
+
+create table statement (
+  statement_id          bigint generated always as identity primary key,
+  statement_profile_id  bigint not null references statement_profile(statement_profile_id),
+  account_id            bigint not null references account(account_id),
+  state                 text not null check (state in ('new','processing','processed','failed')),
+  original_filename     text not null,   -- for reference only
+  file_path             text not null,   -- the uploaded file on the Pi (ARCH-07), never mutated
+  period_start          date,            -- editable; csv: defaults to the first/last booking date
+  period_end            date,
+  opening_balance       numeric(19,4),   -- NULL = turnover-only check
+  closing_balance       numeric(19,4),
+  -- pdf parse (the receipt conventions, §13.1):
+  sent_text             text,            -- the extracted text exactly as edited and sent
+  parse_raw             text,            -- AI response (TOON); overwritten by an operator re-seed
+  parse_error           text,
+  tokens_in             int,
+  tokens_out            int,
+  tokens_cache_write    int,
+  tokens_cache_read     int,
+  parse_cost            numeric(12,6),   -- USD, frozen at parse time from the settings rates
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+  deleted_at            timestamptz
+);
+
+create table statement_line (
+  statement_line_id      bigint generated always as identity primary key,
+  statement_id           bigint not null references statement(statement_id),
+  sort_order             int  not null,
+  booking_date           date,
+  value_date             date,
+  amount                 numeric(19,4),   -- signed, in the account's currency; + = money in
+  original_amount        numeric(19,4),   -- a foreign charge as the bank shows it
+  original_currency_code text references currency(currency_code),
+  original_rate          numeric(19,8),
+  counterparty           text,
+  description            text,
+  bank_category          text,            -- the bank's own label; a hint only, never a category
+  raw_text               text,            -- the source row / AI text
+  problem                text             -- why the line cannot be matched (unreadable, foreign
+                                          -- currency); NULL = a matchable line
+);
+
+create table statement_match (
+  statement_match_id  bigint generated always as identity primary key,
+  statement_line_id   bigint not null unique references statement_line(statement_line_id),
+  statement_id        bigint not null references statement(statement_id),
+  posting_id          bigint not null references posting(posting_id) on delete cascade,
+  matched_at          timestamptz not null default now(),
+  unique (statement_id, posting_id)      -- never two lines of one statement on one posting
+);
+
+alter table settings add column statement_system_prompt text;  -- NULL = built-in default
+```
+
+- **A match exists only on a `reconciled` posting.** Confirming a match sets the posting to
+  `reconciled` and confirms a `pending_review` transaction. Whatever drops the posting out of
+  `reconciled` — an edit that changes its amount (§3.6), Unmatch — removes its matches; so does
+  voiding the transaction. `ledger` reports those posting ids through an interface it owns and
+  `statements` implements (ADR 0003); an edit that deletes the leg outright cascades.
+- **Deleting a statement** soft-deletes it, removes its matches, and leaves the postings'
+  `reconciliation` as the operator chooses (keep or reset). A match on a soft-deleted statement does
+  not exist.
+- **1:1 within a statement; overlaps allowed across statements.** `statement_line_id` is unique on the
+  match; `(statement_id, posting_id)` is unique. One posting may carry matches from several statements
+  of the same account whose periods overlap. Invariant 6 (§8) makes "the account's leg" one posting.
+- **`statement_match.statement_id`** duplicates the line's statement so the uniqueness can be a
+  constraint; the application keeps it equal to `statement_line.statement_id`.
+- **The bank's date lives on the line, never on the transaction.** `transaction.date` is the purchase
+  date and is never rewritten from a statement.
+- **`parse_raw`, `sent_text` and the telemetry** follow §13.1; `sent_text` is what left the Pi, kept
+  for audit. The unedited extracted text is not stored — it is re-derivable from the file.
+- **Account proposal** reuses `account.detection_labels` (§13.4) — IBANs and account numbers are just
+  more labels; no schema change.
+- **Re-seed is refused while any line of the statement is matched** — the analogue of §13's committed
+  receipt.
 
 ---
 

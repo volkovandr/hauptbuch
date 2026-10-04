@@ -1,12 +1,12 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.52
-**Date:** 2026-09-30
+**Status:** Draft v0.53
+**Date:** 2026-10-04
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
-`ui-transaction-register.md`, `ui-receipt-processing.md`, `import.md`, `reporting.md`
-(the seven authoritative design docs)
+`ui-transaction-register.md`, `ui-receipt-processing.md`, `import.md`, `reporting.md`,
+`statements.md` (the eight authoritative design docs)
 
 > This document records the **build sequence** — the order in which the system is implemented, what
 > each stage delivers, and *why that order*, in keeping with the house rule that the *why* must
@@ -28,6 +28,13 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+- **v0.53 (2026-10-04):** **Bank statement reconciliation grilled, designed, and sequenced** into the
+  sub-plan `implementation-plan-statements.md` (slices 0a–f). New authoritative doc
+  **`docs/statements.md`** (the eighth) and **ADR 0003** (postings edited in place; one leg per real
+  own account) — an engine change that also fixes dock edits wiping imported `R` marks. Scope
+  changes: **FR-IMP-05's generic CSV importer is absorbed** by the statement CSV profile (it no
+  longer reuses the QIF staging apparatus); receipt duplicate detection stays a separate follow-on,
+  now unblocked. The top menu gains a `⋯` overflow menu (general-ux/05).
 - **v0.52 (2026-09-30):** **Recurring templates complete** (slices a–g, owner-confirmed). The
   sub-plan `implementation-plan-recurring.md` is deleted; its summary is folded into §3's Recurring
   templates bullet. Scope change from review: the Recurring cost summary became three tables
@@ -662,13 +669,17 @@ shipped; everything after it is unbuilt.
   revisited **with budgets**, since "fact against budget" is the half that makes it worth writing.
 - **Register follow-ons:** column re-sorting with the balance-hide rule (register §2.7) — deferred
   from stage 7a until missed.
-- **Bank statement reconciliation:** the `statements` module (§5.8) — PDF-first extraction, matching
-  statement lines against existing transactions (manual/receipt/recurring), flag-and-create for
-  unmatched, manual override, mark reconciled. Money flow covered by MockMvc acceptance (Playwright
-  dropped, below). Builds the matcher receipt duplicate detection (next bullet) shares.
+- **Bank statement reconciliation** (FR-STMT, FR-IMP-05; grilled 2026-10-03/04). **`docs/statements.md`**
+  is the authoritative doc; the engine prerequisites are ADR 0003; the schema is data-model §15.
+  CSV through statement profiles and PDF through operator-redacted text to the AI; live matching in
+  four confirmed tiers; every fix committed through the dock embedded on the statement page; opening
+  and closing balance checks. Sequenced in the sub-plan **`implementation-plan-statements.md`**
+  (0a data gate, 0b–0c engine, a nav, b CSV in, c matching, d dock, e PDF in, f balance checks).
+  Deliberately **not** a §2 stage; §2 stays closed.
 - **Receipt follow-ons:** duplicate detection at confirm (merchant+date+total) + link-to-existing
   transaction with the Q-RX-2 push-splits question (receipt doc §6.4) — deferred from stage 9;
-  shares the statement matcher above, so lands with or after it. **PDF ingestion** for receipts —
+  shares the statement matcher above, so lands after it (kept out of the statements work by owner
+  decision, 2026-10-04). **PDF ingestion** for receipts —
   a real need (Android document scanners emit PDFs); stage 9b accepts JPEG/PNG only and rejects
   PDFs with a clear message. **Disk-reclaim purge / undelete** — soft-deleted receipt rows keep
   `deleted_at` but there is no UI to undelete or to sweep orphaned image files off the Pi (stage 9b
@@ -710,8 +721,9 @@ shipped; everything after it is unbuilt.
 - **Planning:** budgets on the category taxonomy (FR-BUD) — and with it the **monthly narrative
   report** (FR-RPT, Q12: comparison against the previous month and a multi-month average, fact
   against budget, anomalies, prose); forecasting — scheduled + trend (FR-FC).
-- **Data lifecycle:** generic CSV importer (FR-IMP-05) — reuses the whole staging/mapping/commit
-  apparatus `docs/import.md` defines, differing only in the parser; **full** data-management
+- **Data lifecycle:** generic CSV import (FR-IMP-05) — **absorbed by the statement CSV profile**
+  (bullet above, `statements.md` §3.1), no longer a second path over the QIF staging apparatus;
+  **full** data-management
   operations suite —
   merge categories/payees/people/accounts, bulk re-tag/re-categorize (FR-DM; grows the `operations`
   module from its stage-6 subdivision seed). **Payee editor page** — a dedicated payee list/edit

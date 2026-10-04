@@ -1,6 +1,6 @@
 # Hauptbuch
 
-A self-hosted, single-user double-entry ledger (Microsoft Money replacement). The five design docs
+A self-hosted, single-user double-entry ledger (Microsoft Money replacement). The design docs
 under `docs/` are authoritative for domain rules; this glossary pins the canonical *terms* so
 issues, tests, and discussions don't drift into synonyms.
 
@@ -246,3 +246,45 @@ live templates move. It classifies each non-funding leg as expense (broken down 
 category), income, or transfer (to an own account or a person), plus a net grand total. It is
 calculated from the schedules alone, not from booked postings, so it is not an engine Report.
 _Avoid_: subscription report, recurring report, cost report
+
+### Statements
+
+**Statement**:
+One uploaded bank file — CSV or PDF — for one account, with its period and optional opening and
+closing balances, kept on the Pi as evidence. Worked through on the statement page until green;
+there is no reconciliation operation to start or commit.
+_Avoid_: bank statement import, reconciliation (for the object), session
+
+**Statement profile**:
+How to read one source: a CSV dialect and column map, or a PDF bank's AI note, plus the matching
+date window. A CSV profile can read any CSV, not only a bank's — it is the generic CSV import.
+_Avoid_: import profile, template, bank format, mapping
+
+**Statement line**:
+One booking the bank reports, in the one shape every parser produces: booking date, value date,
+amount in the account's currency, optional original amount/currency/rate, counterparty, description,
+the bank's own category. The bank's date lives here, never on the transaction.
+_Avoid_: bank transaction, row, entry, item
+
+**Match**:
+The confirmed 1:1 link between a statement line and a posting — the only stored result of
+reconciliation. It exists only while its posting is `reconciled`. What the matcher offers before
+confirmation is a **proposal** (exact, amount differs, ambiguous, wrong account).
+_Avoid_: link (in UI), pairing, reconciliation (for the link)
+
+**Missing line**:
+A statement line with no match and no candidate the operator accepted — a booking the ledger lacks.
+Created through the dock embedded on the statement page.
+_Avoid_: unmatched line, new transaction, orphan
+
+**Extra**:
+A posting on the statement's account, dated in its period, matched to no line of it and not
+`reconciled`. A `reconciled` posting is never an extra. A **boundary extra** is one dated in the
+window's last (or first) days of the period, labelled "probably on the next statement", and does not
+count against green. Computed, never stored.
+_Avoid_: unmatched transaction, surplus, discrepancy (for the posting)
+
+**Green**:
+A statement whose every line is matched, with no extras beyond boundary extras, and — when it has
+balances — no unexplained difference at either end. Computed on every view, never a stored state.
+_Avoid_: done, closed, reconciled (for the statement), complete

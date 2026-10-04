@@ -1,8 +1,8 @@
 # Hauptbuch — Requirements Document
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.10
-**Date:** 2026-09-28
+**Status:** Draft v0.11
+**Date:** 2026-10-04
 **Owner:** volkovandr
 **Type:** Self-hosted, single-user, web-based personal finance application
 
@@ -11,6 +11,12 @@
 > Priorities use MoSCoW: **Must**, **Should**, **Could**, **Won't (this version)**.
 
 **Changelog**
+- **v0.11 (2026-10-04):** Statement reconciliation grilling — new authoritative doc
+  **`docs/statements.md`** (the eighth), ADR 0003. **§5.8 rewritten:** CSV through operator-defined
+  statement profiles (no AI) beside PDF (local text extraction, operator-redacted text to the AI —
+  never the PDF); matching in four confirmed tiers; every change committed to the ledger at once
+  instead of a reconciliation operation; opening and closing balance checks. **FR-IMP-05 re-pointed:**
+  the generic CSV importer *is* the statement CSV profile. Q5 updated.
 - **v0.10 (2026-09-28):** Recurring grilling (data-model §14, ADR 0002). **FR-REC-02 rewritten**
   from "pre-registered ahead" to lead time + per-template auto/review confirmation with catch-up;
   FR-REC-01/03/04 sharpened; new **FR-REC-05** (no silent skips). **Subscription is no longer a
@@ -216,17 +222,19 @@ fails in apps like ezBookkeeping.
 | FR-RCPT-07 | Handle German receipts and VAT lines (MwSt/USt 19%/7%), EUR by default. | Should |
 | FR-RCPT-08 | Learn merchant/item → category mappings over time. | Could |
 
-### 5.8 Bank statement reconciliation (AI) — PDF-first
+### 5.8 Bank statement reconciliation — CSV profiles and AI-parsed PDFs
+
+Authoritative design in **`docs/statements.md`**; terminology in `CONTEXT.md` (§Statements).
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-STMT-01 | Upload a statement as **PDF** (primary) or CSV (recent-12-months shortcut). | Must |
-| FR-STMT-02 | AI extracts transactions, including from **historical PDFs**. | Must |
-| FR-STMT-03 | **Match** statement lines against existing transactions (manual, receipt-parsed, recurring). | Must |
-| FR-STMT-04 | Flag unmatched statement lines; offer to create them. | Must |
-| FR-STMT-05 | Flag ledger transactions with no statement match. | Should |
-| FR-STMT-06 | Manual override of any match; nothing committed without confirmation. | Must |
-| FR-STMT-07 | Mark reconciled transactions; record reconciliation points. | Should |
+| FR-STMT-01 | Upload a statement for one account as **CSV** through an operator-defined **statement profile** (dialect + column map, live preview, no AI) or as a **PDF**; the account is proposed from the IBAN / account number and confirmed. | Must |
+| FR-STMT-02 | A PDF is reduced to its **text locally**, pre-masked, and **edited by the operator** before that text — never the PDF — is sent to the AI, including for **historical** statements. The raw response and the lines are editable (re-seed). Period and opening/closing balances are editable. | Must |
+| FR-STMT-03 | **Match** statement lines against the account's postings inside a per-profile date window, in four tiers — exact, amount differs, ambiguous, wrong account — always **confirmed** by the operator. | Must |
+| FR-STMT-04 | A line missing from the ledger is created through the **dock embedded on the statement page**, pre-filled from the line. | Must |
+| FR-STMT-05 | **Extras** — unreconciled postings in the period matched to no line — are listed with Edit / Move / Void. | Should |
+| FR-STMT-06 | Every change commits to the ledger at once; there is no reconciliation operation to commit. Unmatch and statement deletion are always possible. | Must |
+| FR-STMT-07 | A confirmed match marks the **posting** `reconciled`; **opening and closing balance** checks show the unexplained difference; a statement is green when every line is matched, no extras remain and both checks agree. | Should |
 
 ### 5.9 Analytics & reporting — **numbers-first, Money-style, one generic engine**
 
@@ -289,7 +297,7 @@ Layout, Frame, turnover, closing balance, legs) in `CONTEXT.md`.
 | FR-IMP-02 | Money-history importer — format settled as **QIF** (Q9); see `import.md`. | Must |
 | FR-IMP-03 | Map accounts/categories/payees/transfers/splits with a review step before commit. | Must |
 | FR-IMP-04 | Idempotent import — no duplicates on re-run. | Must |
-| FR-IMP-05 | Generic CSV importer for ongoing use. | Should |
+| FR-IMP-05 | Generic CSV import for ongoing use — delivered by the statement **CSV profile** (§5.8, `statements.md` §3.1): any CSV arrives as a statement whose lines are created. | Should |
 
 ### 5.13 Budgets — on the expense taxonomy
 
@@ -421,7 +429,7 @@ everything, and allow full disabling. See Q11.
 | Q2 | Deployment (Docker, Pi roles) | **Resolved** — `installDist` + systemd for app (revised 2026-08-17, Docker dropped); DB + files native on Pi |
 | Q3 | Double- vs single-entry | **Resolved** — double-entry |
 | Q4 | Shared-debt settlement | **Resolved** — auto-managed per-person signed balances |
-| Q5 | Statement formats | **Resolved** — PDF primary; CSV last-12-months |
+| Q5 | Statement formats | **Resolved** (2026-10-04) — CSV through statement profiles, PDF via operator-redacted text to the AI; `statements.md` |
 | Q6 | Forecasting ambition | **Resolved** — scheduled + trend |
 | Q7 | Migrate Money history | **Resolved** — yes, via Money export |
 | Q8 | Budgets | **Resolved** — yes, on the expense taxonomy |
