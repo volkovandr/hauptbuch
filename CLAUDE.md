@@ -2,7 +2,7 @@
 
 Guidance for Claude Code working in this repository. This file is **operational** — how to build
 correctly here. *What* to build next lives in `docs/implementation-plan.md`.
-The seven design docs in `docs/` are **authoritative** for every product and domain decision; this
+The eight design docs in `docs/` are **authoritative** for every product and domain decision; this
 file only summarises the parts you will trip over. Keep it in sync with `docs/` when conventions change.
 
 > A self-hosted, single-user, web-based Microsoft Money replacement: a double-entry ledger with
@@ -181,6 +181,11 @@ Full detail in `docs/data-model.md`. The traps:
   unset. (See the plan §1.3 — being ratified into the data-model doc.)
 - **No materialized balances, no universal materialized base amounts.** Compute on the fly
   (windowed sums, carry-forward rate joins). Add a cache only when *measured* slow.
+- **One leg per real own account per transaction; postings are edited in place** (ADR 0003). An
+  `asset`/`liability`/`equity` account (person leaves excepted) appears at most once per
+  transaction; income/expense and person leaves may repeat. Editing a transaction updates paired
+  legs in place, so `posting_id` and `reconciliation` survive; a changed amount drops the leg to
+  `unreconciled`. Never go back to delete-and-reinsert — statement matches reference postings.
 - **`lifecycle` and `deleted_at` are orthogonal axes** on `transaction` (and receipt state) — two
   columns, never one merged enum. Soft-delete is reversible; integrity checks scope to
   `deleted_at is null`.
@@ -359,6 +364,7 @@ The docs are a navigation aid, not a worklog. Resist the urge to add prose.
 - **`ui-receipt-processing.md`** — receipt lifecycle, the four-step workflow, the `receipt` schema sketch.
 - **`import.md`** — the import session/staging model, the maps, the commit gate, and the QIF/Money dialect.
 - **`reporting.md`** — the report engine: dimensions, the two measures and their valuation rules, legs, scope/filters, the legality rules, renderers, Layouts.
+- **`statements.md`** — bank statement reconciliation: statement profiles (CSV) and redacted-text PDF parsing, the matching tiers, the statement page, matches and the `reconciled` state.
 - **`implementation-plan.md`** — the staged build sequence and the backlog. *Start here for what's next.*
 - **`potential-feature-ideas.md`** — ideas that came up during implementation/testing, not yet planned.
 

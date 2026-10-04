@@ -15,7 +15,8 @@
 > reasoning, in keeping with the house rule that the *why* must survive long after the *what* is code.
 >
 > Scope note: §2–§3 and §5–§10 are **format-agnostic** — they are the apparatus FR-IMP-01 asks for,
-> and FR-IMP-05's generic CSV importer is expected to reuse all of it and supply only a new parser.
+> and a future bulk importer could reuse it with a new parser. (FR-IMP-05's generic CSV import was
+> once expected to; since 2026-10-04 it is the statement CSV profile instead — `statements.md` §3.1.)
 > §4 is the **QIF/Money dialect**, the first and currently only implementation of that parser. §11
 > is a **provisional staging schema sketch**; §13 carries the slicing.
 >
@@ -85,7 +86,7 @@ counterparty — the input to the account map (§5.1), and where the destroyed-a
 (§4.5) is enforced.
 
 Everything downstream — mapping, mirror matching, staging, commit — operates on this shape alone.
-That is the seam FR-IMP-05's CSV importer plugs into: a new parser, nothing else. It is also why
+That is the seam another bulk importer would plug into: a new parser, nothing else. It is also why
 the parser is **pure Java with no Spring and no DB** and is tested entirely in the unit tier (§12).
 
 ---
