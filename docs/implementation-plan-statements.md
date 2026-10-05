@@ -53,7 +53,7 @@
 
 ## a — Navigation
 
-- **a — The `⋯` menu.** `.scratch/general-ux/issues/05-top-menu-overflow.md`.
+- ✅ **a — The `⋯` menu.** `.scratch/general-ux/issues/05-top-menu-overflow.md`.
 
 ## b — CSV in
 
