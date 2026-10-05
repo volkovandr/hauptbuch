@@ -48,6 +48,7 @@
       <nav class="nav" aria-label="Primary">
         <a
           th:each="item : ${nav}"
+          th:unless="${item.overflow()}"
           class="nav__item"
           th:classappend="${item.current()} ? 'nav__item--current'"
           th:href="@{${item.path()}}"
@@ -55,6 +56,29 @@
           th:aria-current="${item.current()} ? 'page'"
           >Section</a
         >
+        <!-- Rarely used sections: a native <details> dropdown, no JS (CLAUDE.md §1.6). -->
+        <details class="nav__more">
+          <summary
+            class="nav__item"
+            th:classappend="${!#lists.isEmpty(nav.?[overflow and current])} ? 'nav__item--current'"
+            title="More sections"
+            aria-label="More sections"
+          >
+            ⋯
+          </summary>
+          <div class="nav__menu">
+            <a
+              th:each="item : ${nav}"
+              th:if="${item.overflow()}"
+              class="nav__menu-item"
+              th:classappend="${item.current()} ? 'nav__item--current'"
+              th:href="@{${item.path()}}"
+              th:text="${item.label()}"
+              th:aria-current="${item.current()} ? 'page'"
+              >Section</a
+            >
+          </div>
+        </details>
       </nav>
     </header>
     <main id="content" class="content" th:replace="${content}">

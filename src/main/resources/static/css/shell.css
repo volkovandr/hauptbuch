@@ -61,6 +61,51 @@
   font-weight: 600;
 }
 
+/* The "⋯" overflow menu: a native <details>, so it opens/closes and tabs without JS. */
+.nav__more {
+  position: relative;
+}
+
+.nav__more > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.nav__more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav__menu {
+  position: absolute;
+  right: 0;
+  z-index: 20;
+  min-width: 10rem;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper-edge);
+  border: 1px solid var(--rule);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 15%);
+}
+
+.nav__menu-item {
+  padding: 0.35rem 0.8rem;
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nav__menu-item:hover,
+.nav__menu-item:focus-visible {
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.nav__menu-item.nav__item--current {
+  border-bottom-color: transparent;
+}
+
 /* ── Content surface: the ledger leaf ─────────────────────────────────── */
 .content {
   padding: 0.75rem 1rem 3rem;

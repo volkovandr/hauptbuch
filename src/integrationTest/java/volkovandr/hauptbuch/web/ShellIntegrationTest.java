@@ -49,6 +49,26 @@ class ShellIntegrationTest {
   }
 
   @Test
+  void rarelyUsedSectionsSitInsideTheOverflowMenu() throws Exception {
+    String html = mockMvc.perform(get("/")).andReturn().getResponse().getContentAsString();
+
+    String menu =
+        html.substring(html.indexOf("<details class=\"nav__more"), html.indexOf("</details>"));
+    assertThat(menu).contains("href=\"/accounts\"", "href=\"/categories\"", "href=\"/import\"");
+    assertThat(menu).contains("href=\"/settings\"").doesNotContain("href=\"/register\"");
+    // Nothing in the overflow menu is current on the landing page.
+    assertThat(menu).doesNotContain("nav__item--current");
+  }
+
+  @Test
+  void overflowEntryIsCurrentWhenAnOverflowSectionIsActive() throws Exception {
+    String html = mockMvc.perform(get("/accounts")).andReturn().getResponse().getContentAsString();
+
+    String summary = html.substring(html.indexOf("<summary"), html.indexOf("</summary>"));
+    assertThat(summary).contains("nav__item--current");
+  }
+
+  @Test
   void staticAssetsAreServed() throws Exception {
     mockMvc.perform(get("/js/htmx.min.js")).andExpect(status().isOk());
     mockMvc.perform(get("/js/keyboard.js")).andExpect(status().isOk());
