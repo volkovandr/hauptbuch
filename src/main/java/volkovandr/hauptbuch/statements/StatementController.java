@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
-import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 import volkovandr.hauptbuch.web.NavItem;
 
@@ -121,17 +120,18 @@ class StatementController {
 
   /** The statement page: header, then the line grid. */
   @GetMapping(BASE_PATH + "/{id}")
-  String show(@PathVariable long id, Model model) {
-    Statement statement = statementService.get(id);
-    Account account =
-        statementService.statementAccounts().stream()
-            .filter(candidate -> candidate.accountId() == statement.accountId())
-            .findFirst()
-            .orElse(null);
+  String show(@PathVariable long id, Model model, RedirectAttributes redirectAttributes) {
+    Statement statement;
+    try {
+      statement = statementService.get(id);
+    } catch (StatementFormatException e) {
+      redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
+      return REDIRECT_BASE;
+    }
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("statement", statement);
-    model.addAttribute("accountName", account == null ? "(closed account)" : account.name());
-    model.addAttribute("profile", profileService.get(statement.statementProfileId()));
+    model.addAttribute("accountName", statementService.accountName(statement.accountId()));
+    model.addAttribute("profileName", profileService.nameOf(statement.statementProfileId()));
     model.addAttribute("opening", number(statement.openingBalance()));
     model.addAttribute("closing", number(statement.closingBalance()));
     model.addAttribute("lines", statementService.lines(id).stream().map(LineView::of).toList());

@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
@@ -118,7 +119,7 @@ final class StatementFixtures {
                     .param("account", String.valueOf(accountId)))
             .andExpect(status().is3xxRedirection())
             .andReturn();
-    String redirect = created.getResponse().getRedirectedUrl();
+    String redirect = Objects.requireNonNull(created.getResponse().getRedirectedUrl());
     return Long.parseLong(redirect.substring(redirect.lastIndexOf('/') + 1));
   }
 }

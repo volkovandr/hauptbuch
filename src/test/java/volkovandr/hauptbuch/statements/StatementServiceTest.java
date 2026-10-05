@@ -275,6 +275,16 @@ class StatementServiceTest {
         .hasMessage("That statement no longer exists.");
   }
 
+  @Test
+  void accountNameSurvivesClosedAccountAndFallsBackWhenUnknown() {
+    when(accountService.findById(ACCOUNT_ID))
+        .thenReturn(
+            java.util.Optional.of(account(ACCOUNT_ID, "asset", false, LocalDate.of(2025, 1, 1))));
+
+    assertThat(service.accountName(ACCOUNT_ID)).isEqualTo("BankAaa-EUR");
+    assertThat(service.accountName(99L)).isEqualTo("(unknown account)");
+  }
+
   private void stubLive(long id) {
     when(statementRepository.findById(id))
         .thenReturn(
