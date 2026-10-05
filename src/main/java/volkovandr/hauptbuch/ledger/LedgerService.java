@@ -58,6 +58,8 @@ public class LedgerService {
   /** A balanced transaction has at least two legs (one debit, one credit). */
   private static final int MIN_LEGS = 2;
 
+  private static final String RECONCILED = "reconciled";
+
   /** A transaction touching exactly one currency is single-currency; more is cross-currency. */
   private static final int SINGLE_CURRENCY = 1;
 
@@ -66,18 +68,21 @@ public class LedgerService {
   private final AccountService accountService;
   private final TransactionRepository transactionRepository;
   private final TagReadRepository tagReadRepository;
+  private final List<ReconciliationDropListener> reconciliationDropListeners;
 
   LedgerService(
       SettingsService settingsService,
       ExchangeRateService exchangeRateService,
       AccountService accountService,
       TransactionRepository transactionRepository,
-      TagReadRepository tagReadRepository) {
+      TagReadRepository tagReadRepository,
+      List<ReconciliationDropListener> reconciliationDropListeners) {
     this.settingsService = settingsService;
     this.exchangeRateService = exchangeRateService;
     this.accountService = accountService;
     this.transactionRepository = transactionRepository;
     this.tagReadRepository = tagReadRepository;
+    this.reconciliationDropListeners = reconciliationDropListeners;
   }
 
   /**
@@ -253,7 +258,10 @@ public class LedgerService {
         .flatMap(leaf -> transactionRepository.findOpeningBalance(accountId, leaf.accountId()));
   }
 
-  /** Reversibly soft-delete a transaction and (by the join) its postings (data-model §3.5). */
+  /**
+   * Reversibly soft-delete a transaction and (by the join) its postings (data-model §3.5). Its
+   * {@code reconciled} postings are reported to the {@link ReconciliationDropListener}s.
+   */
   @Transactional
   public void voidTransaction(long transactionId) {
     int affected = transactionRepository.softDelete(transactionId);
@@ -263,11 +271,24 @@ public class LedgerService {
     }
     // No total: voiding does not change one, so the id alone identifies what happened.
     LOG.debug("Transaction voided: id={}", transactionId);
+    reportReconciliationDropped(
+        transactionRepository.findPostings(transactionId).stream()
+            .filter(posting -> RECONCILED.equals(posting.reconciliation()))
+            .map(Posting::postingId)
+            .toList());
   }
 
   /**
-   * Edit a transaction by re-threading it: update the header and replace its legs with a
-   * freshly-validated set. The same balance/leaves-only rules as {@link #recordTransaction} apply.
+   * Edit a transaction: update the header and bring its legs to a freshly-validated set, editing
+   * them in place where it can (ADR 0003). The same balance/leaves-only rules as {@link
+   * #recordTransaction} apply.
+   *
+   * <p>A new leg on a real own account is paired with the existing leg on that account and updated
+   * in place, so its {@code posting_id} survives; its {@code reconciliation} is kept when the
+   * amount is unchanged and drops to {@code unreconciled} when it changed (a drop out of {@code
+   * reconciled} is reported to the {@link ReconciliationDropListener}s). An old leg with no partner
+   * is deleted and a new leg with none inserted. Legs on accounts that may repeat (income, expense,
+   * person leaves) have no partner by account, so they are deleted and inserted afresh.
    *
    * @throws IllegalArgumentException if the transaction does not exist or is not live
    */
@@ -295,10 +316,35 @@ public class LedgerService {
             existing.createdAt(),
             null,
             null));
-    transactionRepository.deletePostings(transactionId);
-    insertLegs(transactionId, balanced.legs());
+    reThreadLegs(transactionId, balanced.legs());
     recordEnteredRates(draft.date(), balanced.legs(), baseCurrency);
     LOG.debug("Transaction edited: id={}, total={}", transactionId, balanced.debitTotal());
+  }
+
+  /** Carry out the {@link LegEdit} of an edited transaction's legs (ADR 0003). */
+  private void reThreadLegs(long transactionId, List<PostingDraft> newLegs) {
+    LegEdit edit =
+        LegEdit.plan(
+            transactionId,
+            transactionRepository.findPostings(transactionId),
+            newLegs,
+            accountId -> isRealOwnAccount(accountService.findById(accountId).orElseThrow()));
+    for (LegEdit.Update update : edit.updates()) {
+      long postingId = update.leg().postingId();
+      transactionRepository.updatePosting(update.leg());
+      transactionRepository.deletePostingTags(postingId);
+      transactionRepository.insertPostingTags(postingId, update.tagIds());
+    }
+    edit.deletedPostingIds().forEach(transactionRepository::deletePosting);
+    insertLegs(transactionId, edit.inserts());
+    reportReconciliationDropped(edit.droppedPostingIds());
+  }
+
+  private void reportReconciliationDropped(List<Long> postingIds) {
+    if (postingIds.isEmpty()) {
+      return;
+    }
+    reconciliationDropListeners.forEach(listener -> listener.reconciliationDropped(postingIds));
   }
 
   /**

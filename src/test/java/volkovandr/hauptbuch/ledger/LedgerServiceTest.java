@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -51,6 +52,8 @@ class LedgerServiceTest {
   @Mock private TransactionRepository transactionRepository;
   @Mock private TagReadRepository tagReadRepository;
 
+  private final List<List<Long>> droppedReports = new ArrayList<>();
+
   private LedgerService ledgerService;
 
   @BeforeEach
@@ -61,7 +64,8 @@ class LedgerServiceTest {
             exchangeRateService,
             accountService,
             transactionRepository,
-            tagReadRepository);
+            tagReadRepository,
+            List.of(ids -> droppedReports.add(List.copyOf(ids))));
   }
 
   private void stubBaseCurrency(String code) {
@@ -165,7 +169,8 @@ class LedgerServiceTest {
 
     assertThatExceptionOfType(UnbalancedTransactionException.class)
         .isThrownBy(() -> ledgerService.editTransaction(500L, draft));
-    verify(transactionRepository, never()).deletePostings(anyLong());
+    verify(transactionRepository, never()).updatePosting(any());
+    verify(transactionRepository, never()).deletePosting(anyLong());
   }
 
   @Test
@@ -560,8 +565,184 @@ class LedgerServiceTest {
                 PostingDraft.of(FOOD_EUR, new BigDecimal("9.00")))));
 
     verify(transactionRepository).updateHeader(any());
-    verify(transactionRepository).deletePostings(80L);
     verify(transactionRepository, times(2)).insertPosting(any());
+  }
+
+  // ── postings edited in place (ADR 0003) ─────────────────────────────────────
+
+  private static Posting existingLeg(
+      long postingId, long accountId, String amount, String reconciliation) {
+    return new Posting(
+        postingId, 80L, accountId, new BigDecimal(amount), null, reconciliation, null);
+  }
+
+  private void stubExistingLegs(Posting... legs) {
+    when(transactionRepository.findPostings(80L)).thenReturn(List.of(legs));
+  }
+
+  private void editTo(PostingDraft... legs) {
+    ledgerService.editTransaction(
+        80L, TransactionDraft.confirmed(LocalDate.of(2026, 6, 2), null, "edited", List.of(legs)));
+  }
+
+  private Posting capturedUpdate() {
+    ArgumentCaptor<Posting> updated = ArgumentCaptor.forClass(Posting.class);
+    verify(transactionRepository).updatePosting(updated.capture());
+    return updated.getValue();
+  }
+
+  @Test
+  void editKeepsPairedLegIdentityAndReconciliationWhenItsAmountIsUnchanged() {
+    stubEditOf(80L, "confirmed");
+    stubExistingLegs(
+        existingLeg(700L, CASH_EUR, MINUS_5, "reconciled"),
+        existingLeg(701L, FOOD_EUR, "5.00", "unreconciled"));
+
+    editTo(
+        PostingDraft.of(CASH_EUR, new BigDecimal(MINUS_5), "new note"),
+        PostingDraft.of(FOOD_EUR, new BigDecimal("5.00")));
+
+    ArgumentCaptor<Posting> updated = ArgumentCaptor.forClass(Posting.class);
+    verify(transactionRepository, times(2)).updatePosting(updated.capture());
+    Posting cash = updated.getAllValues().get(0);
+    assertThat(cash.postingId()).isEqualTo(700L);
+    assertThat(cash.reconciliation()).isEqualTo("reconciled");
+    assertThat(cash.note()).isEqualTo("new note");
+    verify(transactionRepository, never()).insertPosting(any());
+    verify(transactionRepository, never()).deletePosting(anyLong());
+    assertThat(droppedReports).isEmpty();
+  }
+
+  @Test
+  void editKeepsClearedLegClearedWhenItsAmountIsUnchanged() {
+    stubEditOf(80L, "confirmed");
+    stubExistingLegs(
+        existingLeg(700L, CASH_EUR, MINUS_5, "cleared"),
+        existingLeg(701L, FOOD_EUR, "5.00", "unreconciled"));
+
+    editTo(
+        PostingDraft.of(CASH_EUR, new BigDecimal("-5.0000")),
+        PostingDraft.of(FOOD_EUR, new BigDecimal("5")));
+
+    ArgumentCaptor<Posting> updated = ArgumentCaptor.forClass(Posting.class);
+    verify(transactionRepository, times(2)).updatePosting(updated.capture());
+    assertThat(updated.getAllValues().get(0).reconciliation()).isEqualTo("cleared");
+  }
+
+  @Test
+  void editDropsReconciledLegToUnreconciledWhenItsAmountChangesAndReportsIt() {
+    stubEditOf(80L, "confirmed");
+    stubExistingLegs(
+        existingLeg(700L, CASH_EUR, MINUS_5, "reconciled"),
+        existingLeg(701L, FOOD_EUR, "5.00", "reconciled"));
+
+    editTo(
+        PostingDraft.of(CASH_EUR, new BigDecimal("-6.00")),
+        PostingDraft.of(FOOD_EUR, new BigDecimal("6.00")));
+
+    ArgumentCaptor<Posting> updated = ArgumentCaptor.forClass(Posting.class);
+    verify(transactionRepository, times(2)).updatePosting(updated.capture());
+    assertThat(updated.getAllValues())
+        .extracting(Posting::reconciliation)
+        .containsOnly("unreconciled");
+    assertThat(droppedReports).containsExactly(List.of(700L, 701L));
+  }
+
+  @Test
+  void editDropsClearedLegWhoseAmountChangesWithoutReportingIt() {
+    stubEditOf(80L, "confirmed");
+    stubExistingLegs(
+        existingLeg(700L, CASH_EUR, MINUS_5, "cleared"),
+        existingLeg(701L, FOOD_EUR, "5.00", "unreconciled"));
+
+    editTo(
+        PostingDraft.of(CASH_EUR, new BigDecimal("-6.00")),
+        PostingDraft.of(FOOD_EUR, new BigDecimal("6.00")));
+
+    ArgumentCaptor<Posting> updated = ArgumentCaptor.forClass(Posting.class);
+    verify(transactionRepository, times(2)).updatePosting(updated.capture());
+    assertThat(updated.getAllValues().get(0).reconciliation()).isEqualTo("unreconciled");
+    // Matches live only on reconciled legs; a cleared one never had any to drop.
+    assertThat(droppedReports).isEmpty();
+  }
+
+  @Test
+  void editDeletesUnpairedOldLegAndInsertsNewOneUnreconciled() {
+    stubBaseCurrency(EUR);
+    stubAccount(CASH_EUR, EUR);
+    stubAccount(13L, EUR);
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+    when(transactionRepository.findById(80L))
+        .thenReturn(
+            Optional.of(
+                new Transaction(
+                    80L, LocalDate.of(2026, 6, 1), null, null, "confirmed", null, null, null)));
+    stubExistingLegs(
+        existingLeg(700L, CASH_EUR, MINUS_5, "reconciled"),
+        existingLeg(701L, FOOD_EUR, "5.00", "reconciled"));
+
+    editTo(
+        PostingDraft.of(CASH_EUR, new BigDecimal(MINUS_5)),
+        PostingDraft.of(13L, new BigDecimal("5.00")));
+
+    verify(transactionRepository).deletePosting(701L);
+    ArgumentCaptor<Posting> inserted = ArgumentCaptor.forClass(Posting.class);
+    verify(transactionRepository).insertPosting(inserted.capture());
+    assertThat(inserted.getValue().accountId()).isEqualTo(13L);
+    assertThat(inserted.getValue().reconciliation()).isEqualTo("unreconciled");
+    assertThat(capturedUpdate().postingId()).isEqualTo(700L);
+    // The deleted leg's match goes with the row; only a downgrade is reported.
+    assertThat(droppedReports).isEmpty();
+  }
+
+  @Test
+  void editFallsBackToDeleteAndInsertForLegsOnRepeatingAccounts() {
+    stubEditOf(80L, "confirmed");
+    stubAccountOfType(CASH_EUR, "asset", false);
+    stubAccountOfType(FOOD_EUR, "expense", false);
+    stubExistingLegs(
+        existingLeg(700L, CASH_EUR, "-5.00", "reconciled"),
+        existingLeg(701L, FOOD_EUR, "3.00", "unreconciled"),
+        existingLeg(702L, FOOD_EUR, "2.00", "unreconciled"));
+
+    editTo(
+        PostingDraft.of(CASH_EUR, new BigDecimal(MINUS_5)),
+        PostingDraft.of(FOOD_EUR, new BigDecimal("3.00")),
+        PostingDraft.of(FOOD_EUR, new BigDecimal("2.00")));
+
+    assertThat(capturedUpdate().postingId()).isEqualTo(700L);
+    verify(transactionRepository).deletePosting(701L);
+    verify(transactionRepository).deletePosting(702L);
+    verify(transactionRepository, times(2)).insertPosting(any());
+  }
+
+  @Test
+  void editReplacesPairedLegTagsInPlace() {
+    stubEditOf(80L, "confirmed");
+    stubExistingLegs(
+        existingLeg(700L, CASH_EUR, MINUS_5, "unreconciled"),
+        existingLeg(701L, FOOD_EUR, "5.00", "unreconciled"));
+
+    editTo(
+        PostingDraft.of(CASH_EUR, new BigDecimal(MINUS_5)),
+        PostingDraft.of(FOOD_EUR, new BigDecimal("5.00")).withTags(List.of(77L)));
+
+    verify(transactionRepository).deletePostingTags(700L);
+    verify(transactionRepository).deletePostingTags(701L);
+    verify(transactionRepository).insertPostingTags(700L, List.of());
+    verify(transactionRepository).insertPostingTags(701L, List.of(77L));
+  }
+
+  @Test
+  void voidingReportsTheReconciledPostingsOfTheTransaction() {
+    when(transactionRepository.softDelete(80L)).thenReturn(1);
+    stubExistingLegs(
+        existingLeg(700L, CASH_EUR, MINUS_5, "reconciled"),
+        existingLeg(701L, FOOD_EUR, "5.00", "unreconciled"));
+
+    ledgerService.voidTransaction(80L);
+
+    assertThat(droppedReports).containsExactly(List.of(700L));
   }
 
   // ── lifecycle promotion on edit (issue receipts/26) ─────────────────────────
