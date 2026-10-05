@@ -1,6 +1,6 @@
 # Top menu is too wide — move rarely used items into a `⋯` menu
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: low
 Area: General UX — top navigation
