@@ -43,6 +43,14 @@ public class StatementProfileService {
             () -> new StatementFormatException("That statement profile no longer exists."));
   }
 
+  /** The name of a profile, live or soft-deleted — a statement keeps showing where it came from. */
+  public String nameOf(long statementProfileId) {
+    return repository
+        .findById(statementProfileId)
+        .map(StatementProfile::name)
+        .orElse("(unknown profile)");
+  }
+
   /**
    * Validate and save {@code submitted}: insert when it has no id, otherwise overwrite.
    *

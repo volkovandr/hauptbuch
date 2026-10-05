@@ -277,4 +277,25 @@ class StatementScreenIntegrationTest {
         .perform(get("/statements"))
         .andExpect(content().string(containsString("href=\"/statements\"")));
   }
+
+  @Test
+  void statementPageStillOpensAfterItsProfileIsDeleted() throws Exception {
+    long profileId = saveProfile();
+    long statementId = uploadAndCreate(profileId);
+    mockMvc.perform(post("/statements/profiles/" + profileId + "/delete"));
+
+    mockMvc
+        .perform(get("/statements/" + statementId))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("BankAaa CSV")));
+  }
+
+  @Test
+  void missingStatementSendsYouBackToTheList() throws Exception {
+    mockMvc
+        .perform(get("/statements/999999"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/statements"))
+        .andExpect(flash().attribute("error", "That statement no longer exists."));
+  }
 }

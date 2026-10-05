@@ -113,6 +113,11 @@ public class StatementService {
         .toList();
   }
 
+  /** The name of the statement's account, whether or not the account has since been closed. */
+  public String accountName(long accountId) {
+    return accountService.findById(accountId).map(Account::name).orElse("(unknown account)");
+  }
+
   /** A live statement by id. */
   public Statement get(long statementId) {
     return statementRepository
