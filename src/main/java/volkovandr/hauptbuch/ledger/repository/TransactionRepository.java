@@ -28,6 +28,7 @@ import volkovandr.hauptbuch.ledger.Transaction;
 @Repository
 public class TransactionRepository {
 
+  private static final String POSTING_ID = "postingId";
   private static final String TRANSACTION_ID = "transactionId";
   private static final String RECURRING_TEMPLATE_ID = "recurringTemplateId";
 
@@ -109,7 +110,7 @@ public class TransactionRepository {
               insert into posting_tag (posting_id, tag_id)
               values (:postingId, :tagId)
               """)
-          .param("postingId", postingId)
+          .param(POSTING_ID, postingId)
           .param("tagId", tagId)
           .update();
     }
@@ -124,7 +125,7 @@ public class TransactionRepository {
             where posting_id = :postingId
             order by posting_tag_id
             """)
-        .param("postingId", postingId)
+        .param(POSTING_ID, postingId)
         .query(Long.class)
         .list();
   }
@@ -299,24 +300,44 @@ public class TransactionRepository {
   }
 
   /**
-   * Hard-delete the postings of a transaction (used when re-threading on edit). Their {@code
-   * posting_tag} rows go first — the linkage FKs the posting, so the tags of the old legs must be
-   * cleared before the legs themselves (data-model §10.1).
+   * Update a leg in place (ADR 0003): amount, base amount, reconciliation and note change, while
+   * the {@code posting_id}, its transaction and its account stay. A match on the leg survives the
+   * edit only because the row does.
    */
-  public void deletePostings(long transactionId) {
+  public void updatePosting(Posting posting) {
     jdbcClient
         .sql(
             """
-            delete from posting_tag
-            where posting_id in (
-              select posting_id from posting where transaction_id = :transactionId
-            )
+            update posting
+            set amount = :amount, base_amount = :baseAmount,
+                reconciliation = :reconciliation, note = :note
+            where posting_id = :postingId
             """)
-        .param(TRANSACTION_ID, transactionId)
+        .param(POSTING_ID, posting.postingId())
+        .param(AMOUNT, posting.amount())
+        .param(BASE_AMOUNT, posting.baseAmount())
+        .param(RECONCILIATION, posting.reconciliation())
+        .param(NOTE, posting.note())
         .update();
+  }
+
+  /** Remove every tag link of a leg, before its tags are re-attached on an in-place edit. */
+  public void deletePostingTags(long postingId) {
     jdbcClient
-        .sql("delete from posting where transaction_id = :transactionId")
-        .param(TRANSACTION_ID, transactionId)
+        .sql("delete from posting_tag where posting_id = :postingId")
+        .param(POSTING_ID, postingId)
+        .update();
+  }
+
+  /**
+   * Hard-delete one leg an edit no longer has (ADR 0003). Its {@code posting_tag} rows go first —
+   * the linkage FKs the posting (data-model §10.1).
+   */
+  public void deletePosting(long postingId) {
+    deletePostingTags(postingId);
+    jdbcClient
+        .sql("delete from posting where posting_id = :postingId")
+        .param(POSTING_ID, postingId)
         .update();
   }
 

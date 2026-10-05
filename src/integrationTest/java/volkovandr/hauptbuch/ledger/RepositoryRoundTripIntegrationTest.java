@@ -128,27 +128,67 @@ class RepositoryRoundTripIntegrationTest {
   }
 
   @Test
-  void deletePostingsRemovesEveryLegOfTheTransaction() {
+  void updatePostingChangesTheLegInPlaceKeepingItsIdentity() {
     long cash = insertCashAccount(EUR);
     long txnId =
         transactionRepository.insertTransaction(
             new Transaction(
                 null, LocalDate.of(2026, 6, 1), null, null, CONFIRMED, null, null, null));
-    transactionRepository.insertPosting(
-        new Posting(null, txnId, cash, new BigDecimal("-5.0000"), null, UNRECONCILED, null));
-    transactionRepository.insertPosting(
-        new Posting(null, txnId, cash, new BigDecimal("5.0000"), null, UNRECONCILED, null));
-    assertThat(transactionRepository.findPostings(txnId)).hasSize(2);
+    long postingId =
+        transactionRepository.insertPosting(
+            new Posting(null, txnId, cash, new BigDecimal("-5.0000"), null, "reconciled", null));
 
-    transactionRepository.deletePostings(txnId);
+    transactionRepository.updatePosting(
+        new Posting(
+            postingId,
+            txnId,
+            cash,
+            new BigDecimal("-7.5000"),
+            new BigDecimal("-7.0000"),
+            UNRECONCILED,
+            "fixed"));
 
-    // The transaction row survives (edit re-threads it); only its legs are gone.
-    assertThat(transactionRepository.findPostings(txnId)).isEmpty();
+    List<Posting> postings = transactionRepository.findPostings(txnId);
+    assertThat(postings).hasSize(1);
+    Posting loaded = postings.get(0);
+    assertThat(loaded.postingId()).isEqualTo(postingId);
+    assertThat(loaded.accountId()).isEqualTo(cash);
+    assertThat(loaded.amount()).isEqualByComparingTo("-7.5");
+    assertThat(loaded.baseAmount()).isEqualByComparingTo("-7");
+    assertThat(loaded.reconciliation()).isEqualTo(UNRECONCILED);
+    assertThat(loaded.note()).isEqualTo("fixed");
+  }
+
+  @Test
+  void deletePostingRemovesOnlyThatLegAndItsTags() {
+    long cash = insertCashAccount(EUR);
+    long txnId =
+        transactionRepository.insertTransaction(
+            new Transaction(
+                null, LocalDate.of(2026, 6, 1), null, null, CONFIRMED, null, null, null));
+    long keptId =
+        transactionRepository.insertPosting(
+            new Posting(null, txnId, cash, new BigDecimal("-5.0000"), null, UNRECONCILED, null));
+    long goneId =
+        transactionRepository.insertPosting(
+            new Posting(null, txnId, cash, new BigDecimal("5.0000"), null, UNRECONCILED, null));
+    long carTagId = insertTag("Car");
+    transactionRepository.insertPostingTags(keptId, List.of(carTagId));
+    transactionRepository.insertPostingTags(goneId, List.of(carTagId));
+
+    transactionRepository.deletePosting(goneId);
+
+    // The transaction and the other leg (with its tag) survive; only the deleted leg is gone.
+    assertThat(transactionRepository.findPostings(txnId))
+        .extracting(Posting::postingId)
+        .containsExactly(keptId);
+    assertThat(transactionRepository.findTagIdsByPosting(goneId)).isEmpty();
+    assertThat(transactionRepository.findTagIdsByPosting(keptId)).containsExactly(carTagId);
     assertThat(transactionRepository.findById(txnId)).isPresent();
   }
 
   @Test
-  void postingTagsRoundTripAndAreClearedWhenTheLegsAreDeleted() {
+  void deletePostingTagsClearsTheLegsTagsAndLeavesTheLeg() {
     long cash = insertCashAccount(EUR);
     long txnId =
         transactionRepository.insertTransaction(
@@ -160,16 +200,14 @@ class RepositoryRoundTripIntegrationTest {
     // A tag is categories' entity; seed one directly here so this ledger test stays module-local.
     long carTagId = insertTag("Car");
     long fuelTagId = insertTag("Fuel");
-
     transactionRepository.insertPostingTags(postingId, List.of(carTagId, fuelTagId));
-
     assertThat(transactionRepository.findTagIdsByPosting(postingId))
         .containsExactly(carTagId, fuelTagId);
 
-    // Re-threading on edit deletes the legs; their posting_tag rows must go first (FK), so the
-    // delete succeeds and leaves no dangling links.
-    transactionRepository.deletePostings(txnId);
+    transactionRepository.deletePostingTags(postingId);
+
     assertThat(transactionRepository.findTagIdsByPosting(postingId)).isEmpty();
+    assertThat(transactionRepository.findPostings(txnId)).hasSize(1);
   }
 
   @Test
