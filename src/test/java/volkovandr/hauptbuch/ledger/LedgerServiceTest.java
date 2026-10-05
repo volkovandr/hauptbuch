@@ -87,6 +87,107 @@ class LedgerServiceTest {
                     false)));
   }
 
+  private void stubAccountOfType(long id, String type, boolean personLeaf) {
+    when(accountService.findById(id))
+        .thenReturn(
+            Optional.of(
+                new Account(
+                    id,
+                    "acct" + id,
+                    type,
+                    null,
+                    EUR,
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    personLeaf,
+                    false)));
+  }
+
+  private TransactionDraft draftOf(PostingDraft... legs) {
+    return TransactionDraft.confirmed(LocalDate.of(2026, 6, 1), null, "note", List.of(legs));
+  }
+
+  @Test
+  void rejectsTwoLegsOnTheSameRealOwnAccount() {
+    stubBaseCurrency(EUR);
+    stubAccountOfType(CASH_EUR, "asset", false);
+    stubAccountOfType(FOOD_EUR, "expense", false);
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+    TransactionDraft draft =
+        draftOf(
+            PostingDraft.of(FOOD_EUR, new BigDecimal("5.00")),
+            PostingDraft.of(CASH_EUR, new BigDecimal("-3.00")),
+            PostingDraft.of(CASH_EUR, new BigDecimal("-2.00")));
+
+    assertThatExceptionOfType(UnbalancedTransactionException.class)
+        .isThrownBy(() -> ledgerService.recordTransaction(draft))
+        .withMessageContaining("acct" + CASH_EUR)
+        .withMessageContaining("one leg");
+    verify(transactionRepository, never()).insertTransaction(any());
+  }
+
+  @Test
+  void rejectsTwoLegsOnTheSameLiabilityOrEquityAccount() {
+    stubBaseCurrency(EUR);
+    stubAccountOfType(CASH_EUR, "liability", false);
+    stubAccountOfType(FOOD_EUR, "equity", false);
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+    TransactionDraft liability =
+        draftOf(
+            PostingDraft.of(CASH_EUR, new BigDecimal("-3.00")),
+            PostingDraft.of(CASH_EUR, new BigDecimal("3.00")));
+    TransactionDraft equity =
+        draftOf(
+            PostingDraft.of(FOOD_EUR, new BigDecimal("-3.00")),
+            PostingDraft.of(FOOD_EUR, new BigDecimal("3.00")));
+
+    assertThatExceptionOfType(UnbalancedTransactionException.class)
+        .isThrownBy(() -> ledgerService.recordTransaction(liability));
+    assertThatExceptionOfType(UnbalancedTransactionException.class)
+        .isThrownBy(() -> ledgerService.recordTransaction(equity));
+  }
+
+  @Test
+  void rejectsTwoLegsOnTheSameRealOwnAccountOnEditToo() {
+    stubBaseCurrency(EUR);
+    stubEditOf(500L, "confirmed");
+    stubAccountOfType(CASH_EUR, "asset", false);
+    stubAccountOfType(FOOD_EUR, "expense", false);
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+    TransactionDraft draft =
+        draftOf(
+            PostingDraft.of(FOOD_EUR, new BigDecimal("5.00")),
+            PostingDraft.of(CASH_EUR, new BigDecimal("-3.00")),
+            PostingDraft.of(CASH_EUR, new BigDecimal("-2.00")));
+
+    assertThatExceptionOfType(UnbalancedTransactionException.class)
+        .isThrownBy(() -> ledgerService.editTransaction(500L, draft));
+    verify(transactionRepository, never()).deletePostings(anyLong());
+  }
+
+  @Test
+  void stillBooksRepeatedIncomeExpenseAndPersonLeafLegs() {
+    stubBaseCurrency(EUR);
+    stubAccountOfType(CASH_EUR, "asset", false);
+    stubAccountOfType(FOOD_EUR, "expense", false);
+    stubAccountOfType(CARD_CHF, "asset", true);
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+    when(transactionRepository.insertTransaction(any())).thenReturn(500L);
+
+    ledgerService.recordTransaction(
+        draftOf(
+            PostingDraft.of(CASH_EUR, new BigDecimal("-10.00")),
+            PostingDraft.of(FOOD_EUR, new BigDecimal("3.00")),
+            PostingDraft.of(FOOD_EUR, new BigDecimal("2.00")),
+            PostingDraft.of(CARD_CHF, new BigDecimal("2.00")),
+            PostingDraft.of(CARD_CHF, new BigDecimal("3.00"))));
+
+    verify(transactionRepository, times(5)).insertPosting(any());
+  }
+
   @Test
   void recordsBalancedSingleCurrencyTransaction() {
     stubBaseCurrency(EUR);

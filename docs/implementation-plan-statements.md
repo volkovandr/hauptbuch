@@ -26,13 +26,13 @@
   2026-10-04). Nothing below starts before that confirmation.
 
   ```sql
-  select p.transaction_id, t.date, a.name, a.type, a.person_leaf, count(*) as legs
+  select p.transaction_id, t.date, a.account_id, a.name, a.type, a.person_leaf, count(*) as legs
   from posting p
   join transaction t on t.transaction_id = p.transaction_id
   join account a on a.account_id = p.account_id
   where t.deleted_at is null
     and a.type not in ('income', 'expense')
-  group by p.transaction_id, t.date, a.name, a.type, a.person_leaf
+  group by p.transaction_id, t.date, a.account_id, a.name, a.type, a.person_leaf
   having count(*) > 1
   order by a.person_leaf, t.date;
   ```

@@ -351,9 +351,16 @@ public class LedgerService {
 
     Set<Long> parentAccountIds = new HashSet<>(accountService.findParentAccountIds());
     Set<String> currencies = new HashSet<>();
+    Set<Long> realOwnAccountIds = new HashSet<>();
     for (PostingDraft leg : postings) {
       Account account = requireLeafAccount(leg.accountId(), parentAccountIds);
       currencies.add(account.currencyCode());
+      if (isRealOwnAccount(account) && !realOwnAccountIds.add(account.accountId())) {
+        throw new UnbalancedTransactionException(
+            "A transaction may carry only one leg on account '"
+                + account.name()
+                + "' (one leg per real own account, data-model §8 invariant 6)");
+      }
     }
 
     if (currencies.size() == SINGLE_CURRENCY) {
@@ -362,6 +369,18 @@ public class LedgerService {
     }
     List<PostingDraft> legs = validatedCrossCurrency(postings, baseCurrency);
     return new BalancedLegs(legs, debitTotal(legs, PostingDraft::baseAmount));
+  }
+
+  /**
+   * Whether the account is a real own account for invariant 6: an asset, liability or equity
+   * account that is not a person leaf. Income, expense and person-leaf accounts may repeat in a
+   * transaction (two receipt lines {@code for} the same person).
+   */
+  private static boolean isRealOwnAccount(Account account) {
+    return !account.personLeaf()
+        && ("asset".equals(account.type())
+            || "liability".equals(account.type())
+            || "equity".equals(account.type()));
   }
 
   /** Single-currency: the native amounts must sum to zero exactly (data-model §8, branch 1). */

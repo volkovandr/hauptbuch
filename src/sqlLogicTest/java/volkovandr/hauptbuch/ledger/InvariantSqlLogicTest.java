@@ -81,6 +81,27 @@ class InvariantSqlLogicTest {
       where p.account_id in (select parent_id from account where parent_id is not null)
       """;
 
+  /**
+   * One leg per real own account (data-model §8 invariant 6): a live transaction may not carry two
+   * postings on the same asset/liability/equity account unless it is a person leaf. Counts the
+   * offending (transaction, account) pairs (zero on a correct book).
+   */
+  private static final String ONE_LEG_PER_REAL_OWN_ACCOUNT_VIOLATIONS =
+      """
+      select count(*)
+      from (
+        select p.transaction_id, p.account_id
+        from posting p
+        join transaction t on p.transaction_id = t.transaction_id
+        join account a on p.account_id = a.account_id
+        where t.deleted_at is null
+          and a.type not in ('income', 'expense')
+          and not a.person_leaf
+        group by p.transaction_id, p.account_id
+        having count(*) > 1
+      ) violations
+      """;
+
   private TestLedger ledger;
 
   @BeforeEach
@@ -215,5 +236,45 @@ class InvariantSqlLogicTest {
     insertPosting(txn, foodParent, "5.00", null); // posts to the parent — forbidden
 
     assertThat(countRows(LEAVES_ONLY_VIOLATIONS)).isEqualTo(1L);
+  }
+
+  @Test
+  void twoLegsOnOneRealOwnAccountViolateOneLegPerAccount() throws SQLException {
+    long cash = insertAccount(CASH, ASSET, EUR);
+    long food = insertAccount(FOOD_EUR, EXPENSE, EUR);
+    long txn = insertTransaction(JUNE_1);
+    insertPosting(txn, cash, "-3.00", null);
+    insertPosting(txn, cash, "-2.00", null); // second leg on Cash
+    insertPosting(txn, food, "5.00", null);
+
+    assertThat(countRows(ONE_LEG_PER_REAL_OWN_ACCOUNT_VIOLATIONS)).isEqualTo(1L);
+  }
+
+  @Test
+  void repeatedExpenseAndPersonLeafLegsAreNotViolations() throws SQLException {
+    long txn = insertTransaction(JUNE_1);
+    long cash = insertAccount(CASH, ASSET, EUR);
+    insertPosting(txn, cash, "-10.00", null);
+    long person = ledger.insertPersonLeaf("personal.EUR", EUR);
+    insertPosting(txn, person, "2.00", null);
+    insertPosting(txn, person, "3.00", null);
+    long food = insertAccount(FOOD_EUR, EXPENSE, EUR);
+    insertPosting(txn, food, "3.00", null);
+    insertPosting(txn, food, "2.00", null);
+
+    assertThat(countRows(ONE_LEG_PER_REAL_OWN_ACCOUNT_VIOLATIONS)).isZero();
+  }
+
+  @Test
+  void softDeletedDuplicateLegIsNotFlagged() throws SQLException {
+    long cash = insertAccount(CASH, ASSET, EUR);
+    long food = insertAccount(FOOD_EUR, EXPENSE, EUR);
+    long txn = insertTransaction(JUNE_1);
+    insertPosting(txn, cash, "-3.00", null);
+    insertPosting(txn, cash, "-2.00", null);
+    insertPosting(txn, food, "5.00", null);
+    ledger.softDeleteTransaction(txn);
+
+    assertThat(countRows(ONE_LEG_PER_REAL_OWN_ACCOUNT_VIOLATIONS)).isZero();
   }
 }

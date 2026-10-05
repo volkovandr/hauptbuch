@@ -51,6 +51,18 @@ final class TestLedger implements AutoCloseable {
     }
   }
 
+  /** A person-leaf account (data-model §7): the one kind of non-income/expense that may repeat. */
+  long insertPersonLeaf(String name, String currency) throws SQLException {
+    try (PreparedStatement ps =
+        conn.prepareStatement(
+            "insert into account (name, type, currency_code, person_leaf) "
+                + "values (?, 'asset', ?, true) returning account_id")) {
+      ps.setString(1, name);
+      ps.setString(2, currency);
+      return single(ps);
+    }
+  }
+
   long insertTransaction(String date) throws SQLException {
     try (PreparedStatement ps =
         conn.prepareStatement(
