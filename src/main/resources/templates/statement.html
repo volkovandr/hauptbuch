@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!--
+  The statement page, before matching (statements sub-plan slice b3): the header — period and the
+  optional balances — and the line grid, both editable, and delete. A line with a problem is kept
+  and marked; it is never matched. Matching, the extras and the dock arrive with slices c–d. No
+  bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel">
+      <p class="eyebrow">Statement</p>
+      <h1 class="statement-title">
+        <span th:text="${accountName}">BankAaa-EUR</span>
+      </h1>
+      <p class="muted">
+        <span th:text="${profile.name()}">BankAaa CSV</span> ·
+        <span th:text="${statement.originalFilename()}">2026-05.csv</span>
+      </p>
+      <p class="statements__notice" th:if="${notice}" th:text="${notice}">Header saved.</p>
+      <p class="statements__error" th:if="${error}" th:text="${error}">Not a date.</p>
+
+      <form method="post" th:action="@{/statements/{id}/header(id=${statement.statementId()})}">
+        <div class="statement-header">
+          <div class="field">
+            <label class="field__label" for="periodStart">Period start</label>
+            <input class="input" type="date" id="periodStart" name="periodStart" th:value="${statement.periodStart()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="periodEnd">Period end</label>
+            <input class="input" type="date" id="periodEnd" name="periodEnd" th:value="${statement.periodEnd()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="openingBalance">Opening balance</label>
+            <input class="input input--amount" id="openingBalance" name="openingBalance" th:value="${opening}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="closingBalance">Closing balance</label>
+            <input class="input input--amount" id="closingBalance" name="closingBalance" th:value="${closing}" />
+          </div>
+          <div class="field">
+            <button type="submit" class="btn">Save header</button>
+          </div>
+        </div>
+        <p class="muted">
+          With both balances typed in, the statement is checked on balance and turnover; without
+          them, on turnover only.
+        </p>
+      </form>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Lines</p>
+      <p class="muted" th:if="${#lists.isEmpty(lines)}">The file had no lines.</p>
+      <form
+        th:unless="${#lists.isEmpty(lines)}"
+        method="post"
+        th:action="@{/statements/{id}/lines(id=${statement.statementId()})}"
+      >
+        <div class="statement-lines">
+          <table class="statements">
+            <thead>
+              <tr>
+                <th>Booking</th>
+                <th>Value</th>
+                <th class="num">Amount</th>
+                <th>Counterparty</th>
+                <th>Description</th>
+                <th>Bank category</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr th:each="l : ${lines}" th:classappend="${l.problem() != null} ? 'statement-line--problem'">
+                <td>
+                  <input type="hidden" name="line" th:value="${l.id()}" />
+                  <input class="input" type="date" th:name="'bookingDate_' + ${l.id()}" th:value="${l.bookingDate()}" />
+                </td>
+                <td>
+                  <input class="input" type="date" th:name="'valueDate_' + ${l.id()}" th:value="${l.valueDate()}" />
+                </td>
+                <td>
+                  <input class="input input--amount" th:name="'amount_' + ${l.id()}" th:value="${l.amount()}" />
+                </td>
+                <td>
+                  <input class="input" th:name="'counterparty_' + ${l.id()}" th:value="${l.counterparty()}" />
+                  <div class="statement-line__problem" th:if="${l.problem() != null}" th:text="${l.problem()}">
+                    Unreadable booking date
+                  </div>
+                </td>
+                <td>
+                  <input class="input" th:name="'description_' + ${l.id()}" th:value="${l.description()}" />
+                </td>
+                <td>
+                  <input class="input" th:name="'bankCategory_' + ${l.id()}" th:value="${l.bankCategory()}" />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="actions"><button type="submit" class="btn">Save lines</button></p>
+      </form>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Delete</p>
+      <form
+        method="post"
+        th:action="@{/statements/{id}/delete(id=${statement.statementId()})}"
+        onsubmit="return confirm('Delete this statement? The file stays on the Pi.')"
+      >
+        <button type="submit" class="btn btn--danger">Delete statement</button>
+      </form>
+    </section>
+  </main>
+</html>

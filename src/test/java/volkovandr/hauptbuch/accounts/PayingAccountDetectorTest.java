@@ -70,7 +70,7 @@ class PayingAccountDetectorTest {
   }
 
   @Test
-  void labelsWithinAnAccountAreTriedInTheOrderGiven() {
+  void labelsWithinAccountAreTriedInTheOrderGiven() {
     PayingAccountDetector detector =
         detector(card(1L, EUR, "visa"), card(2L, EUR, "girocard, visa"));
 
@@ -89,7 +89,7 @@ class PayingAccountDetectorTest {
   }
 
   @Test
-  void anExplicitLabelBeatsTheBuiltInCashKeywords() {
+  void explicitLabelBeatsTheBuiltInCashKeywords() {
     // 'Barclaycard' contains 'bar'; the operator's label must win over the built-in vocabulary.
     PayingAccountDetector detector = detector(card(1L, EUR, "barclaycard"), cash(2L, EUR));
 
@@ -114,7 +114,7 @@ class PayingAccountDetectorTest {
   }
 
   @Test
-  void cashWithoutAnIdentifiedCurrencyResolvesEmpty() {
+  void cashWithoutIdentifiedCurrencyResolvesEmpty() {
     PayingAccountDetector detector = detector(cash(1L, EUR));
 
     assertThat(detector.detect("cash", null)).isEmpty();
@@ -150,5 +150,29 @@ class PayingAccountDetectorTest {
     PayingAccountDetector detector = detector(cash(1L, EUR));
 
     assertThat(detector.detect("cash", " eur ")).hasValue(1L);
+  }
+
+  @Test
+  void identifierMatchesLabelIgnoringWhitespaceAndCase() {
+    PayingAccountDetector detector =
+        detector(card(7L, EUR, "xx00 1111 2222"), card(8L, EUR, "xx00 3333 4444"));
+
+    assertThat(detector.detectByIdentifiers(List.of("XX0011112223"))).isEmpty();
+    assertThat(detector.detectByIdentifiers(List.of("XX00 1111 2222"))).hasValue(7L);
+    assertThat(detector.detectByIdentifiers(List.of("xx0033334444"))).hasValue(8L);
+  }
+
+  @Test
+  void identifierMustEqualLabelNotJustContainIt() {
+    PayingAccountDetector detector = detector(card(7L, EUR, "1234"));
+
+    assertThat(detector.detectByIdentifiers(List.of("XX00 1111 1234"))).isEmpty();
+  }
+
+  @Test
+  void noIdentifiersMeansNoProposal() {
+    PayingAccountDetector detector = detector(card(7L, EUR, "1234"));
+
+    assertThat(detector.detectByIdentifiers(List.of())).isEmpty();
   }
 }

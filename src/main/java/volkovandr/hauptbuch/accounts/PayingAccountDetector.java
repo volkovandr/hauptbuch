@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.accounts;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.OptionalLong;
@@ -61,6 +62,26 @@ public class PayingAccountDetector {
       return labelled;
     }
     return namesCash(lowerSignal) ? cashAccountIn(candidates, currency) : OptionalLong.empty();
+  }
+
+  /**
+   * Resolve a statement's account from the identifiers its file carries — the IBANs of a CSV's IBAN
+   * column (statements.md §3.5). A label must equal an identifier (whitespace and case ignored);
+   * candidates are in the repository's order, so the first account carrying one wins. Anything else
+   * stays empty and the operator picks.
+   */
+  public OptionalLong detectByIdentifiers(Collection<String> identifiers) {
+    if (identifiers.isEmpty()) {
+      return OptionalLong.empty();
+    }
+    return accountRepository.findDetectionCandidates(null).stream()
+        .filter(
+            candidate ->
+                identifiers.stream()
+                    .anyMatch(
+                        id -> DetectionLabels.matchesIdentifier(candidate.detectionLabels(), id)))
+        .mapToLong(AccountDetectionCandidate::accountId)
+        .findFirst();
   }
 
   /** Null for anything the parse left blank, so the cash rule can tell "no currency" apart. */

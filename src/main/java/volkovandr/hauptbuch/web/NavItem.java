@@ -21,6 +21,7 @@ public record NavItem(String label, String path, boolean current, boolean overfl
       List.of(
           new NavItem("Register", "/register", false, false),
           new NavItem("Receipts", "/receipts", false, false),
+          new NavItem("Statements", "/statements", false, false),
           new NavItem("Reports", "/reports", false, false),
           new NavItem("Recurring", "/recurring", false, false),
           new NavItem("People", "/people", false, false),

@@ -1,0 +1,80 @@
+/* The Statements page, the profile editor and the statement page (statements sub-plan slice b). */
+
+.statements-list,
+.statement-lines {
+  overflow-x: auto;
+}
+
+table.statements {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+}
+
+table.statements thead th {
+  text-align: left;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border-bottom: 2px solid var(--rule);
+  padding: 0.3rem 0.5rem;
+}
+
+table.statements tbody td {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--feint);
+  vertical-align: top;
+}
+
+table.statements input.input {
+  min-width: 6rem;
+}
+
+table.statements input.input--amount {
+  min-width: 7rem;
+  text-align: right;
+}
+
+.statements__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.statements__notice {
+  margin: 0.5rem 0;
+}
+
+.statements__error {
+  margin: 0.5rem 0;
+  color: var(--debit, #a02020);
+}
+
+.statement-line--problem td {
+  background: color-mix(in srgb, var(--debit, #a02020) 8%, transparent);
+}
+
+.statement-line__problem {
+  font-size: 0.85rem;
+  color: var(--debit, #a02020);
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0 1rem;
+  max-width: 60rem;
+}
+
+.profile-grid .field--wide {
+  grid-column: 1 / -1;
+}
+
+.statement-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1rem;
+  align-items: flex-end;
+}
