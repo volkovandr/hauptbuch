@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<!--
+  The confirm step of a statement upload (statements.md §3.5): how the profile read the file and
+  the account to put it on. The account is proposed from the file's IBAN column through the
+  accounts' detection labels, and the operator always confirms. No bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel">
+      <p class="eyebrow">Confirm statement</p>
+      <p class="statements__error" th:if="${error}" th:text="${error}">Choose the account.</p>
+      <p>
+        <strong th:text="${name}">2026-05.csv</strong> read through
+        <strong th:text="${profile.name()}">BankAaa CSV</strong>:
+        <span th:text="${preview.lineCount()}">42</span> lines<span
+          th:if="${preview.periodStart() != null}"
+        >
+          from
+          <span th:text="${#temporals.format(preview.periodStart(), 'dd.MM.yyyy')}">01.05.2026</span>
+          to
+          <span th:text="${#temporals.format(preview.periodEnd(), 'dd.MM.yyyy')}">31.05.2026</span></span
+        >.
+      </p>
+      <div th:unless="${#lists.isEmpty(preview.problems())}">
+        <p class="warning">
+          Unreadable lines: <span th:text="${#lists.size(preview.problems())}">2</span>. They are
+          kept with their problem on the statement page and never matched; so is a line in a
+          currency other than the account's.
+        </p>
+        <ul>
+          <li th:each="p, i : ${preview.problems()}" th:if="${i.index < 5}" th:text="${p}">
+            Unreadable booking date 'x'
+          </li>
+        </ul>
+      </div>
+
+      <form method="post" th:action="@{/statements/create}" class="form">
+        <input type="hidden" name="profileId" th:value="${profile.statementProfileId()}" />
+        <input type="hidden" name="path" th:value="${path}" />
+        <input type="hidden" name="name" th:value="${name}" />
+        <div class="field">
+          <label class="field__label" for="account">Account</label>
+          <select class="input" id="account" name="account" required>
+            <option value="">Choose…</option>
+            <option
+              th:each="a : ${accounts}"
+              th:value="${a.accountId()}"
+              th:text="${a.name()}"
+              th:selected="${preview.proposedAccountId().isPresent() and preview.proposedAccountId().getAsLong() == a.accountId()}"
+            >
+              BankAaa-EUR
+            </option>
+          </select>
+          <p class="muted" th:if="${preview.proposedAccountId().isPresent()}">
+            Proposed from the file's IBAN.
+          </p>
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Create statement</button>
+          <a class="btn btn--ghost" th:href="@{/statements}">Cancel</a>
+        </p>
+      </form>
+    </section>
+  </main>
+</html>

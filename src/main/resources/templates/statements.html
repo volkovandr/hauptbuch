@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!--
+  The Statements page (statements sub-plan slices b1–b2): every statement — account, period,
+  profile — newest first, filterable by account, and the upload. The upload keeps the file on the
+  Pi and goes on to a confirm step where the account is chosen. The profiles screen is reached from
+  here, not from the top menu (statements.md §8). No bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel">
+      <p class="eyebrow">Statements</p>
+      <p class="statements__notice" th:if="${notice}" th:text="${notice}">Statement deleted.</p>
+      <p class="statements__error" th:if="${error}" th:text="${error}">Could not read the file.</p>
+
+      <div class="statements__toolbar">
+        <form
+          method="post"
+          th:action="@{/statements/upload}"
+          enctype="multipart/form-data"
+          class="statements__toolbar"
+        >
+          <div class="field">
+            <label class="field__label" for="upload-profile">Profile</label>
+            <select class="input" id="upload-profile" name="profile" required>
+              <option th:each="p : ${profiles}" th:value="${p.statementProfileId()}" th:text="${p.name()}">
+                BankAaa CSV
+              </option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field__label" for="upload-file">File</label>
+            <input class="input" id="upload-file" type="file" name="file" required />
+          </div>
+          <div class="field">
+            <button type="submit" class="btn" th:disabled="${#lists.isEmpty(profiles)}">Upload</button>
+          </div>
+        </form>
+        <form method="get" th:action="@{/statements}" class="statements__toolbar">
+          <div class="field">
+            <label class="field__label" for="filter-account">Account</label>
+            <select class="input" id="filter-account" name="account" onchange="this.form.submit()">
+              <option value="">All accounts</option>
+              <option
+                th:each="a : ${accounts}"
+                th:value="${a.accountId()}"
+                th:text="${a.name()}"
+                th:selected="${a.accountId() == accountFilter}"
+              >
+                BankAaa-EUR
+              </option>
+            </select>
+          </div>
+          <noscript><button type="submit" class="btn btn--ghost">Filter</button></noscript>
+        </form>
+        <p class="actions">
+          <a class="btn btn--ghost" th:href="@{/statements/profiles}">Profiles</a>
+        </p>
+      </div>
+      <p class="muted" th:if="${#lists.isEmpty(profiles)}">
+        Create a <a th:href="@{/statements/profiles/new}">statement profile</a> first: it says how
+        to read your bank's CSV.
+      </p>
+
+      <p class="muted" th:if="${#lists.isEmpty(rows)}">No statements yet.</p>
+      <div class="statements-list" th:unless="${#lists.isEmpty(rows)}">
+        <table class="statements">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Period</th>
+              <th>Profile</th>
+              <th class="num">Lines</th>
+              <th>File</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr th:each="r : ${rows}">
+              <td>
+                <a th:href="@{/statements/{id}(id=${r.statementId()})}" th:text="${r.accountName()}"
+                  >BankAaa-EUR</a
+                >
+              </td>
+              <td class="num">
+                <span th:if="${r.periodStart() != null}">
+                  <span th:text="${#temporals.format(r.periodStart(), 'dd.MM.yyyy')}">01.05.2026</span>
+                  –
+                  <span th:text="${#temporals.format(r.periodEnd(), 'dd.MM.yyyy')}">31.05.2026</span>
+                </span>
+              </td>
+              <td th:text="${r.profileName()}">BankAaa CSV</td>
+              <td class="num">
+                <span th:text="${r.lineCount()}">42</span>
+                <span class="warning" th:if="${r.problemCount() > 0}"
+                  >(<span th:text="${r.problemCount()}">2</span> with a problem)</span
+                >
+              </td>
+              <td class="muted" th:text="${r.originalFilename()}">2026-05.csv</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</html>

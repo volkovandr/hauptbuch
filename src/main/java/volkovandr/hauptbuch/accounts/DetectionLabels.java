@@ -42,6 +42,20 @@ public final class DetectionLabels {
     return split(labels).anyMatch(label -> lowerSignal.contains(label.toLowerCase(Locale.ROOT)));
   }
 
+  /**
+   * Whether any label <em>is</em> the identifier, ignoring case and whitespace — how an IBAN or
+   * account number printed in groups ({@code DE12 3456}) meets the same number typed without them.
+   * Unlike {@link #matches}, a label must equal the identifier, not merely appear in it.
+   */
+  public static boolean matchesIdentifier(String labels, String identifier) {
+    String wanted = compact(identifier);
+    return !wanted.isEmpty() && split(labels).anyMatch(label -> compact(label).equals(wanted));
+  }
+
+  private static String compact(String text) {
+    return text == null ? "" : text.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
+  }
+
   /** The non-blank labels, stripped, in the order given. */
   private static Stream<String> split(String labels) {
     if (labels == null || labels.isBlank()) {

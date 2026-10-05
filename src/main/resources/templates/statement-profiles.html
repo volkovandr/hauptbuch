@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<!--
+  The statement profiles list (statements sub-plan slice b1). Reached from the Statements page. A
+  profile says how to read one bank's CSV (statements.md §3.1). No bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel">
+      <p class="eyebrow">Statement profiles</p>
+      <p class="statements__notice" th:if="${notice}" th:text="${notice}">Profile saved.</p>
+      <p class="actions">
+        <a class="btn" th:href="@{/statements/profiles/new}">＋ New CSV profile</a>
+        <a class="btn btn--ghost" th:href="@{/statements}">Back to statements</a>
+      </p>
+      <p class="muted" th:if="${#lists.isEmpty(profiles)}">No profiles yet.</p>
+      <table class="statements" th:unless="${#lists.isEmpty(profiles)}">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Format</th>
+            <th class="num">Window (days before / after)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="p : ${profiles}">
+            <td>
+              <a th:href="@{/statements/profiles/{id}(id=${p.statementProfileId()})}" th:text="${p.name()}"
+                >BankAaa CSV</a
+              >
+            </td>
+            <td th:text="${p.format()}">csv</td>
+            <td class="num">
+              <span th:text="${p.windowDaysBefore()}">10</span> /
+              <span th:text="${p.windowDaysAfter()}">3</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</html>

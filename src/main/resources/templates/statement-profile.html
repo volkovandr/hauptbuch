@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<!--
+  The statement profile editor (statements sub-plan slice b1): the CSV dialect, the sign mode, the
+  column map and the matching window, with a live preview. Picking a sample file shows its first
+  rows parsed with the settings as they stand in the form, refreshed as any setting changes, so a
+  wrong date format is seen before the profile is saved (statements.md §3.1). The preview is plain
+  htmx; the sample stays in the file input and is never stored. No bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content" th:fragment="content">
+    <section class="panel">
+      <p class="eyebrow">Statement profile</p>
+      <p class="statements__error" th:if="${error}" th:text="${error}">The date format is not valid.</p>
+      <form
+        method="post"
+        th:action="@{/statements/profiles/save}"
+        enctype="multipart/form-data"
+        id="profile-form"
+        hx-post="/statements/profiles/preview"
+        hx-target="#preview"
+        hx-trigger="change, keyup changed delay:500ms"
+        hx-encoding="multipart/form-data"
+      >
+        <input type="hidden" name="statementProfileId" th:value="${profile.statementProfileId()}" />
+        <input type="hidden" name="format" value="csv" />
+        <div class="profile-grid">
+          <div class="field field--wide">
+            <label class="field__label" for="name">Name</label>
+            <input class="input" id="name" name="name" th:value="${profile.name()}" required />
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="csvDelimiter">Delimiter</label>
+            <input class="input" id="csvDelimiter" name="csvDelimiter" th:value="${profile.csvDelimiter()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="csvQuote">Quote</label>
+            <input class="input" id="csvQuote" name="csvQuote" th:value="${profile.csvQuote()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="csvEncoding">Encoding</label>
+            <input class="input" id="csvEncoding" name="csvEncoding" th:value="${profile.csvEncoding()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="csvSkipRows">Rows to skip</label>
+            <input class="input" id="csvSkipRows" name="csvSkipRows" type="number" min="0" th:value="${profile.csvSkipRows()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="csvHasHeader">
+              Header row<span
+                th:replace="~{fragments/help-marker :: marker('Tick when a row of column names follows the skipped rows: columns are then named by their header text. Untick for a file without one: columns are then 1-based numbers.')}"
+              ></span>
+            </label>
+            <input id="csvHasHeader" name="csvHasHeader" type="checkbox" value="true" th:checked="${profile.csvHasHeader()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="csvDecimalSeparator">Decimal separator</label>
+            <select class="input" id="csvDecimalSeparator" name="csvDecimalSeparator">
+              <option value="," th:selected="${profile.csvDecimalSeparator() == ','}">, (comma)</option>
+              <option value="." th:selected="${profile.csvDecimalSeparator() == '.'}">. (point)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field__label" for="csvDateFormat">Date format</label>
+            <input class="input" id="csvDateFormat" name="csvDateFormat" th:value="${profile.csvDateFormat()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="csvSignMode">Sign mode</label>
+            <select class="input" id="csvSignMode" name="csvSignMode">
+              <option value="signed" th:selected="${profile.csvSignMode() == 'signed'}">One signed amount column</option>
+              <option value="debit_credit" th:selected="${profile.csvSignMode() == 'debit_credit'}">Debit and credit columns</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="colBookingDate">Booking date column</label>
+            <input class="input" id="colBookingDate" name="colBookingDate" th:value="${profile.colBookingDate()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="colValueDate">Value date column</label>
+            <input class="input" id="colValueDate" name="colValueDate" th:value="${profile.colValueDate()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="colAmount">Amount column</label>
+            <input class="input" id="colAmount" name="colAmount" th:value="${profile.colAmount()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="colDebit">Debit column</label>
+            <input class="input" id="colDebit" name="colDebit" th:value="${profile.colDebit()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="colCredit">Credit column</label>
+            <input class="input" id="colCredit" name="colCredit" th:value="${profile.colCredit()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="colCurrency">Currency column</label>
+            <input class="input" id="colCurrency" name="colCurrency" th:value="${profile.colCurrency()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="colCounterparty">Counterparty column</label>
+            <input class="input" id="colCounterparty" name="colCounterparty" th:value="${profile.colCounterparty()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="colDescription">Description column</label>
+            <input class="input" id="colDescription" name="colDescription" th:value="${profile.colDescription()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="colBankCategory">Bank category column</label>
+            <input class="input" id="colBankCategory" name="colBankCategory" th:value="${profile.colBankCategory()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="colIban">IBAN column</label>
+            <input class="input" id="colIban" name="colIban" th:value="${profile.colIban()}" />
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="windowDaysBefore">
+              Window: days before<span
+                th:replace="~{fragments/help-marker :: marker('A ledger posting matches a bank line when its date lies from this many days before to this many days after the booking date. The ledger date is the purchase date, which is almost always the earlier one.')}"
+              ></span>
+            </label>
+            <input class="input" id="windowDaysBefore" name="windowDaysBefore" type="number" min="0" th:value="${profile.windowDaysBefore()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="windowDaysAfter">Window: days after</label>
+            <input class="input" id="windowDaysAfter" name="windowDaysAfter" type="number" min="0" th:value="${profile.windowDaysAfter()}" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="sample">Sample file for the preview</label>
+          <input class="input" id="sample" name="sample" type="file" />
+        </div>
+
+        <p class="actions">
+          <button type="submit" class="btn">Save profile</button>
+          <a class="btn btn--ghost" th:href="@{/statements/profiles}">Cancel</a>
+        </p>
+      </form>
+
+      <div id="preview" th:fragment="preview" class="statement-preview">
+        <p class="muted" th:if="${hint}" th:text="${hint}">Pick a sample file.</p>
+        <p class="statements__error" th:if="${error}" th:text="${error}">Column not found.</p>
+        <div th:if="${csv != null}" class="statements-list">
+          <p class="muted" th:if="${#lists.isEmpty(csv.lines())}">The file has no data rows.</p>
+          <table class="statements" th:unless="${#lists.isEmpty(csv.lines())}">
+            <thead>
+              <tr>
+                <th>Booking</th>
+                <th>Value</th>
+                <th class="num">Amount</th>
+                <th>Counterparty</th>
+                <th>Description</th>
+                <th>Bank category</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr th:each="l : ${csv.lines()}" th:classappend="${l.problem() != null} ? 'statement-line--problem'">
+                <td class="num" th:text="${l.bookingDate()}">2026-05-02</td>
+                <td class="num" th:text="${l.valueDate()}">2026-05-03</td>
+                <td class="num" th:text="${l.amount()}">-12.50</td>
+                <td>
+                  <span th:text="${l.counterparty()}">ShopAaa</span>
+                  <div class="statement-line__problem" th:if="${l.problem() != null}" th:text="${l.problem()}">
+                    Unreadable booking date
+                  </div>
+                </td>
+                <td th:text="${l.description()}">Card payment</td>
+                <td th:text="${l.bankCategory()}">Groceries</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</html>

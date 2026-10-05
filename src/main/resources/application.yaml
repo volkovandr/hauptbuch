@@ -76,3 +76,6 @@ hauptbuch:
       # now. Configurable in case it ever proves not worth the extra round trip — see the
       # AnthropicProperties javadoc.
       batch-cache-warmup-enabled: true
+  # Uploaded bank statement files (statements b2). Dev default: a throwaway local directory.
+  statements:
+    storage-root: ./.local-statements

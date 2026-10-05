@@ -62,3 +62,6 @@ application-secret*.yml
 
 # Sample Money exports for the import feature — personal data, never commit (import.md a1)
 qif/
+
+# Statement files (dev local root, statements b2)
+.local-statements/

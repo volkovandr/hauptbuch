@@ -11,7 +11,7 @@ class NavItemTest {
   @Test
   void topLevelSectionsKeepTheAgreedOrder() {
     assertThat(labels(NavItem.sectionsFor("/").stream().filter(i -> !i.overflow()).toList()))
-        .containsExactly("Register", "Receipts", "Reports", "Recurring", "People");
+        .containsExactly("Register", "Receipts", "Statements", "Reports", "Recurring", "People");
   }
 
   @Test

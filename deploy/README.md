@@ -68,8 +68,9 @@ ssh <pi-user>@<pi-host>
 # 1. System user for the service (no login shell, no home dir).
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin hauptbuch
 
-# 2. Data dir for receipt images (hauptbuch.receipts.storage-root).
-sudo mkdir -p /var/lib/hauptbuch/receipts
+# 2. Data dirs for receipt images and statement files (hauptbuch.receipts.storage-root,
+#    hauptbuch.statements.storage-root).
+sudo mkdir -p /var/lib/hauptbuch/receipts /var/lib/hauptbuch/statements
 sudo chown -R hauptbuch:hauptbuch /var/lib/hauptbuch
 
 # 3. Config dir + file. A fresh Pi has no $EDITOR set — nano ships with Raspberry Pi OS by
