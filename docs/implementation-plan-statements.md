@@ -42,7 +42,7 @@
   a message naming the account. Unit tests; data-model §8 invariant 6 as a `sqlLogicTest`.
   *Done when:* the rule rejects, income/expense/person-leaf repeats still book.
 
-- **0c — Postings edited in place.** `editTransaction` pairs legs by account; a paired leg is
+- ✅ **0c — Postings edited in place.** `editTransaction` pairs legs by account; a paired leg is
   updated in place (`posting_id` kept) and keeps `reconciliation` when its amount is unchanged,
   drops to `unreconciled` when it changed; unpaired old legs deleted, new ones inserted; repeating
   accounts fall back to delete + insert. `ledger` gains the reconciliation-dropped interface,
