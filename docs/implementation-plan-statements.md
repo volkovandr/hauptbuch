@@ -37,7 +37,7 @@
   order by a.person_leaf, t.date;
   ```
 
-- **0b — One leg per real own account.** `LedgerService` rejects a transaction with two postings to
+- ✅ **0b — One leg per real own account.** `LedgerService` rejects a transaction with two postings to
   the same `asset`/`liability`/`equity` account that is not a person leaf, on record and edit, with
   a message naming the account. Unit tests; data-model §8 invariant 6 as a `sqlLogicTest`.
   *Done when:* the rule rejects, income/expense/person-leaf repeats still book.
