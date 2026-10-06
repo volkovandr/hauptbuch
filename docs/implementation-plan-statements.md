@@ -82,7 +82,7 @@
 - **c2 — Match actions.** Accept, Accept all exact, pick a same-account candidate, Unmatch (→
   `unreconciled`), the overlap decision (same movement / different transaction), delete statement
   with the keep-`reconciled`/reset question; matching confirms `pending_review`; `statements`
-  implements the reconciliation-dropped interface. MockMvc acceptance. *Done when:* a CSV month can
+  implements the reconciliation-dropped interface. MockMvc acceptance. The overlap decision is stored in `statement_line_exclusion` (`.scratch/statements/issues/02-*`). *Done when:* a CSV month can
   be reconciled to the extent the ledger already holds its transactions.
 
 ## d — The dock on the statement page

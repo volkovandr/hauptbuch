@@ -172,7 +172,10 @@ public class StatementService {
     updated.forEach(line -> lineRepository.update(statementId, line));
   }
 
-  /** Soft-delete a statement; its file stays on the Pi (statements.md §5). */
+  /**
+   * Soft-delete a statement; its file stays on the Pi (statements.md §5). Callers remove its matches
+   * first — {@link StatementMatchService#deleteStatement} does.
+   */
   @Transactional
   public void delete(long statementId) {
     if (statementRepository.softDelete(statementId) > 0) {

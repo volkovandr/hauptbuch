@@ -106,3 +106,8 @@ table.statements input.input--amount {
 .statement-status--problem {
   color: var(--debit, #a02020);
 }
+
+.statement-lines td form {
+  display: inline-block;
+  margin: 0 0.25rem 0.25rem 0;
+}

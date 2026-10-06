@@ -24,7 +24,8 @@ import volkovandr.hauptbuch.web.NavItem;
  * b2–b3). The page lists every statement and holds the upload; the upload keeps the file, then asks
  * the operator to confirm the account the file points at; the statement page corrects the period,
  * the balances and the lines, shows what the matcher proposes (slice c1), and deletes the
- * statement. Accepting a proposal arrives with slice c2.
+ * statement. Accept, pick, Unmatch and the overlap decision are the match actions of slice c2; the
+ * dock arrives with slice d.
  */
 @Controller
 class StatementController {
@@ -39,14 +40,17 @@ class StatementController {
   private final StatementService statementService;
   private final StatementProfileService profileService;
   private final StatementReviewService reviewService;
+  private final StatementMatchService matchService;
 
   StatementController(
       StatementService statementService,
       StatementProfileService profileService,
-      StatementReviewService reviewService) {
+      StatementReviewService reviewService,
+      StatementMatchService matchService) {
     this.statementService = statementService;
     this.profileService = profileService;
     this.reviewService = reviewService;
+    this.matchService = matchService;
   }
 
   /** The statements, newest first, filterable by account, with the upload form. */
@@ -193,10 +197,71 @@ class StatementController {
         redirectAttributes);
   }
 
-  /** Delete the statement; its file stays on the Pi. */
+  /** Confirm one candidate for a line (Accept, a pick, or "the same bank movement"). */
+  @PostMapping(BASE_PATH + "/{id}/lines/{lineId}/accept")
+  String accept(
+      @PathVariable long id,
+      @PathVariable long lineId,
+      @RequestParam long posting,
+      RedirectAttributes redirectAttributes) {
+    return saved(
+        id, () -> matchService.accept(id, lineId, posting), "Line matched.", redirectAttributes);
+  }
+
+  /** Confirm every unambiguous exact proposal. */
+  @PostMapping(BASE_PATH + "/{id}/accept-all")
+  String acceptAll(@PathVariable long id, RedirectAttributes redirectAttributes) {
+    return saved(
+        id,
+        () -> {
+          int matched = matchService.acceptAllExact(id);
+          redirectAttributes.addFlashAttribute(NOTICE, matched + " lines matched.");
+        },
+        null,
+        redirectAttributes);
+  }
+
+  /** An overlapping candidate is "a different transaction that looks the same". */
+  @PostMapping(BASE_PATH + "/{id}/lines/{lineId}/different")
+  String different(
+      @PathVariable long id,
+      @PathVariable long lineId,
+      @RequestParam long posting,
+      RedirectAttributes redirectAttributes) {
+    return saved(
+        id,
+        () -> matchService.rejectCandidate(id, lineId, posting),
+        "Kept apart: the line is now treated as missing.",
+        redirectAttributes);
+  }
+
+  /** Remove a line's match; its posting goes back to unreconciled. */
+  @PostMapping(BASE_PATH + "/{id}/lines/{lineId}/unmatch")
+  String unmatch(
+      @PathVariable long id, @PathVariable long lineId, RedirectAttributes redirectAttributes) {
+    return saved(
+        id,
+        () -> matchService.unmatch(id, lineId),
+        "Match removed; the posting is unreconciled.",
+        redirectAttributes);
+  }
+
+  /**
+   * Delete the statement, removing its matches; {@code reconciliation} is {@code keep} (the
+   * postings stay reconciled) or {@code reset} (they go back to unreconciled). The file stays on the
+   * Pi.
+   */
   @PostMapping(BASE_PATH + "/{id}/delete")
-  String delete(@PathVariable long id, RedirectAttributes redirectAttributes) {
-    statementService.delete(id);
+  String delete(
+      @PathVariable long id,
+      @RequestParam(defaultValue = "keep") String reconciliation,
+      RedirectAttributes redirectAttributes) {
+    try {
+      matchService.deleteStatement(id, "reset".equals(reconciliation));
+    } catch (StatementFormatException e) {
+      redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
+      return REDIRECT_BASE;
+    }
     redirectAttributes.addFlashAttribute(NOTICE, "Statement deleted. The file stays on the Pi.");
     return REDIRECT_BASE;
   }
@@ -205,7 +270,9 @@ class StatementController {
       long id, Runnable save, String message, RedirectAttributes redirectAttributes) {
     try {
       save.run();
-      redirectAttributes.addFlashAttribute(NOTICE, message);
+      if (message != null) {
+        redirectAttributes.addFlashAttribute(NOTICE, message);
+      }
     } catch (StatementFormatException e) {
       redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
     }
@@ -263,22 +330,49 @@ class StatementController {
 
   /** A line as the matcher sees it: status, and a one-line account of its match or proposals. */
   record ReviewLineView(
+      long lineId,
       String bookingDate,
       String amount,
       String text,
       String status,
       String statusClass,
-      List<String> details) {
+      List<String> details,
+      List<Pick> picks,
+      boolean canUnmatch,
+      boolean overlap) {
 
     static ReviewLineView of(LineReview review) {
       StatementLine line = review.line();
       return new ReviewLineView(
+          line.statementLineId(),
           date(line.bookingDate()),
           number(line.amount()),
           text(line),
           review.status().label(),
           "statement-status--" + review.status().name().toLowerCase(Locale.ROOT),
-          details(review));
+          details(review),
+          picks(review),
+          review.match() != null,
+          review.status() == LineStatus.OVERLAP);
+    }
+
+    /** The equal-amount candidates the operator can confirm here; the rest need the dock. */
+    private static List<Pick> picks(LineReview review) {
+      boolean single = review.status() == LineStatus.EXACT || review.status() == LineStatus.OVERLAP;
+      return review.candidates().stream()
+          .filter(p -> p.tier() == ProposedCandidate.Tier.EXACT)
+          .map(
+              p ->
+                  new Pick(
+                      p.candidate().postingId(),
+                      single
+                          ? null
+                          : describe(
+                              p.candidate().transactionDate(),
+                              p.candidate().payeeName(),
+                              p.candidate().amount(),
+                              suffix(p))))
+          .toList();
     }
 
     private static String text(StatementLine line) {
@@ -306,6 +400,9 @@ class StatementController {
           .toList();
     }
   }
+
+  /** A candidate to confirm; {@code label} is null when it is the line's only one. */
+  record Pick(long postingId, String label) {}
 
   /** An extra, with its boundary label. */
   record ExtraView(String date, String payee, String note, String amount, String boundary) {
