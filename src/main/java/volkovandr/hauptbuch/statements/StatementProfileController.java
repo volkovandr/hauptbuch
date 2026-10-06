@@ -1,7 +1,5 @@
 package volkovandr.hauptbuch.statements;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -70,7 +68,7 @@ class StatementProfileController {
       RedirectAttributes redirectAttributes) {
     if (binding.hasErrors()) {
       model.addAttribute(ERROR, BAD_NUMBERS);
-      return editor(StatementProfile.blankCsv(), model);
+      return editor(profile, model);
     }
     try {
       profileService.save(profile);
@@ -109,7 +107,8 @@ class StatementProfileController {
       try {
         StatementProfile normalised = StatementProfileService.normalised(profile);
         parser.validate(normalised);
-        CsvStatement csv = parser.parse(normalised, bytesOf(sample), null, PREVIEW_ROWS);
+        CsvStatement csv =
+            parser.parse(normalised, UploadedFiles.bytesOf(sample), null, PREVIEW_ROWS);
         model.addAttribute("csv", csv);
       } catch (StatementFormatException e) {
         model.addAttribute(ERROR, e.getMessage());
@@ -122,13 +121,5 @@ class StatementProfileController {
     model.addAttribute("nav", NavItem.sectionsFor(STATEMENTS_PATH));
     model.addAttribute(PROFILE, profile);
     return VIEW;
-  }
-
-  private static byte[] bytesOf(MultipartFile file) {
-    try {
-      return file.getBytes();
-    } catch (IOException e) {
-      throw new UncheckedIOException("Failed to read the sample file", e);
-    }
   }
 }
