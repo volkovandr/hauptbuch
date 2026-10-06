@@ -313,7 +313,7 @@ class StatementController {
     static ExtraView of(ExtraReview review) {
       StatementExtra e = review.extra();
       return new ExtraView(
-          date(e.transactionDate()),
+          StatementController.date(e.transactionDate()),
           e.payeeName() == null ? "" : e.payeeName(),
           e.note() == null ? "" : e.note(),
           number(e.amount()),
@@ -328,8 +328,7 @@ class StatementController {
     return proposed.candidate().matchedElsewhere() ? "(matched on another statement)" : null;
   }
 
-  private static String describe(
-      LocalDate date, String payee, BigDecimal amount, String suffix) {
+  private static String describe(LocalDate date, String payee, BigDecimal amount, String suffix) {
     String text = date(date) + " " + (payee == null ? "(no payee)" : payee) + " " + number(amount);
     return suffix == null ? text : text + " " + suffix;
   }

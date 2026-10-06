@@ -16,11 +16,11 @@ import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
 
 /**
- * SQL-logic tier (CLAUDE.md §6): the matcher's candidate, match and extras queries
- * (statements.md §4, §6.3) through the real {@link StatementMatchRepository}. Crafted books cover
- * the asymmetric date window and its edges, the account-leg amount, the payee substring, the
- * wrong-account exclusions (reconciled, person leaf, category, foreign currency), a cross-currency
- * transaction, the matched-elsewhere flag and the extras. Raw {@link JdbcClient} seeds the rows.
+ * SQL-logic tier (CLAUDE.md §6): the matcher's candidate, match and extras queries (statements.md
+ * §4, §6.3) through the real {@link StatementMatchRepository}. Crafted books cover the asymmetric
+ * date window and its edges, the account-leg amount, the payee substring, the wrong-account
+ * exclusions (reconciled, person leaf, category, foreign currency), a cross-currency transaction,
+ * the matched-elsewhere flag and the extras. Raw {@link JdbcClient} seeds the rows.
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
@@ -162,9 +162,7 @@ class StatementCandidatesSqlLogicTest {
   }
 
   private List<Long> candidatePostings() {
-    return matcher.findCandidates(statementId).stream()
-        .map(StatementCandidate::postingId)
-        .toList();
+    return matcher.findCandidates(statementId).stream().map(StatementCandidate::postingId).toList();
   }
 
   // ---- the date window ------------------------------------------------------------------
@@ -230,10 +228,11 @@ class StatementCandidatesSqlLogicTest {
   @Test
   void payeeSimilarityIsCaseInsensitiveSubstringOfCounterpartyOrDescription() {
     long upper = expense(BOOKING, own, "-9.00", payee("shopaaa"));
-    long inDescription = line(statementId, 1, BOOKING, "-9.00", null, "Card payment");
+    long inDescription = line(statementId, 1, BOOKING, "-9.00", null, null);
     jdbcClient
-        .sql("update statement_line set description = 'CARD PAYMENT ShopBbb 12' where"
-            + " statement_line_id = :l")
+        .sql(
+            "update statement_line set description = 'CARD PAYMENT ShopBbb 12' where"
+                + " statement_line_id = :l")
         .param("l", inDescription)
         .update();
     long shopBbb = expense(BOOKING, own, "-9.10", payee("ShopBbb"));
@@ -247,7 +246,7 @@ class StatementCandidatesSqlLogicTest {
         .satisfies(c -> assertThat(c.payeeSimilar()).isTrue());
     assertThat(all)
         .filteredOn(c -> c.postingId() == shopBbb && c.statementLineId() == inDescription)
-        .singleElement();
+        .hasSize(1);
     assertThat(all).filteredOn(c -> c.postingId() == reversed).isEmpty();
   }
 
@@ -265,7 +264,7 @@ class StatementCandidatesSqlLogicTest {
   }
 
   @Test
-  void aCrossCurrencyTransactionOffersTheStatementAccountsNativeLeg() {
+  void crossCurrencyTransactionOffersTheStatementAccountsNativeLeg() {
     long usd = account("BankCcc-USD", "asset", "USD", false);
     long txn = transaction(BOOKING, null, false);
     long ownLeg = posting(txn, own, "-3.50", "unreconciled");
@@ -321,7 +320,8 @@ class StatementCandidatesSqlLogicTest {
     long onUsd = expense(BOOKING, usd, "-3.50", shop);
     long onDeleted = expense(BOOKING, deletedAccount, "-3.50", shop);
     long txn = transaction(BOOKING, shop, false);
-    long onCategory = posting(txn, account("Food", "expense", "EUR", false), "-3.50", "unreconciled");
+    long onCategory =
+        posting(txn, account("Food", "expense", "EUR", false), "-3.50", "unreconciled");
     posting(txn, own, "3.50", "unreconciled");
 
     assertThat(candidatePostings()).doesNotContain(onPerson, onUsd, onDeleted, onCategory);
@@ -339,7 +339,7 @@ class StatementCandidatesSqlLogicTest {
   }
 
   @Test
-  void aMatchedLineGetsNoCandidates() {
+  void matchedLineGetsNoCandidates() {
     long taken = expense(BOOKING, own, "-3.50", null);
     expense(BOOKING, own, "-3.50", null);
     match(statementId, lineId, taken);
@@ -370,7 +370,10 @@ class StatementCandidatesSqlLogicTest {
 
   @Test
   void problemUndatedOrAmountlessLinesGetNoCandidates() {
-    jdbcClient.sql("delete from statement_line where statement_line_id = :l").param("l", lineId).update();
+    jdbcClient
+        .sql("delete from statement_line where statement_line_id = :l")
+        .param("l", lineId)
+        .update();
     line(statementId, 1, BOOKING, "-3.50", "SHOPAAA", "Currency USD, but the account is in EUR");
     long undated = line(statementId, 2, BOOKING, "-3.50", "SHOPAAA", null);
     jdbcClient
@@ -404,9 +407,9 @@ class StatementCandidatesSqlLogicTest {
 
   @Test
   void extrasAreUnreconciledUnmatchedLegsOnTheAccountDatedInThePeriod() {
-    long inPeriod = expense(LocalDate.of(2026, 5, 15), own, "-1.00", null);
-    long onFirst = expense(LocalDate.of(2026, 5, 1), own, "-1.00", null);
-    long onLast = expense(LocalDate.of(2026, 5, 31), own, "-1.00", null);
+    final long inPeriod = expense(LocalDate.of(2026, 5, 15), own, "-1.00", null);
+    final long onFirst = expense(LocalDate.of(2026, 5, 1), own, "-1.00", null);
+    final long onLast = expense(LocalDate.of(2026, 5, 31), own, "-1.00", null);
     long cleared = expense(LocalDate.of(2026, 5, 16), own, "-1.00", null);
     jdbcClient
         .sql("update posting set reconciliation = 'cleared' where posting_id = :p")
@@ -432,7 +435,7 @@ class StatementCandidatesSqlLogicTest {
   }
 
   @Test
-  void aLegReconciledOnAnotherStatementIsNeverAnExtra() {
+  void legReconciledOnAnotherStatementIsNeverExtra() {
     long profile = id("select min(statement_profile_id) from statement_profile");
     long june = statement(profile, own, "2026-06-01", "2026-06-30");
     long juneLine = line(june, 0, LocalDate.of(2026, 6, 2), "-1.00", "SHOPAAA", null);

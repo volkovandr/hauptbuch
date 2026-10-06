@@ -17,15 +17,15 @@ public record ExtraReview(StatementExtra extra, Boundary boundary) {
     /** Dated in the first days of the period: probably on the previous statement. */
     PREVIOUS("probably on the previous statement");
 
-    private final String label;
+    private final String text;
 
     Boundary(String label) {
-      this.label = label;
+      this.text = label;
     }
 
     /** The label shown beside the extra. */
     public String label() {
-      return label;
+      return text;
     }
   }
 

@@ -29,8 +29,8 @@ public class StatementMatchRepository {
    * the line's booking date, and it is either on the statement's account (any amount, when the
    * payee is similar) or — wrong-account tier — on another open real asset or liability account of
    * the same currency, not {@code reconciled}, with an equal amount and a similar payee. Legs
-   * already matched to a line of this statement are left out; legs matched on another statement
-   * are returned and flagged.
+   * already matched to a line of this statement are left out; legs matched on another statement are
+   * returned and flagged.
    */
   public List<StatementCandidate> findCandidates(long statementId) {
     return jdbcClient

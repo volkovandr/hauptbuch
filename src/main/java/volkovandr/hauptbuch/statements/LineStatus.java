@@ -19,14 +19,14 @@ public enum LineStatus {
   /** The line could not be read, or is in a foreign currency; it is never matched. */
   PROBLEM("problem");
 
-  private final String label;
+  private final String text;
 
   LineStatus(String label) {
-    this.label = label;
+    this.text = label;
   }
 
   /** The status as the operator reads it. */
   public String label() {
-    return label;
+    return text;
   }
 }

@@ -141,17 +141,19 @@ class StatementScreenIntegrationTest {
   private void booking(String date, Long payeeId, long from, long to, String amount) {
     long txn =
         jdbcClient
-            .sql("insert into transaction (date, payee_id) values (:d, :p) returning transaction_id")
+            .sql(
+                "insert into transaction (date, payee_id) values (:d, :p) returning transaction_id")
             .param("d", LocalDate.parse(date))
             .param("p", payeeId)
             .query(Long.class)
             .single();
+    BigDecimal value = new BigDecimal(amount);
     for (long[] leg : new long[][] {{from, 1}, {to, -1}}) {
       jdbcClient
           .sql("insert into posting (transaction_id, account_id, amount) values (:t, :a, :m)")
           .param("t", txn)
           .param("a", leg[0])
-          .param("m", new BigDecimal(amount).multiply(BigDecimal.valueOf(leg[1])))
+          .param("m", value.multiply(BigDecimal.valueOf(leg[1])))
           .update();
     }
   }
