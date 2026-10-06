@@ -177,8 +177,8 @@ counterparty or description text (`ShopAaa` in `SHOPAAA SAGT DANKE 4711`). Nothi
 
 ### 4.4 Exclusivity and overlaps
 
-- Within one statement a posting is **proposed to at most one line**: the closest booking date wins,
-  and the other line falls to its next candidate, or to ambiguous or missing.
+- Within one statement a posting is **proposed to at most one line**: the best tier wins, then the
+  closest booking date, and the other line falls to its next candidate, or to ambiguous or missing.
 - Matching is **1:1** — one line, one posting. A line that covers two ledger transactions, or two lines
   that cover one, is out of scope in v1.
 - CSVs can be pulled for any range, so two statements of the same account may **overlap**. A posting
@@ -239,7 +239,7 @@ remainder. Only the unexplained remainder counts. A CSV statement without balanc
   candidate list (pick one — the wrong-account tier included), or *missing* (Create). **Accept all
   exact** confirms every unambiguous exact proposal at once.
 - **Extras table** — postings on the account, dated in the period, **not matched** to this statement and
-  **not `reconciled`**, shown as register-style rows with Edit / Move to account / Void. A `reconciled`
+  **not `reconciled`** (and not already proposed to a line, which shows them), shown as register-style rows with Edit / Move to account / Void. A `reconciled`
   posting is never an extra: a transaction booked in May but valued by the bank in June is an extra on
   May's statement until June's is reconciled, and then disappears from May's. An extra dated in the
   window's last days of the period (or its first days, the mirror case) is labelled **probably on the
