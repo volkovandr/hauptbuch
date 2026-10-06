@@ -57,18 +57,18 @@
 
 ## b — CSV in
 
-- **b1 — Schema and CSV profiles.** The statement migration (data-model §15:
+- ✅ **b1 — Schema and CSV profiles.** The statement migration (data-model §15:
   `statement_profile`, `statement`, `statement_line`, `statement_match`); records and
   repositories; the profile screen (CSV dialect, sign mode, column map by header or index,
   window) with the **live preview** of the first rows; a Statements page skeleton linking to it;
   the Statements nav item. *Done when:* a profile for bank A can be created and previews its CSV
   correctly.
-- **b2 — CSV upload.** Upload a file against a profile → a `statement` (file kept on the Pi) and its
+- ✅ **b2 — CSV upload.** Upload a file against a profile → a `statement` (file kept on the Pi) and its
   lines; rows the profile cannot read, or in a foreign currency, kept with a problem; the account
   proposed from the IBAN column via `detection_labels` and confirmed; period defaulted from the
   booking dates; the Statements list (account, period, profile, newest first, account filter).
   *Done when:* a real bank-A CSV lands as a statement with correct lines.
-- **b3 — The statement page, before matching.** Header with editable period and balances; the line
+- ✅ **b3 — The statement page, before matching.** Header with editable period and balances; the line
   grid, editable; delete statement (no matches exist yet). *Done when:* a statement can be opened,
   corrected and deleted.
 
