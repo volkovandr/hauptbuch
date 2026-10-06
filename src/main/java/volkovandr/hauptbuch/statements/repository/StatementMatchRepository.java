@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.statements.repository;
 
+import java.util.Collection;
 import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -16,6 +17,8 @@ import volkovandr.hauptbuch.statements.StatementMatch;
 public class StatementMatchRepository {
 
   private static final String STATEMENT_ID = "statementId";
+  private static final String LINE_ID = "lineId";
+  private static final String POSTING_ID = "postingId";
 
   private final JdbcClient jdbcClient;
 
@@ -30,7 +33,8 @@ public class StatementMatchRepository {
    * payee is similar) or — wrong-account tier — on another open real asset or liability account of
    * the same currency, not {@code reconciled}, with an equal amount and a similar payee. Legs
    * already matched to a line of this statement are left out; legs matched on another statement are
-   * returned and flagged.
+   * returned and flagged. A leg the operator excluded from the line ("a different transaction") is
+   * left out.
    */
   public List<StatementCandidate> findCandidates(long statementId) {
     return jdbcClient
@@ -82,6 +86,9 @@ public class StatementMatchRepository {
                 and not exists (select 1 from statement_match m
                                 where m.statement_id = s.statement_id
                                   and m.posting_id = lg.posting_id)
+                and not exists (select 1 from statement_line_exclusion x
+                                where x.statement_line_id = l.statement_line_id
+                                  and x.posting_id = lg.posting_id)
             )
             select statement_line_id, posting_id, transaction_id, account_id, account_name, amount,
                    transaction_date, payee_name, payee_similar, reconciliation, matched_elsewhere,
@@ -148,5 +155,71 @@ public class StatementMatchRepository {
         .param(STATEMENT_ID, statementId)
         .query(StatementExtra.class)
         .list();
+  }
+
+  /** Record the confirmed match of one line to one posting. */
+  public void insertMatch(long statementId, long statementLineId, long postingId) {
+    jdbcClient
+        .sql(
+            """
+            insert into statement_match (statement_line_id, statement_id, posting_id)
+            values (:lineId, :statementId, :postingId)
+            """)
+        .param(LINE_ID, statementLineId)
+        .param(STATEMENT_ID, statementId)
+        .param(POSTING_ID, postingId)
+        .update();
+  }
+
+  /** Remove every match on these postings, on any statement — a match needs a reconciled leg. */
+  public void deleteMatchesOnPostings(Collection<Long> postingIds) {
+    if (postingIds.isEmpty()) {
+      return;
+    }
+    jdbcClient
+        .sql("delete from statement_match where posting_id in (:postingIds)")
+        .param("postingIds", postingIds)
+        .update();
+  }
+
+  /** Remove all of a statement's matches and return the postings that were matched. */
+  public List<Long> deleteMatchesOfStatement(long statementId) {
+    return jdbcClient
+        .sql("delete from statement_match where statement_id = :statementId returning posting_id")
+        .param(STATEMENT_ID, statementId)
+        .query(Long.class)
+        .list();
+  }
+
+  /** Of these postings, the ones no statement matches any more. */
+  public List<Long> postingsWithoutMatch(Collection<Long> postingIds) {
+    if (postingIds.isEmpty()) {
+      return List.of();
+    }
+    return jdbcClient
+        .sql(
+            """
+            select p.posting_id from posting p
+            where p.posting_id in (:postingIds)
+              and not exists (select 1 from statement_match m where m.posting_id = p.posting_id)
+            order by p.posting_id
+            """)
+        .param("postingIds", postingIds)
+        .query(Long.class)
+        .list();
+  }
+
+  /** The operator's decision that this posting is not the line's movement (statements.md §4.4). */
+  public void insertExclusion(long statementLineId, long postingId) {
+    jdbcClient
+        .sql(
+            """
+            insert into statement_line_exclusion (statement_line_id, posting_id)
+            values (:lineId, :postingId)
+            on conflict (statement_line_id, posting_id) do nothing
+            """)
+        .param(LINE_ID, statementLineId)
+        .param(POSTING_ID, postingId)
+        .update();
   }
 }

@@ -29,6 +29,11 @@ public record StatementReview(List<LineReview> lines, List<ExtraReview> extras) 
         .count();
   }
 
+  /** Lines Accept all exact would confirm: one unambiguous exact proposal. */
+  public long exact() {
+    return count(LineStatus.EXACT);
+  }
+
   /** Lines with proposals still to confirm. */
   public long proposed() {
     return lines.stream()

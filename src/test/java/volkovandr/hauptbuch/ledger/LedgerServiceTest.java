@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -897,5 +898,28 @@ class LedgerServiceTest {
 
     assertThat(ledgerService.openingBalanceOf(CASH_EUR)).isEmpty();
     verify(transactionRepository, never()).findOpeningBalance(anyLong(), anyLong());
+  }
+
+  @Test
+  void markReconciledSetsTheLegsAndConfirmsPendingTransactions() {
+    ledgerService.markReconciled(List.of(5L, 6L));
+
+    verify(transactionRepository).setReconciliation(List.of(5L, 6L), "reconciled");
+    verify(transactionRepository).confirmPendingOwning(List.of(5L, 6L));
+  }
+
+  @Test
+  void markUnreconciledSetsTheLegsBack() {
+    ledgerService.markUnreconciled(List.of(5L));
+
+    verify(transactionRepository).setReconciliation(List.of(5L), "unreconciled");
+  }
+
+  @Test
+  void markingNoLegsTouchesNothing() {
+    ledgerService.markReconciled(List.of());
+    ledgerService.markUnreconciled(List.of());
+
+    verifyNoInteractions(transactionRepository);
   }
 }

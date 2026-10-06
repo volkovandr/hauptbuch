@@ -1427,6 +1427,13 @@ create table statement_match (
   unique (statement_id, posting_id)      -- never two lines of one statement on one posting
 );
 
+create table statement_line_exclusion (   -- "a different transaction that looks the same" (§4.4)
+  statement_line_exclusion_id bigint generated always as identity primary key,
+  statement_line_id           bigint not null references statement_line(statement_line_id),
+  posting_id                  bigint not null references posting(posting_id) on delete cascade,
+  unique (statement_line_id, posting_id)
+);
+
 alter table settings add column statement_system_prompt text;  -- NULL = built-in default
 ```
 

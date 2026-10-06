@@ -340,6 +340,35 @@ public class LedgerService {
     reportReconciliationDropped(edit.droppedPostingIds());
   }
 
+  /**
+   * A statement match confirmed these legs (statements.md §5): they become {@code reconciled}, and
+   * a {@code pending_review} transaction owning one becomes {@code confirmed}. Never sets {@code
+   * cleared}, and never touches the legs' amounts.
+   */
+  @Transactional
+  public void markReconciled(Collection<Long> postingIds) {
+    if (postingIds.isEmpty()) {
+      return;
+    }
+    transactionRepository.setReconciliation(postingIds, RECONCILED);
+    int confirmed = transactionRepository.confirmPendingOwning(postingIds);
+    LOG.debug("Reconciled {} legs, confirmed {} pending transactions", postingIds.size(), confirmed);
+  }
+
+  /**
+   * Unmatch, or a deleted statement's reset (statements.md §5): these legs go back to {@code
+   * unreconciled}. The caller owns removing the matches; the listeners are not told, since the
+   * caller is the listening module.
+   */
+  @Transactional
+  public void markUnreconciled(Collection<Long> postingIds) {
+    if (postingIds.isEmpty()) {
+      return;
+    }
+    transactionRepository.setReconciliation(postingIds, "unreconciled");
+    LOG.debug("Unreconciled {} legs", postingIds.size());
+  }
+
   private void reportReconciliationDropped(List<Long> postingIds) {
     if (postingIds.isEmpty()) {
       return;

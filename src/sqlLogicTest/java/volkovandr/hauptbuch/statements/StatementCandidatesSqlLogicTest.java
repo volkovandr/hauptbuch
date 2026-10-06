@@ -369,6 +369,15 @@ class StatementCandidatesSqlLogicTest {
   }
 
   @Test
+  void legExcludedFromALineIsNotProposedToItAgain() {
+    long excluded = expense(BOOKING, own, "-3.50", null);
+    long other = expense(BOOKING, own, "-3.50", null);
+    matcher.insertExclusion(lineId, excluded);
+
+    assertThat(candidatePostings()).contains(other).doesNotContain(excluded);
+  }
+
+  @Test
   void problemUndatedOrAmountlessLinesGetNoCandidates() {
     jdbcClient
         .sql("delete from statement_line where statement_line_id = :l")

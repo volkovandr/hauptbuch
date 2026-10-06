@@ -321,6 +321,37 @@ public class TransactionRepository {
         .update();
   }
 
+  /**
+   * Set the {@code reconciliation} of these legs — the statement matcher's confirm and Unmatch
+   * (statements.md §5), which change nothing else on the leg.
+   */
+  public void setReconciliation(Collection<Long> postingIds, String reconciliation) {
+    jdbcClient
+        .sql("update posting set reconciliation = :reconciliation where posting_id in (:postingIds)")
+        .param(RECONCILIATION, reconciliation)
+        .param("postingIds", postingIds)
+        .update();
+  }
+
+  /**
+   * Confirm the live {@code pending_review} transactions that own any of these legs (a recurring
+   * occurrence or receipt placeholder the statement has now vouched for).
+   *
+   * @return how many transactions were confirmed
+   */
+  public int confirmPendingOwning(Collection<Long> postingIds) {
+    return jdbcClient
+        .sql(
+            """
+            update transaction set lifecycle = 'confirmed', updated_at = now()
+            where lifecycle = 'pending_review' and deleted_at is null
+              and transaction_id in (select transaction_id from posting
+                                     where posting_id in (:postingIds))
+            """)
+        .param("postingIds", postingIds)
+        .update();
+  }
+
   /** Remove every tag link of a leg, before its tags are re-attached on an in-place edit. */
   public void deletePostingTags(long postingId) {
     jdbcClient

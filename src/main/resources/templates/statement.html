@@ -65,6 +65,15 @@
     <section class="panel">
       <p class="eyebrow">Matching</p>
       <p class="muted" th:if="${#lists.isEmpty(reviewLines)}">The file had no lines.</p>
+      <form
+        method="post"
+        th:action="@{/statements/{id}/accept-all(id=${statement.statementId()})}"
+        th:if="${review.exact() > 0}"
+      >
+        <button type="submit" class="btn">
+          Accept all exact (<span th:text="${review.exact()}">3</span>)
+        </button>
+      </form>
       <div class="statement-lines" th:unless="${#lists.isEmpty(reviewLines)}">
         <table class="statements">
           <thead>
@@ -74,6 +83,7 @@
               <th>Bank text</th>
               <th>Status</th>
               <th>Ledger</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -88,6 +98,31 @@
               </td>
               <td>
                 <div th:each="d : ${r.details()}" th:text="${d}">01.05.2026 ShopAaa -3,50</div>
+              </td>
+              <td>
+                <form
+                  th:each="p : ${r.picks()}"
+                  method="post"
+                  th:action="@{/statements/{id}/lines/{line}/accept(id=${statement.statementId()},line=${r.lineId()})}"
+                >
+                  <input type="hidden" name="posting" th:value="${p.postingId()}" />
+                  <button type="submit" class="btn" th:text="${p.label() == null ? (r.overlap() ? 'Same movement' : 'Accept') : 'Pick ' + p.label()}">Accept</button>
+                </form>
+                <form
+                  th:if="${r.overlap()}"
+                  method="post"
+                  th:action="@{/statements/{id}/lines/{line}/different(id=${statement.statementId()},line=${r.lineId()})}"
+                >
+                  <input type="hidden" name="posting" th:value="${r.picks().get(0).postingId()}" />
+                  <button type="submit" class="btn">Different transaction</button>
+                </form>
+                <form
+                  th:if="${r.canUnmatch()}"
+                  method="post"
+                  th:action="@{/statements/{id}/lines/{line}/unmatch(id=${statement.statementId()},line=${r.lineId()})}"
+                >
+                  <button type="submit" class="btn">Unmatch</button>
+                </form>
               </td>
             </tr>
           </tbody>
@@ -183,6 +218,13 @@
         th:action="@{/statements/{id}/delete(id=${statement.statementId()})}"
         onsubmit="return confirm('Delete this statement? The file stays on the Pi.')"
       >
+        <p class="muted" th:if="${review.matched() > 0}">
+          Its matches are removed. What happens to the postings it reconciled?
+        </p>
+        <div class="field" th:if="${review.matched() > 0}">
+          <label><input type="radio" name="reconciliation" value="keep" checked /> Keep them reconciled</label>
+          <label><input type="radio" name="reconciliation" value="reset" /> Set them back to unreconciled</label>
+        </div>
         <button type="submit" class="btn btn--danger">Delete statement</button>
       </form>
     </section>
