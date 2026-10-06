@@ -50,13 +50,13 @@
               th:each="a : ${accounts}"
               th:value="${a.accountId()}"
               th:text="${a.name()}"
-              th:selected="${preview.proposedAccountId().isPresent() and preview.proposedAccountId().getAsLong() == a.accountId()}"
+              th:selected="${chosenAccountId != null ? chosenAccountId == a.accountId() : (preview.proposedAccountId().isPresent() and preview.proposedAccountId().getAsLong() == a.accountId())}"
             >
               BankAaa-EUR
             </option>
           </select>
-          <p class="muted" th:if="${preview.proposedAccountId().isPresent()}">
-            Proposed from the file's IBAN.
+          <p class="muted" th:if="${chosenAccountId == null and preview.proposedAccountId().isPresent()}">
+            Proposed from the file's IBAN — change it if it is wrong.
           </p>
         </div>
         <p class="actions">

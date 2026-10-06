@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.net.URI;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -111,6 +112,52 @@ class StatementScreenIntegrationTest {
         .andExpect(content().string(containsString("-12,50")))
         .andExpect(content().string(containsString("1.234,56")))
         .andExpect(content().string(containsString("Unreadable booking date")));
+  }
+
+  @Test
+  void theConfirmStepProposesTheAccountWhoseLabelIsTheTailOfTheFileIban() throws Exception {
+    accountService.updateDetection(accountId, "2222", false);
+    long profileId = saveProfile();
+
+    String confirm =
+        mockMvc
+            .perform(get(URI.create(StatementFixtures.upload(mockMvc, profileId))))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Proposed from the file")))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(confirm).containsPattern("value=\"" + accountId + "\"[^>]*selected");
+  }
+
+  @Test
+  void theAccountPickedOnTheUploadFormIsPreselectedOnTheConfirmStep() throws Exception {
+    long otherId =
+        accountService
+            .openAccount(
+                new AccountDraft(
+                    "BankBbb-EUR",
+                    "asset",
+                    null,
+                    "EUR",
+                    LocalDate.parse("2026-01-01"),
+                    BigDecimal.ZERO))
+            .accountId();
+    long profileId = saveProfile();
+
+    String confirmUrl = StatementFixtures.upload(mockMvc, profileId, otherId);
+
+    assertThat(confirmUrl).contains("account=" + otherId);
+    String confirm =
+        mockMvc
+            .perform(get(URI.create(confirmUrl)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(confirm).containsPattern("value=\"" + otherId + "\"[^>]*selected");
+    assertThat(confirm).doesNotContainPattern("value=\"" + accountId + "\"[^>]*selected");
+    assertThat(confirm).doesNotContain("Proposed from the file");
   }
 
   @Test

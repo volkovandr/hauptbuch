@@ -18,6 +18,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 import org.springframework.web.util.UriComponentsBuilder;
 
 /**
@@ -70,17 +71,23 @@ final class StatementFixtures {
 
   /** Upload {@link #CSV} against the profile and return the confirm URL the screen redirects to. */
   static String upload(MockMvc mockMvc, long profileId) throws Exception {
+    return upload(mockMvc, profileId, null);
+  }
+
+  /** As {@link #upload(MockMvc, long)}, with the account the operator picked on the form. */
+  static String upload(MockMvc mockMvc, long profileId, Long accountId) throws Exception {
+    MockMultipartHttpServletRequestBuilder request =
+        multipart("/statements/upload")
+            .file(
+                new MockMultipartFile(
+                    "file", "2026-05.csv", "text/csv", CSV.getBytes(StandardCharsets.UTF_8)))
+            .param("profile", String.valueOf(profileId));
+    if (accountId != null) {
+      request.param("account", String.valueOf(accountId));
+    }
     MvcResult upload =
         mockMvc
-            .perform(
-                multipart("/statements/upload")
-                    .file(
-                        new MockMultipartFile(
-                            "file",
-                            "2026-05.csv",
-                            "text/csv",
-                            CSV.getBytes(StandardCharsets.UTF_8)))
-                    .param("profile", String.valueOf(profileId)))
+            .perform(request)
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrlPattern("/statements/confirm?*"))
             .andReturn();

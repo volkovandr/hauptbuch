@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.OptionalLong;
+import java.util.function.Predicate;
 import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.accounts.repository.AccountRepository;
 
@@ -66,20 +67,43 @@ public class PayingAccountDetector {
 
   /**
    * Resolve a statement's account from the identifiers its file carries — the IBANs of a CSV's IBAN
-   * column (statements.md §3.5). A label must equal an identifier (whitespace and case ignored);
-   * candidates are in the repository's order, so the first account carrying one wins. Anything else
-   * stays empty and the operator picks.
+   * column (statements.md §3.5). A label equal to an identifier (whitespace and case ignored) wins,
+   * the first such account in the repository's order. Failing that, a label that is the tail of an
+   * identifier (the last four digits) counts, but only when exactly one account carries one — two
+   * accounts sharing their last four leave the operator to pick. Anything else stays empty.
    */
   public OptionalLong detectByIdentifiers(Collection<String> identifiers) {
     if (identifiers.isEmpty()) {
       return OptionalLong.empty();
     }
-    return accountRepository.findDetectionCandidates(null).stream()
-        .filter(
+    List<AccountDetectionCandidate> candidates = accountRepository.findDetectionCandidates(null);
+    OptionalLong exact =
+        firstMatching(
+            candidates,
             candidate ->
                 identifiers.stream()
                     .anyMatch(
-                        id -> DetectionLabels.matchesIdentifier(candidate.detectionLabels(), id)))
+                        id -> DetectionLabels.matchesIdentifier(candidate.detectionLabels(), id)));
+    if (exact.isPresent()) {
+      return exact;
+    }
+    long[] byTail =
+        candidates.stream()
+            .filter(
+                candidate ->
+                    identifiers.stream()
+                        .anyMatch(
+                            id -> DetectionLabels.endsIdentifier(candidate.detectionLabels(), id)))
+            .mapToLong(AccountDetectionCandidate::accountId)
+            .distinct()
+            .toArray();
+    return byTail.length == 1 ? OptionalLong.of(byTail[0]) : OptionalLong.empty();
+  }
+
+  private static OptionalLong firstMatching(
+      List<AccountDetectionCandidate> candidates, Predicate<AccountDetectionCandidate> test) {
+    return candidates.stream()
+        .filter(test)
         .mapToLong(AccountDetectionCandidate::accountId)
         .findFirst();
   }

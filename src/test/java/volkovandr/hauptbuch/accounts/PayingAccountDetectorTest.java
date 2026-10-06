@@ -163,10 +163,32 @@ class PayingAccountDetectorTest {
   }
 
   @Test
-  void identifierMustEqualLabelNotJustContainIt() {
+  void identifierEndingInLabelProposesTheOnlyAccountCarryingIt() {
+    PayingAccountDetector detector = detector(card(7L, EUR, "1234"), card(8L, EUR, "5678"));
+
+    assertThat(detector.detectByIdentifiers(List.of("XX00 1111 1234"))).hasValue(7L);
+  }
+
+  @Test
+  void identifierContainingLabelOutsideItsTailDoesNotMatch() {
     PayingAccountDetector detector = detector(card(7L, EUR, "1234"));
 
+    assertThat(detector.detectByIdentifiers(List.of("XX00 1234 9999"))).isEmpty();
+  }
+
+  @Test
+  void accountsSharingTheirLastFourLeaveTheChoiceToTheOperator() {
+    PayingAccountDetector detector = detector(card(7L, EUR, "1234"), card(8L, EUR, "1234"));
+
     assertThat(detector.detectByIdentifiers(List.of("XX00 1111 1234"))).isEmpty();
+  }
+
+  @Test
+  void fullIdentifierLabelBeatsShorterTailLabelOnAnotherAccount() {
+    PayingAccountDetector detector =
+        detector(card(7L, EUR, "1234"), card(8L, EUR, "XX00 1111 1234"));
+
+    assertThat(detector.detectByIdentifiers(List.of("XX00 1111 1234"))).hasValue(8L);
   }
 
   @Test

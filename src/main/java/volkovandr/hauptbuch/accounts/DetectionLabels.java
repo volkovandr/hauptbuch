@@ -52,6 +52,18 @@ public final class DetectionLabels {
     return !wanted.isEmpty() && split(labels).anyMatch(label -> compact(label).equals(wanted));
   }
 
+  /**
+   * Whether any label is the <em>tail</em> of the identifier, ignoring case and whitespace — how
+   * the last four digits an operator keeps on an account meet the full IBAN a statement carries.
+   */
+  public static boolean endsIdentifier(String labels, String identifier) {
+    String wanted = compact(identifier);
+    return !wanted.isEmpty()
+        && split(labels)
+            .map(DetectionLabels::compact)
+            .anyMatch(l -> !l.isEmpty() && wanted.endsWith(l));
+  }
+
   private static String compact(String text) {
     return text == null ? "" : text.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
   }

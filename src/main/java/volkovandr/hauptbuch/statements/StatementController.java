@@ -53,11 +53,12 @@ class StatementController {
   String upload(
       @RequestParam long profile,
       @RequestParam("file") MultipartFile file,
+      @RequestParam(required = false) Long account,
       RedirectAttributes redirectAttributes) {
     try {
       profileService.get(profile);
       String path = statementService.stage(file.getOriginalFilename(), UploadedFiles.bytesOf(file));
-      return backToConfirm(profile, path, file.getOriginalFilename(), redirectAttributes);
+      return backToConfirm(profile, path, file.getOriginalFilename(), account, redirectAttributes);
     } catch (StatementFormatException e) {
       redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
       return REDIRECT_BASE;
@@ -70,6 +71,7 @@ class StatementController {
       @RequestParam long profileId,
       @RequestParam String path,
       @RequestParam String name,
+      @RequestParam(required = false) Long account,
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
@@ -80,6 +82,7 @@ class StatementController {
       model.addAttribute("profile", profileService.get(profileId));
       model.addAttribute("path", path);
       model.addAttribute("name", name);
+      model.addAttribute("chosenAccountId", account);
       return "statement-confirm";
     } catch (StatementFormatException e) {
       redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
@@ -97,22 +100,29 @@ class StatementController {
       RedirectAttributes redirectAttributes) {
     if (account == null) {
       redirectAttributes.addFlashAttribute(ERROR, "Choose the account this statement is for.");
-      return backToConfirm(profileId, path, name, redirectAttributes);
+      return backToConfirm(profileId, path, name, null, redirectAttributes);
     }
     try {
       long id = statementService.create(profileId, path, name, account);
       return REDIRECT_BASE + "/" + id;
     } catch (StatementFormatException e) {
       redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
-      return backToConfirm(profileId, path, name, redirectAttributes);
+      return backToConfirm(profileId, path, name, account, redirectAttributes);
     }
   }
 
   private static String backToConfirm(
-      long profileId, String path, String name, RedirectAttributes redirectAttributes) {
+      long profileId,
+      String path,
+      String name,
+      Long account,
+      RedirectAttributes redirectAttributes) {
     redirectAttributes.addAttribute(PROFILE_ID, profileId);
     redirectAttributes.addAttribute("path", path);
     redirectAttributes.addAttribute("name", name);
+    if (account != null) {
+      redirectAttributes.addAttribute("account", account);
+    }
     return REDIRECT_BASE + "/confirm";
   }
 
