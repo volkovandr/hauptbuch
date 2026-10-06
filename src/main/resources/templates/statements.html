@@ -36,12 +36,24 @@
             <input class="input" id="upload-file" type="file" name="file" required />
           </div>
           <div class="field">
+            <label class="field__label" for="upload-account">Account (optional)</label>
+            <select class="input" id="upload-account" name="account">
+              <option value="">Detect from the file</option>
+              <option th:each="a : ${accounts}" th:value="${a.accountId()}" th:text="${a.name()}">
+                BankAaa-EUR
+              </option>
+            </select>
+          </div>
+          <div class="field">
             <button type="submit" class="btn" th:disabled="${#lists.isEmpty(profiles)}">Upload</button>
           </div>
         </form>
+      </div>
+
+      <div class="statements__toolbar">
         <form method="get" th:action="@{/statements}" class="statements__toolbar">
           <div class="field">
-            <label class="field__label" for="filter-account">Account</label>
+            <label class="field__label" for="filter-account">Filter list by account</label>
             <select class="input" id="filter-account" name="account" onchange="this.form.submit()">
               <option value="">All accounts</option>
               <option
