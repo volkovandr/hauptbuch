@@ -137,7 +137,7 @@ class StatementRepositoryIntegrationTest {
 
     Statement read = statements.findById(id).orElseThrow();
     assertThat(read.accountId()).isEqualTo(accountId);
-    assertThat(read.state()).isEqualTo("new");
+    assertThat(read.state()).isEqualTo("processed");
     assertThat(read.periodStart()).isEqualTo(LocalDate.of(2026, 5, 1));
     assertThat(read.openingBalance()).isNull();
     assertThat(read.deletedAt()).isNull();

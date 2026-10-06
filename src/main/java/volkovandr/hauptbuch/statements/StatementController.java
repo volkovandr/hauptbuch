@@ -1,7 +1,5 @@
 package volkovandr.hauptbuch.statements;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.List;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -58,7 +56,7 @@ class StatementController {
       RedirectAttributes redirectAttributes) {
     try {
       profileService.get(profile);
-      String path = statementService.stage(file.getOriginalFilename(), bytesOf(file));
+      String path = statementService.stage(file.getOriginalFilename(), UploadedFiles.bytesOf(file));
       return backToConfirm(profile, path, file.getOriginalFilename(), redirectAttributes);
     } catch (StatementFormatException e) {
       redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
@@ -209,17 +207,6 @@ class StatementController {
 
   private static String number(java.math.BigDecimal value) {
     return value == null ? "" : MoneyFormat.number(value, AMOUNT_DIGITS);
-  }
-
-  private static byte[] bytesOf(MultipartFile file) {
-    if (file == null || file.isEmpty()) {
-      throw new StatementFormatException("No file was attached — pick a file and try again.");
-    }
-    try {
-      return file.getBytes();
-    } catch (IOException e) {
-      throw new UncheckedIOException("Failed to read the uploaded file", e);
-    }
   }
 
   /** A line as the grid shows it: dates as ISO text, the amount German-formatted. */

@@ -103,6 +103,19 @@ class StatementProfileScreenIntegrationTest {
   }
 
   @Test
+  void profileWithNonNumericWindowKeepsTheOperatorsInputOnTheEditor() throws Exception {
+    mockMvc
+        .perform(
+            post("/statements/profiles/save")
+                .param("name", "Keeps input")
+                .param("csvDelimiter", ";")
+                .param("csvSkipRows", "abc"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Check the numbers")))
+        .andExpect(content().string(containsString("Keeps input")));
+  }
+
+  @Test
   void thePreviewParsesTheSampleWithTheFormsSettings() throws Exception {
     mockMvc
         .perform(

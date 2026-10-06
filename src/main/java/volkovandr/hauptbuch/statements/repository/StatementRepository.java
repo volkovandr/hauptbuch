@@ -25,7 +25,7 @@ public class StatementRepository {
     this.jdbcClient = jdbcClient;
   }
 
-  /** Insert a new {@code new} statement and return its generated id. */
+  /** Insert a {@code processed} statement and return its generated id. */
   public long insert(
       long statementProfileId,
       long accountId,
@@ -40,7 +40,7 @@ public class StatementRepository {
               (statement_profile_id, account_id, state, original_filename, file_path,
                period_start, period_end)
             values
-              (:statementProfileId, :accountId, 'new', :originalFilename, :filePath,
+              (:statementProfileId, :accountId, 'processed', :originalFilename, :filePath,
                :periodStart, :periodEnd)
             returning statement_id
             """)
