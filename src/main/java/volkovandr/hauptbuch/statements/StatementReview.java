@@ -11,6 +11,12 @@ import java.util.List;
  */
 public record StatementReview(List<LineReview> lines, List<ExtraReview> extras) {
 
+  /** Defensive copy of the lists (the house pattern for record lists). */
+  public StatementReview {
+    lines = List.copyOf(lines);
+    extras = List.copyOf(extras);
+  }
+
   /** Lines with a confirmed match. */
   public long matched() {
     return count(LineStatus.MATCHED);

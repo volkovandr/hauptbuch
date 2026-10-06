@@ -13,10 +13,11 @@ import volkovandr.hauptbuch.statements.ProposedCandidate.Tier;
 
 /**
  * Sorts the SQL candidates into tiers and statuses (statements.md §4.2, §4.4). Pure logic over the
- * rows the repository returned: a posting is proposed to at most one line — the one with the
- * best tier, then the closest booking date — so a line whose candidate went elsewhere falls to its
- * next candidate, or to missing.
+ * rows the repository returned: a posting is proposed to at most one line — the one with the best
+ * tier, then the closest booking date — so a line whose candidate went elsewhere falls to its next
+ * candidate, or to missing.
  */
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 final class StatementMatcher {
 
   private static final Comparator<ProposedCandidate> BEST_FIRST =
@@ -79,12 +80,7 @@ final class StatementMatcher {
     for (StatementCandidate candidate : candidates) {
       Tier tier = tierOf(candidate, byId.get(candidate.statementLineId()), statement);
       if (tier != null) {
-        ProposedCandidate proposed = new ProposedCandidate(candidate, tier);
-        owner.merge(
-            candidate.postingId(),
-            proposed,
-            (current, challenger) ->
-                wins(challenger, current, byId) ? challenger : current);
+        propose(owner, byId, candidate, tier);
       }
     }
     Map<Long, List<ProposedCandidate>> byLine = new HashMap<>();
@@ -97,6 +93,17 @@ final class StatementMatcher {
                     .add(p));
     byLine.values().forEach(list -> list.sort(BEST_FIRST));
     return byLine;
+  }
+
+  private static void propose(
+      Map<Long, ProposedCandidate> owner,
+      Map<Long, StatementLine> byId,
+      StatementCandidate candidate,
+      Tier tier) {
+    owner.merge(
+        candidate.postingId(),
+        new ProposedCandidate(candidate, tier),
+        (current, challenger) -> wins(challenger, current, byId) ? challenger : current);
   }
 
   private static boolean wins(
@@ -157,8 +164,7 @@ final class StatementMatcher {
     if (s.periodEnd() != null && date.isAfter(s.periodEnd().minusDays(windowDaysBefore))) {
       return Boundary.NEXT;
     }
-    if (s.periodStart() != null
-        && date.isBefore(s.periodStart().plusDays(windowDaysAfter))) {
+    if (s.periodStart() != null && date.isBefore(s.periodStart().plusDays(windowDaysAfter))) {
       return Boundary.PREVIOUS;
     }
     return Boundary.NONE;

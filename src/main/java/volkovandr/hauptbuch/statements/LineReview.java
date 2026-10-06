@@ -14,4 +14,10 @@ public record LineReview(
     StatementLine line,
     LineStatus status,
     StatementMatch match,
-    List<ProposedCandidate> candidates) {}
+    List<ProposedCandidate> candidates) {
+
+  /** Defensive copy of the lists (the house pattern for record lists). */
+  public LineReview {
+    candidates = List.copyOf(candidates);
+  }
+}

@@ -150,7 +150,7 @@ class StatementMatcherTest {
   }
 
   @Test
-  void aPostingIsProposedToTheLineWithTheClosestBookingDate() {
+  void postingIsProposedToTheLineWithTheClosestBookingDate() {
     StatementReview result =
         review(
             List.of(line(1, 0, "2026-05-12", "-3.50"), line(2, 1, "2026-05-14", "-3.50")),
@@ -167,7 +167,7 @@ class StatementMatcherTest {
   }
 
   @Test
-  void aLineWhoseOnlyCandidateWentToAnotherLineIsMissing() {
+  void lineWhoseOnlyCandidateWentToAnotherLineIsMissing() {
     StatementReview result =
         review(
             List.of(line(1, 0, "2026-05-12", "-3.50"), line(2, 1, "2026-05-14", "-3.50")),
@@ -185,12 +185,21 @@ class StatementMatcherTest {
   void anExactCandidateMatchedOnAnotherStatementIsAnOverlap() {
     StatementCandidate taken =
         new StatementCandidate(
-            1, 100, 100, OWN, "Own", new BigDecimal("-3.50"), LocalDate.of(2026, 5, 10), null,
-            false, "reconciled", true, 2);
+            1,
+            100,
+            100,
+            OWN,
+            "Own",
+            new BigDecimal("-3.50"),
+            LocalDate.of(2026, 5, 10),
+            null,
+            false,
+            "reconciled",
+            true,
+            2);
 
     StatementReview result =
-        review(
-            List.of(line(1, 0, "2026-05-12", "-3.50")), List.of(taken), List.of(), List.of());
+        review(List.of(line(1, 0, "2026-05-12", "-3.50")), List.of(taken), List.of(), List.of());
 
     assertThat(statusOf(result, 0)).isEqualTo(LineStatus.OVERLAP);
   }
@@ -201,12 +210,20 @@ class StatementMatcherTest {
         new StatementLine(2L, 1, null, null, null, null, null, null, "raw", "Unreadable date");
     StatementMatch match =
         new StatementMatch(
-            1, 100, 100, LocalDate.of(2026, 5, 10), "ShopAaa", new BigDecimal("-3.50"),
+            1,
+            100,
+            100,
+            LocalDate.of(2026, 5, 10),
+            "ShopAaa",
+            new BigDecimal("-3.50"),
             "reconciled");
 
     StatementReview result =
         review(
-            List.of(line(1, 0, "2026-05-12", "-3.50"), broken), List.of(), List.of(match), List.of());
+            List.of(line(1, 0, "2026-05-12", "-3.50"), broken),
+            List.of(),
+            List.of(match),
+            List.of());
 
     assertThat(statusOf(result, 0)).isEqualTo(LineStatus.MATCHED);
     assertThat(statusOf(result, 1)).isEqualTo(LineStatus.PROBLEM);
@@ -231,9 +248,7 @@ class StatementMatcherTest {
     assertThat(result.extras())
         .extracting(e -> e.extra().postingId(), ExtraReview::boundary)
         .containsExactly(
-            tuple(200L, Boundary.NONE),
-            tuple(201L, Boundary.NEXT),
-            tuple(202L, Boundary.PREVIOUS));
+            tuple(200L, Boundary.NONE), tuple(201L, Boundary.NEXT), tuple(202L, Boundary.PREVIOUS));
     assertThat(result.extra()).isEqualTo(1);
     assertThat(result.boundary()).isEqualTo(2);
   }
