@@ -74,7 +74,7 @@
 
 ## c — Matching
 
-- **c1 — The matcher.** The candidate queries for all four tiers (statements.md §4) — window, the
+- ✅ **c1 — The matcher.** The candidate queries for all four tiers (statements.md §4) — window, the
   account-leg sum, payee substring, exclusivity by closest date, overlaps, the reconciled-elsewhere
   exclusion for the wrong-account tier — as `sqlLogicTest`s with crafted cross-currency and boundary
   data. Line statuses and the extras table (unreconciled only, boundary label) rendered; counts in
