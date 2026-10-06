@@ -78,3 +78,31 @@ table.statements input.input--amount {
   gap: 0 1rem;
   align-items: flex-end;
 }
+
+.statement-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.25rem;
+  margin: 0.5rem 0;
+}
+
+.statement-status {
+  white-space: nowrap;
+}
+
+.statement-status--exact,
+.statement-status--matched {
+  color: var(--credit, #1f7a3d);
+}
+
+.statement-status--ambiguous,
+.statement-status--overlap,
+.statement-status--amount_differs,
+.statement-status--wrong_account {
+  color: var(--warning, #9a6700);
+}
+
+.statement-status--missing,
+.statement-status--problem {
+  color: var(--debit, #a02020);
+}

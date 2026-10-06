@@ -43,6 +43,18 @@ public class StatementProfileService {
             () -> new StatementFormatException("That statement profile no longer exists."));
   }
 
+  /**
+   * A profile, live or soft-deleted — a statement keeps matching with the window it was read with.
+   *
+   * @throws StatementFormatException when it does not exist
+   */
+  public StatementProfile getIncludingDeleted(long statementProfileId) {
+    return repository
+        .findById(statementProfileId)
+        .orElseThrow(
+            () -> new StatementFormatException("That statement profile no longer exists."));
+  }
+
   /** The name of a profile, live or soft-deleted — a statement keeps showing where it came from. */
   public String nameOf(long statementProfileId) {
     return repository

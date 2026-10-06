@@ -115,6 +115,48 @@ class StatementScreenIntegrationTest {
   }
 
   @Test
+  void theStatementPageShowsLiveProposalsMissingLinesAndExtras() throws Exception {
+    long statementId = uploadAndCreate(saveProfile());
+    long shop = insertId("insert into payee (name) values ('ShopAaa') returning payee_id");
+    long food =
+        insertId(
+            "insert into account (name, type, currency_code) values ('Food-EUR', 'expense', 'EUR')"
+                + " returning account_id");
+    booking("2026-05-01", shop, accountId, food, "-12.50");
+    booking("2026-05-05", null, accountId, food, "-2.00");
+
+    mockMvc
+        .perform(get("/statements/" + statementId))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("statement-status--exact")))
+        .andExpect(content().string(containsString("01.05.2026 ShopAaa -12,50")))
+        .andExpect(content().string(containsString("statement-status--missing")))
+        .andExpect(content().string(containsString("probably on the next statement")));
+  }
+
+  private long insertId(String sql) {
+    return jdbcClient.sql(sql).query(Long.class).single();
+  }
+
+  private void booking(String date, Long payeeId, long from, long to, String amount) {
+    long txn =
+        jdbcClient
+            .sql("insert into transaction (date, payee_id) values (:d, :p) returning transaction_id")
+            .param("d", LocalDate.parse(date))
+            .param("p", payeeId)
+            .query(Long.class)
+            .single();
+    for (long[] leg : new long[][] {{from, 1}, {to, -1}}) {
+      jdbcClient
+          .sql("insert into posting (transaction_id, account_id, amount) values (:t, :a, :m)")
+          .param("t", txn)
+          .param("a", leg[0])
+          .param("m", new BigDecimal(amount).multiply(BigDecimal.valueOf(leg[1])))
+          .update();
+    }
+  }
+
+  @Test
   void theConfirmStepProposesTheAccountWhoseLabelIsTheTailOfTheFileIban() throws Exception {
     accountService.updateDetection(accountId, "2222", false);
     long profileId = saveProfile();

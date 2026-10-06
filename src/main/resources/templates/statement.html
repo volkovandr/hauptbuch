@@ -2,7 +2,7 @@
 <!--
   The statement page, before matching (statements sub-plan slice b3): the header — period and the
   optional balances — and the line grid, both editable, and delete. A line with a problem is kept
-  and marked; it is never matched. Matching, the extras and the dock arrive with slices c–d. No
+  and marked; it is never matched. Matching is shown live (slice c1); accepting and the dock arrive with slices c2–d. No
   bespoke JS.
 -->
 <html
@@ -22,6 +22,16 @@
       </p>
       <p class="statements__notice" th:if="${notice}" th:text="${notice}">Header saved.</p>
       <p class="statements__error" th:if="${error}" th:text="${error}">Not a date.</p>
+      <p class="statement-counts">
+        <span><strong th:text="${review.matched()}">0</strong> matched</span>
+        <span><strong th:text="${review.reconciled()}">0</strong> reconciled</span>
+        <span><strong th:text="${review.proposed()}">0</strong> proposed</span>
+        <span><strong th:text="${review.missing()}">0</strong> missing</span>
+        <span><strong th:text="${review.extra()}">0</strong> extra</span>
+        <span th:if="${review.boundary() > 0}"
+          ><strong th:text="${review.boundary()}">0</strong> boundary</span
+        >
+      </p>
 
       <form method="post" th:action="@{/statements/{id}/header(id=${statement.statementId()})}">
         <div class="statement-header">
@@ -50,6 +60,68 @@
           them, on turnover only.
         </p>
       </form>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Matching</p>
+      <p class="muted" th:if="${#lists.isEmpty(reviewLines)}">The file had no lines.</p>
+      <div class="statement-lines" th:unless="${#lists.isEmpty(reviewLines)}">
+        <table class="statements">
+          <thead>
+            <tr>
+              <th>Booking</th>
+              <th class="num">Amount</th>
+              <th>Bank text</th>
+              <th>Status</th>
+              <th>Ledger</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr th:each="r : ${reviewLines}">
+              <td th:text="${r.bookingDate()}">02.05.2026</td>
+              <td class="num" th:text="${r.amount()}">-3,50</td>
+              <td th:text="${r.text()}">SHOPAAA SAGT DANKE</td>
+              <td>
+                <span class="statement-status" th:classappend="${r.statusClass()}" th:text="${r.status()}"
+                  >exact</span
+                >
+              </td>
+              <td>
+                <div th:each="d : ${r.details()}" th:text="${d}">01.05.2026 ShopAaa -3,50</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" th:unless="${#lists.isEmpty(reviewExtras)}">
+      <p class="eyebrow">Extras</p>
+      <p class="muted">
+        Postings on this account, dated in the period, that the statement does not account for.
+      </p>
+      <div class="statement-lines">
+        <table class="statements">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Payee</th>
+              <th>Note</th>
+              <th class="num">Amount</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr th:each="e : ${reviewExtras}">
+              <td th:text="${e.date()}">03.05.2026</td>
+              <td th:text="${e.payee()}">ShopAaa</td>
+              <td th:text="${e.note()}"></td>
+              <td class="num" th:text="${e.amount()}">-9,99</td>
+              <td class="muted" th:text="${e.boundary()}">probably on the next statement</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="panel">

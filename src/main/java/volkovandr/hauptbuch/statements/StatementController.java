@@ -1,6 +1,12 @@
 package volkovandr.hauptbuch.statements;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.MultiValueMap;
@@ -17,7 +23,8 @@ import volkovandr.hauptbuch.web.NavItem;
  * The Statements page, the two-step upload and the statement page (statements sub-plan slices
  * b2–b3). The page lists every statement and holds the upload; the upload keeps the file, then asks
  * the operator to confirm the account the file points at; the statement page corrects the period,
- * the balances and the lines, and deletes the statement. Matching arrives with slice c.
+ * the balances and the lines, shows what the matcher proposes (slice c1), and deletes the
+ * statement. Accepting a proposal arrives with slice c2.
  */
 @Controller
 class StatementController {
@@ -31,10 +38,15 @@ class StatementController {
 
   private final StatementService statementService;
   private final StatementProfileService profileService;
+  private final StatementReviewService reviewService;
 
-  StatementController(StatementService statementService, StatementProfileService profileService) {
+  StatementController(
+      StatementService statementService,
+      StatementProfileService profileService,
+      StatementReviewService reviewService) {
     this.statementService = statementService;
     this.profileService = profileService;
+    this.reviewService = reviewService;
   }
 
   /** The statements, newest first, filterable by account, with the upload form. */
@@ -143,6 +155,10 @@ class StatementController {
     model.addAttribute("opening", number(statement.openingBalance()));
     model.addAttribute("closing", number(statement.closingBalance()));
     model.addAttribute("lines", statementService.lines(id).stream().map(LineView::of).toList());
+    StatementReview review = reviewService.review(id);
+    model.addAttribute("review", review);
+    model.addAttribute("reviewLines", review.lines().stream().map(ReviewLineView::of).toList());
+    model.addAttribute("reviewExtras", review.extras().stream().map(ExtraView::of).toList());
     return "statement";
   }
 
@@ -215,7 +231,7 @@ class StatementController {
         .toList();
   }
 
-  private static String number(java.math.BigDecimal value) {
+  private static String number(BigDecimal value) {
     return value == null ? "" : MoneyFormat.number(value, AMOUNT_DIGITS);
   }
 
@@ -243,5 +259,82 @@ class StatementController {
           line.rawText(),
           line.problem());
     }
+  }
+
+  /** A line as the matcher sees it: status, and a one-line account of its match or proposals. */
+  record ReviewLineView(
+      String bookingDate,
+      String amount,
+      String text,
+      String status,
+      String statusClass,
+      List<String> details) {
+
+    static ReviewLineView of(LineReview review) {
+      StatementLine line = review.line();
+      return new ReviewLineView(
+          date(line.bookingDate()),
+          number(line.amount()),
+          text(line),
+          review.status().label(),
+          "statement-status--" + review.status().name().toLowerCase(Locale.ROOT),
+          details(review));
+    }
+
+    private static String text(StatementLine line) {
+      return Stream.of(line.counterparty(), line.description())
+          .filter(t -> t != null && !t.isBlank())
+          .collect(Collectors.joining(" · "));
+    }
+
+    private static List<String> details(LineReview review) {
+      if (review.match() != null) {
+        StatementMatch m = review.match();
+        return List.of(describe(m.transactionDate(), m.payeeName(), m.amount(), null));
+      }
+      if (review.line().problem() != null) {
+        return List.of(review.line().problem());
+      }
+      return review.candidates().stream()
+          .map(
+              p ->
+                  describe(
+                      p.candidate().transactionDate(),
+                      p.candidate().payeeName(),
+                      p.candidate().amount(),
+                      suffix(p)))
+          .toList();
+    }
+  }
+
+  /** An extra, with its boundary label. */
+  record ExtraView(String date, String payee, String note, String amount, String boundary) {
+
+    static ExtraView of(ExtraReview review) {
+      StatementExtra e = review.extra();
+      return new ExtraView(
+          date(e.transactionDate()),
+          e.payeeName() == null ? "" : e.payeeName(),
+          e.note() == null ? "" : e.note(),
+          number(e.amount()),
+          review.boundary().label());
+    }
+  }
+
+  private static String suffix(ProposedCandidate proposed) {
+    if (proposed.tier() == ProposedCandidate.Tier.WRONG_ACCOUNT) {
+      return "on " + proposed.candidate().accountName();
+    }
+    return proposed.candidate().matchedElsewhere() ? "(matched on another statement)" : null;
+  }
+
+  private static String describe(
+      LocalDate date, String payee, BigDecimal amount, String suffix) {
+    String text = date(date) + " " + (payee == null ? "(no payee)" : payee) + " " + number(amount);
+    return suffix == null ? text : text + " " + suffix;
+  }
+
+  private static String date(LocalDate date) {
+    return date == null ? "" : date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
   }
 }
