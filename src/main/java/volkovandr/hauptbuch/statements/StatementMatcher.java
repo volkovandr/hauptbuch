@@ -25,12 +25,18 @@ final class StatementMatcher {
           .thenComparingInt(p -> p.candidate().dayDistance())
           .thenComparingLong(p -> p.candidate().postingId());
 
+  /** Booking date, undated lines last, then file order. */
+  private static final Comparator<StatementLine> BY_BOOKING_DATE =
+      Comparator.comparing(
+              StatementLine::bookingDate, Comparator.nullsLast(Comparator.naturalOrder()))
+          .thenComparingInt(StatementLine::sortOrder);
+
   private StatementMatcher() {}
 
   /**
    * Review a statement.
    *
-   * @param lines the statement's lines in file order
+   * @param lines the statement's lines, in any order
    * @param candidates the window candidates of every unmatched, readable line
    * @param matches the statement's confirmed matches
    * @param extras the unreconciled, unmatched legs dated in the period
@@ -51,6 +57,7 @@ final class StatementMatcher {
     Map<Long, List<ProposedCandidate>> owned = assign(lines, candidates, statement);
     List<LineReview> reviews =
         lines.stream()
+            .sorted(BY_BOOKING_DATE)
             .map(
                 line ->
                     reviewLine(

@@ -76,6 +76,27 @@ class StatementMatcherTest {
   }
 
   @Test
+  void linesAreOrderedByBookingDateThenFileOrderWithUndatedLast() {
+    StatementLine undated =
+        new StatementLine(4L, 0, null, null, null, "unreadable", null, "bad date", "raw", null);
+
+    StatementReview result =
+        review(
+            List.of(
+                line(1, 1, "2026-05-20", "-1.00"),
+                undated,
+                line(2, 2, "2026-05-03", "-2.00"),
+                line(3, 3, "2026-05-03", "-3.00")),
+            List.of(),
+            List.of(),
+            List.of());
+
+    assertThat(result.lines())
+        .extracting(r -> r.line().statementLineId())
+        .containsExactly(2L, 3L, 1L, 4L);
+  }
+
+  @Test
   void singleEqualAmountOnTheStatementAccountIsExact() {
     StatementReview result =
         review(
