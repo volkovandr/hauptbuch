@@ -107,6 +107,11 @@
                 >
                   <input type="hidden" name="posting" th:value="${p.postingId()}" />
                   <button type="submit" class="btn" th:text="${p.label()}">Accept</button>
+                  <th:block th:if="${r.differentPosting() != null}">
+                    <span
+                      th:replace="~{fragments/help-marker :: marker('Match the transaction to this statement as well.')}"
+                    ></span>
+                  </th:block>
                 </form>
                 <form
                   th:if="${r.differentPosting() != null}"
@@ -115,6 +120,9 @@
                 >
                   <input type="hidden" name="posting" th:value="${r.differentPosting()}" />
                   <button type="submit" class="btn">Different transaction</button>
+                  <span
+                    th:replace="~{fragments/help-marker :: marker('Leave the transaction for the other statement.')}"
+                  ></span>
                 </form>
                 <form
                   th:if="${r.canUnmatch()}"

@@ -305,7 +305,10 @@ class StatementMatchActionsIntegrationTest {
             .andReturn()
             .getResponse()
             .getContentAsString();
-    assertThat(page).contains("already on another statement");
+    assertThat(page)
+        .contains("already on another statement")
+        .contains("Match the transaction to this statement as well.")
+        .contains("Leave the transaction for the other statement.");
 
     mockMvc
         .perform(
