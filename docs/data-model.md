@@ -341,7 +341,8 @@ create table posting (
   the `C` values imported from Money); see §15 and `statements.md` §5.
 - **Postings are edited in place** (ADR 0003). Editing a transaction pairs its new legs with the
   existing ones **by account**: a paired leg keeps its `posting_id` and its `reconciliation` when its
-  amount is unchanged, and drops to `unreconciled` when it changed; an unpaired old leg is deleted, a
+  amount is unchanged, and drops to `unreconciled` when it changed; **changing the transaction's
+  date drops every `reconciled` leg of it to `unreconciled`**; an unpaired old leg is deleted, a
   new one inserted `unreconciled`. Legs on accounts that may repeat (invariant 6) fall back to
   delete + insert.
 
@@ -1439,7 +1440,7 @@ alter table settings add column statement_system_prompt text;  -- NULL = built-i
 
 - **A match exists only on a `reconciled` posting.** Confirming a match sets the posting to
   `reconciled` and confirms a `pending_review` transaction. Whatever drops the posting out of
-  `reconciled` — an edit that changes its amount (§3.6), Unmatch — removes its matches; so does
+  `reconciled` — an edit that changes its amount or the transaction's date (§3.6), Unmatch — removes its matches; so does
   voiding the transaction. `ledger` reports those posting ids through an interface it owns and
   `statements` implements (ADR 0003); an edit that deletes the leg outright cascades.
 - **Deleting a statement** soft-deletes it, removes its matches, and leaves the postings'

@@ -104,6 +104,18 @@ class StatementMatchActionsIntegrationTest {
         .single();
   }
 
+  private long lineWithAmount(String amount, String bookingDate) {
+    return jdbcClient
+        .sql(
+            "select statement_line_id from statement_line where statement_id = :s and amount = :a"
+                + " and booking_date = :d")
+        .param("s", statementId)
+        .param("a", new BigDecimal(amount))
+        .param("d", LocalDate.parse(bookingDate))
+        .query(Long.class)
+        .single();
+  }
+
   private long lineWithAmount(String amount) {
     return jdbcClient
         .sql("select statement_line_id from statement_line where statement_id = :s and amount = :a")
@@ -153,6 +165,60 @@ class StatementMatchActionsIntegrationTest {
         .andExpect(content().string(containsString("Accept all exact (")))
         .andExpect(
             content().string(containsString("/lines/" + lineWithAmount("-12.50") + "/accept")));
+  }
+
+  @Test
+  void actionFormsPostWithHtmxAndSwapTheMainElementSoTheScrollPositionStays() throws Exception {
+    String page = statementPage();
+
+    assertThat(page)
+        .contains("hx-post=\"/statements/" + statementId + "/accept-all\"")
+        .contains(
+            "hx-post=\"/statements/"
+                + statementId
+                + "/lines/"
+                + lineWithAmount("-12.50")
+                + "/accept\"")
+        .contains("hx-post=\"/statements/" + statementId + "/lines\"")
+        .contains("hx-select=\"main\"")
+        .contains("hx-swap=\"outerHTML\"");
+    assertThat(page).doesNotContain("hx-post=\"/statements/" + statementId + "/delete\"");
+  }
+
+  @Test
+  void postingFittingTwoLinesIsOfferedToBothAndAcceptAllSkipsThem() throws Exception {
+    long secondShopLine = secondLineForTheShopLeg();
+    long firstShopLine = lineWithAmount("-12.50", "2026-05-02");
+
+    assertThat(statementPage())
+        .contains("/lines/" + firstShopLine + "/accept")
+        .contains("/lines/" + secondShopLine + "/accept")
+        .contains("fits another line too");
+
+    acceptAll(1);
+
+    assertThat(reconciliationOf(shopLeg)).isEqualTo("unreconciled");
+
+    mockMvc
+        .perform(
+            post("/statements/" + statementId + "/lines/" + secondShopLine + "/accept")
+                .param("posting", String.valueOf(shopLeg)))
+        .andExpect(status().is3xxRedirection());
+
+    assertThat(reconciliationOf(shopLeg)).isEqualTo("reconciled");
+    assertThat(statementPage()).doesNotContain("/lines/" + firstShopLine + "/accept");
+  }
+
+  /** A second line of the statement with the shop leg's amount, booked two days after the first. */
+  private long secondLineForTheShopLeg() {
+    return jdbcClient
+        .sql(
+            "insert into statement_line (statement_id, sort_order, booking_date, amount,"
+                + " counterparty, raw_text) values (:s, 9, '2026-05-04', -12.50, 'ShopAaa', 'r')"
+                + " returning statement_line_id")
+        .param("s", statementId)
+        .query(Long.class)
+        .single();
   }
 
   @Test
@@ -292,6 +358,26 @@ class StatementMatchActionsIntegrationTest {
 
     assertThat(matchCount()).isEqualTo(1);
     assertThat(reconciliationOf(shopLeg)).isEqualTo("unreconciled");
+  }
+
+  @Test
+  void editingOnlyTheDateOfMatchedTransactionDropsTheMatchAndTheReconciliation() throws Exception {
+    acceptAll(2);
+
+    ledgerService.editTransaction(
+        shopTxn,
+        new TransactionDraft(
+            LocalDate.parse("2026-05-02"),
+            null,
+            null,
+            "confirmed",
+            List.of(
+                PostingDraft.of(accountId, new BigDecimal("-12.50")),
+                PostingDraft.of(foodId, new BigDecimal("12.50")))));
+
+    assertThat(matchCount()).isEqualTo(1);
+    assertThat(reconciliationOf(shopLeg)).isEqualTo("unreconciled");
+    assertThat(reconciliationOf(salaryLeg)).isEqualTo("reconciled");
   }
 
   @Test

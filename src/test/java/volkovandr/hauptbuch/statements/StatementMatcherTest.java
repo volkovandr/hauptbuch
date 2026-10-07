@@ -11,7 +11,7 @@ import volkovandr.hauptbuch.statements.ExtraReview.Boundary;
 
 /**
  * Unit tier: {@link StatementMatcher} (statements.md §4.2, §4.4, §6.3) — how the SQL candidates
- * become statuses, that a posting is proposed to one line only, and the boundary labels.
+ * become statuses, that an exact posting is offered to every line it fits, and the boundary labels.
  */
 class StatementMatcherTest {
 
@@ -171,7 +171,25 @@ class StatementMatcherTest {
   }
 
   @Test
-  void postingIsProposedToTheLineWithTheClosestBookingDate() {
+  void exactPostingFittingTwoLinesIsOfferedToBothAsCompeting() {
+    StatementReview result =
+        review(
+            List.of(line(1, 0, "2026-05-12", "-3.50"), line(2, 1, "2026-05-14", "-3.50")),
+            List.of(
+                candidate(1, 100, OWN, "-3.50", 3, false),
+                candidate(2, 100, OWN, "-3.50", 1, false)),
+            List.of(),
+            List.of());
+
+    assertThat(statusOf(result, 0)).isEqualTo(LineStatus.COMPETING);
+    assertThat(statusOf(result, 1)).isEqualTo(LineStatus.COMPETING);
+    assertThat(result.lines().get(0).firstProposedPostingId()).isEqualTo(100L);
+    assertThat(result.lines().get(1).firstProposedPostingId()).isEqualTo(100L);
+    assertThat(result.exact()).isZero();
+  }
+
+  @Test
+  void competingLineWithAnotherExactCandidateIsAmbiguousAndStillOffersTheSharedOne() {
     StatementReview result =
         review(
             List.of(line(1, 0, "2026-05-12", "-3.50"), line(2, 1, "2026-05-14", "-3.50")),
@@ -182,24 +200,40 @@ class StatementMatcherTest {
             List.of(),
             List.of());
 
-    assertThat(statusOf(result, 0)).isEqualTo(LineStatus.EXACT);
-    assertThat(result.lines().get(0).candidates().get(0).candidate().postingId()).isEqualTo(101L);
-    assertThat(result.lines().get(1).candidates().get(0).candidate().postingId()).isEqualTo(100L);
+    assertThat(statusOf(result, 0)).isEqualTo(LineStatus.AMBIGUOUS);
+    assertThat(result.lines().get(0).candidates())
+        .extracting(p -> p.candidate().postingId())
+        .containsExactly(101L, 100L);
+    assertThat(statusOf(result, 1)).isEqualTo(LineStatus.COMPETING);
   }
 
   @Test
-  void lineWhoseOnlyCandidateWentToAnotherLineIsMissing() {
+  void lowerTierPostingStillGoesOnlyToTheClosestLine() {
     StatementReview result =
         review(
-            List.of(line(1, 0, "2026-05-12", "-3.50"), line(2, 1, "2026-05-14", "-3.50")),
+            List.of(line(1, 0, "2026-05-12", "-3.60"), line(2, 1, "2026-05-14", "-3.60")),
             List.of(
-                candidate(1, 100, OWN, "-3.50", 3, false),
-                candidate(2, 100, OWN, "-3.50", 1, false)),
+                candidate(1, 100, OWN, "-3.50", 3, true), candidate(2, 100, OWN, "-3.50", 1, true)),
             List.of(),
             List.of());
 
     assertThat(statusOf(result, 0)).isEqualTo(LineStatus.MISSING);
-    assertThat(statusOf(result, 1)).isEqualTo(LineStatus.EXACT);
+    assertThat(statusOf(result, 1)).isEqualTo(LineStatus.AMOUNT_DIFFERS);
+  }
+
+  @Test
+  void exactForOneLineBeatsAnAmountDiffersClaimOfAnother() {
+    StatementReview result =
+        review(
+            List.of(line(1, 0, "2026-05-12", "-3.50"), line(2, 1, "2026-05-14", "-3.60")),
+            List.of(
+                candidate(1, 100, OWN, "-3.50", 3, false),
+                candidate(2, 100, OWN, "-3.50", 1, true)),
+            List.of(),
+            List.of());
+
+    assertThat(statusOf(result, 0)).isEqualTo(LineStatus.EXACT);
+    assertThat(statusOf(result, 1)).isEqualTo(LineStatus.MISSING);
   }
 
   @Test

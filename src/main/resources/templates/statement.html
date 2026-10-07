@@ -33,7 +33,14 @@
         >
       </p>
 
-      <form method="post" th:action="@{/statements/{id}/header(id=${statement.statementId()})}">
+      <form
+        method="post"
+        th:action="@{/statements/{id}/header(id=${statement.statementId()})}"
+        th:attr="hx-post=@{/statements/{id}/header(id=${statement.statementId()})}"
+        hx-target="main"
+        hx-select="main"
+        hx-swap="outerHTML"
+      >
         <div class="statement-header">
           <div class="field">
             <label class="field__label" for="periodStart">Period start</label>
@@ -68,6 +75,10 @@
       <form
         method="post"
         th:action="@{/statements/{id}/accept-all(id=${statement.statementId()})}"
+        th:attr="hx-post=@{/statements/{id}/accept-all(id=${statement.statementId()})}"
+        hx-target="main"
+        hx-select="main"
+        hx-swap="outerHTML"
         th:if="${review.exact() > 0}"
       >
         <button type="submit" class="btn">
@@ -104,6 +115,10 @@
                   th:each="p : ${r.picks()}"
                   method="post"
                   th:action="@{/statements/{id}/lines/{line}/accept(id=${statement.statementId()},line=${r.lineId()})}"
+                  th:attr="hx-post=@{/statements/{id}/lines/{line}/accept(id=${statement.statementId()},line=${r.lineId()})}"
+                  hx-target="main"
+                  hx-select="main"
+                  hx-swap="outerHTML"
                 >
                   <input type="hidden" name="posting" th:value="${p.postingId()}" />
                   <button type="submit" class="btn" th:text="${p.label()}">Accept</button>
@@ -117,6 +132,10 @@
                   th:if="${r.differentPosting() != null}"
                   method="post"
                   th:action="@{/statements/{id}/lines/{line}/different(id=${statement.statementId()},line=${r.lineId()})}"
+                  th:attr="hx-post=@{/statements/{id}/lines/{line}/different(id=${statement.statementId()},line=${r.lineId()})}"
+                  hx-target="main"
+                  hx-select="main"
+                  hx-swap="outerHTML"
                 >
                   <input type="hidden" name="posting" th:value="${r.differentPosting()}" />
                   <button type="submit" class="btn">Different transaction</button>
@@ -128,6 +147,10 @@
                   th:if="${r.canUnmatch()}"
                   method="post"
                   th:action="@{/statements/{id}/lines/{line}/unmatch(id=${statement.statementId()},line=${r.lineId()})}"
+                  th:attr="hx-post=@{/statements/{id}/lines/{line}/unmatch(id=${statement.statementId()},line=${r.lineId()})}"
+                  hx-target="main"
+                  hx-select="main"
+                  hx-swap="outerHTML"
                 >
                   <button type="submit" class="btn">Unmatch</button>
                 </form>
@@ -174,6 +197,10 @@
         th:unless="${#lists.isEmpty(lines)}"
         method="post"
         th:action="@{/statements/{id}/lines(id=${statement.statementId()})}"
+        th:attr="hx-post=@{/statements/{id}/lines(id=${statement.statementId()})}"
+        hx-target="main"
+        hx-select="main"
+        hx-swap="outerHTML"
       >
         <div class="statement-lines">
           <table class="statements">

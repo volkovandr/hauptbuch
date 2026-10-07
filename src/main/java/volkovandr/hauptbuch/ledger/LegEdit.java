@@ -11,13 +11,14 @@ import java.util.function.LongPredicate;
 /**
  * What editing a transaction does to its legs (ADR 0003), worked out before anything is written:
  * which existing legs are updated in place, which new legs are inserted, which old legs are
- * deleted, and which {@code reconciled} legs lose that state. A pure function of the old and new
- * legs, so {@link LedgerService} only has to carry it out.
+ * deleted, and which {@code reconciled} legs lose that state — on an amount change, and on a change
+ * of the transaction's date (a match is made on the date, data-model §3.6). A pure function of the
+ * old and new legs, so {@link LedgerService} only has to carry it out.
  *
  * @param updates the existing legs to update in place, with the tags they should carry afterwards
  * @param inserts the new legs that have no partner
  * @param deletedPostingIds the existing legs that have no partner
- * @param droppedPostingIds the {@code reconciled} legs an amount change drops to {@code
+ * @param droppedPostingIds the {@code reconciled} legs an amount or date change drops to {@code
  *     unreconciled}, in the order of the new legs
  */
 record LegEdit(
@@ -39,12 +40,14 @@ record LegEdit(
    *
    * @param realOwnAccount whether an account id is a real own account, the only kind legs are
    *     paired on (data-model §8 invariant 6)
+   * @param dateChanged whether the edit moves the transaction to another date
    */
   static LegEdit plan(
       long transactionId,
       List<Posting> oldLegs,
       List<PostingDraft> newLegs,
-      LongPredicate realOwnAccount) {
+      LongPredicate realOwnAccount,
+      boolean dateChanged) {
     Map<Long, Posting> pairable = new LinkedHashMap<>();
     for (Posting old : oldLegs) {
       pairable.putIfAbsent(old.accountId(), old);
@@ -62,7 +65,7 @@ record LegEdit(
         continue;
       }
       pairedIds.add(partner.postingId());
-      Update update = pair(transactionId, partner, leg);
+      Update update = pair(transactionId, partner, leg, dateChanged);
       updates.add(update);
       if (RECONCILED.equals(partner.reconciliation())
           && !RECONCILED.equals(update.leg().reconciliation())) {
@@ -75,10 +78,16 @@ record LegEdit(
     return new LegEdit(updates, inserts, deleted, dropped);
   }
 
-  /** A paired leg keeps its reconciliation while its amount is unchanged, else starts over. */
-  private static Update pair(long transactionId, Posting old, PostingDraft leg) {
-    String reconciliation =
-        old.amount().compareTo(leg.amount()) == 0 ? old.reconciliation() : UNRECONCILED;
+  /**
+   * A paired leg keeps its reconciliation while its amount is unchanged, else starts over; a new
+   * transaction date also unreconciles a {@code reconciled} leg.
+   */
+  private static Update pair(
+      long transactionId, Posting old, PostingDraft leg, boolean dateChanged) {
+    boolean keep =
+        old.amount().compareTo(leg.amount()) == 0
+            && !(dateChanged && RECONCILED.equals(old.reconciliation()));
+    String reconciliation = keep ? old.reconciliation() : UNRECONCILED;
     return new Update(
         new Posting(
             old.postingId(),

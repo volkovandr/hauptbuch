@@ -8,6 +8,8 @@ public enum LineStatus {
   EXACT("exact"),
   /** Several equal-amount candidates on the statement's account; the operator picks. */
   AMBIGUOUS("ambiguous"),
+  /** The one exact candidate also fits another line; the operator decides which line it is. */
+  COMPETING("fits another line too"),
   /** The one exact candidate is already matched on another statement; the operator decides. */
   OVERLAP("already on another statement"),
   /** Candidates on the statement's account with a different amount and a similar payee. */
@@ -27,7 +29,7 @@ public enum LineStatus {
 
   /** Whether the line has one equal-amount candidate on the statement's account to confirm. */
   public boolean hasSingleProposal() {
-    return this == EXACT || this == OVERLAP;
+    return this == EXACT || this == COMPETING || this == OVERLAP;
   }
 
   /** The status as the operator reads it. */

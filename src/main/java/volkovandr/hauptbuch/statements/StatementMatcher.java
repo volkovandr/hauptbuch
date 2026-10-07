@@ -13,9 +13,9 @@ import volkovandr.hauptbuch.statements.ProposedCandidate.Tier;
 
 /**
  * Sorts the SQL candidates into tiers and statuses (statements.md §4.2, §4.4). Pure logic over the
- * rows the repository returned: a posting is proposed to at most one line — the one with the best
- * tier, then the closest booking date — so a line whose candidate went elsewhere falls to its next
- * candidate, or to missing.
+ * rows the repository returned: a posting goes to the lines of its best tier — every line it is
+ * exact for, otherwise the one with the closest booking date — so a line whose lower-tier candidate
+ * went elsewhere falls to its next candidate, or to missing.
  */
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 final class StatementMatcher {
@@ -55,6 +55,7 @@ final class StatementMatcher {
     Map<Long, StatementMatch> matchByLine = new HashMap<>();
     matches.forEach(m -> matchByLine.put(m.statementLineId(), m));
     Map<Long, List<ProposedCandidate>> owned = assign(lines, candidates, statement);
+    Set<Long> sharedPostings = sharedExactPostings(owned);
     List<LineReview> reviews =
         lines.stream()
             .sorted(BY_BOOKING_DATE)
@@ -63,7 +64,8 @@ final class StatementMatcher {
                     reviewLine(
                         line,
                         matchByLine.get(line.statementLineId()),
-                        owned.getOrDefault(line.statementLineId(), List.of())))
+                        owned.getOrDefault(line.statementLineId(), List.of()),
+                        sharedPostings))
             .toList();
     Set<Long> proposedPostings =
         owned.values().stream()
@@ -78,54 +80,57 @@ final class StatementMatcher {
     return new StatementReview(reviews, extraReviews);
   }
 
-  /** Each posting goes to exactly one line: best tier, then closest date, then file order. */
+  /**
+   * Each posting goes to the lines of its best tier: all of them for an exact posting (the date is
+   * a weak signal, so the operator decides), the closest one for the lower tiers.
+   */
   private static Map<Long, List<ProposedCandidate>> assign(
       List<StatementLine> lines, List<StatementCandidate> candidates, Statement statement) {
     Map<Long, StatementLine> byId = new HashMap<>();
     lines.forEach(l -> byId.put(l.statementLineId(), l));
-    Map<Long, ProposedCandidate> owner = new HashMap<>();
+    Map<Long, List<ProposedCandidate>> claimsByPosting = new HashMap<>();
     for (StatementCandidate candidate : candidates) {
       Tier tier = tierOf(candidate, byId.get(candidate.statementLineId()), statement);
       if (tier != null) {
-        propose(owner, byId, candidate, tier);
+        claim(claimsByPosting, candidate, tier);
       }
     }
     Map<Long, List<ProposedCandidate>> byLine = new HashMap<>();
-    owner
+    claimsByPosting
         .values()
         .forEach(
-            p ->
-                byLine
-                    .computeIfAbsent(p.candidate().statementLineId(), k -> new ArrayList<>())
-                    .add(p));
+            claims ->
+                winners(claims, byId)
+                    .forEach(
+                        p ->
+                            byLine
+                                .computeIfAbsent(
+                                    p.candidate().statementLineId(), k -> new ArrayList<>())
+                                .add(p)));
     byLine.values().forEach(list -> list.sort(BEST_FIRST));
     return byLine;
   }
 
-  private static void propose(
-      Map<Long, ProposedCandidate> owner,
-      Map<Long, StatementLine> byId,
-      StatementCandidate candidate,
-      Tier tier) {
-    owner.merge(
-        candidate.postingId(),
-        new ProposedCandidate(candidate, tier),
-        (current, challenger) -> wins(challenger, current, byId) ? challenger : current);
+  private static void claim(
+      Map<Long, List<ProposedCandidate>> claimsByPosting, StatementCandidate candidate, Tier tier) {
+    claimsByPosting
+        .computeIfAbsent(candidate.postingId(), k -> new ArrayList<>())
+        .add(new ProposedCandidate(candidate, tier));
   }
 
-  private static boolean wins(
-      ProposedCandidate challenger, ProposedCandidate current, Map<Long, StatementLine> lines) {
-    int byTier = challenger.tier().compareTo(current.tier());
-    if (byTier != 0) {
-      return byTier < 0;
+  private static List<ProposedCandidate> winners(
+      List<ProposedCandidate> claims, Map<Long, StatementLine> lines) {
+    ProposedCandidate best =
+        claims.stream()
+            .min(
+                Comparator.comparing(ProposedCandidate::tier)
+                    .thenComparingInt(p -> p.candidate().dayDistance())
+                    .thenComparingInt(p -> lines.get(p.candidate().statementLineId()).sortOrder()))
+            .orElseThrow();
+    if (best.tier() == Tier.EXACT) {
+      return claims.stream().filter(p -> p.tier() == Tier.EXACT).toList();
     }
-    int byDistance =
-        Integer.compare(challenger.candidate().dayDistance(), current.candidate().dayDistance());
-    if (byDistance != 0) {
-      return byDistance < 0;
-    }
-    return lines.get(challenger.candidate().statementLineId()).sortOrder()
-        < lines.get(current.candidate().statementLineId()).sortOrder();
+    return List.of(best);
   }
 
   private static Tier tierOf(
@@ -140,24 +145,44 @@ final class StatementMatcher {
     return sameAmount && candidate.payeeSimilar() ? Tier.WRONG_ACCOUNT : null;
   }
 
+  /** The postings that are an exact proposal of more than one line. */
+  private static Set<Long> sharedExactPostings(Map<Long, List<ProposedCandidate>> owned) {
+    return owned.values().stream()
+        .flatMap(List::stream)
+        .filter(p -> p.tier() == Tier.EXACT)
+        .collect(Collectors.groupingBy(p -> p.candidate().postingId(), Collectors.counting()))
+        .entrySet()
+        .stream()
+        .filter(e -> e.getValue() > 1)
+        .map(Map.Entry::getKey)
+        .collect(Collectors.toSet());
+  }
+
   private static LineReview reviewLine(
-      StatementLine line, StatementMatch match, List<ProposedCandidate> proposals) {
+      StatementLine line,
+      StatementMatch match,
+      List<ProposedCandidate> proposals,
+      Set<Long> sharedPostings) {
     if (match != null) {
       return new LineReview(line, LineStatus.MATCHED, match, List.of());
     }
     if (line.problem() != null) {
       return new LineReview(line, LineStatus.PROBLEM, null, List.of());
     }
-    return new LineReview(line, statusOf(proposals), null, proposals);
+    return new LineReview(line, statusOf(proposals, sharedPostings), null, proposals);
   }
 
-  private static LineStatus statusOf(List<ProposedCandidate> proposals) {
+  private static LineStatus statusOf(List<ProposedCandidate> proposals, Set<Long> sharedPostings) {
     List<ProposedCandidate> exact = proposals.stream().filter(p -> p.tier() == Tier.EXACT).toList();
     if (exact.size() > 1) {
       return LineStatus.AMBIGUOUS;
     }
     if (exact.size() == 1) {
-      return exact.get(0).candidate().matchedElsewhere() ? LineStatus.OVERLAP : LineStatus.EXACT;
+      StatementCandidate only = exact.get(0).candidate();
+      if (only.matchedElsewhere()) {
+        return LineStatus.OVERLAP;
+      }
+      return sharedPostings.contains(only.postingId()) ? LineStatus.COMPETING : LineStatus.EXACT;
     }
     if (proposals.stream().anyMatch(p -> p.tier() == Tier.AMOUNT_DIFFERS)) {
       return LineStatus.AMOUNT_DIFFERS;
