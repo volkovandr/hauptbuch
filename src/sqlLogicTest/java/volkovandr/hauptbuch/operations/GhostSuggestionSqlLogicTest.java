@@ -125,7 +125,8 @@ class GhostSuggestionSqlLogicTest {
     long snacks = insertAccount("Snacks", EXPENSE, EUR, null);
     long station = insertPayee("Shell");
 
-    // Fuel is the mode, but the latest visit was Snacks — "last" follows the date (statements §6.4).
+    // Fuel is the mode, but the latest visit was Snacks — "last" follows the date (statements
+    // §6.4).
     spend("2026-01-01", station, cash, fuel, "50");
     spend("2026-01-08", station, cash, fuel, "55");
     spend("2026-01-15", station, cash, snacks, "3");
@@ -137,7 +138,7 @@ class GhostSuggestionSqlLogicTest {
   }
 
   @Test
-  void lastCategoryRollsALeafUpAndIgnoresVoidedTransactions() {
+  void lastCategoryRollsLeafUpAndIgnoresVoidedTransactions() {
     long cash = insertAccount("Cash", ASSET, EUR, null);
     long food = insertAccount("Food", EXPENSE, EUR, null);
     long foodEur = insertCurrencyLeaf(EUR, EXPENSE, food);
@@ -158,7 +159,7 @@ class GhostSuggestionSqlLogicTest {
   }
 
   @Test
-  void lastCategoryIsEmptyForAPayeeWithoutHistory() {
+  void lastCategoryIsEmptyForPayeeWithoutHistory() {
     assertThat(ghostSuggestionRepository.lastFor(insertPayee("Nobody"))).isEmpty();
   }
 

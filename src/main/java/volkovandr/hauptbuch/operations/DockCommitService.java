@@ -85,7 +85,7 @@ public class DockCommitService {
    */
   @Transactional
   public long commit(DockEntry entry) {
-    return commit(entry, null);
+    return commitEntry(entry, null);
   }
 
   /**
@@ -99,10 +99,10 @@ public class DockCommitService {
    */
   @Transactional
   public long commitWithFundingAmount(DockEntry entry, BigDecimal fundingAmount) {
-    return commit(entry, fundingAmount);
+    return commitEntry(entry, fundingAmount);
   }
 
-  private long commit(DockEntry entry, BigDecimal pinnedFundingAmount) {
+  private long commitEntry(DockEntry entry, BigDecimal pinnedFundingAmount) {
     Account fundingAccount = resolveFundingAccount(entry);
     Long payeeId = payeeService.resolvePayee(entry.payeeId(), entry.payeeText());
 

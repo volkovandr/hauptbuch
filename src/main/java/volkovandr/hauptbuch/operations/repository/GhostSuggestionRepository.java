@@ -70,8 +70,8 @@ public class GhostSuggestionRepository {
   }
 
   /**
-   * The category of the payee's most recent live transaction, or empty if the payee has none —
-   * the statement page's pre-fill (statements.md §6.4), "the payee's last category", as opposed to
+   * The category of the payee's most recent live transaction, or empty if the payee has none — the
+   * statement page's pre-fill (statements.md §6.4), "the payee's last category", as opposed to
    * {@link #suggestFor}'s most common one. Rolled up to its semantic category like {@link
    * #suggestFor}; ties on date go to the later-entered transaction.
    *

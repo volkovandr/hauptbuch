@@ -44,7 +44,6 @@ class StatementDockServiceTest {
   private static final long LEG = 123L;
   private static final BigDecimal AMOUNT = new BigDecimal("-3.50");
 
-  @Mock private StatementReviewService reviewService;
   @Mock private StatementService statementService;
   @Mock private StatementMatchService matchService;
   @Mock private PayeeService payeeService;
@@ -58,7 +57,6 @@ class StatementDockServiceTest {
   void setUp() {
     service =
         new StatementDockService(
-            reviewService,
             statementService,
             matchService,
             payeeService,
@@ -146,7 +144,7 @@ class StatementDockServiceTest {
   }
 
   @Test
-  void prefillRefusesALineThatIsNotMissing() {
+  void prefillRefusesLineThatIsNotMissing() {
     when(matchService.lineOf(STATEMENT, LINE_ID)).thenReturn(review(LineStatus.EXACT));
 
     assertThatThrownBy(() -> service.prefill(STATEMENT, LINE_ID))
@@ -162,7 +160,8 @@ class StatementDockServiceTest {
         .thenReturn(
             List.of(
                 new Posting(LEG, TRANSACTION, ACCOUNT, AMOUNT, null, "unreconciled", null),
-                new Posting(LEG + 1, TRANSACTION, 8L, AMOUNT.negate(), null, "unreconciled", null)));
+                new Posting(
+                    LEG + 1, TRANSACTION, 8L, AMOUNT.negate(), null, "unreconciled", null)));
 
     service.createMissing(STATEMENT, LINE_ID, input(8L));
 
@@ -176,7 +175,7 @@ class StatementDockServiceTest {
   }
 
   @Test
-  void saveWithoutACategoryOrPersonBooksNothing() {
+  void saveWithoutCategoryOrPersonBooksNothing() {
     statementOnAccount();
     when(matchService.lineOf(STATEMENT, LINE_ID)).thenReturn(review(LineStatus.MISSING));
 
@@ -215,7 +214,7 @@ class StatementDockServiceTest {
   }
 
   @Test
-  void saveOnALineThatIsNoLongerMissingBooksNothing() {
+  void saveOnLineNoLongerMissingBooksNothing() {
     when(matchService.lineOf(STATEMENT, LINE_ID)).thenReturn(review(LineStatus.MATCHED));
 
     assertThatThrownBy(() -> service.createMissing(STATEMENT, LINE_ID, input(8L)))
