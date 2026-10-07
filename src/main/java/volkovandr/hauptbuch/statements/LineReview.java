@@ -20,4 +20,9 @@ public record LineReview(
   public LineReview {
     candidates = List.copyOf(candidates);
   }
+
+  /** The posting of the first proposal — the line's only one when its status is single-proposal. */
+  public long firstProposedPostingId() {
+    return candidates.get(0).candidate().postingId();
+  }
 }

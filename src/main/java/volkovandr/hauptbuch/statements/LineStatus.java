@@ -25,6 +25,11 @@ public enum LineStatus {
     this.text = label;
   }
 
+  /** Whether the line has one equal-amount candidate on the statement's account to confirm. */
+  public boolean hasSingleProposal() {
+    return this == EXACT || this == OVERLAP;
+  }
+
   /** The status as the operator reads it. */
   public String label() {
     return text;

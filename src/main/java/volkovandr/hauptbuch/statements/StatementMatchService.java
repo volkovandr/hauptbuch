@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.statements;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -50,13 +51,7 @@ public class StatementMatchService {
   @Transactional
   public void accept(long statementId, long statementLineId, long postingId) {
     LineReview line = lineOf(statementId, statementLineId);
-    boolean offered =
-        line.status() != LineStatus.MATCHED
-            && line.candidates().stream()
-                .anyMatch(p -> p.tier() == Tier.EXACT && p.candidate().postingId() == postingId);
-    if (!offered) {
-      throw new StatementFormatException(STALE);
-    }
+    requireOffered(line, postingId, p -> p.tier() == Tier.EXACT);
     confirm(statementId, List.of(new Pair(statementLineId, postingId)));
   }
 
@@ -71,9 +66,7 @@ public class StatementMatchService {
     List<Pair> pairs = new ArrayList<>();
     for (LineReview line : reviewService.review(statementId).lines()) {
       if (line.status() == LineStatus.EXACT) {
-        pairs.add(
-            new Pair(
-                line.line().statementLineId(), line.candidates().get(0).candidate().postingId()));
+        pairs.add(new Pair(line.line().statementLineId(), line.firstProposedPostingId()));
       }
     }
     confirm(statementId, pairs);
@@ -88,12 +81,7 @@ public class StatementMatchService {
   @Transactional
   public void rejectCandidate(long statementId, long statementLineId, long postingId) {
     LineReview line = lineOf(statementId, statementLineId);
-    boolean offered =
-        line.status() != LineStatus.MATCHED
-            && line.candidates().stream().anyMatch(p -> p.candidate().postingId() == postingId);
-    if (!offered) {
-      throw new StatementFormatException(STALE);
-    }
+    requireOffered(line, postingId, p -> true);
     matchRepository.insertExclusion(statementLineId, postingId);
   }
 
@@ -133,6 +121,17 @@ public class StatementMatchService {
         .filter(l -> l.line().statementLineId() == statementLineId)
         .findFirst()
         .orElseThrow(() -> new StatementFormatException(STALE));
+  }
+
+  private static void requireOffered(
+      LineReview line, long postingId, Predicate<ProposedCandidate> eligible) {
+    boolean offered =
+        line.status() != LineStatus.MATCHED
+            && line.candidates().stream()
+                .anyMatch(p -> eligible.test(p) && p.candidate().postingId() == postingId);
+    if (!offered) {
+      throw new StatementFormatException(STALE);
+    }
   }
 
   private void confirm(long statementId, List<Pair> pairs) {

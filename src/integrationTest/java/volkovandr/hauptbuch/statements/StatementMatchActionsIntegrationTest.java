@@ -137,7 +137,12 @@ class StatementMatchActionsIntegrationTest {
     mockMvc
         .perform(post("/statements/" + statementId + "/accept-all"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(flash().attribute("notice", expectedMatched + " lines matched."));
+        .andExpect(
+            flash()
+                .attribute(
+                    "notice",
+                    expectedMatched
+                        + (expectedMatched == 1 ? " line matched." : " lines matched.")));
   }
 
   @Test

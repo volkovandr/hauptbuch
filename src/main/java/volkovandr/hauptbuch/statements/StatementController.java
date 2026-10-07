@@ -4,9 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Locale;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.MultiValueMap;
@@ -27,7 +25,6 @@ import volkovandr.hauptbuch.web.NavItem;
  * statement. Accept, pick, Unmatch and the overlap decision are the match actions of slice c2; the
  * dock arrives with slice d.
  */
-@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Controller
 class StatementController {
 
@@ -162,8 +159,11 @@ class StatementController {
     model.addAttribute("lines", statementService.lines(id).stream().map(LineView::of).toList());
     StatementReview review = reviewService.review(id);
     model.addAttribute("review", review);
-    model.addAttribute("reviewLines", review.lines().stream().map(ReviewLineView::of).toList());
-    model.addAttribute("reviewExtras", review.extras().stream().map(ExtraView::of).toList());
+    model.addAttribute(
+        "reviewLines",
+        review.lines().stream().map(StatementReviewViews.ReviewLineView::of).toList());
+    model.addAttribute(
+        "reviewExtras", review.extras().stream().map(StatementReviewViews.ExtraView::of).toList());
     return "statement";
   }
 
@@ -212,14 +212,13 @@ class StatementController {
   /** Confirm every unambiguous exact proposal. */
   @PostMapping(BASE_PATH + "/{id}/accept-all")
   String acceptAll(@PathVariable long id, RedirectAttributes redirectAttributes) {
-    return saved(
-        id,
+    attempt(
         () -> {
           int matched = matchService.acceptAllExact(id);
-          redirectAttributes.addFlashAttribute(NOTICE, matched + " lines matched.");
+          return matched + (matched == 1 ? " line matched." : " lines matched.");
         },
-        null,
         redirectAttributes);
+    return REDIRECT_BASE + "/" + id;
   }
 
   /** An overlapping candidate is "a different transaction that looks the same". */
@@ -257,27 +256,33 @@ class StatementController {
       @PathVariable long id,
       @RequestParam(defaultValue = "keep") String reconciliation,
       RedirectAttributes redirectAttributes) {
-    try {
-      matchService.deleteStatement(id, "reset".equals(reconciliation));
-    } catch (StatementFormatException e) {
-      redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
-      return REDIRECT_BASE;
-    }
-    redirectAttributes.addFlashAttribute(NOTICE, "Statement deleted. The file stays on the Pi.");
+    attempt(
+        () -> {
+          matchService.deleteStatement(id, "reset".equals(reconciliation));
+          return "Statement deleted. The file stays on the Pi.";
+        },
+        redirectAttributes);
     return REDIRECT_BASE;
   }
 
   private String saved(
       long id, Runnable save, String message, RedirectAttributes redirectAttributes) {
+    attempt(
+        () -> {
+          save.run();
+          return message;
+        },
+        redirectAttributes);
+    return REDIRECT_BASE + "/" + id;
+  }
+
+  /** Run an action, flashing its notice, or the reason the operator's input was refused. */
+  private static void attempt(Supplier<String> action, RedirectAttributes redirectAttributes) {
     try {
-      save.run();
-      if (message != null) {
-        redirectAttributes.addFlashAttribute(NOTICE, message);
-      }
+      redirectAttributes.addFlashAttribute(NOTICE, action.get());
     } catch (StatementFormatException e) {
       redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
     }
-    return REDIRECT_BASE + "/" + id;
   }
 
   /**
@@ -297,10 +302,6 @@ class StatementController {
                     params.getFirst("description_" + id),
                     params.getFirst("bankCategory_" + id)))
         .toList();
-  }
-
-  private static String number(BigDecimal value) {
-    return value == null ? "" : MoneyFormat.number(value, AMOUNT_DIGITS);
   }
 
   /** A line as the grid shows it: dates as ISO text, the amount German-formatted. */
@@ -329,109 +330,11 @@ class StatementController {
     }
   }
 
-  /** A line as the matcher sees it: status, and a one-line account of its match or proposals. */
-  record ReviewLineView(
-      long lineId,
-      String bookingDate,
-      String amount,
-      String text,
-      String status,
-      String statusClass,
-      List<String> details,
-      List<Pick> picks,
-      boolean canUnmatch,
-      boolean overlap) {
-
-    static ReviewLineView of(LineReview review) {
-      StatementLine line = review.line();
-      return new ReviewLineView(
-          line.statementLineId(),
-          date(line.bookingDate()),
-          number(line.amount()),
-          text(line),
-          review.status().label(),
-          "statement-status--" + review.status().name().toLowerCase(Locale.ROOT),
-          details(review),
-          picks(review),
-          review.match() != null,
-          review.status() == LineStatus.OVERLAP);
-    }
-
-    /** The equal-amount candidates the operator can confirm here; the rest need the dock. */
-    private static List<Pick> picks(LineReview review) {
-      boolean single = review.status() == LineStatus.EXACT || review.status() == LineStatus.OVERLAP;
-      return review.candidates().stream()
-          .filter(p -> p.tier() == ProposedCandidate.Tier.EXACT)
-          .map(
-              p ->
-                  new Pick(
-                      p.candidate().postingId(),
-                      single
-                          ? null
-                          : describe(
-                              p.candidate().transactionDate(),
-                              p.candidate().payeeName(),
-                              p.candidate().amount(),
-                              suffix(p))))
-          .toList();
-    }
-
-    private static String text(StatementLine line) {
-      return Stream.of(line.counterparty(), line.description())
-          .filter(t -> t != null && !t.isBlank())
-          .collect(Collectors.joining(" · "));
-    }
-
-    private static List<String> details(LineReview review) {
-      if (review.match() != null) {
-        StatementMatch m = review.match();
-        return List.of(describe(m.transactionDate(), m.payeeName(), m.amount(), null));
-      }
-      if (review.line().problem() != null) {
-        return List.of(review.line().problem());
-      }
-      return review.candidates().stream()
-          .map(
-              p ->
-                  describe(
-                      p.candidate().transactionDate(),
-                      p.candidate().payeeName(),
-                      p.candidate().amount(),
-                      suffix(p)))
-          .toList();
-    }
+  static String number(BigDecimal value) {
+    return value == null ? "" : MoneyFormat.number(value, AMOUNT_DIGITS);
   }
 
-  /** A candidate to confirm; {@code label} is null when it is the line's only one. */
-  record Pick(long postingId, String label) {}
-
-  /** An extra, with its boundary label. */
-  record ExtraView(String date, String payee, String note, String amount, String boundary) {
-
-    static ExtraView of(ExtraReview review) {
-      StatementExtra e = review.extra();
-      return new ExtraView(
-          StatementController.date(e.transactionDate()),
-          e.payeeName() == null ? "" : e.payeeName(),
-          e.note() == null ? "" : e.note(),
-          number(e.amount()),
-          review.boundary().label());
-    }
-  }
-
-  private static String suffix(ProposedCandidate proposed) {
-    if (proposed.tier() == ProposedCandidate.Tier.WRONG_ACCOUNT) {
-      return "on " + proposed.candidate().accountName();
-    }
-    return proposed.candidate().matchedElsewhere() ? "(matched on another statement)" : null;
-  }
-
-  private static String describe(LocalDate date, String payee, BigDecimal amount, String suffix) {
-    String text = date(date) + " " + (payee == null ? "(no payee)" : payee) + " " + number(amount);
-    return suffix == null ? text : text + " " + suffix;
-  }
-
-  private static String date(LocalDate date) {
+  static String date(LocalDate date) {
     return date == null ? "" : date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
   }
 }
