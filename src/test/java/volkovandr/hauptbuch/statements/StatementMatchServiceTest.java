@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.statements;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.inOrder;
@@ -193,15 +194,55 @@ class StatementMatchServiceTest {
   }
 
   @Test
-  void unmatchRemovesTheMatchesOnThePostingAndUnreconcilesIt() {
+  void unmatchRemovesThisStatementsMatchAndUnreconcilesPostingNoOtherStatementMatches() {
     reviewing(
         new LineReview(line(LINE_ID), LineStatus.MATCHED, match(LINE_ID, POSTING), List.of()));
+    when(matchRepository.deleteMatchesOfLines(STATEMENT, List.of(LINE_ID)))
+        .thenReturn(List.of(POSTING));
+    when(matchRepository.postingsWithoutMatch(List.of(POSTING))).thenReturn(List.of(POSTING));
 
     service.unmatch(STATEMENT, LINE_ID);
 
     InOrder order = inOrder(matchRepository, ledgerService);
-    order.verify(matchRepository).deleteMatchesOnPostings(List.of(POSTING));
+    order.verify(matchRepository).deleteMatchesOfLines(STATEMENT, List.of(LINE_ID));
     order.verify(ledgerService).markUnreconciled(List.of(POSTING));
+  }
+
+  @Test
+  void unmatchLeavesPostingAnotherStatementStillMatchesReconciled() {
+    reviewing(
+        new LineReview(line(LINE_ID), LineStatus.MATCHED, match(LINE_ID, POSTING), List.of()));
+    when(matchRepository.deleteMatchesOfLines(STATEMENT, List.of(LINE_ID)))
+        .thenReturn(List.of(POSTING));
+    when(matchRepository.postingsWithoutMatch(List.of(POSTING))).thenReturn(List.of());
+
+    service.unmatch(STATEMENT, LINE_ID);
+
+    verify(ledgerService).markUnreconciled(List.of());
+  }
+
+  @Test
+  void savingLinesUnmatchesTheLinesWhoseDateOrAmountChanged() {
+    List<LineEdit> edits = List.of(new LineEdit(LINE_ID, "2026-05-21", "", "-3,50", "", "", ""));
+    when(statementService.updateLines(STATEMENT, edits)).thenReturn(List.of(line(LINE_ID)));
+    when(matchRepository.deleteMatchesOfLines(STATEMENT, List.of(LINE_ID)))
+        .thenReturn(List.of(POSTING));
+    when(matchRepository.postingsWithoutMatch(List.of(POSTING))).thenReturn(List.of(POSTING));
+
+    service.saveLines(STATEMENT, edits);
+
+    verify(ledgerService).markUnreconciled(List.of(POSTING));
+  }
+
+  @Test
+  void savingLinesWithOnlyTextEditsLeavesEveryMatch() {
+    List<LineEdit> edits = List.of(new LineEdit(LINE_ID, "2026-05-20", "", "-3,50", "X", "", ""));
+    when(statementService.updateLines(STATEMENT, edits)).thenReturn(List.of());
+
+    service.saveLines(STATEMENT, edits);
+
+    verify(matchRepository, never()).deleteMatchesOnPostings(any());
+    verify(ledgerService, never()).markUnreconciled(List.of(POSTING));
   }
 
   @Test

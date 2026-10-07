@@ -86,19 +86,30 @@ public class StatementMatchService {
   }
 
   /**
-   * Unmatch a line: its match goes — and with it every match on that posting, on any statement,
-   * since a match needs a {@code reconciled} leg — and the posting becomes {@code unreconciled}
-   * (statements.md §5), even a Money-imported {@code R}.
+   * Unmatch a line: this statement's match goes and the posting becomes {@code unreconciled}
+   * (statements.md §5), even a Money-imported {@code R} — unless another statement still matches
+   * it, which this does not touch.
    */
   @Transactional
   public void unmatch(long statementId, long statementLineId) {
-    StatementMatch match = lineOf(statementId, statementLineId).match();
-    if (match == null) {
+    if (lineOf(statementId, statementLineId).match() == null) {
       throw new StatementFormatException("That line has no match to remove.");
     }
-    matchRepository.deleteMatchesOnPostings(List.of(match.postingId()));
-    ledgerService.markUnreconciled(List.of(match.postingId()));
+    removeMatches(statementId, List.of(statementLineId));
     LOG.debug("Unmatched line {} of statement {}", statementLineId, statementId);
+  }
+
+  /**
+   * Save the edited line grid. A matched line whose booking date or amount changed is no longer the
+   * line the match was made on, so it is unmatched like {@link #unmatch}; text edits keep matches.
+   */
+  @Transactional
+  public void saveLines(long statementId, List<LineEdit> edits) {
+    List<Long> changed =
+        statementService.updateLines(statementId, edits).stream()
+            .map(StatementLine::statementLineId)
+            .toList();
+    removeMatches(statementId, changed);
   }
 
   /**
@@ -121,6 +132,11 @@ public class StatementMatchService {
         .filter(l -> l.line().statementLineId() == statementLineId)
         .findFirst()
         .orElseThrow(() -> new StatementFormatException(STALE));
+  }
+
+  private void removeMatches(long statementId, List<Long> lineIds) {
+    List<Long> postings = matchRepository.deleteMatchesOfLines(statementId, lineIds);
+    ledgerService.markUnreconciled(matchRepository.postingsWithoutMatch(postings));
   }
 
   private static void requireOffered(

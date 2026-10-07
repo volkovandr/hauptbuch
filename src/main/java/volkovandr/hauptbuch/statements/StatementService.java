@@ -154,33 +154,34 @@ public class StatementService {
   }
 
   /**
-   * Save the edited line grid. Every row is read first, so one unreadable entry saves nothing. A
-   * matched line keeps its booking date and amount — the match was made on them — until it is
-   * unmatched (statements.md §5).
+   * Save the edited line grid. Every row is read first, so one unreadable entry saves nothing.
    *
-   * @throws StatementFormatException naming the row that cannot be read, or the matched line whose
-   *     date or amount was changed
+   * @return the saved lines whose booking date or amount changed — {@link StatementMatchService}
+   *     unmatches the matched ones
+   * @throws StatementFormatException naming the row that cannot be read
    */
   @Transactional
-  public void updateLines(long statementId, List<LineEdit> edits) {
+  public List<StatementLine> updateLines(long statementId, List<LineEdit> edits) {
     get(statementId);
+    List<StatementLine> existing = lineRepository.findByStatement(statementId);
     List<StatementLine> updated =
-        lineRepository.findByStatement(statementId).stream()
+        existing.stream()
             .flatMap(
                 old ->
                     edits.stream()
                         .filter(edit -> edit.statementLineId() == old.statementLineId())
-                        .map(edit -> edit.applyTo(old))
-                        .peek(line -> refuseChangeToMatched(old, line)))
+                        .map(edit -> edit.applyTo(old)))
             .toList();
     updated.forEach(line -> lineRepository.update(statementId, line));
-  }
-
-  private void refuseChangeToMatched(StatementLine old, StatementLine edited) {
-    if (!old.sameDateAndAmount(edited) && lineRepository.isMatched(old.statementLineId())) {
-      throw new StatementFormatException(
-          "A matched line keeps its date and amount. Unmatch it before changing them.");
-    }
+    return updated.stream()
+        .filter(
+            line ->
+                existing.stream()
+                    .noneMatch(
+                        old ->
+                            old.statementLineId().equals(line.statementLineId())
+                                && old.sameDateAndAmount(line)))
+        .toList();
   }
 
   /**

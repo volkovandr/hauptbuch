@@ -201,11 +201,14 @@ There is no snapshot to go stale and no stored "done" state.
 - **A confirmed match sets the posting to `reconciled`** — from `unreconciled` or `cleared` — and
   **confirms a `pending_review` transaction** (a recurring occurrence, a receipt placeholder). This
   flow **never sets `cleared`**; the state stays for manual use and for Money's imported `C` values.
-- **A match exists only on a `reconciled` posting.** Whatever drops a posting out of `reconciled` drops
-  its matches with it: an edit that changes the leg's amount or moves it to another account (data-model
-  §3.6, ADR 0003), voiding the transaction, or Unmatch.
-- **Unmatch** (one line, a match made by mistake) removes the match and **sets the posting to
-  `unreconciled`** — even a Money-`R` posting; it will normally be matched to the right line at once.
+- **A match exists only on a `reconciled` posting.** Whatever drops a posting out of `reconciled` from
+  the ledger side drops its matches, on every statement, with it: an edit that changes the leg's
+  amount or moves it to another account (data-model §3.6, ADR 0003), or voiding the transaction.
+- **Unmatch** (one line, a match made by mistake) removes **that statement's** match only. The
+  posting goes back to `unreconciled` — even a Money-`R` posting; it will normally be matched to the
+  right line at once — unless another statement still matches it, in which case it stays `reconciled`.
+- **Editing a matched line's booking date or amount** (the line grid) unmatches it the same way when
+  saved; the page says so beside Save. Text fields never affect a match.
 - **Deleting a statement** removes its matches and **asks** whether its postings stay `reconciled` or
   go back to `unreconciled`. The rows are soft-deleted; the file stays on the Pi unless the operator
   chooses to remove it.
