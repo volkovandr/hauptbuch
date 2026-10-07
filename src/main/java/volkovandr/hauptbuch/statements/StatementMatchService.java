@@ -21,7 +21,8 @@ import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
 public class StatementMatchService {
 
   private static final Logger LOG = LoggerFactory.getLogger(StatementMatchService.class);
-  private static final String STALE = "That proposal is no longer available. The page was reloaded.";
+  private static final String STALE =
+      "That proposal is no longer available. The page was reloaded.";
 
   private final StatementReviewService reviewService;
   private final StatementService statementService;
@@ -52,8 +53,7 @@ public class StatementMatchService {
     boolean offered =
         line.status() != LineStatus.MATCHED
             && line.candidates().stream()
-                .anyMatch(
-                    p -> p.tier() == Tier.EXACT && p.candidate().postingId() == postingId);
+                .anyMatch(p -> p.tier() == Tier.EXACT && p.candidate().postingId() == postingId);
     if (!offered) {
       throw new StatementFormatException(STALE);
     }
@@ -71,7 +71,9 @@ public class StatementMatchService {
     List<Pair> pairs = new ArrayList<>();
     for (LineReview line : reviewService.review(statementId).lines()) {
       if (line.status() == LineStatus.EXACT) {
-        pairs.add(new Pair(line.line().statementLineId(), line.candidates().get(0).candidate().postingId()));
+        pairs.add(
+            new Pair(
+                line.line().statementLineId(), line.candidates().get(0).candidate().postingId()));
       }
     }
     confirm(statementId, pairs);

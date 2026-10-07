@@ -31,10 +31,10 @@ import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.ledger.TransactionDraft;
 
 /**
- * Integration tier (CLAUDE.md §6): the match actions of slice c2 driven through MockMvc against real
- * Postgres, on the sample CSV of {@link StatementFixtures} — Accept all exact, a pick, Unmatch, the
- * overlap decision, delete with the keep/reset question, and the ledger's side effects (a pending
- * transaction is confirmed, an amount edit drops the match). Each test is rolled back.
+ * Integration tier (CLAUDE.md §6): the match actions of slice c2 driven through MockMvc against
+ * real Postgres, on the sample CSV of {@link StatementFixtures} — Accept all exact, a pick,
+ * Unmatch, the overlap decision, delete with the keep/reset question, and the ledger's side effects
+ * (a pending transaction is confirmed, an amount edit drops the match). Each test is rolled back.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -51,7 +51,6 @@ class StatementMatchActionsIntegrationTest {
 
   private long accountId;
   private long foodId;
-  private long incomeId;
   private long statementId;
   private long shopTxn;
   private long shopLeg;
@@ -74,7 +73,7 @@ class StatementMatchActionsIntegrationTest {
             .accountId();
     accountService.updateDetection(accountId, "XX00 1111 2222", false);
     foodId = accountService.insertLeaf("Food", "expense", null, "EUR").accountId();
-    incomeId = accountService.insertLeaf("Salary", "income", null, "EUR").accountId();
+    long incomeId = accountService.insertLeaf("Salary", "income", null, "EUR").accountId();
     shopTxn = book("2026-05-01", "-12.50", foodId, "confirmed");
     salaryTxn = book("2026-05-05", "1234.56", incomeId, "pending_review");
     shopLeg = legOn(shopTxn);
@@ -134,25 +133,26 @@ class StatementMatchActionsIntegrationTest {
         .single();
   }
 
-  private void acceptAll() throws Exception {
+  private void acceptAll(int expectedMatched) throws Exception {
     mockMvc
         .perform(post("/statements/" + statementId + "/accept-all"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(flash().attribute("notice", "2 lines matched."));
+        .andExpect(flash().attribute("notice", expectedMatched + " lines matched."));
   }
 
   @Test
-  void pageOffersAcceptAllAndAPerLineAccept() throws Exception {
+  void pageOffersAcceptAllAndPerLineAccept() throws Exception {
     mockMvc
         .perform(get("/statements/" + statementId))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("Accept all exact (")))
-        .andExpect(content().string(containsString("/lines/" + lineWithAmount("-12.50") + "/accept")));
+        .andExpect(
+            content().string(containsString("/lines/" + lineWithAmount("-12.50") + "/accept")));
   }
 
   @Test
   void acceptAllExactReconcilesTheLegsAndConfirmsThePendingTransaction() throws Exception {
-    acceptAll();
+    acceptAll(2);
 
     assertThat(matchCount()).isEqualTo(2);
     assertThat(reconciliationOf(shopLeg)).isEqualTo("reconciled");
@@ -180,7 +180,7 @@ class StatementMatchActionsIntegrationTest {
   }
 
   @Test
-  void acceptingAPostingThatIsNotACandidateIsRefused() throws Exception {
+  void acceptingPostingThatIsNotCandidateIsRefused() throws Exception {
     mockMvc
         .perform(
             post("/statements/" + statementId + "/lines/" + lineWithAmount("-12.50") + "/accept")
@@ -192,7 +192,7 @@ class StatementMatchActionsIntegrationTest {
 
   @Test
   void unmatchSetsThePostingBackToUnreconciled() throws Exception {
-    acceptAll();
+    acceptAll(2);
 
     mockMvc
         .perform(
@@ -205,8 +205,8 @@ class StatementMatchActionsIntegrationTest {
   }
 
   @Test
-  void editingTheAmountOfAMatchedLegDropsTheMatch() throws Exception {
-    acceptAll();
+  void editingTheAmountOfMatchedLegDropsTheMatch() throws Exception {
+    acceptAll(2);
 
     ledgerService.editTransaction(
         shopTxn,
@@ -265,7 +265,7 @@ class StatementMatchActionsIntegrationTest {
 
   @Test
   void deleteKeepingReconciledRemovesTheMatchesOnly() throws Exception {
-    acceptAll();
+    acceptAll(2);
 
     mockMvc
         .perform(post("/statements/" + statementId + "/delete").param("reconciliation", "keep"))
@@ -278,7 +278,7 @@ class StatementMatchActionsIntegrationTest {
   @Test
   void deleteWithResetUnreconcilesExceptWhatAnotherStatementStillMatches() throws Exception {
     earlierStatementMatching(shopLeg);
-    acceptAll();
+    acceptAll(1);
 
     mockMvc
         .perform(post("/statements/" + statementId + "/delete").param("reconciliation", "reset"))

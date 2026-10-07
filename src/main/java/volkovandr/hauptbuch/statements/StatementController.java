@@ -27,6 +27,7 @@ import volkovandr.hauptbuch.web.NavItem;
  * statement. Accept, pick, Unmatch and the overlap decision are the match actions of slice c2; the
  * dock arrives with slice d.
  */
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Controller
 class StatementController {
 
@@ -248,8 +249,8 @@ class StatementController {
 
   /**
    * Delete the statement, removing its matches; {@code reconciliation} is {@code keep} (the
-   * postings stay reconciled) or {@code reset} (they go back to unreconciled). The file stays on the
-   * Pi.
+   * postings stay reconciled) or {@code reset} (they go back to unreconciled). The file stays on
+   * the Pi.
    */
   @PostMapping(BASE_PATH + "/{id}/delete")
   String delete(
