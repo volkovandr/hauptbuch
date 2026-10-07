@@ -173,7 +173,7 @@ class StatementDockIntegrationTest {
   }
 
   @Test
-  void bankSignWinsOverTheCategoryDirectionSoAPositiveLineOnAnExpenseIsARefund() throws Exception {
+  void bankSignWinsOverTheCategoryDirectionSoPositiveLineOnExpenseIsRefund() throws Exception {
     mockMvc
         .perform(
             post(url(salaryLine, "create"))
@@ -183,7 +183,8 @@ class StatementDockIntegrationTest {
 
     BigDecimal foodLeg =
         jdbcClient
-            .sql("select amount from posting where account_id in (select account_id from account"
+            .sql(
+                "select amount from posting where account_id in (select account_id from account"
                     + " where parent_id = :f or account_id = :f)")
             .param("f", foodId)
             .query(BigDecimal.class)
@@ -192,7 +193,7 @@ class StatementDockIntegrationTest {
   }
 
   @Test
-  void saveWithoutACategoryBooksNothingAndReopensTheDock() throws Exception {
+  void saveWithoutCategoryBooksNothingAndReopensTheDock() throws Exception {
     mockMvc
         .perform(post(url(shopLine, "create")).param("date", "2026-05-02"))
         .andExpect(status().is3xxRedirection())

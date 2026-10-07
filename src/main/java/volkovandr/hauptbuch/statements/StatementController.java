@@ -25,8 +25,7 @@ import volkovandr.hauptbuch.web.NavItem;
  * the operator to confirm the account the file points at; the statement page corrects the period,
  * the balances and the lines, shows what the matcher proposes (slice c1), and deletes the
  * statement. Accept, pick, Unmatch and the overlap decision are the match actions of slice c2; the
- * dock (slice d) opens on a missing line
- * and books it.
+ * dock (slice d) opens on a missing line and books it.
  */
 @Controller
 class StatementController {

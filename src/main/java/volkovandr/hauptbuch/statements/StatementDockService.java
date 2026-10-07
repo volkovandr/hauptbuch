@@ -24,7 +24,6 @@ public class StatementDockService {
 
   private static final String STALE = "That line is no longer missing. The page was reloaded.";
 
-  private final StatementReviewService reviewService;
   private final StatementService statementService;
   private final StatementMatchService matchService;
   private final PayeeService payeeService;
@@ -33,14 +32,12 @@ public class StatementDockService {
   private final LedgerService ledgerService;
 
   StatementDockService(
-      StatementReviewService reviewService,
       StatementService statementService,
       StatementMatchService matchService,
       PayeeService payeeService,
       DockPrefillService dockPrefillService,
       DockCommitService dockCommitService,
       LedgerService ledgerService) {
-    this.reviewService = reviewService;
     this.statementService = statementService;
     this.matchService = matchService;
     this.payeeService = payeeService;

@@ -501,7 +501,6 @@ class RepositoryRoundTripIntegrationTest {
 
   @Test
   void findLongestNameInPicksTheLongestLiveNameFoundInTheText() {
-    long shop = payeeRepository.insert("Shop", null, null);
     long shopAaa = payeeRepository.insert("ShopAaa", "Berlin", null);
     long gone = payeeRepository.insert("ShopAaa Berlin Central", null, null);
     jdbcClient
@@ -515,6 +514,7 @@ class RepositoryRoundTripIntegrationTest {
         .get()
         .extracting(Payee::payeeId)
         .isEqualTo(shopAaa);
+    long shop = payeeRepository.insert("Shop", null, null);
     assertThat(payeeRepository.findLongestNameIn("a shop somewhere"))
         .get()
         .extracting(Payee::payeeId)
