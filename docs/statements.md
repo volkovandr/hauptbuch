@@ -177,8 +177,12 @@ counterparty or description text (`ShopAaa` in `SHOPAAA SAGT DANKE 4711`). Nothi
 
 ### 4.4 Exclusivity and overlaps
 
-- Within one statement a posting is **proposed to at most one line**: the best tier wins, then the
-  closest booking date, and the other line falls to its next candidate, or to ambiguous or missing.
+- Within one statement a posting is proposed to **the lines of its best tier**. For the lower tiers
+  (amount differs, wrong account) that is one line — the closest booking date wins. An **exact**
+  posting is offered to **every** line it is exact for: the date is a weak signal, so the operator
+  decides. Such a line is *competing* (it fits another line too): it has Accept, and **Accept all
+  exact skips it**. Once one line takes the posting the others lose it and fall to their next
+  candidate, or to missing.
 - Matching is **1:1** — one line, one posting. A line that covers two ledger transactions, or two lines
   that cover one, is out of scope in v1.
 - CSVs can be pulled for any range, so two statements of the same account may **overlap**. A posting
@@ -203,7 +207,8 @@ There is no snapshot to go stale and no stored "done" state.
   flow **never sets `cleared`**; the state stays for manual use and for Money's imported `C` values.
 - **A match exists only on a `reconciled` posting.** Whatever drops a posting out of `reconciled` from
   the ledger side drops its matches, on every statement, with it: an edit that changes the leg's
-  amount or moves it to another account (data-model §3.6, ADR 0003), or voiding the transaction.
+  amount or its **date**, moves it to another account (data-model §3.6, ADR 0003), or voiding the
+  transaction. A date change drops every `reconciled` leg of the transaction.
 - **Unmatch** (one line, a match made by mistake) removes **that statement's** match only. The
   posting goes back to `unreconciled` — even a Money-`R` posting; it will normally be matched to the
   right line at once — unless another statement still matches it, in which case it stays `reconciled`.
@@ -240,7 +245,7 @@ remainder. Only the unexplained remainder counts. A CSV statement without balanc
 
 - **Lines table** — one row per line with its status: *matched* ✓, an *exact* proposal (Accept), a
   candidate list (pick one — the wrong-account tier included), or *missing* (Create). **Accept all
-  exact** confirms every unambiguous exact proposal at once.
+  exact** confirms every unambiguous exact proposal at once — not a competing one (§4.4).
 - **Extras table** — postings on the account, dated in the period, **not matched** to this statement and
   **not `reconciled`** (and not already proposed to a line, which shows them), shown as register-style rows with Edit / Move to account / Void. A `reconciled`
   posting is never an extra: a transaction booked in May but valued by the bank in June is an extra on

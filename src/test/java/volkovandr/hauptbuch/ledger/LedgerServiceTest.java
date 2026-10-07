@@ -583,7 +583,7 @@ class LedgerServiceTest {
 
   private void editTo(PostingDraft... legs) {
     ledgerService.editTransaction(
-        80L, TransactionDraft.confirmed(LocalDate.of(2026, 6, 2), null, "edited", List.of(legs)));
+        80L, TransactionDraft.confirmed(LocalDate.of(2026, 6, 1), null, "edited", List.of(legs)));
   }
 
   private Posting capturedUpdate() {
@@ -628,6 +628,52 @@ class LedgerServiceTest {
     ArgumentCaptor<Posting> updated = ArgumentCaptor.forClass(Posting.class);
     verify(transactionRepository, times(2)).updatePosting(updated.capture());
     assertThat(updated.getAllValues().get(0).reconciliation()).isEqualTo("cleared");
+  }
+
+  @Test
+  void editDropsEveryReconciledLegWhenOnlyTheDateChangesAndReportsThem() {
+    stubEditOf(80L, "confirmed");
+    stubExistingLegs(
+        existingLeg(700L, CASH_EUR, MINUS_5, "reconciled"),
+        existingLeg(701L, FOOD_EUR, "5.00", "unreconciled"));
+
+    ledgerService.editTransaction(
+        80L,
+        TransactionDraft.confirmed(
+            LocalDate.of(2026, 6, 2),
+            null,
+            null,
+            List.of(
+                PostingDraft.of(CASH_EUR, new BigDecimal(MINUS_5)),
+                PostingDraft.of(FOOD_EUR, new BigDecimal("5.00")))));
+
+    ArgumentCaptor<Posting> updated = ArgumentCaptor.forClass(Posting.class);
+    verify(transactionRepository, times(2)).updatePosting(updated.capture());
+    assertThat(updated.getAllValues())
+        .extracting(Posting::reconciliation)
+        .containsOnly("unreconciled");
+    assertThat(droppedReports).containsExactly(List.of(700L));
+  }
+
+  @Test
+  void editWithTheSameDateLeavesReconciledLegsAlone() {
+    stubEditOf(80L, "confirmed");
+    stubExistingLegs(
+        existingLeg(700L, CASH_EUR, MINUS_5, "reconciled"),
+        existingLeg(701L, FOOD_EUR, "5.00", "unreconciled"));
+
+    editTo(
+        PostingDraft.of(CASH_EUR, new BigDecimal(MINUS_5)),
+        PostingDraft.of(FOOD_EUR, new BigDecimal("5.00")));
+
+    assertThat(capturedUpdates().get(0).reconciliation()).isEqualTo("reconciled");
+    assertThat(droppedReports).isEmpty();
+  }
+
+  private List<Posting> capturedUpdates() {
+    ArgumentCaptor<Posting> updated = ArgumentCaptor.forClass(Posting.class);
+    verify(transactionRepository, times(2)).updatePosting(updated.capture());
+    return updated.getAllValues();
   }
 
   @Test

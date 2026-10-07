@@ -317,19 +317,20 @@ public class LedgerService {
             existing.createdAt(),
             null,
             null));
-    reThreadLegs(transactionId, balanced.legs());
+    reThreadLegs(transactionId, balanced.legs(), !existing.date().equals(draft.date()));
     recordEnteredRates(draft.date(), balanced.legs(), baseCurrency);
     LOG.debug("Transaction edited: id={}, total={}", transactionId, balanced.debitTotal());
   }
 
   /** Carry out the {@link LegEdit} of an edited transaction's legs (ADR 0003). */
-  private void reThreadLegs(long transactionId, List<PostingDraft> newLegs) {
+  private void reThreadLegs(long transactionId, List<PostingDraft> newLegs, boolean dateChanged) {
     LegEdit edit =
         LegEdit.plan(
             transactionId,
             transactionRepository.findPostings(transactionId),
             newLegs,
-            accountId -> isRealOwnAccount(accountService.findById(accountId).orElseThrow()));
+            accountId -> isRealOwnAccount(accountService.findById(accountId).orElseThrow()),
+            dateChanged);
     for (LegEdit.Update update : edit.updates()) {
       long postingId = update.leg().postingId();
       transactionRepository.updatePosting(update.leg());

@@ -34,6 +34,7 @@ match 1:1 by construction.
   inversion recurring already uses for person merges; `ledger` never learns about statements.
 - **Posting ids are now stable across edits.** Anything that later references a posting (rules engine,
   learned mappings) can rely on it; before this, a reference survived only until the next edit.
-- **A changed amount always costs the reconciled state.** Re-reconciling is the honest consequence of
+- **A changed amount — or, added 2026-10-07, a changed transaction date — always costs the
+  reconciled state.** Re-reconciling is the honest consequence of
   changing a figure the bank already confirmed; the statement page shows the line as no longer
   matched the next time it is opened.
