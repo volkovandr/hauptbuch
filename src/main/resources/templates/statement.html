@@ -2,7 +2,7 @@
 <!--
   The statement page, before matching (statements sub-plan slice b3): the header — period and the
   optional balances — and the line grid, both editable, and delete. A line with a problem is kept
-  and marked; it is never matched. Matching is shown live (slice c1); accepting and the dock arrive with slices c2–d. No
+  and marked; it is never matched. Matching is shown live (slice c1); accepting is slice c2, the dock slice d. No
   bespoke JS.
 -->
 <html
@@ -154,6 +154,17 @@
                 >
                   <button type="submit" class="btn">Unmatch</button>
                 </form>
+                <a
+                  th:if="${r.canCreate()}"
+                  class="btn"
+                  th:href="@{/statements/{id}(id=${statement.statementId()},dock=${r.lineId()})}"
+                  th:attr="hx-get=@{/statements/{id}(id=${statement.statementId()},dock=${r.lineId()})}"
+                  hx-target="main"
+                  hx-select="main"
+                  hx-swap="outerHTML"
+                  hx-push-url="true"
+                  >Create</a
+                >
               </td>
             </tr>
           </tbody>
@@ -188,6 +199,89 @@
           </tbody>
         </table>
       </div>
+    </section>
+
+    <!-- The dock (statements.md §6.4): a missing line's transaction, booked and matched in one go.
+         Category resolves through the shared /categories/resolve exactly as the register's dock. -->
+    <section class="panel" id="statement-dock" th:if="${dock != null}">
+      <p class="eyebrow">Create transaction</p>
+      <p class="muted">
+        <span th:text="${dock.bankText()}">SHOPAAA SAGT DANKE</span>
+      </p>
+      <form
+        class="entry-dock"
+        method="post"
+        th:action="@{/statements/{id}/lines/{line}/create(id=${statement.statementId()},line=${dock.lineId()})}"
+        th:attr="hx-post=@{/statements/{id}/lines/{line}/create(id=${statement.statementId()},line=${dock.lineId()})}"
+        hx-target="main"
+        hx-select="main"
+        hx-swap="outerHTML"
+      >
+        <div class="entry-dock__fields">
+          <div class="field">
+            <label class="field__label" for="dock-date">Date</label>
+            <input id="dock-date" name="date" type="date" class="input" th:value="${dock.date()}" required />
+          </div>
+          <div class="field">
+            <label class="field__label" for="dock-account">Account</label>
+            <input id="dock-account" class="input" th:value="${dock.accountName()}" readonly />
+          </div>
+          <div class="field">
+            <label class="field__label" for="dock-amount">Amount</label>
+            <input id="dock-amount" class="input input--amount" th:value="${dock.amount()}" readonly />
+          </div>
+          <div class="field">
+            <label class="field__label" for="dock-payee">Payee</label>
+            <input
+              id="dock-payee"
+              name="payeeText"
+              class="input"
+              list="dock-payee-options"
+              autocomplete="off"
+              th:value="${dock.payeeText()}"
+            />
+            <datalist id="dock-payee-options">
+              <option th:each="p : ${lists.payees()}" th:value="${p.entryValue()}"></option>
+            </datalist>
+          </div>
+          <div class="field">
+            <label class="field__label" for="dock-category">Category</label>
+            <input
+              id="dock-category"
+              name="categoryText"
+              class="input"
+              list="dock-category-options"
+              autocomplete="off"
+              placeholder="Food  ·  or  for Max"
+              th:value="${dock.categoryText()}"
+              hx-post="/categories/resolve"
+              hx-trigger="change"
+              hx-target="#entry-category-resolved"
+              hx-swap="innerHTML"
+            />
+            <datalist id="dock-category-options">
+              <option th:each="c : ${lists.categories()}" th:value="${c.name()}"></option>
+              <option th:each="t : ${lists.transferTargets()}" th:value="${t}"></option>
+              <option th:each="p : ${lists.personTargets()}" th:value="${p}"></option>
+            </datalist>
+            <span class="muted" th:if="${!dock.bankCategory().isEmpty()}">
+              Bank category: <span th:text="${dock.bankCategory()}">Groceries</span>
+            </span>
+          </div>
+          <div class="field">
+            <label class="field__label" for="dock-note">Note</label>
+            <input id="dock-note" name="note" class="input" autocomplete="off" />
+          </div>
+          <span id="entry-category-resolved" data-counterpart-resolved>
+            <input type="hidden" name="categoryId" th:value="${dock.categoryId()}" />
+          </span>
+          <span id="entry-ghost" class="entry-dock__ghost muted"></span>
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn btn--primary">Save and match</button>
+          <a class="btn btn--ghost" th:href="@{/statements/{id}(id=${statement.statementId()})}">Cancel</a>
+        </p>
+      </form>
     </section>
 
     <section class="panel">

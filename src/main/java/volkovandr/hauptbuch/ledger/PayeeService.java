@@ -59,6 +59,14 @@ public class PayeeService {
   }
 
   /**
+   * The live payee whose name is the longest one found inside {@code text} (a bank line's text), or
+   * empty when none is — the pre-fill of a statement line's payee (statements.md §6.4).
+   */
+  public Optional<Payee> longestNameIn(String text) {
+    return payeeRepository.findLongestNameIn(text);
+  }
+
+  /**
    * The {@code Name - City - Country} entry value for an existing payee (register §3.4) — the same
    * string the dock's datalist offers and the create-new parser round-trips, used to pre-fill the
    * payee input when a transaction is loaded into the dock's edit mode. Empty if the payee does not
