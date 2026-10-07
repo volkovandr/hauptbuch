@@ -248,22 +248,25 @@ class StatementServiceTest {
   }
 
   @Test
-  void matchedLineKeepsItsDateAndAmountButTextStaysEditable() {
+  void updateLinesReturnsOnlyLinesWhoseDateOrAmountChanged() {
     stubLive(1L);
     when(lineRepository.findByStatement(1L))
-        .thenReturn(List.of(withId(10L, line(0, LocalDate.of(2026, 5, 2), null))));
-    when(lineRepository.isMatched(10L)).thenReturn(true);
+        .thenReturn(
+            List.of(
+                withId(10L, line(0, LocalDate.of(2026, 5, 2), null)),
+                withId(11L, line(1, LocalDate.of(2026, 5, 2), null)),
+                withId(12L, line(2, LocalDate.of(2026, 5, 2), null))));
 
-    assertThatThrownBy(
-            () ->
-                service.updateLines(
-                    1L, List.of(new LineEdit(10L, "2026-05-03", "", "-1,00", "", "", ""))))
-        .hasMessage("A matched line keeps its date and amount. Unmatch it before changing them.");
-    verify(lineRepository, never()).update(any(Long.class), any());
+    List<StatementLine> changed =
+        service.updateLines(
+            1L,
+            List.of(
+                new LineEdit(10L, "2026-05-03", "", "-1,00", "ShopAaa", "Card", ""),
+                new LineEdit(11L, "2026-05-02", "", "-2,00", "ShopAaa", "Card", ""),
+                new LineEdit(12L, "2026-05-02", "", "-1,00", "Renamed", "Other", "Cat")));
 
-    service.updateLines(
-        1L, List.of(new LineEdit(10L, "2026-05-02", "", "-1,00", "ShopAaa", "", "")));
-    verify(lineRepository).update(eq(1L), any());
+    assertThat(changed).extracting(StatementLine::statementLineId).containsExactly(10L, 11L);
+    verify(lineRepository, org.mockito.Mockito.times(3)).update(eq(1L), any());
   }
 
   @Test

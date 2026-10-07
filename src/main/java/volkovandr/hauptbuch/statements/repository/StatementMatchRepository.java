@@ -182,6 +182,24 @@ public class StatementMatchRepository {
         .update();
   }
 
+  /** Remove the matches of these lines of the statement and return the postings they were on. */
+  public List<Long> deleteMatchesOfLines(long statementId, Collection<Long> lineIds) {
+    if (lineIds.isEmpty()) {
+      return List.of();
+    }
+    return jdbcClient
+        .sql(
+            """
+            delete from statement_match
+            where statement_id = :statementId and statement_line_id in (:lineIds)
+            returning posting_id
+            """)
+        .param(STATEMENT_ID, statementId)
+        .param("lineIds", lineIds)
+        .query(Long.class)
+        .list();
+  }
+
   /** Remove all of a statement's matches and return the postings that were matched. */
   public List<Long> deleteMatchesOfStatement(long statementId) {
     return jdbcClient

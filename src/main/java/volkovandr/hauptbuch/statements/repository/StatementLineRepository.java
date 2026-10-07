@@ -47,15 +47,6 @@ public class StatementLineRepository {
         .single();
   }
 
-  /** Whether the line has a confirmed match. */
-  public boolean isMatched(long statementLineId) {
-    return jdbcClient
-        .sql("select exists (select 1 from statement_match where statement_line_id = :lineId)")
-        .param("lineId", statementLineId)
-        .query(Boolean.class)
-        .single();
-  }
-
   /** The statement's lines in file order. */
   public List<StatementLine> findByStatement(long statementId) {
     return jdbcClient

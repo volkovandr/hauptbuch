@@ -192,10 +192,7 @@ class StatementController {
       @RequestParam MultiValueMap<String, String> params,
       RedirectAttributes redirectAttributes) {
     return saved(
-        id,
-        () -> statementService.updateLines(id, edits(params)),
-        "Lines saved.",
-        redirectAttributes);
+        id, () -> matchService.saveLines(id, edits(params)), "Lines saved.", redirectAttributes);
   }
 
   /** Confirm one candidate for a line (Accept, a pick, or "the same bank movement"). */
@@ -239,11 +236,7 @@ class StatementController {
   @PostMapping(BASE_PATH + "/{id}/lines/{lineId}/unmatch")
   String unmatch(
       @PathVariable long id, @PathVariable long lineId, RedirectAttributes redirectAttributes) {
-    return saved(
-        id,
-        () -> matchService.unmatch(id, lineId),
-        "Match removed; the posting is unreconciled.",
-        redirectAttributes);
+    return saved(id, () -> matchService.unmatch(id, lineId), "Match removed.", redirectAttributes);
   }
 
   /**

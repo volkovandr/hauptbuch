@@ -207,7 +207,13 @@
             </tbody>
           </table>
         </div>
-        <p class="actions"><button type="submit" class="btn">Save lines</button></p>
+        <p class="actions">
+          <button type="submit" class="btn">Save lines</button>
+          <span class="muted" th:if="${review.matched() > 0}">
+            Saving a changed date or amount on a matched line removes its match and makes its posting
+            unreconciled.
+          </span>
+        </p>
       </form>
     </section>
 

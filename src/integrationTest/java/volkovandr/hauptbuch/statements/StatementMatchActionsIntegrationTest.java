@@ -210,6 +210,72 @@ class StatementMatchActionsIntegrationTest {
   }
 
   @Test
+  void unmatchOnOneStatementLeavesAnotherStatementsMatchAndTheReconciliation() throws Exception {
+    earlierStatementMatching(shopLeg);
+    mockMvc
+        .perform(
+            post("/statements/" + statementId + "/lines/" + lineWithAmount("-12.50") + "/accept")
+                .param("posting", String.valueOf(shopLeg)))
+        .andExpect(status().is3xxRedirection());
+    assertThat(matchCount()).isEqualTo(2);
+
+    mockMvc
+        .perform(
+            post("/statements/" + statementId + "/lines/" + lineWithAmount("-12.50") + "/unmatch"))
+        .andExpect(status().is3xxRedirection());
+
+    assertThat(matchCount()).isEqualTo(1);
+    assertThat(reconciliationOf(shopLeg)).isEqualTo("reconciled");
+  }
+
+  @Test
+  void savingChangedAmountOnMatchedLineUnmatchesItButSavingTextDoesNot() throws Exception {
+    acceptAll(2);
+    long shopLine = lineWithAmount("-12.50");
+
+    saveLine(shopLine, "2026-05-02", "-12,50", "Renamed");
+    assertThat(matchCount()).isEqualTo(2);
+
+    saveLine(shopLine, "2026-05-02", "-13,00", "Renamed");
+
+    assertThat(matchCount()).isEqualTo(1);
+    assertThat(reconciliationOf(shopLeg)).isEqualTo("unreconciled");
+    assertThat(reconciliationOf(salaryLeg)).isEqualTo("reconciled");
+  }
+
+  @Test
+  void pageWarnsBesideSaveLinesOnlyWhenLineIsMatched() throws Exception {
+    assertThat(statementPage()).doesNotContain("makes its posting");
+
+    acceptAll(2);
+
+    assertThat(statementPage()).contains("makes its posting");
+  }
+
+  private String statementPage() throws Exception {
+    return mockMvc
+        .perform(get("/statements/" + statementId))
+        .andReturn()
+        .getResponse()
+        .getContentAsString();
+  }
+
+  private void saveLine(long lineId, String bookingDate, String amount, String counterparty)
+      throws Exception {
+    mockMvc
+        .perform(
+            post("/statements/" + statementId + "/lines")
+                .param("line", String.valueOf(lineId))
+                .param("bookingDate_" + lineId, bookingDate)
+                .param("valueDate_" + lineId, "")
+                .param("amount_" + lineId, amount)
+                .param("counterparty_" + lineId, counterparty)
+                .param("description_" + lineId, "")
+                .param("bankCategory_" + lineId, ""))
+        .andExpect(status().is3xxRedirection());
+  }
+
+  @Test
   void editingTheAmountOfMatchedLegDropsTheMatch() throws Exception {
     acceptAll(2);
 

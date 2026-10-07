@@ -20,6 +20,6 @@ recomputed.
 - Accept in c2 only confirms **equal-amount candidates on the statement's own account**
   (`exact`/`ambiguous`/`overlap`). Amount-differs and wrong-account candidates change the ledger
   and therefore go through the dock (slice d2).
-- Unmatch removes every match on the posting (a match needs a `reconciled` leg) and sets it
-  `unreconciled`. Deleting a statement with "reset" un-reconciles only postings no other statement
+- Unmatch removes that statement's match and, unless another statement still matches the posting,
+  sets it `unreconciled` (revised by `03-*`). Deleting a statement with "reset" un-reconciles only postings no other statement
   still matches.

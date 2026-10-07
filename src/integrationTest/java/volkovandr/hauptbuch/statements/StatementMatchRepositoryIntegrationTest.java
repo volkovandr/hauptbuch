@@ -11,7 +11,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
-import volkovandr.hauptbuch.statements.repository.StatementLineRepository;
 import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
 
 /**
@@ -25,7 +24,6 @@ import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
 class StatementMatchRepositoryIntegrationTest {
 
   @Autowired StatementMatchRepository matches;
-  @Autowired StatementLineRepository lines;
   @Autowired JdbcClient jdbcClient;
 
   private long accountId;
@@ -78,11 +76,15 @@ class StatementMatchRepositoryIntegrationTest {
   }
 
   @Test
-  void isMatchedIsTrueOnlyForTheMatchedLine() {
+  void deleteMatchesOfLinesRemovesOnlyThoseLinesOfThatStatement() {
     matches.insertMatch(statementId, lineId, postingId);
+    matches.insertMatch(otherStatementId, otherLineId, postingId);
 
-    assertThat(lines.isMatched(lineId)).isTrue();
-    assertThat(lines.isMatched(otherLineId)).isFalse();
+    List<Long> deleted = matches.deleteMatchesOfLines(statementId, List.of(lineId, otherLineId));
+
+    assertThat(deleted).containsExactly(postingId);
+    assertThat(matchCount()).isEqualTo(1);
+    assertThat(matches.deleteMatchesOfLines(statementId, List.of())).isEmpty();
   }
 
   @Test
