@@ -102,6 +102,89 @@ public record DockEntry(
     String personRevive,
     List<Long> tagIds) {
 
+  /**
+   * A new (not edit) entry on a real funding account with no funding person, cross-currency fields,
+   * payee id or tags — the shape the statement page's "create missing" dock produces. Payee arrives
+   * as create-new text; the counterpart is a category unless {@link #withTransfer} or {@link
+   * #withPerson} says otherwise.
+   */
+  public static DockEntry newOnAccount(
+      LocalDate date,
+      long accountId,
+      String payeeText,
+      long categoryId,
+      String amount,
+      String note) {
+    return new DockEntry(
+        null,
+        date,
+        accountId,
+        null,
+        null,
+        null,
+        null,
+        payeeText,
+        categoryId,
+        null,
+        amount,
+        null,
+        null,
+        note,
+        null,
+        null,
+        null,
+        null,
+        List.of());
+  }
+
+  /** This entry with a transfer counterpart: {@code categoryId} is the target account's id. */
+  public DockEntry withTransfer(String direction) {
+    return new DockEntry(
+        transactionId,
+        date,
+        accountId,
+        fundingPersonName,
+        fundingPersonDirection,
+        fundingPersonRevive,
+        payeeId,
+        payeeText,
+        categoryId,
+        categoryCurrencyCode,
+        amount,
+        categoryAmount,
+        baseAmount,
+        note,
+        direction,
+        personName,
+        personDirection,
+        personRevive,
+        tagIds);
+  }
+
+  /** This entry with a person counterpart (register §3.5); {@code categoryId} carries no value. */
+  public DockEntry withPerson(String name, String direction, String revive) {
+    return new DockEntry(
+        transactionId,
+        date,
+        accountId,
+        fundingPersonName,
+        fundingPersonDirection,
+        fundingPersonRevive,
+        payeeId,
+        payeeText,
+        categoryId,
+        categoryCurrencyCode,
+        amount,
+        categoryAmount,
+        baseAmount,
+        note,
+        transferDirection,
+        name,
+        direction,
+        revive,
+        tagIds);
+  }
+
   /** Defensively copy the tag ids (null-safe) so the entry cannot be mutated after. */
   public DockEntry {
     tagIds = tagIds == null ? List.of() : List.copyOf(tagIds);
