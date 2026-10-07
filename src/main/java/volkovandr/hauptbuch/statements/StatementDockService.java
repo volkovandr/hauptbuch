@@ -117,26 +117,15 @@ public class StatementDockService {
   }
 
   private static DockEntry entry(DockInput input, long accountId, StatementLine line) {
-    return new DockEntry(
-        null,
-        input.date(),
-        accountId,
-        null,
-        null,
-        null,
-        null,
-        input.payeeText(),
-        input.categoryId() == null ? 0 : input.categoryId(),
-        null,
-        StatementController.number(line.amount()),
-        null,
-        null,
-        input.note(),
-        input.transferDirection(),
-        input.personName(),
-        input.personDirection(),
-        input.personRevive(),
-        List.of());
+    return DockEntry.newOnAccount(
+            input.date(),
+            accountId,
+            input.payeeText(),
+            input.categoryId() == null ? 0 : input.categoryId(),
+            StatementController.number(line.amount()),
+            input.note())
+        .withTransfer(input.transferDirection())
+        .withPerson(input.personName(), input.personDirection(), input.personRevive());
   }
 
   private static String bankText(StatementLine line) {
