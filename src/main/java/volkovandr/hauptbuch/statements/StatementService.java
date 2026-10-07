@@ -173,8 +173,8 @@ public class StatementService {
   }
 
   /**
-   * Soft-delete a statement; its file stays on the Pi (statements.md §5). Callers remove its matches
-   * first — {@link StatementMatchService#deleteStatement} does.
+   * Soft-delete a statement; its file stays on the Pi (statements.md §5). Callers remove its
+   * matches first — {@link StatementMatchService#deleteStatement} does.
    */
   @Transactional
   public void delete(long statementId) {

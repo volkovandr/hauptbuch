@@ -352,7 +352,8 @@ public class LedgerService {
     }
     transactionRepository.setReconciliation(postingIds, RECONCILED);
     int confirmed = transactionRepository.confirmPendingOwning(postingIds);
-    LOG.debug("Reconciled {} legs, confirmed {} pending transactions", postingIds.size(), confirmed);
+    LOG.debug(
+        "Reconciled {} legs, confirmed {} pending transactions", postingIds.size(), confirmed);
   }
 
   /**

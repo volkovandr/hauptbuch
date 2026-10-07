@@ -29,7 +29,7 @@ import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
 class StatementMatchServiceTest {
 
   private static final long STATEMENT = 4L;
-  private static final long LINE = 10L;
+  private static final long LINE_ID = 10L;
   private static final long POSTING = 50L;
 
   @Mock private StatementReviewService reviewService;
@@ -41,39 +41,68 @@ class StatementMatchServiceTest {
 
   @BeforeEach
   void setUp() {
-    service = new StatementMatchService(reviewService, statementService, matchRepository, ledgerService);
+    service =
+        new StatementMatchService(reviewService, statementService, matchRepository, ledgerService);
   }
 
   private static StatementLine line(long id) {
     return new StatementLine(
-        id, 0, LocalDate.of(2026, 5, 20), null, new BigDecimal("-3.50"), "SHOPAAA", null, null, "raw", null);
+        id,
+        0,
+        LocalDate.of(2026, 5, 20),
+        null,
+        new BigDecimal("-3.50"),
+        "SHOPAAA",
+        null,
+        null,
+        "raw",
+        null);
   }
 
   private static ProposedCandidate proposal(long posting, Tier tier) {
     return new ProposedCandidate(
         new StatementCandidate(
-            LINE, posting, posting, 1L, "BankAaa-EUR", new BigDecimal("-3.50"),
-            LocalDate.of(2026, 5, 19), "ShopAaa", true, "unreconciled", false, 1),
+            LINE_ID,
+            posting,
+            posting,
+            1L,
+            "BankAaa-EUR",
+            new BigDecimal("-3.50"),
+            LocalDate.of(2026, 5, 19),
+            "ShopAaa",
+            true,
+            "unreconciled",
+            false,
+            1),
         tier);
   }
 
   private static StatementMatch match(long line, long posting) {
     return new StatementMatch(
-        line, posting, posting, LocalDate.of(2026, 5, 19), "ShopAaa", new BigDecimal("-3.50"), "reconciled");
+        line,
+        posting,
+        posting,
+        LocalDate.of(2026, 5, 19),
+        "ShopAaa",
+        new BigDecimal("-3.50"),
+        "reconciled");
   }
 
   private void reviewing(LineReview... lines) {
-    when(reviewService.review(STATEMENT)).thenReturn(new StatementReview(List.of(lines), List.of()));
+    when(reviewService.review(STATEMENT))
+        .thenReturn(new StatementReview(List.of(lines), List.of()));
   }
 
   @Test
   void acceptRecordsTheMatchThenReconcilesTheLeg() {
-    reviewing(new LineReview(line(LINE), LineStatus.EXACT, null, List.of(proposal(POSTING, Tier.EXACT))));
+    reviewing(
+        new LineReview(
+            line(LINE_ID), LineStatus.EXACT, null, List.of(proposal(POSTING, Tier.EXACT))));
 
-    service.accept(STATEMENT, LINE, POSTING);
+    service.accept(STATEMENT, LINE_ID, POSTING);
 
     InOrder order = inOrder(matchRepository, ledgerService);
-    order.verify(matchRepository).insertMatch(STATEMENT, LINE, POSTING);
+    order.verify(matchRepository).insertMatch(STATEMENT, LINE_ID, POSTING);
     order.verify(ledgerService).markReconciled(List.of(POSTING));
   }
 
@@ -81,21 +110,23 @@ class StatementMatchServiceTest {
   void acceptPicksOneOfSeveralAmbiguousCandidates() {
     reviewing(
         new LineReview(
-            line(LINE),
+            line(LINE_ID),
             LineStatus.AMBIGUOUS,
             null,
             List.of(proposal(POSTING, Tier.EXACT), proposal(51L, Tier.EXACT))));
 
-    service.accept(STATEMENT, LINE, 51L);
+    service.accept(STATEMENT, LINE_ID, 51L);
 
-    verify(matchRepository).insertMatch(STATEMENT, LINE, 51L);
+    verify(matchRepository).insertMatch(STATEMENT, LINE_ID, 51L);
   }
 
   @Test
-  void acceptRefusesAPostingThatIsNoLongerACandidate() {
-    reviewing(new LineReview(line(LINE), LineStatus.EXACT, null, List.of(proposal(POSTING, Tier.EXACT))));
+  void acceptRefusesPostingThatIsNoLongerCandidate() {
+    reviewing(
+        new LineReview(
+            line(LINE_ID), LineStatus.EXACT, null, List.of(proposal(POSTING, Tier.EXACT))));
 
-    assertThatThrownBy(() -> service.accept(STATEMENT, LINE, 99L))
+    assertThatThrownBy(() -> service.accept(STATEMENT, LINE_ID, 99L))
         .isInstanceOf(StatementFormatException.class);
     verify(matchRepository, never()).insertMatch(anyLong(), anyLong(), anyLong());
   }
@@ -104,14 +135,14 @@ class StatementMatchServiceTest {
   void acceptRefusesAmountDiffersAndWrongAccountCandidates() {
     reviewing(
         new LineReview(
-            line(LINE),
+            line(LINE_ID),
             LineStatus.AMOUNT_DIFFERS,
             null,
             List.of(proposal(POSTING, Tier.AMOUNT_DIFFERS), proposal(51L, Tier.WRONG_ACCOUNT))));
 
-    assertThatThrownBy(() -> service.accept(STATEMENT, LINE, POSTING))
+    assertThatThrownBy(() -> service.accept(STATEMENT, LINE_ID, POSTING))
         .isInstanceOf(StatementFormatException.class);
-    assertThatThrownBy(() -> service.accept(STATEMENT, LINE, 51L))
+    assertThatThrownBy(() -> service.accept(STATEMENT, LINE_ID, 51L))
         .isInstanceOf(StatementFormatException.class);
     verify(ledgerService, never()).markReconciled(anyCollection());
   }
@@ -119,9 +150,13 @@ class StatementMatchServiceTest {
   @Test
   void acceptRefusesAnAlreadyMatchedLine() {
     reviewing(
-        new LineReview(line(LINE), LineStatus.MATCHED, match(LINE, POSTING), List.of(proposal(51L, Tier.EXACT))));
+        new LineReview(
+            line(LINE_ID),
+            LineStatus.MATCHED,
+            match(LINE_ID, POSTING),
+            List.of(proposal(51L, Tier.EXACT))));
 
-    assertThatThrownBy(() -> service.accept(STATEMENT, LINE, 51L))
+    assertThatThrownBy(() -> service.accept(STATEMENT, LINE_ID, 51L))
         .isInstanceOf(StatementFormatException.class);
   }
 
@@ -130,7 +165,10 @@ class StatementMatchServiceTest {
     reviewing(
         new LineReview(line(1L), LineStatus.EXACT, null, List.of(proposal(61L, Tier.EXACT))),
         new LineReview(
-            line(2L), LineStatus.AMBIGUOUS, null, List.of(proposal(62L, Tier.EXACT), proposal(63L, Tier.EXACT))),
+            line(2L),
+            LineStatus.AMBIGUOUS,
+            null,
+            List.of(proposal(62L, Tier.EXACT), proposal(63L, Tier.EXACT))),
         new LineReview(line(3L), LineStatus.OVERLAP, null, List.of(proposal(64L, Tier.EXACT))),
         new LineReview(line(4L), LineStatus.EXACT, null, List.of(proposal(65L, Tier.EXACT))),
         new LineReview(line(5L), LineStatus.MISSING, null, List.of()));
@@ -145,18 +183,21 @@ class StatementMatchServiceTest {
 
   @Test
   void rejectCandidateRemembersTheDecision() {
-    reviewing(new LineReview(line(LINE), LineStatus.OVERLAP, null, List.of(proposal(POSTING, Tier.EXACT))));
+    reviewing(
+        new LineReview(
+            line(LINE_ID), LineStatus.OVERLAP, null, List.of(proposal(POSTING, Tier.EXACT))));
 
-    service.rejectCandidate(STATEMENT, LINE, POSTING);
+    service.rejectCandidate(STATEMENT, LINE_ID, POSTING);
 
-    verify(matchRepository).insertExclusion(LINE, POSTING);
+    verify(matchRepository).insertExclusion(LINE_ID, POSTING);
   }
 
   @Test
   void unmatchRemovesTheMatchesOnThePostingAndUnreconcilesIt() {
-    reviewing(new LineReview(line(LINE), LineStatus.MATCHED, match(LINE, POSTING), List.of()));
+    reviewing(
+        new LineReview(line(LINE_ID), LineStatus.MATCHED, match(LINE_ID, POSTING), List.of()));
 
-    service.unmatch(STATEMENT, LINE);
+    service.unmatch(STATEMENT, LINE_ID);
 
     InOrder order = inOrder(matchRepository, ledgerService);
     order.verify(matchRepository).deleteMatchesOnPostings(List.of(POSTING));
@@ -164,10 +205,10 @@ class StatementMatchServiceTest {
   }
 
   @Test
-  void unmatchRefusesALineWithoutAMatch() {
-    reviewing(new LineReview(line(LINE), LineStatus.MISSING, null, List.of()));
+  void unmatchRefusesLineWithoutMatch() {
+    reviewing(new LineReview(line(LINE_ID), LineStatus.MISSING, null, List.of()));
 
-    assertThatThrownBy(() -> service.unmatch(STATEMENT, LINE))
+    assertThatThrownBy(() -> service.unmatch(STATEMENT, LINE_ID))
         .isInstanceOf(StatementFormatException.class);
   }
 

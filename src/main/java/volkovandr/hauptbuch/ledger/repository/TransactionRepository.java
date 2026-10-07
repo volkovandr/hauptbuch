@@ -327,7 +327,8 @@ public class TransactionRepository {
    */
   public void setReconciliation(Collection<Long> postingIds, String reconciliation) {
     jdbcClient
-        .sql("update posting set reconciliation = :reconciliation where posting_id in (:postingIds)")
+        .sql(
+            "update posting set reconciliation = :reconciliation where posting_id in (:postingIds)")
         .param(RECONCILIATION, reconciliation)
         .param("postingIds", postingIds)
         .update();

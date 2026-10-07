@@ -369,7 +369,7 @@ class StatementCandidatesSqlLogicTest {
   }
 
   @Test
-  void legExcludedFromALineIsNotProposedToItAgain() {
+  void legExcludedFromLineIsNotProposedToItAgain() {
     long excluded = expense(BOOKING, own, "-3.50", null);
     long other = expense(BOOKING, own, "-3.50", null);
     matcher.insertExclusion(lineId, excluded);
