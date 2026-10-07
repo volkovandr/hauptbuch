@@ -500,6 +500,30 @@ class RepositoryRoundTripIntegrationTest {
   }
 
   @Test
+  void findLongestNameInPicksTheLongestLiveNameFoundInTheText() {
+    long shop = payeeRepository.insert("Shop", null, null);
+    long shopAaa = payeeRepository.insert("ShopAaa", "Berlin", null);
+    long gone = payeeRepository.insert("ShopAaa Berlin Central", null, null);
+    jdbcClient
+        .sql("update payee set deleted_at = now() where payee_id = :id")
+        .param("id", gone)
+        .update();
+    payeeRepository.insert("Lidl", null, null);
+
+    // Case-insensitive; the longest live name wins, a deleted payee is never offered.
+    assertThat(payeeRepository.findLongestNameIn("CARD SHOPAAA BERLIN CENTRAL 12"))
+        .get()
+        .extracting(Payee::payeeId)
+        .isEqualTo(shopAaa);
+    assertThat(payeeRepository.findLongestNameIn("a shop somewhere"))
+        .get()
+        .extracting(Payee::payeeId)
+        .isEqualTo(shop);
+    assertThat(payeeRepository.findLongestNameIn("nothing known")).isEmpty();
+    assertThat(payeeRepository.findLongestNameIn("  ")).isEmpty();
+  }
+
+  @Test
   void countryListAndAliasLookupReadFromTheSeed() {
     // The country reference list and its alias lookup (register §3.4) — plain reads over the V4
     // seed.

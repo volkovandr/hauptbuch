@@ -209,6 +209,25 @@ public class PayeeRepository {
   }
 
   /**
+   * The live payee with the longest name that occurs, case-insensitively, inside {@code text} —
+   * statements.md §6.4's guess at who a bank line is about. Ties go to the lower id; a blank name
+   * never matches.
+   */
+  public Optional<Payee> findLongestNameIn(String text) {
+    if (text == null || text.isBlank()) {
+      return Optional.empty();
+    }
+    return jdbcClient
+        .sql(
+            SELECT_PAYEES
+                + "deleted_at is null and name <> '' and position(lower(name) in lower(:text)) > 0"
+                + " order by length(name) desc, payee_id limit 1")
+        .param("text", text)
+        .query(Payee.class)
+        .optional();
+  }
+
+  /**
    * Lower-case and strip every non-alphanumeric, the same shape the SQL builds its match key in.
    */
   private static String normalise(String query) {

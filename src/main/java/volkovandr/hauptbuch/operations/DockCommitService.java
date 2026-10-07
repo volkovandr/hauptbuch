@@ -85,11 +85,32 @@ public class DockCommitService {
    */
   @Transactional
   public long commit(DockEntry entry) {
+    return commit(entry, null);
+  }
+
+  /**
+   * Commit a new simple dock entry whose funding-leg amount is already signed and fixed — the
+   * statement page's "create missing" (statements.md §6.4), where the bank's line, not the
+   * counterpart's direction, decides the sign (a positive line on an expense category is a refund).
+   * Everything else — payee, counterpart routing, cross-currency legs — is {@link #commit}'s.
+   *
+   * @param entry the entry; its {@code amount} is ignored
+   * @param fundingAmount the signed amount of the funding leg
+   */
+  @Transactional
+  public long commitWithFundingAmount(DockEntry entry, BigDecimal fundingAmount) {
+    return commit(entry, fundingAmount);
+  }
+
+  private long commit(DockEntry entry, BigDecimal pinnedFundingAmount) {
     Account fundingAccount = resolveFundingAccount(entry);
     Long payeeId = payeeService.resolvePayee(entry.payeeId(), entry.payeeText());
 
     Counterpart counterpart = resolveCounterpart(entry, fundingAccount);
-    BigDecimal fundingAmount = signedAmount(entry.amount(), counterpart.defaultOutflow());
+    BigDecimal fundingAmount =
+        pinnedFundingAmount != null
+            ? pinnedFundingAmount
+            : signedAmount(entry.amount(), counterpart.defaultOutflow());
     FundingSigilCheck.verify(entry.fundingPersonDirection(), fundingAmount);
     Account other = counterpart.account();
     List<PostingDraft> legs =

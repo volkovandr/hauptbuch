@@ -187,6 +187,26 @@ class DockCommitServiceTest {
   }
 
   @Test
+  void pinnedFundingAmountOverridesTheCounterpartsDirection() {
+    Account cash = account(CASH_ID, "asset", EUR);
+    Account leaf = account(LEAF_ID, EXPENSE, EUR);
+    when(accountService.findById(CASH_ID)).thenReturn(Optional.of(cash));
+    when(currencyLeafService.resolveCurrencyLeaf(CATEGORY_ID, EUR)).thenReturn(leaf);
+    when(payeeService.resolvePayee(42L, null)).thenReturn(42L);
+    when(ledgerService.recordTransaction(any())).thenReturn(99L);
+
+    // A bank line of +20 on an expense category is a refund: the bank's sign wins, the entry's
+    // own amount text is not read.
+    dockCommitService.commitWithFundingAmount(simpleEntry("ignored"), new BigDecimal("20.00"));
+
+    ArgumentCaptor<TransactionDraft> draft = ArgumentCaptor.forClass(TransactionDraft.class);
+    verify(ledgerService).recordTransaction(draft.capture());
+    List<PostingDraft> legs = draft.getValue().postings();
+    assertThat(leg(legs, CASH_ID)).isEqualByComparingTo("20");
+    assertThat(leg(legs, LEAF_ID)).isEqualByComparingTo("-20");
+  }
+
+  @Test
   void attachesTagsToEveryLegOfSimpleTransaction() {
     Account cash = account(CASH_ID, "asset", EUR);
     Account leaf = account(LEAF_ID, EXPENSE, EUR);

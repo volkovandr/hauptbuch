@@ -119,6 +119,50 @@ class GhostSuggestionSqlLogicTest {
   }
 
   @Test
+  void lastCategoryIsTheMostRecentOneNotTheMostCommon() {
+    long cash = insertAccount("Cash", ASSET, EUR, null);
+    long fuel = insertAccount("Fuel", EXPENSE, EUR, null);
+    long snacks = insertAccount("Snacks", EXPENSE, EUR, null);
+    long station = insertPayee("Shell");
+
+    // Fuel is the mode, but the latest visit was Snacks — "last" follows the date (statements §6.4).
+    spend("2026-01-01", station, cash, fuel, "50");
+    spend("2026-01-08", station, cash, fuel, "55");
+    spend("2026-01-15", station, cash, snacks, "3");
+
+    assertThat(ghostSuggestionRepository.lastFor(station))
+        .get()
+        .extracting(GhostSuggestion::categoryId)
+        .isEqualTo(snacks);
+  }
+
+  @Test
+  void lastCategoryRollsALeafUpAndIgnoresVoidedTransactions() {
+    long cash = insertAccount("Cash", ASSET, EUR, null);
+    long food = insertAccount("Food", EXPENSE, EUR, null);
+    long foodEur = insertCurrencyLeaf(EUR, EXPENSE, food);
+    long fuel = insertAccount("Fuel", EXPENSE, EUR, null);
+    long payee = insertPayee("Kiosk");
+
+    spend("2026-02-01", payee, cash, foodEur, "10");
+    spend("2026-02-10", payee, cash, fuel, "4");
+    jdbcClient
+        .sql("update transaction set deleted_at = now() where date = :d")
+        .param("d", LocalDate.parse("2026-02-10"))
+        .update();
+
+    assertThat(ghostSuggestionRepository.lastFor(payee))
+        .get()
+        .extracting(GhostSuggestion::categoryId)
+        .isEqualTo(food);
+  }
+
+  @Test
+  void lastCategoryIsEmptyForAPayeeWithoutHistory() {
+    assertThat(ghostSuggestionRepository.lastFor(insertPayee("Nobody"))).isEmpty();
+  }
+
+  @Test
   void breaksFrequencyTieByMostRecentUse() {
     long cash = insertAccount("Cash", ASSET, EUR, null);
     long food = insertAccount("Food", EXPENSE, EUR, null);

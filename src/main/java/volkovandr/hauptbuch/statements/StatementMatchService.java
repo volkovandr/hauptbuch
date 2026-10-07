@@ -127,7 +127,7 @@ public class StatementMatchService {
     statementService.delete(statementId);
   }
 
-  private LineReview lineOf(long statementId, long statementLineId) {
+  LineReview lineOf(long statementId, long statementLineId) {
     return reviewService.review(statementId).lines().stream()
         .filter(l -> l.line().statementLineId() == statementLineId)
         .findFirst()
@@ -148,6 +148,11 @@ public class StatementMatchService {
     if (!offered) {
       throw new StatementFormatException(STALE);
     }
+  }
+
+  /** Match one line to one posting and make the posting {@code reconciled}. */
+  void link(long statementId, long statementLineId, long postingId) {
+    confirm(statementId, List.of(new Pair(statementLineId, postingId)));
   }
 
   private void confirm(long statementId, List<Pair> pairs) {

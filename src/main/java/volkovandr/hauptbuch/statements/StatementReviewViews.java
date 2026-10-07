@@ -30,7 +30,8 @@ final class StatementReviewViews {
       List<String> details,
       List<Pick> picks,
       boolean canUnmatch,
-      Long differentPosting) {
+      Long differentPosting,
+      boolean canCreate) {
 
     static ReviewLineView of(LineReview review) {
       StatementLine line = review.line();
@@ -45,7 +46,8 @@ final class StatementReviewViews {
           details(review),
           picks(review),
           review.match() != null,
-          overlap ? review.firstProposedPostingId() : null);
+          overlap ? review.firstProposedPostingId() : null,
+          review.status() == LineStatus.MISSING);
     }
 
     /** The equal-amount candidates the operator can confirm here; the rest need the dock. */

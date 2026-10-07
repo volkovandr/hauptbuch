@@ -70,6 +70,37 @@ public class GhostSuggestionRepository {
   }
 
   /**
+   * The category of the payee's most recent live transaction, or empty if the payee has none —
+   * the statement page's pre-fill (statements.md §6.4), "the payee's last category", as opposed to
+   * {@link #suggestFor}'s most common one. Rolled up to its semantic category like {@link
+   * #suggestFor}; ties on date go to the later-entered transaction.
+   *
+   * @param payeeId the payee
+   */
+  public Optional<GhostSuggestion> lastFor(long payeeId) {
+    return jdbcClient
+        .sql(
+            """
+            select case when leaf.currency_leaf then parent.account_id else leaf.account_id end
+                     as category_id,
+                   case when leaf.currency_leaf then parent.name else leaf.name end
+                     as category_name
+            from transaction t
+            join posting p on p.transaction_id = t.transaction_id
+            join account leaf on p.account_id = leaf.account_id
+            left join account parent on leaf.parent_id = parent.account_id
+            where t.payee_id = :payeeId
+              and t.deleted_at is null
+              and leaf.type in ('income', 'expense')
+            order by t.date desc, t.transaction_id desc, p.posting_id
+            limit 1
+            """)
+        .param(PAYEE_ID, payeeId)
+        .query(GhostSuggestion.class)
+        .optional();
+  }
+
+  /**
    * The transaction currency of the most recent live, confirmed transaction this payee had on this
    * account (issue transaction-register-ui/17), or empty if the pair has no history. The
    * transaction currency is the currency of the legs that are <em>not</em> in the account's own
