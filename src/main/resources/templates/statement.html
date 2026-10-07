@@ -106,14 +106,14 @@
                   th:action="@{/statements/{id}/lines/{line}/accept(id=${statement.statementId()},line=${r.lineId()})}"
                 >
                   <input type="hidden" name="posting" th:value="${p.postingId()}" />
-                  <button type="submit" class="btn" th:text="${p.label() == null ? (r.overlap() ? 'Same movement' : 'Accept') : 'Pick ' + p.label()}">Accept</button>
+                  <button type="submit" class="btn" th:text="${p.label()}">Accept</button>
                 </form>
                 <form
-                  th:if="${r.overlap()}"
+                  th:if="${r.differentPosting() != null}"
                   method="post"
                   th:action="@{/statements/{id}/lines/{line}/different(id=${statement.statementId()},line=${r.lineId()})}"
                 >
-                  <input type="hidden" name="posting" th:value="${r.picks().get(0).postingId()}" />
+                  <input type="hidden" name="posting" th:value="${r.differentPosting()}" />
                   <button type="submit" class="btn">Different transaction</button>
                 </form>
                 <form

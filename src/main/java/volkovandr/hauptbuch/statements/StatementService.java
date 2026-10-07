@@ -13,8 +13,8 @@ import volkovandr.hauptbuch.statements.repository.StatementRepository;
 
 /**
  * Statements as domain operations (statements.md §3, §5): upload a file against a profile, correct
- * the header and the lines, delete. Matching arrives with slice c; until then no statement has a
- * match to remove, so a delete is just the soft-delete.
+ * the header and the lines, delete. Matching is {@link StatementMatchService}'s; a delete here is
+ * just the soft-delete, after the caller removed the statement's matches.
  */
 @Service
 public class StatementService {
@@ -154,9 +154,12 @@ public class StatementService {
   }
 
   /**
-   * Save the edited line grid. Every row is read first, so one unreadable entry saves nothing.
+   * Save the edited line grid. Every row is read first, so one unreadable entry saves nothing. A
+   * matched line keeps its booking date and amount — the match was made on them — until it is
+   * unmatched (statements.md §5).
    *
-   * @throws StatementFormatException naming the row that cannot be read
+   * @throws StatementFormatException naming the row that cannot be read, or the matched line whose
+   *     date or amount was changed
    */
   @Transactional
   public void updateLines(long statementId, List<LineEdit> edits) {
@@ -167,9 +170,17 @@ public class StatementService {
                 old ->
                     edits.stream()
                         .filter(edit -> edit.statementLineId() == old.statementLineId())
-                        .map(edit -> edit.applyTo(old)))
+                        .map(edit -> edit.applyTo(old))
+                        .peek(line -> refuseChangeToMatched(old, line)))
             .toList();
     updated.forEach(line -> lineRepository.update(statementId, line));
+  }
+
+  private void refuseChangeToMatched(StatementLine old, StatementLine edited) {
+    if (!old.sameDateAndAmount(edited) && lineRepository.isMatched(old.statementLineId())) {
+      throw new StatementFormatException(
+          "A matched line keeps its date and amount. Unmatch it before changing them.");
+    }
   }
 
   /**

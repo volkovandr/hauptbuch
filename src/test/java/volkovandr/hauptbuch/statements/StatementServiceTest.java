@@ -248,6 +248,25 @@ class StatementServiceTest {
   }
 
   @Test
+  void matchedLineKeepsItsDateAndAmountButTextStaysEditable() {
+    stubLive(1L);
+    when(lineRepository.findByStatement(1L))
+        .thenReturn(List.of(withId(10L, line(0, LocalDate.of(2026, 5, 2), null))));
+    when(lineRepository.isMatched(10L)).thenReturn(true);
+
+    assertThatThrownBy(
+            () ->
+                service.updateLines(
+                    1L, List.of(new LineEdit(10L, "2026-05-03", "", "-1,00", "", "", ""))))
+        .hasMessage("A matched line keeps its date and amount. Unmatch it before changing them.");
+    verify(lineRepository, never()).update(any(Long.class), any());
+
+    service.updateLines(
+        1L, List.of(new LineEdit(10L, "2026-05-02", "", "-1,00", "ShopAaa", "", "")));
+    verify(lineRepository).update(eq(1L), any());
+  }
+
+  @Test
   void ignoresEditForLineOfAnotherStatement() {
     stubLive(1L);
     when(lineRepository.findByStatement(1L)).thenReturn(List.of());

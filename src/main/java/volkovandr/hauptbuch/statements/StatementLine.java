@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.statements;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Objects;
 
 /**
  * One booking the bank reports (data-model §15, statements.md §3.3). The amount is always in the
@@ -29,4 +30,14 @@ public record StatementLine(
     String description,
     String bankCategory,
     String rawText,
-    String problem) {}
+    String problem) {
+
+  /** Whether the other line has this line's booking date and amount — what a match was made on. */
+  public boolean sameDateAndAmount(StatementLine other) {
+    boolean sameAmount =
+        amount == null
+            ? other.amount == null
+            : other.amount != null && amount.compareTo(other.amount) == 0;
+    return Objects.equals(bookingDate, other.bookingDate) && sameAmount;
+  }
+}

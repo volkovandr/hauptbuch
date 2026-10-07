@@ -59,6 +59,7 @@ public class LedgerService {
   private static final int MIN_LEGS = 2;
 
   private static final String RECONCILED = "reconciled";
+  private static final String UNRECONCILED = "unreconciled";
 
   /** A transaction touching exactly one currency is single-currency; more is cross-currency. */
   private static final int SINGLE_CURRENCY = 1;
@@ -366,7 +367,7 @@ public class LedgerService {
     if (postingIds.isEmpty()) {
       return;
     }
-    transactionRepository.setReconciliation(postingIds, "unreconciled");
+    transactionRepository.setReconciliation(postingIds, UNRECONCILED);
     LOG.debug("Unreconciled {} legs", postingIds.size());
   }
 
@@ -573,7 +574,7 @@ public class LedgerService {
         leg.accountId(),
         leg.amount(),
         leg.baseAmount(),
-        leg.reconciliation() == null ? "unreconciled" : leg.reconciliation(),
+        leg.reconciliation() == null ? UNRECONCILED : leg.reconciliation(),
         leg.note());
   }
 
