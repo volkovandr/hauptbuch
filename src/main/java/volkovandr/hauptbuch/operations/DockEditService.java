@@ -11,6 +11,7 @@ import volkovandr.hauptbuch.debts.PersonTarget;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.Posting;
+import volkovandr.hauptbuch.ledger.ReconciledLegNotices;
 import volkovandr.hauptbuch.ledger.Transaction;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 
@@ -53,16 +54,26 @@ public class DockEditService {
   private final AccountService accountService;
   private final PayeeService payeeService;
   private final PersonService personService;
+  private final List<ReconciledLegNotices> reconciledLegNotices;
 
   DockEditService(
       LedgerService ledgerService,
       AccountService accountService,
       PayeeService payeeService,
-      PersonService personService) {
+      PersonService personService,
+      List<ReconciledLegNotices> reconciledLegNotices) {
+    this.reconciledLegNotices = reconciledLegNotices;
     this.ledgerService = ledgerService;
     this.accountService = accountService;
     this.payeeService = payeeService;
     this.personService = personService;
+  }
+
+  /** Muted notices naming the statements that reconciled a leg of the transaction. */
+  public List<String> reconciledNotices(long transactionId) {
+    return reconciledLegNotices.stream()
+        .flatMap(n -> n.noticesFor(transactionId).stream())
+        .toList();
   }
 
   /**

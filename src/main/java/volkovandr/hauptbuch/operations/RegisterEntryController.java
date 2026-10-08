@@ -165,6 +165,7 @@ class RegisterEntryController {
     try {
       DockEditModel edit = dockEditService.load(transactionId);
       model.addAttribute("edit", edit);
+      model.addAttribute("reconciledNotices", dockEditService.reconciledNotices(transactionId));
       addCurrencyAttributes(model, dockAmountFieldsService.forEdit(edit));
       return DOCK_FRAGMENT
           + " :: dock(register=${register}, oob=false, edit=${edit}, amountFields=${amountFields})";
@@ -318,6 +319,10 @@ class RegisterEntryController {
     RegisterView register = registerService.view(filter);
     model.addAttribute(REGISTER, register);
     model.addAttribute("entryError", message);
+    if (form.transactionId() != null) {
+      model.addAttribute(
+          "reconciledNotices", dockEditService.reconciledNotices(form.transactionId()));
+    }
     addAmountAttributes(model, dockAmountFieldsService.amountsFor(form));
     return DOCK_ERROR;
   }

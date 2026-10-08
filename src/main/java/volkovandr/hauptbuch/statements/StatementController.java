@@ -9,13 +9,11 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
-import volkovandr.hauptbuch.ledger.RegisterService;
 import volkovandr.hauptbuch.shared.MoneyFormat;
 import volkovandr.hauptbuch.web.NavItem;
 
@@ -25,7 +23,7 @@ import volkovandr.hauptbuch.web.NavItem;
  * the operator to confirm the account the file points at; the statement page corrects the period,
  * the balances and the lines, shows what the matcher proposes (slice c1), and deletes the
  * statement. Accept, pick, Unmatch and the overlap decision are the match actions of slice c2; the
- * dock (slice d) opens on a missing line and books it.
+ * dock's saves (slice d) are {@link StatementDockController}'s.
  */
 @Controller
 class StatementController {
@@ -39,24 +37,18 @@ class StatementController {
 
   private final StatementService statementService;
   private final StatementProfileService profileService;
-  private final StatementReviewService reviewService;
   private final StatementMatchService matchService;
-  private final StatementDockService dockService;
-  private final RegisterService registerService;
+  private final StatementPageAssembler pageAssembler;
 
   StatementController(
       StatementService statementService,
       StatementProfileService profileService,
-      StatementReviewService reviewService,
       StatementMatchService matchService,
-      StatementDockService dockService,
-      RegisterService registerService) {
+      StatementPageAssembler pageAssembler) {
     this.statementService = statementService;
     this.profileService = profileService;
-    this.reviewService = reviewService;
     this.matchService = matchService;
-    this.dockService = dockService;
-    this.registerService = registerService;
+    this.pageAssembler = pageAssembler;
   }
 
   /** The statements, newest first, filterable by account, with the upload form. */
@@ -153,77 +145,18 @@ class StatementController {
   String show(
       @PathVariable long id,
       @RequestParam(required = false) Long dock,
+      @RequestParam(required = false) Long posting,
+      @RequestParam(required = false) Long extra,
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      addPage(id, model);
+      pageAssembler.addPage(id, model);
     } catch (StatementFormatException e) {
       redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
       return REDIRECT_BASE;
     }
-    addDock(id, dock, model);
+    pageAssembler.addDock(id, dock, posting, extra, model);
     return "statement";
-  }
-
-  /** Everything the statement page shows except the dock. */
-  private void addPage(long id, Model model) {
-    Statement statement = statementService.get(id);
-    model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
-    model.addAttribute("statement", statement);
-    model.addAttribute("accountName", statementService.accountName(statement.accountId()));
-    model.addAttribute("profileName", profileService.nameOf(statement.statementProfileId()));
-    model.addAttribute("opening", number(statement.openingBalance()));
-    model.addAttribute("closing", number(statement.closingBalance()));
-    model.addAttribute("lines", statementService.lines(id).stream().map(LineView::of).toList());
-    StatementReview review = reviewService.review(id);
-    model.addAttribute("review", review);
-    model.addAttribute(
-        "reviewLines",
-        review.lines().stream().map(StatementReviewViews.ReviewLineView::of).toList());
-    model.addAttribute(
-        "reviewExtras", review.extras().stream().map(StatementReviewViews.ExtraView::of).toList());
-  }
-
-  /** Open the dock on a missing line, or say why it cannot be (the line was matched meanwhile). */
-  private void addDock(long id, Long lineId, Model model) {
-    if (lineId == null) {
-      return;
-    }
-    try {
-      model.addAttribute("dock", dockService.prefill(id, lineId));
-      model.addAttribute("lists", registerService.datalists());
-    } catch (StatementFormatException e) {
-      model.addAttribute(ERROR, e.getMessage());
-    }
-  }
-
-  /**
-   * Book a missing line through the dock and match it. A refusal re-renders the page with the dock
-   * still open on that line, holding what was typed and saying why beside Save.
-   */
-  @PostMapping(BASE_PATH + "/{id}/lines/{lineId}/create")
-  String createMissing(
-      @PathVariable long id,
-      @PathVariable long lineId,
-      @ModelAttribute DockInput input,
-      Model model,
-      RedirectAttributes redirectAttributes) {
-    try {
-      dockService.createMissing(id, lineId, input);
-      redirectAttributes.addFlashAttribute(NOTICE, "Transaction created and matched.");
-      return REDIRECT_BASE + "/" + id;
-    } catch (StatementFormatException refused) {
-      try {
-        addPage(id, model);
-        model.addAttribute("dock", dockService.reopen(id, lineId, input, refused.getMessage()));
-        model.addAttribute("lists", registerService.datalists());
-        return "statement";
-      } catch (StatementFormatException gone) {
-        // The line itself is no longer missing: there is no dock to keep open.
-        redirectAttributes.addFlashAttribute(ERROR, gone.getMessage());
-        return REDIRECT_BASE + "/" + id;
-      }
-    }
   }
 
   /** Save the period and the balances. */

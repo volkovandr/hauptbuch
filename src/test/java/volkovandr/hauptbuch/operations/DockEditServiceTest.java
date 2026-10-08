@@ -48,7 +48,8 @@ class DockEditServiceTest {
   @Mock private PersonService personService;
 
   private DockEditService service() {
-    return new DockEditService(ledgerService, accountService, payeeService, personService);
+    return new DockEditService(
+        ledgerService, accountService, payeeService, personService, List.of());
   }
 
   @BeforeEach

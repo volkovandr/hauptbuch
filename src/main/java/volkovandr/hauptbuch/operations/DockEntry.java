@@ -137,6 +137,73 @@ public record DockEntry(
         List.of());
   }
 
+  /**
+   * An edit of an existing transaction whose funding leg is on the given real account, with no
+   * funding person, cross-currency fields, payee id or tags — the shape the statement page's dock
+   * produces when it amends a booked transaction. Cross-currency fields come from {@link
+   * #withCrossCurrency}; the counterpart from {@link #withTransfer} or {@link #withPerson}.
+   */
+  public static DockEntry editOnAccount(
+      long transactionId,
+      LocalDate date,
+      long accountId,
+      String payeeText,
+      long categoryId,
+      String amount,
+      String note) {
+    return newOnAccount(date, accountId, payeeText, categoryId, amount, note)
+        .withTransactionId(transactionId);
+  }
+
+  /** This entry editing the given existing transaction. */
+  public DockEntry withTransactionId(Long id) {
+    return new DockEntry(
+        id,
+        date,
+        accountId,
+        fundingPersonName,
+        fundingPersonDirection,
+        fundingPersonRevive,
+        payeeId,
+        payeeText,
+        categoryId,
+        categoryCurrencyCode,
+        amount,
+        categoryAmount,
+        baseAmount,
+        note,
+        transferDirection,
+        personName,
+        personDirection,
+        personRevive,
+        tagIds);
+  }
+
+  /** This entry with the cross-currency fields of register §3.8a (all three may be null). */
+  public DockEntry withCrossCurrency(
+      String currencyCode, String counterpartAmount, String frozenBaseAmount) {
+    return new DockEntry(
+        transactionId,
+        date,
+        accountId,
+        fundingPersonName,
+        fundingPersonDirection,
+        fundingPersonRevive,
+        payeeId,
+        payeeText,
+        categoryId,
+        currencyCode,
+        amount,
+        counterpartAmount,
+        frozenBaseAmount,
+        note,
+        transferDirection,
+        personName,
+        personDirection,
+        personRevive,
+        tagIds);
+  }
+
   /** This entry carrying the given transaction-level tags. */
   public DockEntry withTags(List<Long> tags) {
     return new DockEntry(
