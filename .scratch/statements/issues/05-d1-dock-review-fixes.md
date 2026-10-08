@@ -1,6 +1,6 @@
 # d1 dock: category never resolves, dock placement, sign display, errors, tags
 
-Status: open
+Status: resolved (slice d1)
 
 ## Symptom
 Owner testing of d1 ("Create missing") found:

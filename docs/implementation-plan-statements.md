@@ -87,7 +87,7 @@
 
 ## d — The dock on the statement page
 
-- **d1 — Create missing.** The dock embedded on the statement page; a missing line pre-fills date,
+- ✅ **d1 — Create missing.** The dock embedded on the statement page; a missing line pre-fills date,
   account, amount, the longest payee substring, the payee's last category, and the bank-category
   label; Save books through `operations` and matches + reconciles in one database transaction.
   *Done when:* a missing line becomes a matched transaction without leaving the page.
