@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,7 @@ import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.Payee;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.Posting;
+import volkovandr.hauptbuch.ledger.TransactionTag;
 import volkovandr.hauptbuch.ledger.UnbalancedTransactionException;
 import volkovandr.hauptbuch.operations.DockCommitService;
 import volkovandr.hauptbuch.operations.DockEntry;
@@ -85,7 +87,16 @@ class StatementDockServiceTest {
 
   private static DockInput input(Long categoryId) {
     return new DockInput(
-        LocalDate.of(2026, 5, 20), "ShopAaa", categoryId, null, null, null, null, "note");
+        LocalDate.of(2026, 5, 20),
+        "ShopAaa",
+        categoryId,
+        "Food",
+        null,
+        null,
+        null,
+        null,
+        "note",
+        List.of(3L));
   }
 
   private void statementOnAccount() {
@@ -108,8 +119,6 @@ class StatementDockServiceTest {
 
   @Test
   void prefillsDateAmountLongestPayeeAndItsLastCategory() {
-    statementOnAccount();
-    when(statementService.accountName(ACCOUNT)).thenReturn("BankAaa-EUR");
     when(matchService.lineOf(STATEMENT, LINE_ID)).thenReturn(review(LineStatus.MISSING));
     when(payeeService.longestNameIn("ShopAaa Berlin Card payment"))
         .thenReturn(Optional.of(new Payee(5L, "ShopAaa", "Berlin", null, null)));
@@ -119,28 +128,46 @@ class StatementDockServiceTest {
 
     DockPrefill prefill = service.prefill(STATEMENT, LINE_ID);
 
-    assertThat(prefill.date()).isEqualTo("2026-05-20");
-    assertThat(prefill.accountName()).isEqualTo("BankAaa-EUR");
-    assertThat(prefill.amount()).isEqualTo("-3,50");
-    assertThat(prefill.payeeText()).isEqualTo("ShopAaa - Berlin");
-    assertThat(prefill.categoryText()).isEqualTo("Food");
-    assertThat(prefill.categoryId()).isEqualTo(8L);
+    assertThat(prefill.input().date()).isEqualTo(LocalDate.of(2026, 5, 20));
+    assertThat(prefill.amount()).isEqualTo("3,50");
+    assertThat(prefill.input().payeeText()).isEqualTo("ShopAaa - Berlin");
+    assertThat(prefill.input().categoryText()).isEqualTo("Food");
+    assertThat(prefill.input().categoryId()).isEqualTo(8L);
     assertThat(prefill.bankCategory()).isEqualTo("Groceries");
   }
 
   @Test
   void prefillWithoutKnownPayeeLeavesPayeeAndCategoryEmpty() {
-    statementOnAccount();
-    when(statementService.accountName(ACCOUNT)).thenReturn("BankAaa-EUR");
     when(matchService.lineOf(STATEMENT, LINE_ID)).thenReturn(review(LineStatus.MISSING));
     when(payeeService.longestNameIn(any())).thenReturn(Optional.empty());
 
     DockPrefill prefill = service.prefill(STATEMENT, LINE_ID);
 
-    assertThat(prefill.payeeText()).isEmpty();
-    assertThat(prefill.categoryText()).isEmpty();
-    assertThat(prefill.categoryId()).isNull();
+    assertThat(prefill.input().payeeText()).isEmpty();
+    assertThat(prefill.input().categoryText()).isEmpty();
+    assertThat(prefill.input().categoryId()).isNull();
     assertThat(prefill.bankText()).isEqualTo("ShopAaa Berlin Card payment");
+  }
+
+  @Test
+  void reopenKeepsWhatWasTypedWithTheTagLabelsAndTheReason() {
+    when(matchService.lineOf(STATEMENT, LINE_ID)).thenReturn(review(LineStatus.MISSING));
+    when(ledgerService.labelsForTagIds(List.of(3L))).thenReturn(Map.of(3L, "Car:Passat"));
+
+    DockPrefill dock = service.reopen(STATEMENT, LINE_ID, input(null), "No category");
+
+    assertThat(dock.input().payeeText()).isEqualTo("ShopAaa");
+    assertThat(dock.input().note()).isEqualTo("note");
+    assertThat(dock.tags()).extracting(TransactionTag::label).containsExactly("Car:Passat");
+    assertThat(dock.error()).isEqualTo("No category");
+  }
+
+  @Test
+  void reopenRefusesLineThatIsNoLongerMissing() {
+    when(matchService.lineOf(STATEMENT, LINE_ID)).thenReturn(review(LineStatus.EXACT));
+
+    assertThatThrownBy(() -> service.reopen(STATEMENT, LINE_ID, input(null), "x"))
+        .isInstanceOf(StatementFormatException.class);
   }
 
   @Test
@@ -171,6 +198,7 @@ class StatementDockServiceTest {
     assertThat(entry.getValue().accountId()).isEqualTo(ACCOUNT);
     assertThat(entry.getValue().categoryId()).isEqualTo(8L);
     assertThat(entry.getValue().payeeText()).isEqualTo("ShopAaa");
+    assertThat(entry.getValue().tagIds()).containsExactly(3L);
     verify(matchService).link(STATEMENT, LINE_ID, LEG);
   }
 

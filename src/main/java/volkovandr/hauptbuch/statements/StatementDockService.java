@@ -1,12 +1,14 @@
 package volkovandr.hauptbuch.statements;
 
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.Payee;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.Posting;
+import volkovandr.hauptbuch.ledger.TransactionTag;
 import volkovandr.hauptbuch.ledger.UnbalancedTransactionException;
 import volkovandr.hauptbuch.operations.DockCommitService;
 import volkovandr.hauptbuch.operations.DockEntry;
@@ -47,29 +49,55 @@ public class StatementDockService {
   }
 
   /**
-   * The dock's pre-fill for a missing line: the booking date, the account, the amount, the longest
-   * payee name found in the bank's text and that payee's last category.
+   * The dock's pre-fill for a missing line: the booking date, the amount, the longest payee name
+   * found in the bank's text and that payee's last category.
    *
    * @throws StatementFormatException when the line is not (or no longer) missing
    */
   public DockPrefill prefill(long statementId, long statementLineId) {
     StatementLine line = missingLine(statementId, statementLineId);
-    String bankText = bankText(line);
-    Payee payee = payeeService.longestNameIn(bankText).orElse(null);
+    Payee payee = payeeService.longestNameIn(bankText(line)).orElse(null);
     String payeeText =
         payee == null ? "" : payeeService.entryValueFor(payee.payeeId()).orElse(payee.name());
     GhostSuggestion category =
         payee == null ? null : dockPrefillService.lastCategoryOf(payee.payeeId()).orElse(null);
+    DockInput input =
+        new DockInput(
+            line.bookingDate(),
+            payeeText,
+            category == null ? null : category.categoryId(),
+            category == null ? "" : category.categoryName(),
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of());
+    return dock(line, input, null);
+  }
+
+  /**
+   * The dock as the operator left it after a refused save: the typed fields, the tag chips and the
+   * reason.
+   *
+   * @throws StatementFormatException when the line is no longer missing
+   */
+  public DockPrefill reopen(long statementId, long statementLineId, DockInput input, String error) {
+    return dock(missingLine(statementId, statementLineId), input, error);
+  }
+
+  private DockPrefill dock(StatementLine line, DockInput input, String error) {
+    Map<Long, String> labels = ledgerService.labelsForTagIds(input.tagId());
+    List<TransactionTag> tags =
+        input.tagId().stream().map(id -> new TransactionTag(id, labels.get(id))).toList();
     return new DockPrefill(
-        statementLineId,
-        line.bookingDate().toString(),
-        statementService.accountName(statementService.get(statementId).accountId()),
-        StatementController.number(line.amount()),
-        bankText,
-        payeeText,
-        category == null ? "" : category.categoryName(),
-        category == null ? null : category.categoryId(),
-        line.bankCategory() == null ? "" : line.bankCategory());
+        line.statementLineId(),
+        StatementController.number(line.amount().abs()),
+        bankText(line),
+        line.bankCategory() == null ? "" : line.bankCategory(),
+        input,
+        tags,
+        error);
   }
 
   /**
@@ -125,7 +153,8 @@ public class StatementDockService {
             StatementController.number(line.amount()),
             input.note())
         .withTransfer(input.transferDirection())
-        .withPerson(input.personName(), input.personDirection(), input.personRevive());
+        .withPerson(input.personName(), input.personDirection(), input.personRevive())
+        .withTags(input.tagId());
   }
 
   private static String bankText(StatementLine line) {

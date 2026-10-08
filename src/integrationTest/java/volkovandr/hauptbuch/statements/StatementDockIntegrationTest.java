@@ -103,11 +103,12 @@ class StatementDockIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("Save and match")))
         .andExpect(content().string(containsString("value=\"2026-05-02\"")))
-        .andExpect(content().string(containsString("value=\"BankAaa-EUR\"")))
-        .andExpect(content().string(containsString("value=\"-12,50\"")))
+        .andExpect(content().string(containsString("value=\"12,50\"")))
         .andExpect(content().string(containsString("Bank category:")))
         .andExpect(content().string(containsString("Groceries")))
-        .andExpect(content().string(containsString("hx-post=\"/categories/resolve\"")));
+        .andExpect(content().string(containsString("hx-post=\"/categories/resolve\"")))
+        .andExpect(content().string(containsString("hx-select=\"unset\"")))
+        .andExpect(content().string(containsString("name=\"tagText\"")));
   }
 
   @Test
@@ -193,12 +194,18 @@ class StatementDockIntegrationTest {
   }
 
   @Test
-  void saveWithoutCategoryBooksNothingAndReopensTheDock() throws Exception {
+  void saveWithoutCategoryBooksNothingAndReopensTheDockWithWhatWasTyped() throws Exception {
     mockMvc
-        .perform(post(url(shopLine, "create")).param("date", "2026-05-02"))
-        .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/statements/" + statementId + "?dock=" + shopLine))
-        .andExpect(flash().attributeExists("error"));
+        .perform(
+            post(url(shopLine, "create"))
+                .param("date", "2026-05-02")
+                .param("payeeText", "Typed payee")
+                .param("note", "Typed note"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("A category, transfer target, or person")))
+        .andExpect(content().string(containsString("value=\"Typed payee\"")))
+        .andExpect(content().string(containsString("value=\"Typed note\"")))
+        .andExpect(content().string(containsString("Save and match")));
 
     assertThat(count("select count(*) from transaction")).isZero();
     assertThat(count("select count(*) from statement_match")).isZero();
@@ -216,6 +223,7 @@ class StatementDockIntegrationTest {
             post(url(shopLine, "create"))
                 .param("date", "2026-05-02")
                 .param("categoryId", String.valueOf(foodId)))
+        .andExpect(redirectedUrl("/statements/" + statementId))
         .andExpect(flash().attributeExists("error"));
 
     assertThat(count("select count(*) from transaction")).isEqualTo(1);
