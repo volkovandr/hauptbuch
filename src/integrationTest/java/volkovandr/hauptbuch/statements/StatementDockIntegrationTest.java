@@ -108,7 +108,9 @@ class StatementDockIntegrationTest {
         .andExpect(content().string(containsString("Groceries")))
         .andExpect(content().string(containsString("hx-post=\"/categories/resolve\"")))
         .andExpect(content().string(containsString("hx-select=\"unset\"")))
-        .andExpect(content().string(containsString("name=\"tagText\"")));
+        .andExpect(content().string(containsString("name=\"tagText\"")))
+        // Cancel swaps <main> like Create does, so the page keeps its scroll position.
+        .andExpect(content().string(containsString("hx-get=\"/statements/" + statementId + "\"")));
   }
 
   @Test
