@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <!--
-  The dock on the statement page (statements.md §6.4, plan slice d1): a missing line's transaction,
-  booked and matched in one go. It is a full-width row directly under the line it creates, so the
-  operator never scrolls to find it. Category and tags resolve through the shared
+  The dock on the statement page (statements.md §6.4, plan slices d1–d2): a missing line's
+  transaction booked and matched in one go, a proposed transaction amended to the bank's figures and
+  matched, or an extra edited (nothing matched). It is a full-width row directly under the line or
+  extra it belongs to, so the operator never scrolls to find it. Category and tags resolve through the shared
   /categories/resolve and /categories/tags/resolve exactly as the register's dock does.
 
   The form swaps the whole <main> (hx-select), and that setting is inherited by every htmx element
@@ -14,18 +15,21 @@
   <body>
     <th:block th:fragment="dock(statementId, dock, lists)">
       <div id="statement-dock" class="statement-dock">
-        <p class="eyebrow">Create transaction</p>
-        <p class="muted">
+        <p class="eyebrow" th:text="${dock.title()}">Create transaction</p>
+        <p class="muted" th:if="${!dock.bankText().isEmpty()}">
           <span th:text="${dock.bankText()}">SHOPAAA SAGT DANKE</span>
           <span th:if="${!dock.bankCategory().isEmpty()}">
             · Bank category: <span th:text="${dock.bankCategory()}">Groceries</span>
           </span>
         </p>
+        <p class="muted" th:if="${!dock.notice().isEmpty()}" th:text="${dock.notice()}">
+          Booked as 3,00; saving sets it to the bank's 3,50.
+        </p>
         <form
           class="entry-dock"
           method="post"
-          th:action="@{/statements/{id}/lines/{line}/create(id=${statementId},line=${dock.lineId()})}"
-          th:attr="hx-post=@{/statements/{id}/lines/{line}/create(id=${statementId},line=${dock.lineId()})}"
+          th:action="@{${dock.path(statementId)}}"
+          th:attr="hx-post=@{${dock.path(statementId)}}"
           hx-target="main"
           hx-select="main"
           hx-swap="outerHTML"
@@ -37,8 +41,37 @@
             </div>
             <div class="field">
               <label class="field__label" for="dock-amount">Amount</label>
-              <input id="dock-amount" class="input input--amount" th:value="${dock.amount()}" readonly />
+              <input
+                id="dock-amount"
+                class="input input--amount"
+                th:value="${dock.amount()}"
+                th:name="${dock.amountEditable()} ? 'amount'"
+                th:readonly="${!dock.amountEditable()}"
+              />
             </div>
+            <th:block th:if="${dock.crossCurrency()}">
+              <input type="hidden" name="categoryCurrencyCode" th:value="${dock.input().categoryCurrencyCode()}" />
+              <div class="field">
+                <label class="field__label" for="dock-category-amount">
+                  Counterpart amount (<span th:text="${dock.input().categoryCurrencyCode()}">CHF</span>)
+                </label>
+                <input
+                  id="dock-category-amount"
+                  name="categoryAmount"
+                  class="input input--amount"
+                  th:value="${dock.input().categoryAmount()}"
+                />
+              </div>
+              <div class="field">
+                <label class="field__label" for="dock-base-amount">Base amount</label>
+                <input
+                  id="dock-base-amount"
+                  name="baseAmount"
+                  class="input input--amount"
+                  th:value="${dock.input().baseAmount()}"
+                />
+              </div>
+            </th:block>
             <div class="field">
               <label class="field__label" for="dock-payee">Payee</label>
               <input
@@ -128,7 +161,7 @@
             </span>
           </div>
           <p class="actions">
-            <button type="submit" class="btn btn--primary">Save and match</button>
+            <button type="submit" class="btn btn--primary" th:text="${dock.saveLabel()}">Save and match</button>
             <a
               class="btn btn--ghost"
               th:href="@{/statements/{id}(id=${statementId})}"

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.statements.StatementCandidate;
 import volkovandr.hauptbuch.statements.StatementExtra;
 import volkovandr.hauptbuch.statements.StatementMatch;
+import volkovandr.hauptbuch.statements.StatementOfLeg;
 
 /**
  * The matcher's queries (statements.md §4): which live ledger legs are candidates for each line,
@@ -239,5 +240,24 @@ public class StatementMatchRepository {
         .param(LINE_ID, statementLineId)
         .param(POSTING_ID, postingId)
         .update();
+  }
+
+  /** The statements that match a leg of the transaction, one row per matched leg. */
+  public List<StatementOfLeg> findStatementsOfTransaction(long transactionId) {
+    return jdbcClient
+        .sql(
+            """
+            select a.name as account_name, s.period_start, s.original_filename
+            from statement_match m
+            join posting p on p.posting_id = m.posting_id
+            join account a on a.account_id = p.account_id
+            join statement s on s.statement_id = m.statement_id
+            where p.transaction_id = :transactionId
+              and s.deleted_at is null
+            order by s.period_start nulls last, m.statement_match_id
+            """)
+        .param("transactionId", transactionId)
+        .query(StatementOfLeg.class)
+        .list();
   }
 }

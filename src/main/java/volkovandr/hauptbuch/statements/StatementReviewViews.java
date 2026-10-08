@@ -29,6 +29,7 @@ final class StatementReviewViews {
       String statusClass,
       List<String> details,
       List<Pick> picks,
+      List<Pick> fixes,
       boolean canUnmatch,
       Long differentPosting,
       boolean canCreate) {
@@ -45,6 +46,7 @@ final class StatementReviewViews {
           "statement-status--" + review.status().name().toLowerCase(Locale.ROOT),
           details(review),
           picks(review),
+          fixes(review),
           review.match() != null,
           overlap ? review.firstProposedPostingId() : null,
           review.status() == LineStatus.MISSING);
@@ -56,6 +58,23 @@ final class StatementReviewViews {
           .filter(p -> p.tier() == ProposedCandidate.Tier.EXACT)
           .map(p -> new Pick(p.candidate().postingId(), pickLabel(review.status(), p)))
           .toList();
+    }
+
+    /** The other proposals, which need the dock: an amount to correct or a leg to move here. */
+    private static List<Pick> fixes(LineReview review) {
+      if (review.status() == LineStatus.MATCHED) {
+        return List.of();
+      }
+      return review.candidates().stream()
+          .filter(p -> p.tier() != ProposedCandidate.Tier.EXACT)
+          .map(p -> new Pick(p.candidate().postingId(), fixLabel(p)))
+          .toList();
+    }
+
+    private static String fixLabel(ProposedCandidate proposed) {
+      String verb =
+          proposed.tier() == ProposedCandidate.Tier.WRONG_ACCOUNT ? "Move here: " : "Amend: ";
+      return verb + candidateText(proposed);
     }
 
     private static String pickLabel(LineStatus status, ProposedCandidate proposed) {
@@ -96,11 +115,13 @@ final class StatementReviewViews {
   record Pick(long postingId, String label) {}
 
   /** An extra, with its boundary label. */
-  record ExtraView(String date, String payee, String note, String amount, String boundary) {
+  record ExtraView(
+      long postingId, String date, String payee, String note, String amount, String boundary) {
 
     static ExtraView of(ExtraReview review) {
       StatementExtra e = review.extra();
       return new ExtraView(
+          e.postingId(),
           StatementController.date(e.transactionDate()),
           e.payeeName() == null ? "" : e.payeeName(),
           e.note() == null ? "" : e.note(),

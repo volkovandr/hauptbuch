@@ -3,7 +3,6 @@ package volkovandr.hauptbuch.statements;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -27,6 +26,7 @@ import volkovandr.hauptbuch.ledger.Posting;
 import volkovandr.hauptbuch.ledger.TransactionTag;
 import volkovandr.hauptbuch.ledger.UnbalancedTransactionException;
 import volkovandr.hauptbuch.operations.DockCommitService;
+import volkovandr.hauptbuch.operations.DockEditService;
 import volkovandr.hauptbuch.operations.DockEntry;
 import volkovandr.hauptbuch.operations.DockPrefillService;
 import volkovandr.hauptbuch.operations.GhostSuggestion;
@@ -34,7 +34,8 @@ import volkovandr.hauptbuch.operations.GhostSuggestion;
 /**
  * Unit tier: the statement page's dock (statements.md §6.4) with {@code operations} and {@code
  * ledger} mocked — the pre-fill from a missing line, and that a save books with the bank's amount,
- * matches the new leg, and matches nothing when the booking is refused.
+ * matches the new leg, and matches nothing when the booking is refused; and amending a proposed
+ * amount-differs or wrong-account transaction to the bank's figures (slice d2).
  */
 @ExtendWith(MockitoExtension.class)
 class StatementDockServiceTest {
@@ -51,6 +52,7 @@ class StatementDockServiceTest {
   @Mock private PayeeService payeeService;
   @Mock private DockPrefillService dockPrefillService;
   @Mock private DockCommitService dockCommitService;
+  @Mock private DockEditService dockEditService;
   @Mock private LedgerService ledgerService;
 
   private StatementDockService service;
@@ -64,6 +66,7 @@ class StatementDockServiceTest {
             payeeService,
             dockPrefillService,
             dockCommitService,
+            dockEditService,
             ledgerService);
   }
 
@@ -96,7 +99,11 @@ class StatementDockServiceTest {
         null,
         null,
         "note",
-        List.of(3L));
+        List.of(3L),
+        null,
+        null,
+        null,
+        null);
   }
 
   private void statementOnAccount() {
@@ -225,7 +232,7 @@ class StatementDockServiceTest {
         .isInstanceOf(StatementFormatException.class)
         .hasMessage("A CHF amount is required");
 
-    verify(matchService, never()).link(anyLong(), anyLong(), anyLong());
+    verify(matchService, never()).link(eq(STATEMENT), eq(LINE_ID), eq(LEG));
   }
 
   @Test
@@ -238,7 +245,7 @@ class StatementDockServiceTest {
     assertThatThrownBy(() -> service.createMissing(STATEMENT, LINE_ID, input(8L)))
         .isInstanceOf(StatementFormatException.class);
 
-    verify(matchService, never()).link(anyLong(), anyLong(), anyLong());
+    verify(matchService, never()).link(eq(STATEMENT), eq(LINE_ID), eq(LEG));
   }
 
   @Test

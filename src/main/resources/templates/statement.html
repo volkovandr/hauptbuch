@@ -156,6 +156,18 @@
                   <button type="submit" class="btn">Unmatch</button>
                 </form>
                 <a
+                  th:each="f : ${r.fixes()}"
+                  class="btn"
+                  th:href="@{/statements/{id}(id=${statement.statementId()},dock=${r.lineId()},posting=${f.postingId()})}"
+                  th:attr="hx-get=@{/statements/{id}(id=${statement.statementId()},dock=${r.lineId()},posting=${f.postingId()})}"
+                  hx-target="main"
+                  hx-select="main"
+                  hx-swap="outerHTML"
+                  hx-push-url="true"
+                  th:text="${f.label()}"
+                  >Amend</a
+                >
+                <a
                   th:if="${r.canCreate()}"
                   class="btn"
                   th:href="@{/statements/{id}(id=${statement.statementId()},dock=${r.lineId()})}"
@@ -193,16 +205,60 @@
               <th>Note</th>
               <th class="num">Amount</th>
               <th></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr th:each="e : ${reviewExtras}">
-              <td th:text="${e.date()}">03.05.2026</td>
-              <td th:text="${e.payee()}">ShopAaa</td>
-              <td th:text="${e.note()}"></td>
-              <td class="num" th:text="${e.amount()}">-9,99</td>
-              <td class="muted" th:text="${e.boundary()}">probably on the next statement</td>
-            </tr>
+            <th:block th:each="e : ${reviewExtras}">
+              <tr>
+                <td th:text="${e.date()}">03.05.2026</td>
+                <td th:text="${e.payee()}">ShopAaa</td>
+                <td th:text="${e.note()}"></td>
+                <td class="num" th:text="${e.amount()}">-9,99</td>
+                <td class="muted" th:text="${e.boundary()}">probably on the next statement</td>
+                <td>
+                  <a
+                    class="btn"
+                    th:href="@{/statements/{id}(id=${statement.statementId()},extra=${e.postingId()})}"
+                    th:attr="hx-get=@{/statements/{id}(id=${statement.statementId()},extra=${e.postingId()})}"
+                    hx-target="main"
+                    hx-select="main"
+                    hx-swap="outerHTML"
+                    hx-push-url="true"
+                    >Edit</a
+                  >
+                  <form
+                    method="post"
+                    th:action="@{/statements/{id}/extras/{posting}/move(id=${statement.statementId()},posting=${e.postingId()})}"
+                    th:attr="hx-post=@{/statements/{id}/extras/{posting}/move(id=${statement.statementId()},posting=${e.postingId()})}"
+                    hx-target="main"
+                    hx-select="main"
+                    hx-swap="outerHTML"
+                  >
+                    <select class="input" name="account" aria-label="Move to account">
+                      <option th:each="a : ${moveAccounts}" th:if="${a.accountId() != statement.accountId()}" th:value="${a.accountId()}" th:text="${a.name()}">BankBbb-EUR</option>
+                    </select>
+                    <button type="submit" class="btn">Move</button>
+                  </form>
+                  <form
+                    method="post"
+                    th:action="@{/statements/{id}/extras/{posting}/void(id=${statement.statementId()},posting=${e.postingId()})}"
+                    th:attr="hx-post=@{/statements/{id}/extras/{posting}/void(id=${statement.statementId()},posting=${e.postingId()})}"
+                    hx-target="main"
+                    hx-select="main"
+                    hx-swap="outerHTML"
+                    hx-confirm="Void this transaction?"
+                  >
+                    <button type="submit" class="btn btn--danger">Void</button>
+                  </form>
+                </td>
+              </tr>
+              <tr th:if="${dock != null and dock.amountEditable() and dock.postingId() == e.postingId()}">
+                <td colspan="6">
+                  <th:block th:replace="~{fragments/statement-dock :: dock(${statement.statementId()}, ${dock}, ${lists})}"></th:block>
+                </td>
+              </tr>
+            </th:block>
           </tbody>
         </table>
       </div>

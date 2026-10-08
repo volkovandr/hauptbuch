@@ -19,6 +19,13 @@ import java.util.List;
  * @param personRevive the revive decision for a soft-deleted person
  * @param note the transaction note, optional
  * @param tagId the resolved tag ids of the committed chips; never null
+ * @param amount the amount as the register's dock would type it, used only where the operator may
+ *     change it (an extra); a line's dock books the bank's amount and ignores it
+ * @param categoryCurrencyCode the counterpart leg's currency when the booked transaction is
+ *     cross-currency, else null
+ * @param categoryAmount the counterpart leg's native magnitude (cross-currency only)
+ * @param baseAmount the frozen base-currency magnitude, asked for only when neither leg is the base
+ *     currency (cross-currency only)
  */
 public record DockInput(
     LocalDate date,
@@ -30,10 +37,33 @@ public record DockInput(
     String personDirection,
     String personRevive,
     String note,
-    List<Long> tagId) {
+    List<Long> tagId,
+    String amount,
+    String categoryCurrencyCode,
+    String categoryAmount,
+    String baseAmount) {
 
   /** Defensively copy the tag ids (null-safe) so the input cannot be mutated after. */
   public DockInput {
     tagId = tagId == null ? List.of() : List.copyOf(tagId);
+  }
+
+  /** This input with a different frozen base amount (blank asks the operator to enter one). */
+  public DockInput withBaseAmount(String newBaseAmount) {
+    return new DockInput(
+        date,
+        payeeText,
+        categoryId,
+        categoryText,
+        transferDirection,
+        personName,
+        personDirection,
+        personRevive,
+        note,
+        tagId,
+        amount,
+        categoryCurrencyCode,
+        categoryAmount,
+        newBaseAmount);
   }
 }

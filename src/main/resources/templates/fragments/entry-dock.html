@@ -426,6 +426,10 @@
       </div>
 
       <p class="entry-dock__error warning" th:if="${entryError}" th:text="${entryError}"></p>
+      <!-- Legs a bank statement has proven (statements.md §6.4): informative, never a block. -->
+      <p class="muted" th:each="notice : ${reconciledNotices}" th:text="${notice}">
+        BankAaa-EUR leg reconciled — statement 2026-05
+      </p>
     </form>
 
     <!-- POST /register/entry success response: the repainted rows region (the primary swap into

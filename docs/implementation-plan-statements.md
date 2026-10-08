@@ -91,7 +91,7 @@
   account, amount, the longest payee substring, the payee's last category, and the bank-category
   label; Save books through `operations` and matches + reconciles in one database transaction.
   *Done when:* a missing line becomes a matched transaction without leaving the page.
-- **d2 — The rest of the dock.** Amount differs (single-currency and cross-currency with base
+- **d2 — The rest of the dock** *(built; awaiting owner confirmation — `.scratch/statements/issues/07-*`)*. Amount differs (single-currency and cross-currency with base
   re-freeze and rate write-back), wrong-account candidates (account switch on Save), extras' Edit /
   Move / Void, the reconciled-leg notice in the register's dock. *Done when:* every status on the
   page has its action.
