@@ -129,7 +129,16 @@
           </div>
           <p class="actions">
             <button type="submit" class="btn btn--primary">Save and match</button>
-            <a class="btn btn--ghost" th:href="@{/statements/{id}(id=${statementId})}">Cancel</a>
+            <a
+              class="btn btn--ghost"
+              th:href="@{/statements/{id}(id=${statementId})}"
+              th:attr="hx-get=@{/statements/{id}(id=${statementId})}"
+              hx-target="main"
+              hx-select="main"
+              hx-swap="outerHTML"
+              hx-push-url="true"
+              >Cancel</a
+            >
             <span class="statements__error" role="alert" th:if="${dock.error() != null}" th:text="${dock.error()}">
               A category, transfer target, or person is required.
             </span>
