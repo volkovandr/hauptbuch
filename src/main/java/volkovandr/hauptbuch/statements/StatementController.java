@@ -155,13 +155,19 @@ class StatementController {
       @RequestParam(required = false) Long dock,
       Model model,
       RedirectAttributes redirectAttributes) {
-    Statement statement;
     try {
-      statement = statementService.get(id);
+      addPage(id, model);
     } catch (StatementFormatException e) {
       redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
       return REDIRECT_BASE;
     }
+    addDock(id, dock, model);
+    return "statement";
+  }
+
+  /** Everything the statement page shows except the dock. */
+  private void addPage(long id, Model model) {
+    Statement statement = statementService.get(id);
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("statement", statement);
     model.addAttribute("accountName", statementService.accountName(statement.accountId()));
@@ -176,8 +182,6 @@ class StatementController {
         review.lines().stream().map(StatementReviewViews.ReviewLineView::of).toList());
     model.addAttribute(
         "reviewExtras", review.extras().stream().map(StatementReviewViews.ExtraView::of).toList());
-    addDock(id, dock, model);
-    return "statement";
   }
 
   /** Open the dock on a missing line, or say why it cannot be (the line was matched meanwhile). */
@@ -193,20 +197,32 @@ class StatementController {
     }
   }
 
-  /** Book a missing line through the dock and match it; on a refusal the dock stays open. */
+  /**
+   * Book a missing line through the dock and match it. A refusal re-renders the page with the dock
+   * still open on that line, holding what was typed and saying why beside Save.
+   */
   @PostMapping(BASE_PATH + "/{id}/lines/{lineId}/create")
   String createMissing(
       @PathVariable long id,
       @PathVariable long lineId,
       @ModelAttribute DockInput input,
+      Model model,
       RedirectAttributes redirectAttributes) {
     try {
       dockService.createMissing(id, lineId, input);
       redirectAttributes.addFlashAttribute(NOTICE, "Transaction created and matched.");
       return REDIRECT_BASE + "/" + id;
-    } catch (StatementFormatException e) {
-      redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
-      return REDIRECT_BASE + "/" + id + "?dock=" + lineId;
+    } catch (StatementFormatException refused) {
+      try {
+        addPage(id, model);
+        model.addAttribute("dock", dockService.reopen(id, lineId, input, refused.getMessage()));
+        model.addAttribute("lists", registerService.datalists());
+        return "statement";
+      } catch (StatementFormatException gone) {
+        // The line itself is no longer missing: there is no dock to keep open.
+        redirectAttributes.addFlashAttribute(ERROR, gone.getMessage());
+        return REDIRECT_BASE + "/" + id;
+      }
     }
   }
 

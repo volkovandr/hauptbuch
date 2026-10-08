@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!--
+  The dock on the statement page (statements.md §6.4, plan slice d1): a missing line's transaction,
+  booked and matched in one go. It is a full-width row directly under the line it creates, so the
+  operator never scrolls to find it. Category and tags resolve through the shared
+  /categories/resolve and /categories/tags/resolve exactly as the register's dock does.
+
+  The form swaps the whole <main> (hx-select), and that setting is inherited by every htmx element
+  inside it — which would filter the small fragments the pickers return down to nothing and wipe
+  the resolved category. So the fields wrapper resets hx-select to `unset`; only Save, outside the
+  wrapper, swaps the page.
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <th:block th:fragment="dock(statementId, dock, lists)">
+      <div id="statement-dock" class="statement-dock">
+        <p class="eyebrow">Create transaction</p>
+        <p class="muted">
+          <span th:text="${dock.bankText()}">SHOPAAA SAGT DANKE</span>
+          <span th:if="${!dock.bankCategory().isEmpty()}">
+            · Bank category: <span th:text="${dock.bankCategory()}">Groceries</span>
+          </span>
+        </p>
+        <form
+          class="entry-dock"
+          method="post"
+          th:action="@{/statements/{id}/lines/{line}/create(id=${statementId},line=${dock.lineId()})}"
+          th:attr="hx-post=@{/statements/{id}/lines/{line}/create(id=${statementId},line=${dock.lineId()})}"
+          hx-target="main"
+          hx-select="main"
+          hx-swap="outerHTML"
+        >
+          <div class="entry-dock__fields" hx-select="unset">
+            <div class="field">
+              <label class="field__label" for="dock-date">Date</label>
+              <input id="dock-date" name="date" type="date" class="input" th:value="${dock.input().date()}" required />
+            </div>
+            <div class="field">
+              <label class="field__label" for="dock-amount">Amount</label>
+              <input id="dock-amount" class="input input--amount" th:value="${dock.amount()}" readonly />
+            </div>
+            <div class="field">
+              <label class="field__label" for="dock-payee">Payee</label>
+              <input
+                id="dock-payee"
+                name="payeeText"
+                class="input"
+                list="dock-payee-options"
+                autocomplete="off"
+                th:value="${dock.input().payeeText()}"
+              />
+              <datalist id="dock-payee-options">
+                <option th:each="p : ${lists.payees()}" th:value="${p.entryValue()}"></option>
+              </datalist>
+            </div>
+            <div class="field">
+              <label class="field__label" for="dock-category">Category</label>
+              <input
+                id="dock-category"
+                name="categoryText"
+                class="input"
+                list="dock-category-options"
+                autocomplete="off"
+                placeholder="Food  ·  or  for Max"
+                th:value="${dock.input().categoryText()}"
+                hx-post="/categories/resolve"
+                hx-trigger="change"
+                hx-target="#entry-category-resolved"
+                hx-swap="innerHTML"
+              />
+              <datalist id="dock-category-options">
+                <option th:each="c : ${lists.categories()}" th:value="${c.name()}"></option>
+                <option th:each="t : ${lists.transferTargets()}" th:value="${t}"></option>
+                <option th:each="p : ${lists.personTargets()}" th:value="${p}"></option>
+              </datalist>
+            </div>
+            <div class="field">
+              <label class="field__label" for="dock-note">Note</label>
+              <input id="dock-note" name="note" class="input" autocomplete="off" th:value="${dock.input().note()}" />
+            </div>
+            <div class="field field--tags" data-tag-field>
+              <label class="field__label" for="entry-tags">Tags</label>
+              <div class="chips">
+                <span id="entry-tag-chips" class="chips__list" data-tag-chips>
+                  <th:block th:each="t : ${dock.tags()}">
+                    <th:block
+                      th:replace="~{fragments/entry-dock :: tagChip(tagId=${t.tagId()}, tagLabel=${t.label()}, fieldName='tagId')}"
+                    ></th:block>
+                  </th:block>
+                </span>
+                <input
+                  id="entry-tags"
+                  name="tagText"
+                  class="input chips__input"
+                  list="entry-tag-options"
+                  autocomplete="off"
+                  placeholder="Car:Passat"
+                  data-tag-input
+                  hx-post="/categories/tags/resolve"
+                  hx-trigger="tag-commit"
+                  hx-include="this"
+                  hx-target="#entry-tag-chips"
+                  hx-swap="beforeend"
+                />
+                <datalist id="entry-tag-options">
+                  <option th:each="tl : ${lists.tagOptions()}" th:value="${tl}"></option>
+                </datalist>
+              </div>
+            </div>
+            <span id="entry-category-resolved" data-counterpart-resolved>
+              <input type="hidden" name="categoryId" th:value="${dock.input().categoryId()}" />
+              <input
+                th:if="${dock.input().transferDirection() != null}"
+                type="hidden"
+                name="transferDirection"
+                th:value="${dock.input().transferDirection()}"
+              />
+              <th:block th:if="${dock.input().personName() != null}">
+                <input type="hidden" name="personName" th:value="${dock.input().personName()}" />
+                <input type="hidden" name="personDirection" th:value="${dock.input().personDirection()}" />
+                <input
+                  th:if="${dock.input().personRevive() != null}"
+                  type="hidden"
+                  name="personRevive"
+                  th:value="${dock.input().personRevive()}"
+                />
+              </th:block>
+            </span>
+          </div>
+          <p class="actions">
+            <button type="submit" class="btn btn--primary">Save and match</button>
+            <a class="btn btn--ghost" th:href="@{/statements/{id}(id=${statementId})}">Cancel</a>
+            <span class="statements__error" role="alert" th:if="${dock.error() != null}" th:text="${dock.error()}">
+              A category, transfer target, or person is required.
+            </span>
+          </p>
+        </form>
+      </div>
+    </th:block>
+  </body>
+</html>

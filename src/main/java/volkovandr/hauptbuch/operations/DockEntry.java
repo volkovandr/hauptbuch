@@ -137,6 +137,30 @@ public record DockEntry(
         List.of());
   }
 
+  /** This entry carrying the given transaction-level tags. */
+  public DockEntry withTags(List<Long> tags) {
+    return new DockEntry(
+        transactionId,
+        date,
+        accountId,
+        fundingPersonName,
+        fundingPersonDirection,
+        fundingPersonRevive,
+        payeeId,
+        payeeText,
+        categoryId,
+        categoryCurrencyCode,
+        amount,
+        categoryAmount,
+        baseAmount,
+        note,
+        transferDirection,
+        personName,
+        personDirection,
+        personRevive,
+        tags);
+  }
+
   /** This entry with a transfer counterpart: {@code categoryId} is the target account's id. */
   public DockEntry withTransfer(String direction) {
     return new DockEntry(
