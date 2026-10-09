@@ -61,6 +61,7 @@ final class StatementTextMasker {
             .chars()
             .mapToObj(c -> Pattern.quote(String.valueOf((char) c)))
             .collect(Collectors.joining("[ \\t]*"));
-    return Pattern.compile("(?<![A-Za-z0-9])" + spaced + "(?![A-Za-z0-9])", Pattern.CASE_INSENSITIVE);
+    return Pattern.compile(
+        "(?<![A-Za-z0-9])" + spaced + "(?![A-Za-z0-9])", Pattern.CASE_INSENSITIVE);
   }
 }

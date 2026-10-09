@@ -2,8 +2,8 @@ package volkovandr.hauptbuch.accounts;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.OptionalInt;
 import java.util.Locale;
+import java.util.OptionalInt;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -79,9 +79,9 @@ public final class DetectionLabels {
 
   /**
    * Where the earliest identifier-shaped label of the account appears in the text, as an offset in
-   * the text with whitespace dropped and case ignored — an IBAN printed in groups of four meets
-   * the same number typed without them. Empty when none appears. Short labels never count: the
-   * last four digits would match any amount.
+   * the text with whitespace dropped and case ignored — an IBAN printed in groups of four meets the
+   * same number typed without them. Empty when none appears. Short labels never count: the last
+   * four digits would match any amount.
    */
   public static OptionalInt firstIdentifierIndexIn(String labels, String text) {
     String haystack = compact(text);
@@ -93,7 +93,8 @@ public final class DetectionLabels {
 
   private static boolean looksLikeIdentifier(String label) {
     String compact = compact(label);
-    return compact.length() >= MIN_IDENTIFIER_LENGTH && compact.chars().anyMatch(Character::isDigit);
+    return compact.length() >= MIN_IDENTIFIER_LENGTH
+        && compact.chars().anyMatch(Character::isDigit);
   }
 
   private static String compact(String text) {

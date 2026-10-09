@@ -114,8 +114,25 @@ public class StatementProfileService {
           s.windowDaysBefore(),
           s.windowDaysAfter(),
           blankToNull(s.aiNote()),
-          null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-          null, null, null, null, null);
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null);
     }
     return new StatementProfile(
         s.statementProfileId(),

@@ -205,9 +205,31 @@ class StatementProfileServiceTest {
   void pdfProfileKeepsOnlyItsNameWindowAndAiNoteAndNeedsNoColumns() {
     StatementProfile submitted =
         new StatementProfile(
-            null, " BankBbb PDF ", "pdf", 5, 2, "  Beschreibung carries the rate ", ";", null,
-            null, 3, true, null, null, "signed", "Booking", null, null, null, null, null, null,
-            null, null, null, null);
+            null,
+            " BankBbb PDF ",
+            "pdf",
+            5,
+            2,
+            "  Beschreibung carries the rate ",
+            ";",
+            null,
+            null,
+            3,
+            true,
+            null,
+            null,
+            "signed",
+            "Booking",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
     when(repository.insert(any())).thenReturn(9L);
 
     assertThat(service().save(submitted)).isEqualTo(9L);
@@ -223,7 +245,7 @@ class StatementProfileServiceTest {
   }
 
   @Test
-  void pdfProfileStillNeedsAName() {
+  void pdfProfileStillNeedsName() {
     StatementProfile submitted = StatementProfile.blankPdf();
 
     assertThatThrownBy(() -> service().save(submitted))
