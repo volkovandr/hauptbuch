@@ -487,9 +487,9 @@ class ReceiptRegisterScreenIntegrationTest {
   @Test
   void sortByCapturedAscendingReordersTheList() throws Exception {
     long later = upload();
-    setCapturedAt(later, "2026-07-20T10:00:00Z");
+    setCapturedAt(later, java.time.Instant.now().minus(java.time.Duration.ofDays(5)).toString());
     long earlier = upload();
-    setCapturedAt(earlier, "2026-07-10T10:00:00Z");
+    setCapturedAt(earlier, java.time.Instant.now().minus(java.time.Duration.ofDays(10)).toString());
 
     mockMvc
         .perform(get(RECEIPTS_PATH).param("sort", "captured").param("dir", "asc"))
