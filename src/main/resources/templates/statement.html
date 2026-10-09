@@ -95,6 +95,7 @@
               <th>Status</th>
               <th>Ledger</th>
               <th></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -179,9 +180,17 @@
                   >Create</a
                 >
               </td>
+              <td>
+                <a
+                  th:if="${r.registerTransactionId() != null}"
+                  class="btn"
+                  th:href="@{/register(selected=${r.registerTransactionId()})}"
+                  >Edit in register</a
+                >
+              </td>
             </tr>
             <tr th:if="${refusal != null and refusedExtra == null and refusedLine == r.lineId()}">
-              <td colspan="6" class="statements__error" role="alert">
+              <td colspan="7" class="statements__error" role="alert">
                 <span th:text="${refusal}">Only a simple two-leg transaction can be edited here.</span>
                 <a
                   th:if="${refusalTransactionId != null}"
@@ -191,7 +200,7 @@
                 </td>
             </tr>
             <tr th:if="${dock != null and dock.lineId() == r.lineId()}">
-              <td colspan="6">
+              <td colspan="7">
                 <th:block th:replace="~{fragments/statement-dock :: dock(${statement.statementId()}, ${dock}, ${lists})}"></th:block>
               </td>
             </tr>

@@ -232,6 +232,7 @@ class StatementMatchActionsIntegrationTest {
     mockMvc
         .perform(get("/statements/" + statementId))
         .andExpect(content().string(containsString("Unmatch")))
+        .andExpect(content().string(containsString("/register?selected=" + shopTxn)))
         .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Accept all exact"))));
   }
 
