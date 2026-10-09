@@ -215,7 +215,7 @@
       <p class="muted">
         Postings on this account, dated in the period, that the statement does not account for.
       </p>
-      <div class="statement-lines">
+      <div class="statement-lines statement-lines--extras">
         <table class="statements">
           <thead>
             <tr>
@@ -224,7 +224,12 @@
               <th>Note</th>
               <th class="num">Amount</th>
               <th></th>
-              <th></th>
+              <th>
+                Actions
+                <span
+                  th:replace="~{fragments/help-marker :: marker('Edit: change it here. Move: book it on another account of the same currency, when it was entered on the wrong one. Void: delete it, e.g. a duplicate.')}"
+                ></span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -236,6 +241,7 @@
                 <td class="num" th:text="${e.amount()}">-9,99</td>
                 <td class="muted" th:text="${e.boundary()}">probably on the next statement</td>
                 <td>
+                  <div class="statement-actions">
                   <a
                     class="btn"
                     th:href="@{/statements/{id}(id=${statement.statementId()},extra=${e.postingId()})}"
@@ -247,6 +253,7 @@
                     >Edit</a
                   >
                   <form
+                    class="statement-actions__move"
                     method="post"
                     th:action="@{/statements/{id}/extras/{posting}/move(id=${statement.statementId()},posting=${e.postingId()})}"
                     th:attr="hx-post=@{/statements/{id}/extras/{posting}/move(id=${statement.statementId()},posting=${e.postingId()})}"
@@ -270,6 +277,7 @@
                   >
                     <button type="submit" class="btn btn--danger">Void</button>
                   </form>
+                  </div>
                 </td>
               </tr>
               <tr th:if="${refusal != null and refusedExtra == e.postingId()}">

@@ -58,3 +58,6 @@ The register's dock did not say a leg was reconciled by a statement.
 - **Round 3, wish:** a perfectly matched transaction could only be unmatched or re-matched, never
   edited. Matched lines get an "Edit in register" button in their own column, linking to
   `/register?selected=<transaction>` (the register's jump opens the edit dock).
+- **Round 3:** the extras' Move form stacked its account picker above the button. Edit, Move
+  (picker left of its button) and Void now sit on one line; the column header has a help marker
+  saying what each does.

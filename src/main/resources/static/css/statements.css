@@ -127,3 +127,31 @@ table.statements .btn {
 table.statements a.btn {
   display: inline-block;
 }
+
+/* The extras' Edit, Move (account picker, then its button) and Void sit on one line. */
+.statement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.statement-lines td .statement-actions form {
+  margin: 0;
+}
+
+.statement-lines td .statement-actions form.statement-actions__move {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.statement-actions__move select.input {
+  width: auto;
+}
+
+/* The extras list is short; letting it overflow visibly keeps the Actions help bubble from being
+   clipped by the scroll box (overflow-x: auto also clips vertically). */
+.statement-lines.statement-lines--extras {
+  overflow: visible;
+}
