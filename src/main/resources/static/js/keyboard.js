@@ -640,6 +640,16 @@
     updateSplitReadout();
   });
 
+  // The statement page's dock (statements.md §6.4) opens by swapping the whole <main>, which
+  // leaves nothing focused; put the cursor on its Date so Tab walks the fields and Enter saves. A
+  // small swap inside the dock (category or tag resolve) leaves focus on the field being typed in,
+  // so it never steals focus.
+  function focusStatementDock() {
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const date = document.querySelector("#statement-dock #dock-date");
+    if (date) date.focus();
+  }
+
   // After an htmx swap that REPLACED ROWS, drop a stale selection so the next arrow keypress
   // re-selects from a clean state, and re-anchor the newest-at-bottom scroll. Scoped to swaps that
   // actually touched rows: a dock-only swap (the ✎ affordance, or the receipt→register jump's
@@ -657,5 +667,6 @@
       const path = config ? config.path : null;
       focusAfterSplitSwap(path);
       clearTagInputAfterSwap(event, path);
+      focusStatementDock();
     });
 })();

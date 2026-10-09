@@ -171,6 +171,13 @@ class StatementDockBrowserTest extends BrowserTest {
   }
 
   @Test
+  void dockOpensWithTheDateFocused() {
+    openDock("-15,50");
+
+    assertThat(page.locator("#dock-date")).isFocused();
+  }
+
+  @Test
   void newCategoryUnderAnExistingParentIsOfferedAndCreatedFromTheDock() {
     openDock("-13,50");
 
