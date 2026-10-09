@@ -167,7 +167,7 @@ class StatementScreenIntegrationTest {
         mockMvc
             .perform(get(URI.create(StatementFixtures.upload(mockMvc, profileId))))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Proposed from the file")))
+            .andExpect(content().string(containsString("Proposed from the account number")))
             .andReturn()
             .getResponse()
             .getContentAsString();
@@ -201,7 +201,7 @@ class StatementScreenIntegrationTest {
             .getContentAsString();
     assertThat(confirm).containsPattern("value=\"" + otherId + "\"[^>]*selected");
     assertThat(confirm).doesNotContainPattern("value=\"" + accountId + "\"[^>]*selected");
-    assertThat(confirm).doesNotContain("Proposed from the file");
+    assertThat(confirm).doesNotContain("Proposed from the account number");
   }
 
   @Test

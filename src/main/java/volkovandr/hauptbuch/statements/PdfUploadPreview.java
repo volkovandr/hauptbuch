@@ -7,7 +7,7 @@ import java.util.OptionalLong;
  * identifier appears in it.
  *
  * @param characters the length of the extracted text
- * @param proposedAccountId the account whose detection labels name an IBAN or account number in
- *     the text
+ * @param proposedAccountId the account whose detection labels name an IBAN or account number in the
+ *     text
  */
 public record PdfUploadPreview(int characters, OptionalLong proposedAccountId) {}

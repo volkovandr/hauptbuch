@@ -26,7 +26,7 @@ class StatementPdfText {
       stripper.setSortByPosition(true);
       text = stripper.getText(document);
     } catch (IOException e) {
-      throw new StatementFormatException("That file is not a PDF Hauptbuch can read.");
+      throw new StatementFormatException("That file is not a PDF Hauptbuch can read.", e);
     }
     if (text.isBlank()) {
       throw new StatementFormatException(

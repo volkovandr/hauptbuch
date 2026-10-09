@@ -60,7 +60,7 @@ class StatementPdfServiceTest {
   }
 
   @Test
-  void createStoresTheMaskedTextAsANewStatement() {
+  void createStoresTheMaskedTextAsNewStatement() {
     when(storage.read(PATH)).thenReturn(BYTES);
     when(pdfText.extract(BYTES)).thenReturn(RAW);
     when(detector.ownIdentifiers()).thenReturn(List.of("XX00 1111 2222"));
@@ -74,7 +74,7 @@ class StatementPdfServiceTest {
   }
 
   @Test
-  void aPdfWithoutATextLayerStoresNothing() {
+  void pdfWithoutTextLayerStoresNothing() {
     when(storage.read(PATH)).thenReturn(BYTES);
     when(pdfText.extract(BYTES)).thenThrow(new StatementFormatException("no text layer"));
 
@@ -85,7 +85,7 @@ class StatementPdfServiceTest {
   }
 
   @Test
-  void anAccountThatCannotHoldAStatementIsRefusedBeforeAnyReading() {
+  void accountThatCannotHoldStatementIsRefusedBeforeAnyReading() {
     when(statementService.statementAccount(ACCOUNT_ID))
         .thenThrow(new StatementFormatException("Choose the account this statement is for."));
 
@@ -96,7 +96,7 @@ class StatementPdfServiceTest {
   }
 
   @Test
-  void sentTextIsNullForAStatementThatIsNotAPdf() {
+  void sentTextIsNullForStatementThatIsNotPdf() {
     when(statementRepository.findSentText(STATEMENT_ID)).thenReturn(Optional.empty());
 
     assertThat(service.sentText(STATEMENT_ID)).isNull();

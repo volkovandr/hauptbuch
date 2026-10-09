@@ -196,9 +196,7 @@ class StatementController {
   /** Save the PDF text the operator edited (statements.md §3.2). */
   @PostMapping(BASE_PATH + "/{id}/text")
   String saveText(
-      @PathVariable long id,
-      @RequestParam String text,
-      RedirectAttributes redirectAttributes) {
+      @PathVariable long id, @RequestParam String text, RedirectAttributes redirectAttributes) {
     return saved(id, () -> pdfService.updateText(id, text), "Text saved.", redirectAttributes);
   }
 

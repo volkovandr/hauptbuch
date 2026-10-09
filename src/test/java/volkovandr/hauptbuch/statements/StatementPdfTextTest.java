@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -13,8 +14,8 @@ import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tier (CLAUDE.md §6): PDFBox extraction of a statement's text layer, and the two refusals —
- * a PDF without a text layer and bytes that are not a PDF.
+ * Unit tier (CLAUDE.md §6): PDFBox extraction of a statement's text layer, and the two refusals — a
+ * PDF without a text layer and bytes that are not a PDF.
  */
 class StatementPdfTextTest {
 
@@ -50,7 +51,7 @@ class StatementPdfTextTest {
   }
 
   @Test
-  void pdfWithoutATextLayerIsRefused() throws IOException {
+  void pdfWithoutTextLayerIsRefused() throws IOException {
     byte[] blank;
     try (PDDocument document = new PDDocument()) {
       document.addPage(new PDPage());
@@ -65,8 +66,8 @@ class StatementPdfTextTest {
   }
 
   @Test
-  void bytesThatAreNotAPdfAreRefused() {
-    assertThatThrownBy(() -> extractor.extract("a,b,c\n".getBytes()))
+  void bytesThatAreNotPdfAreRefused() {
+    assertThatThrownBy(() -> extractor.extract("a,b,c\n".getBytes(StandardCharsets.UTF_8)))
         .isInstanceOf(StatementFormatException.class)
         .hasMessageContaining("not a PDF");
   }
