@@ -111,3 +111,9 @@ table.statements input.input--amount {
   display: inline-block;
   margin: 0 0.25rem 0.25rem 0;
 }
+
+/* Every statement-page action swaps the whole <main> through htmx; with scroll anchoring on, the
+   browser re-anchors to the replaced content and jumps the page to the bottom. */
+main:has(table.statements) {
+  overflow-anchor: none;
+}

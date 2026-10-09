@@ -72,9 +72,7 @@ final class StatementReviewViews {
     }
 
     private static String fixLabel(ProposedCandidate proposed) {
-      String verb =
-          proposed.tier() == ProposedCandidate.Tier.WRONG_ACCOUNT ? "Move here: " : "Amend: ";
-      return verb + candidateText(proposed);
+      return proposed.tier() == ProposedCandidate.Tier.WRONG_ACCOUNT ? "Move here" : "Amend";
     }
 
     private static String pickLabel(LineStatus status, ProposedCandidate proposed) {

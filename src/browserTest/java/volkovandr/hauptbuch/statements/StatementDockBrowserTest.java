@@ -34,6 +34,7 @@ class StatementDockBrowserTest extends BrowserTest {
   @Autowired AccountService accountService;
   @Autowired SettingsService settingsService;
   @Autowired StatementProfileService profileService;
+  @Autowired org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
 
   private long accountId;
 
@@ -58,8 +59,12 @@ class StatementDockBrowserTest extends BrowserTest {
 
   /** Save the profile, upload the CSV and confirm it; the new statement's page URL. */
   private String createStatement(String amount) {
-    String csv =
-        CSV_HEADER + "02.05.2026;;" + amount + ";EUR;BrowShopAaa;Card payment;Groceries;\n";
+    return createStatementFromRows(
+        "02.05.2026;;" + amount + ";EUR;BrowShopAaa;Card payment;Groceries;\n");
+  }
+
+  private String createStatementFromRows(String rows) {
+    String csv = CSV_HEADER + rows;
     page.request()
         .post(
             url("/statements/profiles/save"),
@@ -190,5 +195,72 @@ class StatementDockBrowserTest extends BrowserTest {
     assertThat(page.locator("#statement-dock .statements__error"))
         .containsText("A category, transfer target, or person is required");
     assertThat(page.locator("#dock-note")).hasValue("typed note");
+  }
+
+  @Test
+  void openingAndSavingTheDockDoesNotMoveThePage() {
+    StringBuilder rows = new StringBuilder(2048);
+    for (int i = 0; i < 40; i++) {
+      rows.append("02.05.2026;;-").append(100 + i).append(",07;EUR;BrowShopAaa;Card;Groceries;\n");
+    }
+    for (int i = 0; i < 6; i++) {
+      bookExtra("7" + i + ",31");
+    }
+    page.navigate(createStatementFromRows(rows.toString()));
+    Locator create =
+        page.getByText(
+                "Create", new com.microsoft.playwright.Page.GetByTextOptions().setExact(true))
+            .nth(30);
+    create.scrollIntoViewIfNeeded();
+    page.evaluate("window.scrollBy(0, -150)");
+    double before = scrollY();
+    org.assertj.core.api.Assertions.assertThat(before).isGreaterThan(300);
+    create.click();
+    assertThat(page.locator("table.statements #statement-dock")).isVisible();
+    settled();
+    double afterOpen = scrollY();
+    org.assertj.core.api.Assertions.assertThat(afterOpen).isBetween(before - 5, before + 5);
+
+    page.locator("#dock-category").fill("BrowFood");
+    page.locator("#dock-category").dispatchEvent("change");
+    settled();
+    page.getByText("Save and match").click();
+    assertThat(page.locator(".statements__notice")).isVisible();
+    settled();
+    double afterSave = scrollY();
+    org.assertj.core.api.Assertions.assertThat(afterSave).isBetween(before - 5, before + 5);
+  }
+
+  private double scrollY() {
+    Object y = page.evaluate("window.scrollY");
+    return y instanceof Number n ? n.doubleValue() : 0;
+  }
+
+  /** A confirmed expense on the statement's account that no statement line mentions. */
+  private void bookExtra(String amount) {
+    long food =
+        jdbcClient
+            .sql("select account_id from account where name = 'BrowFood-EUR' or name = 'BrowFood'")
+            .query(Long.class)
+            .list()
+            .get(0);
+    long transaction =
+        jdbcClient
+            .sql(
+                "insert into transaction (date, lifecycle) values (:d, 'confirmed') returning"
+                    + " transaction_id")
+            .param("d", LocalDate.of(2026, 5, 2))
+            .query(Long.class)
+            .single();
+    jdbcClient
+        .sql(
+            "insert into posting (transaction_id, account_id, amount) values (:t, :a, :m), (:t, :f,"
+                + " :n)")
+        .param("t", transaction)
+        .param("a", accountId)
+        .param("m", new BigDecimal("-" + amount.replace(',', '.')))
+        .param("f", food)
+        .param("n", new BigDecimal(amount.replace(',', '.')))
+        .update();
   }
 }

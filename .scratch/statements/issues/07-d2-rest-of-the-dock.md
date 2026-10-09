@@ -39,3 +39,11 @@ The register's dock did not say a leg was reconciled by a statement.
 - A cross-currency amend whose bank figure differs from the booked one opens with the base amount
   blank (the frozen value belonged to the old figure); the operator confirms a new one.
 - The register dock keeps the reconciled-leg notice when a save is refused.
+
+## Owner testing, round 1
+- **Page jumped to the bottom** on every statement-page action (Create, Save, Move here). Cause:
+  Chrome scroll anchoring re-anchors after htmx replaces the whole `<main>`, visible once the page
+  had extras below the lines. Fixed with `overflow-anchor: none` on the statement page's `<main>`;
+  `StatementDockBrowserTest.openingAndSavingTheDockDoesNotMoveThePage` guards it.
+- **Fix buttons were as wide as the candidate text** ("Move here: 29.09.2026 Kpler 337,88 on …").
+  They now read just "Amend" / "Move here"; the candidate is already listed in the line's details.

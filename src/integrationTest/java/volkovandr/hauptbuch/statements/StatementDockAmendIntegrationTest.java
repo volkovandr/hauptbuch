@@ -139,7 +139,7 @@ class StatementDockAmendIntegrationTest {
     mockMvc
         .perform(get("/statements/" + statementId))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("Amend:")))
+        .andExpect(content().string(containsString(">Amend<")))
         .andExpect(content().string(containsString("posting=" + leg)));
 
     mockMvc
@@ -193,7 +193,7 @@ class StatementDockAmendIntegrationTest {
 
     mockMvc
         .perform(get("/statements/" + statementId))
-        .andExpect(content().string(containsString("Move here:")));
+        .andExpect(content().string(containsString(">Move here<")));
     mockMvc
         .perform(
             get("/statements/" + statementId)
