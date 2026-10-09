@@ -1,6 +1,6 @@
 # Statement page: filter to the lines that need attention; collapse the contents editor
 
-Status: resolved — pending owner confirmation
+Status: resolved
 
 ## Symptom
 On a long statement where every line but one is matched, the one missing line is easy to scroll past.
