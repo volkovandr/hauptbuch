@@ -1,6 +1,6 @@
 # Statement dock d2: amount differs, wrong account, extras, reconciled-leg notice
 
-Status: resolved (slice d2) — pending owner confirmation of the stage
+Status: resolved (slice d2)
 
 ## Symptom
 After d1 only a *missing* line had a dock action. An amount-differs or wrong-account proposal could

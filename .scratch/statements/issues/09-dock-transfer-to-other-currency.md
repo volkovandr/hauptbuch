@@ -1,6 +1,6 @@
 # Statement dock: a transfer to an account in another currency
 
-Status: resolved — pending owner confirmation
+Status: resolved
 
 ## Symptom
 On a EUR account's statement, Create on a line that is a transfer to a USD account refuses to save
