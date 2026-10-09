@@ -112,7 +112,7 @@ final class StatementFixtures {
             .andExpect(content().string(containsString("02.05.2026")))
             .andExpect(content().string(containsString("07.05.2026")))
             .andExpect(content().string(containsString("Unreadable lines: <span>1</span>")))
-            .andExpect(content().string(containsString("Proposed from the file")))
+            .andExpect(content().string(containsString("Proposed from the account number")))
             .andReturn();
     assertThat(confirm.getResponse().getContentAsString())
         .containsPattern("value=\"" + accountId + "\"[^>]*selected");

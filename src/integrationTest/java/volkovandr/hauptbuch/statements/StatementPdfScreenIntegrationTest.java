@@ -4,25 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.Objects;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.PDPageContentStream;
-import org.apache.pdfbox.pdmodel.font.PDType1Font;
-import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +22,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -43,8 +34,8 @@ import volkovandr.hauptbuch.ledger.SettingsService;
 /**
  * Integration tier (CLAUDE.md §6): the PDF way into a statement (slice e1) driven through MockMvc
  * against real Postgres — a PDF profile is saved, a PDF is uploaded, the account is proposed from
- * the unmasked text, the statement is created {@code new} with the masked text, the text is
- * edited, and a scan without a text layer is refused. Each test is rolled back.
+ * the unmasked text, the statement is created {@code new} with the masked text, the text is edited,
+ * and a scan without a text layer is refused. Each test is rolled back.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -94,45 +85,9 @@ class StatementPdfScreenIntegrationTest {
             .single();
   }
 
-  private static byte[] pdf(String... lines) throws IOException {
-    try (PDDocument document = new PDDocument()) {
-      PDPage page = new PDPage();
-      document.addPage(page);
-      if (lines.length > 0) {
-        try (PDPageContentStream content = new PDPageContentStream(document, page)) {
-          content.beginText();
-          content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
-          content.setLeading(14);
-          content.newLineAtOffset(50, 700);
-          for (String line : lines) {
-            content.showText(line);
-            content.newLine();
-          }
-          content.endText();
-        }
-      }
-      ByteArrayOutputStream out = new ByteArrayOutputStream();
-      document.save(out);
-      return out.toByteArray();
-    }
-  }
-
-  private String upload(byte[] bytes) throws Exception {
-    MvcResult result =
-        mockMvc
-            .perform(
-                multipart("/statements/upload")
-                    .file(new MockMultipartFile("file", "2026-05.pdf", "application/pdf", bytes))
-                    .param("profile", String.valueOf(profileId)))
-            .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrlPattern("/statements/confirm?*"))
-            .andReturn();
-    return Objects.requireNonNull(result.getResponse().getRedirectedUrl());
-  }
-
   @Test
   void pdfProfileIsSavedWithOnlyItsNameWindowAndNote() {
-    var row =
+    Map<String, Object> row =
         jdbcClient
             .sql("select * from statement_profile where statement_profile_id = :id")
             .param("id", profileId)
@@ -146,7 +101,7 @@ class StatementPdfScreenIntegrationTest {
   }
 
   @Test
-  void pdfProfileEditorHasNoColumnMapAndALink() throws Exception {
+  void pdfProfileEditorHasNoColumnMapAndLink() throws Exception {
     mockMvc
         .perform(get("/statements/profiles/new-pdf"))
         .andExpect(status().isOk())
@@ -160,7 +115,11 @@ class StatementPdfScreenIntegrationTest {
   @Test
   void uploadedPdfBecomesNewStatementWithItsMaskedText() throws Exception {
     String confirmUrl =
-        upload(pdf("Account " + IBAN, "BIC: ABCDXXYY", "02.05.2026 ShopAaa -12.50"));
+        StatementPdfFixtures.upload(
+            mockMvc,
+            profileId,
+            StatementPdfFixtures.pdf(
+                "Account " + IBAN, "BIC: ABCDXXYY", "02.05.2026 ShopAaa -12.50"));
 
     MvcResult confirm =
         mockMvc
@@ -185,7 +144,7 @@ class StatementPdfScreenIntegrationTest {
     String redirect = Objects.requireNonNull(created.getResponse().getRedirectedUrl());
     long statementId = Long.parseLong(redirect.substring(redirect.lastIndexOf('/') + 1));
 
-    var row =
+    Map<String, Object> row =
         jdbcClient
             .sql("select * from statement where statement_id = :id")
             .param("id", statementId)
@@ -224,8 +183,8 @@ class StatementPdfScreenIntegrationTest {
   }
 
   @Test
-  void scanWithoutATextLayerIsRefusedAtTheConfirmStep() throws Exception {
-    String confirmUrl = upload(pdf());
+  void scanWithoutTextLayerIsRefusedAtTheConfirmStep() throws Exception {
+    String confirmUrl = StatementPdfFixtures.upload(mockMvc, profileId, StatementPdfFixtures.pdf());
 
     mockMvc
         .perform(get(URI.create(confirmUrl)))
@@ -234,7 +193,7 @@ class StatementPdfScreenIntegrationTest {
   }
 
   @Test
-  void textOfACsvStatementCannotBeEdited() throws Exception {
+  void textOfCsvStatementCannotBeEdited() throws Exception {
     long csvProfile = StatementFixtures.saveProfile(mockMvc, jdbcClient);
     long statementId = StatementFixtures.uploadAndCreate(mockMvc, csvProfile, accountId);
 

@@ -82,8 +82,31 @@ public record StatementProfile(
   /** A new PDF profile with the defaults the form starts from. */
   public static StatementProfile blankPdf() {
     return new StatementProfile(
-        null, "", FORMAT_PDF, 10, 3, null, null, null, null, null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null, null, null);
+        null,
+        "",
+        FORMAT_PDF,
+        10,
+        3,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   /** A new CSV profile with the defaults the form starts from. */
