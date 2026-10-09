@@ -360,7 +360,7 @@
       <form
         method="post"
         th:action="@{/statements/{id}/delete(id=${statement.statementId()})}"
-        onsubmit="return confirm('Delete this statement? The file stays on the Pi.')"
+        onsubmit="return confirm('Delete this statement? The file stays on the server.')"
       >
         <p class="muted" th:if="${review.matched() > 0}">
           Its matches are removed. What happens to the postings it reconciled?
