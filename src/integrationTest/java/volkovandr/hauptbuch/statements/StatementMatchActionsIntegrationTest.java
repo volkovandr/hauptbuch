@@ -237,6 +237,53 @@ class StatementMatchActionsIntegrationTest {
   }
 
   @Test
+  void needsAttentionViewHidesMatchedLinesAndIsRememberedForTheSession() throws Exception {
+    acceptAll(2);
+    org.springframework.mock.web.MockHttpSession session =
+        new org.springframework.mock.web.MockHttpSession();
+    String matchedLine = "ShopAaa · Card payment";
+
+    mockMvc
+        .perform(get("/statements/" + statementId).session(session))
+        .andExpect(content().string(containsString(matchedLine)));
+    mockMvc
+        .perform(get("/statements/" + statementId).param("show", "attention").session(session))
+        .andExpect(content().string(org.hamcrest.Matchers.not(containsString(matchedLine))))
+        .andExpect(content().string(containsString("ShopBbb · Abroad")))
+        .andExpect(content().string(containsString("Needs attention (<span>2</span>)")));
+    mockMvc
+        .perform(get("/statements/" + statementId).session(session))
+        .andExpect(content().string(org.hamcrest.Matchers.not(containsString(matchedLine))));
+    mockMvc
+        .perform(get("/statements/" + statementId).param("show", "all").session(session))
+        .andExpect(content().string(containsString(matchedLine)));
+  }
+
+  @Test
+  void needsAttentionViewKeepsTheLineTheOperatorJustClicked() throws Exception {
+    acceptAll(2);
+    org.springframework.mock.web.MockHttpSession session =
+        new org.springframework.mock.web.MockHttpSession();
+
+    mockMvc
+        .perform(
+            get("/statements/" + statementId)
+                .param("show", "attention")
+                .param("dock", String.valueOf(lineWithAmount("-12.50")))
+                .session(session))
+        .andExpect(content().string(containsString("ShopAaa · Card payment")))
+        .andExpect(content().string(containsString("role=\"alert\"")));
+  }
+
+  @Test
+  void statementContentsEditorIsCollapsedUnderSummary() throws Exception {
+    mockMvc
+        .perform(get("/statements/" + statementId))
+        .andExpect(content().string(containsString("<details class=\"statement-contents\">")))
+        .andExpect(content().string(containsString("Edit statement contents")));
+  }
+
+  @Test
   void acceptOneLineMatchesJustThatLine() throws Exception {
     mockMvc
         .perform(

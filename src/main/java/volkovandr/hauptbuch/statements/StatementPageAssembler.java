@@ -1,5 +1,7 @@
 package volkovandr.hauptbuch.statements;
 
+import jakarta.servlet.http.HttpSession;
+import java.util.List;
 import org.springframework.stereotype.Component;
 import org.springframework.ui.Model;
 import volkovandr.hauptbuch.ledger.RegisterService;
@@ -8,12 +10,16 @@ import volkovandr.hauptbuch.web.NavItem;
 /**
  * Puts the statement page's model together — the page itself, and the dock when one is open — for
  * the two controllers that render it: the page's own and the dock's, which re-renders the page with
- * the dock still open when a save is refused.
+ * the dock still open when a save is refused. The session is the injected request-scoped proxy, so
+ * the remembered matching-table view is available wherever the page is rendered.
  */
 @Component
 class StatementPageAssembler {
 
   private static final String BASE_PATH = "/statements";
+  private static final String SHOW_ATTENTION = "attention";
+  private static final String SHOW_ALL = "all";
+  private static final String SHOW_SESSION_KEY = "statementLinesShow";
 
   private final StatementService statementService;
   private final StatementProfileService profileService;
@@ -21,6 +27,7 @@ class StatementPageAssembler {
   private final StatementDockService dockService;
   private final StatementExtraDockService extraDockService;
   private final RegisterService registerService;
+  private final HttpSession session;
 
   StatementPageAssembler(
       StatementService statementService,
@@ -28,21 +35,30 @@ class StatementPageAssembler {
       StatementReviewService reviewService,
       StatementDockService dockService,
       StatementExtraDockService extraDockService,
-      RegisterService registerService) {
+      RegisterService registerService,
+      HttpSession session) {
     this.statementService = statementService;
     this.profileService = profileService;
     this.reviewService = reviewService;
     this.dockService = dockService;
     this.extraDockService = extraDockService;
     this.registerService = registerService;
+    this.session = session;
   }
 
   /**
-   * Everything the statement page shows except the dock.
+   * Everything the statement page shows except the dock. {@code show} ({@code all} or {@code
+   * attention}) picks the matching table's view and is remembered in the session; absent, the
+   * remembered one applies.
    *
    * @throws StatementFormatException when the statement no longer exists
    */
-  void addPage(long id, Model model) {
+  void addPage(long id, String show, Model model) {
+    if (SHOW_ALL.equals(show) || SHOW_ATTENTION.equals(show)) {
+      session.setAttribute(SHOW_SESSION_KEY, show);
+    }
+    model.addAttribute(
+        "showAttentionOnly", SHOW_ATTENTION.equals(session.getAttribute(SHOW_SESSION_KEY)));
     Statement statement = statementService.get(id);
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("statement", statement);
@@ -55,9 +71,12 @@ class StatementPageAssembler {
         statementService.lines(id).stream().map(StatementController.LineView::of).toList());
     StatementReview review = reviewService.review(id);
     model.addAttribute("review", review);
+    List<StatementReviewViews.ReviewLineView> reviewLines =
+        review.lines().stream().map(StatementReviewViews.ReviewLineView::of).toList();
+    model.addAttribute("reviewLines", reviewLines);
     model.addAttribute(
-        "reviewLines",
-        review.lines().stream().map(StatementReviewViews.ReviewLineView::of).toList());
+        "attentionCount",
+        reviewLines.stream().filter(StatementReviewViews.ReviewLineView::needsAttention).count());
     model.addAttribute(
         "reviewExtras", review.extras().stream().map(StatementReviewViews.ExtraView::of).toList());
     model.addAttribute("moveAccounts", statementService.statementAccounts());
@@ -92,6 +111,7 @@ class StatementPageAssembler {
   /** Show this dock, with the lists its pickers offer. */
   void addDock(DockPrefill dock, Model model) {
     model.addAttribute("dock", dock);
+    model.addAttribute("keptLine", dock.lineId());
     model.addAttribute("lists", registerService.datalists());
   }
 
@@ -100,6 +120,7 @@ class StatementPageAssembler {
       StatementFormatException e, Long lineId, Long extraPostingId, Model model) {
     model.addAttribute("refusal", e.getMessage());
     model.addAttribute("refusedLine", lineId);
+    model.addAttribute("keptLine", lineId);
     model.addAttribute("refusedExtra", extraPostingId);
   }
 }

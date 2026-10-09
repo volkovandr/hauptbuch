@@ -33,7 +33,8 @@ final class StatementReviewViews {
       boolean canUnmatch,
       Long differentPosting,
       boolean canCreate,
-      Long registerTransactionId) {
+      Long registerTransactionId,
+      boolean needsAttention) {
 
     static ReviewLineView of(LineReview review) {
       StatementLine line = review.line();
@@ -51,7 +52,8 @@ final class StatementReviewViews {
           review.match() != null,
           overlap ? review.firstProposedPostingId() : null,
           review.status() == LineStatus.MISSING,
-          review.match() == null ? null : review.match().transactionId());
+          review.match() == null ? null : review.match().transactionId(),
+          review.status() != LineStatus.MATCHED);
     }
 
     /** The equal-amount candidates the operator can confirm here; the rest need the dock. */

@@ -155,3 +155,23 @@ table.statements a.btn {
 .statement-lines.statement-lines--extras {
   overflow: visible;
 }
+
+/* The matching table's All / Needs attention switch. */
+.statement-view {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.statement-view__choice--active {
+  background: var(--green-ink);
+  color: var(--paper);
+}
+
+/* The contents editor is collapsed behind a summary that reads as a quiet button. */
+.statement-contents__summary {
+  cursor: pointer;
+  color: var(--green-ink);
+  letter-spacing: 0.04em;
+}
