@@ -264,7 +264,10 @@ same operation**; a save that fails validation matches nothing. What the dock is
   is a substring of the bank text (none ⇒ empty, with the bank text shown as a label), category = that
   payee's most recent category. The bank's own category is shown as a **label beside the category
   picker**, never in it. Missing lines are created **one at a time** — bulk pre-booking would skip the
-  categorisation that is the point.
+  categorisation that is the point. A **transfer to an account in another currency** (the bank only
+  knows its own side) asks for the **counterpart amount**, proposed from the rate feed (blank when no
+  rate is on file) and a base amount when neither account is the base currency; Save is the
+  confirmation, and a wrong figure is corrected when the other account's statement is matched.
 - **Amount differs** — the transaction, with the statement's leg set to the bank amount. For a
   **cross-currency** transaction the foreign legs' `base_amount` is re-frozen to the bank's amount (and
   the foreign native amount pre-filled from the line's original amount when it differs); the existing
