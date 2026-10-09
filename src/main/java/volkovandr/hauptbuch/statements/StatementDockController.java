@@ -1,8 +1,10 @@
 package volkovandr.hauptbuch.statements;
 
+import java.time.LocalDate;
 import java.util.function.Function;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,14 +28,37 @@ class StatementDockController {
   private final StatementDockService dockService;
   private final StatementExtraDockService extraDockService;
   private final StatementPageAssembler pageAssembler;
+  private final StatementCrossCurrencyService crossCurrencyService;
 
   StatementDockController(
       StatementDockService dockService,
       StatementExtraDockService extraDockService,
-      StatementPageAssembler pageAssembler) {
+      StatementPageAssembler pageAssembler,
+      StatementCrossCurrencyService crossCurrencyService) {
+    this.crossCurrencyService = crossCurrencyService;
     this.dockService = dockService;
     this.extraDockService = extraDockService;
     this.pageAssembler = pageAssembler;
+  }
+
+  /**
+   * The counterpart-amount fields for a transfer target the dock just resolved, or nothing when the
+   * entry is not a transfer into another currency (issue statements/09).
+   */
+  @GetMapping(BASE_PATH + "/{id}/lines/{lineId}/cross-currency")
+  String crossCurrency(
+      @PathVariable long id,
+      @PathVariable long lineId,
+      @RequestParam(required = false) Long categoryId,
+      @RequestParam(required = false) String transferDirection,
+      @RequestParam(required = false) LocalDate date,
+      Model model) {
+    model.addAttribute(
+        "cross",
+        crossCurrencyService
+            .forTransfer(id, lineId, categoryId, transferDirection, date)
+            .orElse(null));
+    return "fragments/statement-dock :: crossFieldsFor(cross=${cross})";
   }
 
   /** Book a missing line through the dock and match it. */

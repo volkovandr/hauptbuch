@@ -49,29 +49,24 @@
                 th:readonly="${!dock.amountEditable()}"
               />
             </div>
-            <th:block th:if="${dock.crossCurrency()}">
-              <input type="hidden" name="categoryCurrencyCode" th:value="${dock.input().categoryCurrencyCode()}" />
-              <div class="field">
-                <label class="field__label" for="dock-category-amount">
-                  Counterpart amount (<span th:text="${dock.input().categoryCurrencyCode()}">CHF</span>)
-                </label>
-                <input
-                  id="dock-category-amount"
-                  name="categoryAmount"
-                  class="input input--amount"
-                  th:value="${dock.input().categoryAmount()}"
-                />
-              </div>
-              <div class="field">
-                <label class="field__label" for="dock-base-amount">Base amount</label>
-                <input
-                  id="dock-base-amount"
-                  name="baseAmount"
-                  class="input input--amount"
-                  th:value="${dock.input().baseAmount()}"
-                />
-              </div>
-            </th:block>
+            <!-- The counterpart's amounts, when the booking is cross-currency. A transfer picked on a
+                 new line asks the server for them (rate-proposed) each time the category resolves. -->
+            <div
+              id="dock-cross"
+              class="entry-dock__cross"
+              th:attr="hx-get=${dock.suggestsCrossCurrency()} ? @{/statements/{id}/lines/{line}/cross-currency(id=${statementId},line=${dock.lineId()})}"
+              hx-trigger="htmx:afterSwap from:#entry-category-resolved"
+              hx-include="#dock-date, #entry-category-resolved"
+              hx-target="this"
+              hx-select="unset"
+              hx-swap="innerHTML"
+            >
+              <th:block th:if="${dock.crossCurrency()}">
+                <th:block
+                  th:replace="~{:: crossFields(${dock.input().categoryCurrencyCode()}, ${dock.input().categoryAmount()}, ${dock.input().baseAmount() != null}, ${dock.input().baseAmount()})}"
+                ></th:block>
+              </th:block>
+            </div>
             <div class="field">
               <label class="field__label" for="dock-payee">Payee</label>
               <input
@@ -178,6 +173,34 @@
           </p>
         </form>
       </div>
+    </th:block>
+    <!-- The counterpart-amount (and, when asked for, base-amount) fields of a cross-currency dock. -->
+    <th:block th:fragment="crossFields(currencyCode, counterpartAmount, showBase, baseAmount)">
+      <input type="hidden" name="categoryCurrencyCode" th:value="${currencyCode}" />
+      <div class="field">
+        <label class="field__label" for="dock-category-amount">
+          Counterpart amount (<span th:text="${currencyCode}">USD</span>)
+        </label>
+        <input
+          id="dock-category-amount"
+          name="categoryAmount"
+          class="input input--amount"
+          th:value="${counterpartAmount}"
+        />
+      </div>
+      <div class="field" th:if="${showBase}">
+        <label class="field__label" for="dock-base-amount">Base amount</label>
+        <input id="dock-base-amount" name="baseAmount" class="input input--amount" th:value="${baseAmount}" />
+      </div>
+    </th:block>
+
+    <!-- GET /statements/{id}/lines/{line}/cross-currency: the fields for a transfer into another currency. -->
+    <th:block th:fragment="crossFieldsFor(cross)">
+      <th:block th:if="${cross != null}">
+        <th:block
+          th:replace="~{:: crossFields(${cross.currencyCode()}, ${cross.counterpartAmount()}, ${cross.showBase()}, ${cross.baseAmount()})}"
+        ></th:block>
+      </th:block>
     </th:block>
   </body>
 </html>

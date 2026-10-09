@@ -53,6 +53,11 @@ public record DockPrefill(
     return input.categoryAmount() != null;
   }
 
+  /** Whether picking a transfer target on this dock should ask for the counterpart's amounts. */
+  public boolean suggestsCrossCurrency() {
+    return kind == Kind.CREATE;
+  }
+
   /** Whether the operator may type the amount (an extra) rather than inherit the bank's. */
   public boolean amountEditable() {
     return kind == Kind.EXTRA;

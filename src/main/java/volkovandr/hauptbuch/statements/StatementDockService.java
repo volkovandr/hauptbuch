@@ -173,6 +173,8 @@ public class StatementDockService {
                     input.categoryId() == null ? 0 : input.categoryId(),
                     StatementController.number(line.amount()),
                     input.note())
+                .withCrossCurrency(
+                    input.categoryCurrencyCode(), input.categoryAmount(), input.baseAmount())
                 .withTransfer(input.transferDirection())
                 .withPerson(input.personName(), input.personDirection(), input.personRevive())
                 .withTags(input.tagId()),

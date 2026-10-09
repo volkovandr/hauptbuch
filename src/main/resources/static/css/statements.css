@@ -175,3 +175,8 @@ table.statements a.btn {
   color: var(--green-ink);
   letter-spacing: 0.04em;
 }
+
+/* The dock's counterpart-amount fields flow in the field row like its other fields. */
+.entry-dock__cross {
+  display: contents;
+}

@@ -34,6 +34,7 @@ class StatementDockBrowserTest extends BrowserTest {
   @Autowired AccountService accountService;
   @Autowired SettingsService settingsService;
   @Autowired StatementProfileService profileService;
+  @Autowired volkovandr.hauptbuch.ledger.ExchangeRateService exchangeRateService;
   @Autowired org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
 
   private long accountId;
@@ -217,6 +218,34 @@ class StatementDockBrowserTest extends BrowserTest {
                     + " document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);"
                     + " return r.height > 40 && e.contains(hit); }");
     org.assertj.core.api.Assertions.assertThat(visible).isEqualTo(true);
+  }
+
+  @Test
+  void pickingTransferIntoAnotherCurrencyRevealsTheCounterpartAmountFromTheRate() {
+    accountService.openAccount(
+        new AccountDraft(
+            "BrowUsd-USD", "asset", null, "USD", LocalDate.parse("2026-01-01"), BigDecimal.ZERO));
+    exchangeRateService.recordEnteredRate(
+        LocalDate.parse("2026-05-01"), "USD", new BigDecimal("100.00"), new BigDecimal("90.00"));
+    openDock("-18,00");
+
+    Object option =
+        page.evaluate(
+            "Array.from(document.querySelectorAll('#dock-category-options option'))"
+                + ".map(o => o.value).find(v => v.startsWith('To') && v.includes('BrowUsd'))");
+    org.assertj.core.api.Assertions.assertThat(option).isNotNull();
+    Locator category = page.locator("#dock-category");
+    category.fill(String.valueOf(option));
+    category.dispatchEvent("change");
+    settled();
+
+    assertThat(page.locator("#dock-category-amount")).hasValue("20,00");
+    assertThat(page.locator("#dock-base-amount")).hasCount(0);
+
+    category.fill("BrowFood");
+    category.dispatchEvent("change");
+    settled();
+    assertThat(page.locator("#dock-category-amount")).hasCount(0);
   }
 
   @Test
