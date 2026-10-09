@@ -81,8 +81,11 @@ class StatementPageAssembler {
         return;
       }
       addDock(dock, model);
+    } catch (RegisterOnlyException e) {
+      refuse(e, lineId, extraPostingId, model);
+      model.addAttribute("refusalTransactionId", e.transactionId());
     } catch (StatementFormatException e) {
-      model.addAttribute("error", e.getMessage());
+      refuse(e, lineId, extraPostingId, model);
     }
   }
 
@@ -90,5 +93,13 @@ class StatementPageAssembler {
   void addDock(DockPrefill dock, Model model) {
     model.addAttribute("dock", dock);
     model.addAttribute("lists", registerService.datalists());
+  }
+
+  /** Shown on the row the operator clicked: the top of the page may be scrolled out of view. */
+  private static void refuse(
+      StatementFormatException e, Long lineId, Long extraPostingId, Model model) {
+    model.addAttribute("refusal", e.getMessage());
+    model.addAttribute("refusedLine", lineId);
+    model.addAttribute("refusedExtra", extraPostingId);
   }
 }

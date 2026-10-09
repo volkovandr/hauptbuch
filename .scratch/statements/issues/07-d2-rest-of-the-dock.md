@@ -47,3 +47,11 @@ The register's dock did not say a leg was reconciled by a statement.
   `StatementDockBrowserTest.openingAndSavingTheDockDoesNotMoveThePage` guards it.
 - **Fix buttons were as wide as the candidate text** ("Move here: 29.09.2026 Kpler 337,88 on …").
   They now read just "Amend" / "Move here"; the candidate is already listed in the line's details.
+- **Round 2:** "Move here" still wrapped (the `.btn` could shrink in the narrow actions cell) —
+  buttons in the statement table are now `nowrap`. Amend on a split looked like a no-op: the refusal
+  was shown at the top of the page, out of view. It now appears on the line's (or extra's) own row,
+  worded for the statement page ("change it in the register").
+- **Round 3:** the "use the register" refusals (split, cross-currency extra, far end of a transfer)
+  throw `RegisterOnlyException`, and the refusal row ends in a "Change it in the register" link to
+  `/register?selected=<transaction>`, which opens that transaction in the register's edit dock.
+  Focus moves to the dock's Date on open.

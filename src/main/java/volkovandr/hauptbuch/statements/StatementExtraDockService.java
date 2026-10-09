@@ -25,9 +25,13 @@ public class StatementExtraDockService {
 
   private static final String STALE = "That extra is no longer open. The page was reloaded.";
   private static final String CROSS_CURRENCY =
-      "A cross-currency transaction is edited in the register.";
+      "A cross-currency transaction cannot be edited here.";
   private static final String OTHER_END =
-      "The statement's account is the other end of that transfer. Edit it in the register.";
+      "The statement's account is the other end of that transfer.";
+
+  private static final String NOT_SIMPLE =
+      "Only a simple two-leg transaction can be changed here — this one is a split or otherwise"
+          + " not editable in the dock.";
 
   private final StatementService statementService;
   private final StatementReviewService reviewService;
@@ -166,13 +170,13 @@ public class StatementExtraDockService {
     try {
       model = dockEditService.load(extra.transactionId());
     } catch (IllegalArgumentException e) {
-      throw new StatementFormatException(e.getMessage(), e);
+      throw new RegisterOnlyException(NOT_SIMPLE, extra.transactionId(), e);
     }
     if (model.categoryAmount() != null) {
-      throw new StatementFormatException(CROSS_CURRENCY);
+      throw new RegisterOnlyException(CROSS_CURRENCY, extra.transactionId());
     }
     if (model.accountId() != statementService.get(statementId).accountId()) {
-      throw new StatementFormatException(OTHER_END);
+      throw new RegisterOnlyException(OTHER_END, extra.transactionId());
     }
     return model;
   }

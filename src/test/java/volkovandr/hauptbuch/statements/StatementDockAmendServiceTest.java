@@ -356,7 +356,7 @@ class StatementDockAmendServiceTest {
 
     assertThatThrownBy(() -> service.prefillAmend(STATEMENT, LINE_ID, OLD_LEG))
         .isInstanceOf(StatementFormatException.class)
-        .hasMessageContaining("register");
+        .isInstanceOf(RegisterOnlyException.class);
   }
 
   @Test
@@ -367,7 +367,8 @@ class StatementDockAmendServiceTest {
         .thenThrow(new IllegalArgumentException("cannot be edited in the dock yet"));
 
     assertThatThrownBy(() -> service.prefillAmend(STATEMENT, LINE_ID, OLD_LEG))
-        .isInstanceOf(StatementFormatException.class)
-        .hasMessageContaining("cannot be edited");
+        .isInstanceOfSatisfying(
+            RegisterOnlyException.class,
+            e -> assertThat(e.transactionId()).isEqualTo(OLD_TRANSACTION));
   }
 }

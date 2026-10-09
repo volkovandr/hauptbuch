@@ -155,6 +155,35 @@ class StatementDockAmendIntegrationTest {
   }
 
   @Test
+  void amendOfSplitTransactionIsRefusedOnTheLineItself() throws Exception {
+    long transaction = booked(accountId, "2026-05-02", "ShopAaa", "12.00");
+    long leg = legOf(transaction, accountId);
+    long drinksId = accountService.insertLeaf("Drinks", "expense", null, "EUR").accountId();
+    jdbcClient
+        .sql("update posting set amount = 8.00 where transaction_id = :t and account_id = :f")
+        .param("t", transaction)
+        .param("f", foodId)
+        .update();
+    jdbcClient
+        .sql("insert into posting (transaction_id, account_id, amount) values (:t, :d, 4.00)")
+        .param("t", transaction)
+        .param("d", drinksId)
+        .update();
+
+    mockMvc
+        .perform(
+            get("/statements/" + statementId)
+                .param("dock", String.valueOf(shopLine))
+                .param("posting", String.valueOf(leg)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("role=\"alert\"")))
+        .andExpect(
+            content().string(containsString("href=\"/register?selected=" + transaction + "\"")))
+        .andExpect(
+            content().string(org.hamcrest.Matchers.not(containsString("Amend transaction"))));
+  }
+
+  @Test
   void amendSetsTheLegToTheBanksAmountAndMatchesItReconciled() throws Exception {
     long transaction = booked(accountId, "2026-05-02", "ShopAaa", "12.00");
     long leg = legOf(transaction, accountId);

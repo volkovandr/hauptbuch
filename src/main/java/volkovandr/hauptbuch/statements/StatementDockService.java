@@ -33,7 +33,11 @@ public class StatementDockService {
   private static final String NO_PROPOSAL =
       "That proposal is no longer available. The page was reloaded.";
   private static final String NOT_ON_ACCOUNT =
-      "The statement's account is the other end of that transfer. Amend it in the register.";
+      "The statement's account is the other end of that transfer.";
+
+  private static final String NOT_SIMPLE =
+      "Only a simple two-leg transaction can be changed here — this one is a split or otherwise"
+          + " not editable in the dock.";
 
   private final StatementService statementService;
   private final StatementMatchService matchService;
@@ -240,10 +244,10 @@ public class StatementDockService {
     try {
       model = dockEditService.load(candidate.transactionId());
     } catch (IllegalArgumentException e) {
-      throw new StatementFormatException(e.getMessage(), e);
+      throw new RegisterOnlyException(NOT_SIMPLE, candidate.transactionId(), e);
     }
     if (model.accountId() != candidate.accountId()) {
-      throw new StatementFormatException(NOT_ON_ACCOUNT);
+      throw new RegisterOnlyException(NOT_ON_ACCOUNT, candidate.transactionId());
     }
     return model;
   }

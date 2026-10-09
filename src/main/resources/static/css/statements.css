@@ -117,3 +117,8 @@ table.statements input.input--amount {
 main:has(table.statements) {
   overflow-anchor: none;
 }
+
+/* A button's label stays on one line; the actions cell widens instead. */
+table.statements .btn {
+  white-space: nowrap;
+}

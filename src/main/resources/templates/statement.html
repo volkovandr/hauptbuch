@@ -180,6 +180,16 @@
                 >
               </td>
             </tr>
+            <tr th:if="${refusal != null and refusedExtra == null and refusedLine == r.lineId()}">
+              <td colspan="6" class="statements__error" role="alert">
+                <span th:text="${refusal}">Only a simple two-leg transaction can be edited here.</span>
+                <a
+                  th:if="${refusalTransactionId != null}"
+                  th:href="@{/register(selected=${refusalTransactionId})}"
+                  >Change it in the register</a
+                >
+                </td>
+            </tr>
             <tr th:if="${dock != null and dock.lineId() == r.lineId()}">
               <td colspan="6">
                 <th:block th:replace="~{fragments/statement-dock :: dock(${statement.statementId()}, ${dock}, ${lists})}"></th:block>
@@ -252,6 +262,16 @@
                     <button type="submit" class="btn btn--danger">Void</button>
                   </form>
                 </td>
+              </tr>
+              <tr th:if="${refusal != null and refusedExtra == e.postingId()}">
+                <td colspan="6" class="statements__error" role="alert">
+                  <span th:text="${refusal}">Only a simple two-leg transaction can be edited here.</span>
+                  <a
+                    th:if="${refusalTransactionId != null}"
+                    th:href="@{/register(selected=${refusalTransactionId})}"
+                    >Change it in the register</a
+                  >
+                  </td>
               </tr>
               <tr th:if="${dock != null and dock.amountEditable() and dock.postingId() == e.postingId()}">
                 <td colspan="6">
