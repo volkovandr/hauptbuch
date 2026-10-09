@@ -1,6 +1,8 @@
 package volkovandr.hauptbuch.accounts;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.OptionalInt;
 import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -20,6 +22,7 @@ import java.util.stream.Stream;
 public final class DetectionLabels {
 
   private static final String SEPARATOR = ",";
+  private static final int MIN_IDENTIFIER_LENGTH = 8;
 
   private DetectionLabels() {}
 
@@ -62,6 +65,35 @@ public final class DetectionLabels {
         && split(labels)
             .map(DetectionLabels::compact)
             .anyMatch(l -> !l.isEmpty() && wanted.endsWith(l));
+  }
+
+  /**
+   * The labels that look like an IBAN or account number rather than a payment-line word: at least
+   * {@value #MIN_IDENTIFIER_LENGTH} characters once whitespace is dropped, and at least one digit.
+   * {@code card} and {@code 1234} are not identifiers; {@code XX00 1111 2222} is. Stripped, in the
+   * order given.
+   */
+  public static List<String> identifiers(String labels) {
+    return split(labels).filter(DetectionLabels::looksLikeIdentifier).toList();
+  }
+
+  /**
+   * Where the earliest identifier-shaped label of the account appears in the text, as an offset in
+   * the text with whitespace dropped and case ignored — an IBAN printed in groups of four meets
+   * the same number typed without them. Empty when none appears. Short labels never count: the
+   * last four digits would match any amount.
+   */
+  public static OptionalInt firstIdentifierIndexIn(String labels, String text) {
+    String haystack = compact(text);
+    return identifiers(labels).stream()
+        .mapToInt(label -> haystack.indexOf(compact(label)))
+        .filter(index -> index >= 0)
+        .min();
+  }
+
+  private static boolean looksLikeIdentifier(String label) {
+    String compact = compact(label);
+    return compact.length() >= MIN_IDENTIFIER_LENGTH && compact.chars().anyMatch(Character::isDigit);
   }
 
   private static String compact(String text) {
