@@ -180,3 +180,9 @@ table.statements a.btn {
 .entry-dock__cross {
   display: contents;
 }
+
+.statement-text {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+  white-space: pre;
+}

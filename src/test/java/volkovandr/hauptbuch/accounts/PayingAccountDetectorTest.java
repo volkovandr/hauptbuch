@@ -197,4 +197,45 @@ class PayingAccountDetectorTest {
 
     assertThat(detector.detectByIdentifiers(List.of())).isEmpty();
   }
+
+  @Test
+  void textCarryingAnIdentifierLabelProposesItsAccountWhateverTheGrouping() {
+    PayingAccountDetector detector =
+        detector(card(7L, EUR, "xx00 1111 2222"), card(8L, EUR, "XX00 3333 4444"));
+
+    assertThat(detector.detectInText("Konto XX00 3333 4444 vom 01.05.")).hasValue(8L);
+    assertThat(detector.detectInText("Konto xx0011112222")).hasValue(7L);
+  }
+
+  @Test
+  void textNamingSeveralOwnAccountsProposesTheOneItNamesFirst() {
+    // The header names the statement's own account; a later transfer names another of the
+    // operator's accounts, which sorts earlier in the repository's order.
+    PayingAccountDetector detector =
+        detector(card(7L, EUR, "XX00 1111 2222"), card(8L, EUR, "XX00 3333 4444"));
+
+    assertThat(detector.detectInText("Konto XX00 3333 4444\nUmbuchung auf XX00 1111 2222"))
+        .hasValue(8L);
+  }
+
+  @Test
+  void shortLabelsNeverIdentifyAnAccountInText() {
+    PayingAccountDetector detector = detector(card(7L, EUR, "1234"), card(8L, EUR, "girocard"));
+
+    assertThat(detector.detectInText("Saldo 1234,56 girocard")).isEmpty();
+    assertThat(detector.detectInText("  ")).isEmpty();
+    assertThat(detector.detectInText(null)).isEmpty();
+  }
+
+  @Test
+  void ownIdentifiersAreTheIdentifierShapedLabelsOfEveryAccount() {
+    PayingAccountDetector detector =
+        detector(
+            card(7L, EUR, "card, XX00 1111 2222"),
+            card(8L, EUR, "1234, XX00 3333 4444"),
+            card(9L, EUR, null),
+            card(10L, EUR, "XX00 1111 2222"));
+
+    assertThat(detector.ownIdentifiers()).containsExactly("XX00 1111 2222", "XX00 3333 4444");
+  }
 }

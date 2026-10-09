@@ -53,6 +53,12 @@ class StatementProfileController {
     return editor(StatementProfile.blankCsv(), model);
   }
 
+  /** The editor for a new PDF profile: a name, the matching window and the AI note. */
+  @GetMapping(BASE_PATH + "/new-pdf")
+  String createPdf(Model model) {
+    return editor(StatementProfile.blankPdf(), model);
+  }
+
   /** The editor for an existing profile. */
   @GetMapping(BASE_PATH + "/{id}")
   String edit(@PathVariable long id, Model model) {

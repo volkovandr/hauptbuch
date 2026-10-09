@@ -22,6 +22,7 @@ class StatementPageAssembler {
   private static final String SHOW_SESSION_KEY = "statementLinesShow";
 
   private final StatementService statementService;
+  private final StatementPdfService pdfService;
   private final StatementProfileService profileService;
   private final StatementReviewService reviewService;
   private final StatementDockService dockService;
@@ -31,6 +32,7 @@ class StatementPageAssembler {
 
   StatementPageAssembler(
       StatementService statementService,
+      StatementPdfService pdfService,
       StatementProfileService profileService,
       StatementReviewService reviewService,
       StatementDockService dockService,
@@ -38,6 +40,7 @@ class StatementPageAssembler {
       RegisterService registerService,
       HttpSession session) {
     this.statementService = statementService;
+    this.pdfService = pdfService;
     this.profileService = profileService;
     this.reviewService = reviewService;
     this.dockService = dockService;
@@ -62,6 +65,7 @@ class StatementPageAssembler {
     Statement statement = statementService.get(id);
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("statement", statement);
+    model.addAttribute("sentText", pdfService.sentText(id));
     model.addAttribute("accountName", statementService.accountName(statement.accountId()));
     model.addAttribute("profileName", profileService.nameOf(statement.statementProfileId()));
     model.addAttribute("opening", StatementController.number(statement.openingBalance()));

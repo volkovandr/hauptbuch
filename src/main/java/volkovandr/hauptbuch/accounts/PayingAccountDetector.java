@@ -1,8 +1,10 @@
 package volkovandr.hauptbuch.accounts;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.OptionalLong;
 import java.util.function.Predicate;
 import org.springframework.stereotype.Component;
@@ -98,6 +100,40 @@ public class PayingAccountDetector {
             .distinct()
             .toArray();
     return byTail.length == 1 ? OptionalLong.of(byTail[0]) : OptionalLong.empty();
+  }
+
+  /**
+   * Resolve a statement's account from the text of its PDF (statements.md §3.5): the account whose
+   * identifier-shaped label (an IBAN or account number — not {@code card} or the last four digits)
+   * appears <em>earliest</em> in the text, ignoring whitespace and case. A statement names its own
+   * account in its header, before any transfer to another of the operator's accounts. The text is
+   * the unmasked extraction; nothing here leaves the machine.
+   */
+  public OptionalLong detectInText(String text) {
+    if (text == null || text.isBlank()) {
+      return OptionalLong.empty();
+    }
+    return accountRepository.findDetectionCandidates(null).stream()
+        .map(
+            candidate ->
+                Map.entry(
+                    candidate.accountId(),
+                    DetectionLabels.firstIdentifierIndexIn(candidate.detectionLabels(), text)))
+        .filter(entry -> entry.getValue().isPresent())
+        .min(Comparator.comparingInt(entry -> entry.getValue().getAsInt()))
+        .map(entry -> OptionalLong.of(entry.getKey()))
+        .orElse(OptionalLong.empty());
+  }
+
+  /**
+   * Every identifier-shaped detection label of every account — the operator's own IBANs and account
+   * numbers, which a statement's text is masked of before it is shown (statements.md §3.2).
+   */
+  public List<String> ownIdentifiers() {
+    return accountRepository.findDetectionCandidates(null).stream()
+        .flatMap(candidate -> DetectionLabels.identifiers(candidate.detectionLabels()).stream())
+        .distinct()
+        .toList();
   }
 
   private static OptionalLong firstMatching(
