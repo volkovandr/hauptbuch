@@ -175,8 +175,48 @@ class StatementDockBrowserTest extends BrowserTest {
   }
 
   private double top(String selector) {
-    Object y = page.locator(selector).first().evaluate("e => e.getBoundingClientRect().top");
+    return edge(selector, "top");
+  }
+
+  private double left(String selector) {
+    return edge(selector, "left");
+  }
+
+  private double right(String selector) {
+    return edge(selector, "right");
+  }
+
+  private double edge(String selector, String side) {
+    Object y = page.locator(selector).first().evaluate("e => e.getBoundingClientRect()." + side);
     return y instanceof Number n ? n.doubleValue() : -1;
+  }
+
+  @Test
+  void extrasAccountPickerSitsLeftOfItsMoveButtonOnTheSameLine() {
+    bookExtra("66,31");
+    page.navigate(createStatement("-16,50"));
+
+    double pickerTop = top("select[aria-label='Move to account']");
+    double moveTop = top("button:has-text('Move')");
+    double pickerRight = right("select[aria-label='Move to account']");
+    double moveLeft = left("button:has-text('Move')");
+    org.assertj.core.api.Assertions.assertThat(pickerTop).isBetween(moveTop - 8, moveTop + 8);
+    org.assertj.core.api.Assertions.assertThat(pickerRight).isLessThanOrEqualTo(moveLeft);
+  }
+
+  @Test
+  void extrasActionsHelpBubbleIsFullyVisibleOnHover() {
+    bookExtra("67,31");
+    page.navigate(createStatement("-17,50"));
+
+    page.locator(".statement-lines--extras thead .help").hover();
+    Object visible =
+        page.locator(".statement-lines--extras thead .help__text")
+            .evaluate(
+                "e => { const r = e.getBoundingClientRect(); const hit ="
+                    + " document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);"
+                    + " return r.height > 40 && e.contains(hit); }");
+    org.assertj.core.api.Assertions.assertThat(visible).isEqualTo(true);
   }
 
   @Test
