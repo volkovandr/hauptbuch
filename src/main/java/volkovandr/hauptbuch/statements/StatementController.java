@@ -244,7 +244,7 @@ class StatementController {
     attempt(
         () -> {
           matchService.deleteStatement(id, "reset".equals(reconciliation));
-          return "Statement deleted. The file stays on the Pi.";
+          return "Statement deleted. The file stays on the server.";
         },
         redirectAttributes);
     return REDIRECT_BASE;
