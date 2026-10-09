@@ -16,8 +16,15 @@
       <p>
         <strong th:text="${name}">2026-05.csv</strong> read through
         <strong th:text="${profile.name()}">BankAaa CSV</strong>:
-        <span th:text="${preview.lineCount()}">42</span> lines<span
-          th:if="${preview.periodStart() != null}"
+        <span th:if="${pdfCharacters != null}"
+          >a text layer of <span th:text="${pdfCharacters}">5000</span> characters. The text is
+          masked of your account numbers and IBANs next, and you edit it before anything is
+          parsed</span
+        >
+        <span th:unless="${pdfCharacters != null}"
+          ><span th:text="${preview.lineCount()}">42</span> lines</span
+        ><span
+          th:if="${pdfCharacters == null and preview.periodStart() != null}"
         >
           from
           <span th:text="${#temporals.format(preview.periodStart(), 'dd.MM.yyyy')}">01.05.2026</span>
@@ -25,7 +32,7 @@
           <span th:text="${#temporals.format(preview.periodEnd(), 'dd.MM.yyyy')}">31.05.2026</span></span
         >.
       </p>
-      <div th:unless="${#lists.isEmpty(preview.problems())}">
+      <div th:if="${pdfCharacters == null and !#lists.isEmpty(preview.problems())}">
         <p class="warning">
           Unreadable lines: <span th:text="${#lists.size(preview.problems())}">2</span>. They are
           kept with their problem on the statement page and never matched; so is a line in a
@@ -50,13 +57,13 @@
               th:each="a : ${accounts}"
               th:value="${a.accountId()}"
               th:text="${a.name()}"
-              th:selected="${chosenAccountId != null ? chosenAccountId == a.accountId() : (preview.proposedAccountId().isPresent() and preview.proposedAccountId().getAsLong() == a.accountId())}"
+              th:selected="${chosenAccountId != null ? chosenAccountId == a.accountId() : (proposedAccount.isPresent() and proposedAccount.getAsLong() == a.accountId())}"
             >
               BankAaa-EUR
             </option>
           </select>
-          <p class="muted" th:if="${chosenAccountId == null and preview.proposedAccountId().isPresent()}">
-            Proposed from the file's IBAN — change it if it is wrong.
+          <p class="muted" th:if="${chosenAccountId == null and proposedAccount.isPresent()}">
+            Proposed from the account number in the file — change it if it is wrong.
           </p>
         </div>
         <p class="actions">

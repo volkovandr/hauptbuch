@@ -14,6 +14,7 @@
       <p class="statements__notice" th:if="${notice}" th:text="${notice}">Profile saved.</p>
       <p class="actions">
         <a class="btn" th:href="@{/statements/profiles/new}">＋ New CSV profile</a>
+        <a class="btn" th:href="@{/statements/profiles/new-pdf}">＋ New PDF profile</a>
         <a class="btn btn--ghost" th:href="@{/statements}">Back to statements</a>
       </p>
       <p class="muted" th:if="${#lists.isEmpty(profiles)}">No profiles yet.</p>

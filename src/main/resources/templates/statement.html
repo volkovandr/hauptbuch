@@ -69,6 +69,26 @@
       </form>
     </section>
 
+    <section class="panel" th:if="${sentText != null}">
+      <p class="eyebrow">PDF text</p>
+      <p class="muted">
+        The text extracted from the PDF, masked of your account numbers and any IBAN. Edit it
+        freely — remove your name, your address, anything else. Exactly this text is what will be
+        sent for parsing; the PDF itself never is.
+      </p>
+      <form method="post" th:action="@{/statements/{id}/text(id=${statement.statementId()})}">
+        <textarea
+          class="input statement-text"
+          name="text"
+          rows="30"
+          spellcheck="false"
+          aria-label="PDF text"
+          th:text="${sentText}"
+        ></textarea>
+        <p class="actions"><button type="submit" class="btn">Save text</button></p>
+      </form>
+    </section>
+
     <section class="panel">
       <p class="eyebrow">Matching</p>
       <p class="muted" th:if="${#lists.isEmpty(reviewLines)}">The file had no lines.</p>

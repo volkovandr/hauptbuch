@@ -99,11 +99,24 @@ public class StatementProfileService {
     if (submitted.windowDaysBefore() < 0 || submitted.windowDaysAfter() < 0) {
       throw new StatementFormatException("The date window cannot be negative.");
     }
-    parser.validate(submitted);
+    if (!submitted.isPdf()) {
+      parser.validate(submitted);
+    }
   }
 
   /** {@code submitted} with text trimmed, blank optional columns made null, and defaults filled. */
   static StatementProfile normalised(StatementProfile s) {
+    if (s.isPdf()) {
+      return new StatementProfile(
+          s.statementProfileId(),
+          s.name() == null ? "" : s.name().strip(),
+          StatementProfile.FORMAT_PDF,
+          s.windowDaysBefore(),
+          s.windowDaysAfter(),
+          blankToNull(s.aiNote()),
+          null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+          null, null, null, null, null);
+    }
     return new StatementProfile(
         s.statementProfileId(),
         s.name() == null ? "" : s.name().strip(),

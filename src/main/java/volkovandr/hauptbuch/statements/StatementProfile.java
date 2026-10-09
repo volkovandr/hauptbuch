@@ -10,7 +10,8 @@ import java.time.OffsetDateTime;
  *
  * @param statementProfileId the id, or null before the first save
  * @param name the operator's name for the source
- * @param format {@code csv} (the PDF format arrives with slice e)
+ * @param format {@code csv}, or {@code pdf} (a PDF profile holds only the name, the window and the
+ *     AI note)
  * @param windowDaysBefore how many days before the booking date a ledger posting may be dated
  * @param windowDaysAfter how many days after the booking date a ledger posting may be dated
  * @param aiNote PDF only: per-bank guidance for the parser
@@ -64,11 +65,26 @@ public record StatementProfile(
   /** The {@code format} of a CSV profile. */
   public static final String FORMAT_CSV = "csv";
 
+  /** The {@code format} of a PDF profile. */
+  public static final String FORMAT_PDF = "pdf";
+
   /** The {@code csvSignMode} with one signed amount column. */
   public static final String SIGN_SIGNED = "signed";
 
   /** The {@code csvSignMode} with separate debit and credit columns. */
   public static final String SIGN_DEBIT_CREDIT = "debit_credit";
+
+  /** Whether this profile reads a PDF, which the AI parses, rather than a CSV. */
+  public boolean isPdf() {
+    return FORMAT_PDF.equals(format);
+  }
+
+  /** A new PDF profile with the defaults the form starts from. */
+  public static StatementProfile blankPdf() {
+    return new StatementProfile(
+        null, "", FORMAT_PDF, 10, 3, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null);
+  }
 
   /** A new CSV profile with the defaults the form starts from. */
   public static StatementProfile blankCsv() {

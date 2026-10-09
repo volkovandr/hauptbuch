@@ -32,20 +32,24 @@ class StatementController {
   private static final String REDIRECT_BASE = "redirect:" + BASE_PATH;
   private static final String NOTICE = "notice";
   private static final String ERROR = "error";
+  private static final String PROPOSED_ACCOUNT = "proposedAccount";
   private static final String PROFILE_ID = "profileId";
   private static final int AMOUNT_DIGITS = 2;
 
   private final StatementService statementService;
+  private final StatementPdfService pdfService;
   private final StatementProfileService profileService;
   private final StatementMatchService matchService;
   private final StatementPageAssembler pageAssembler;
 
   StatementController(
       StatementService statementService,
+      StatementPdfService pdfService,
       StatementProfileService profileService,
       StatementMatchService matchService,
       StatementPageAssembler pageAssembler) {
     this.statementService = statementService;
+    this.pdfService = pdfService;
     this.profileService = profileService;
     this.matchService = matchService;
     this.pageAssembler = pageAssembler;
@@ -89,11 +93,19 @@ class StatementController {
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      UploadPreview preview = statementService.preview(profileId, path);
+      StatementProfile profile = profileService.get(profileId);
       model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
-      model.addAttribute("preview", preview);
+      if (profile.isPdf()) {
+        PdfUploadPreview pdf = pdfService.preview(path);
+        model.addAttribute("pdfCharacters", pdf.characters());
+        model.addAttribute(PROPOSED_ACCOUNT, pdf.proposedAccountId());
+      } else {
+        UploadPreview preview = statementService.preview(profileId, path);
+        model.addAttribute("preview", preview);
+        model.addAttribute(PROPOSED_ACCOUNT, preview.proposedAccountId());
+      }
       model.addAttribute("accounts", statementService.statementAccounts());
-      model.addAttribute("profile", profileService.get(profileId));
+      model.addAttribute("profile", profile);
       model.addAttribute("path", path);
       model.addAttribute("name", name);
       model.addAttribute("chosenAccountId", account);
@@ -117,7 +129,10 @@ class StatementController {
       return backToConfirm(profileId, path, name, null, redirectAttributes);
     }
     try {
-      long id = statementService.create(profileId, path, name, account);
+      long id =
+          profileService.get(profileId).isPdf()
+              ? pdfService.create(profileId, path, name, account)
+              : statementService.create(profileId, path, name, account);
       return REDIRECT_BASE + "/" + id;
     } catch (StatementFormatException e) {
       redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
@@ -176,6 +191,15 @@ class StatementController {
                 id, new HeaderEdit(periodStart, periodEnd, openingBalance, closingBalance)),
         "Header saved.",
         redirectAttributes);
+  }
+
+  /** Save the PDF text the operator edited (statements.md §3.2). */
+  @PostMapping(BASE_PATH + "/{id}/text")
+  String saveText(
+      @PathVariable long id,
+      @RequestParam String text,
+      RedirectAttributes redirectAttributes) {
+    return saved(id, () -> pdfService.updateText(id, text), "Text saved.", redirectAttributes);
   }
 
   /** Save the edited line grid. */

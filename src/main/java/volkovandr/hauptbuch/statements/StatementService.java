@@ -195,7 +195,8 @@ public class StatementService {
     }
   }
 
-  private Account statementAccount(long accountId) {
+  /** The open statement account with this id, or the refusal to show the operator. */
+  Account statementAccount(long accountId) {
     return statementAccounts().stream()
         .filter(account -> account.accountId() == accountId)
         .findFirst()

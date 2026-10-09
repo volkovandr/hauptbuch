@@ -299,4 +299,29 @@ class StatementRepositoryIntegrationTest {
         .query(Long.class)
         .single();
   }
+
+  @Test
+  void pdfStatementRoundTripsItsTextAndStaysEditableUntilParsed() {
+    long statementId =
+        statements.insertPdf(profileId, accountId, "may.pdf", "2026/05/may.pdf", "masked text");
+
+    assertThat(statements.findSentText(statementId)).contains("masked text");
+    assertThat(statements.findById(statementId).orElseThrow().state()).isEqualTo("new");
+
+    assertThat(statements.updateSentText(statementId, "edited text")).isEqualTo(1);
+    assertThat(statements.findSentText(statementId)).contains("edited text");
+
+    jdbcClient.sql("update statement set state = 'processed'").update();
+    assertThat(statements.updateSentText(statementId, "too late")).isZero();
+    assertThat(statements.findSentText(statementId)).contains("edited text");
+  }
+
+  @Test
+  void csvStatementHasNoSentText() {
+    long statementId =
+        statements.insert(profileId, accountId, "may.csv", "2026/05/may.csv", null, null);
+
+    assertThat(statements.findSentText(statementId)).isEmpty();
+    assertThat(statements.updateSentText(statementId, "nope")).isZero();
+  }
 }

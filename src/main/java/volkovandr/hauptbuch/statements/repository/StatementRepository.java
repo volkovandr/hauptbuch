@@ -54,6 +54,62 @@ public class StatementRepository {
         .single();
   }
 
+  /**
+   * Insert a {@code new} PDF statement — its text extracted, masked and waiting for the operator —
+   * and return its generated id (statements.md §3.2).
+   */
+  public long insertPdf(
+      long statementProfileId,
+      long accountId,
+      String originalFilename,
+      String filePath,
+      String sentText) {
+    return jdbcClient
+        .sql(
+            """
+            insert into statement
+              (statement_profile_id, account_id, state, original_filename, file_path, sent_text)
+            values
+              (:statementProfileId, :accountId, 'new', :originalFilename, :filePath, :sentText)
+            returning statement_id
+            """)
+        .param("statementProfileId", statementProfileId)
+        .param("accountId", accountId)
+        .param("originalFilename", originalFilename)
+        .param("filePath", filePath)
+        .param("sentText", sentText)
+        .query(Long.class)
+        .single();
+  }
+
+  /** The text of a PDF statement as it stands, or empty for a CSV statement. */
+  public Optional<String> findSentText(long statementId) {
+    return jdbcClient
+        .sql("select sent_text from statement where statement_id = :statementId")
+        .param(STATEMENT_ID, statementId)
+        .query(String.class)
+        .optional();
+  }
+
+  /**
+   * Overwrite the text of a live PDF statement that has not been parsed yet (state {@code new} or
+   * {@code failed}).
+   *
+   * @return the number of statements updated
+   */
+  public int updateSentText(long statementId, String sentText) {
+    return jdbcClient
+        .sql(
+            """
+            update statement set sent_text = :sentText, updated_at = now()
+            where statement_id = :statementId and deleted_at is null
+              and sent_text is not null and state in ('new', 'failed')
+            """)
+        .param(STATEMENT_ID, statementId)
+        .param("sentText", sentText)
+        .update();
+  }
+
   /** A statement by id, live or soft-deleted. */
   public Optional<Statement> findById(long statementId) {
     return jdbcClient

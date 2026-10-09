@@ -200,4 +200,35 @@ class StatementProfileServiceTest {
         p.colIban(),
         null);
   }
+
+  @Test
+  void pdfProfileKeepsOnlyItsNameWindowAndAiNoteAndNeedsNoColumns() {
+    StatementProfile submitted =
+        new StatementProfile(
+            null, " BankBbb PDF ", "pdf", 5, 2, "  Beschreibung carries the rate ", ";", null,
+            null, 3, true, null, null, "signed", "Booking", null, null, null, null, null, null,
+            null, null, null, null);
+    when(repository.insert(any())).thenReturn(9L);
+
+    assertThat(service().save(submitted)).isEqualTo(9L);
+
+    ArgumentCaptor<StatementProfile> saved = ArgumentCaptor.forClass(StatementProfile.class);
+    verify(repository).insert(saved.capture());
+    assertThat(saved.getValue().isPdf()).isTrue();
+    assertThat(saved.getValue().name()).isEqualTo("BankBbb PDF");
+    assertThat(saved.getValue().aiNote()).isEqualTo("Beschreibung carries the rate");
+    assertThat(saved.getValue().windowDaysBefore()).isEqualTo(5);
+    assertThat(saved.getValue().csvDelimiter()).isNull();
+    assertThat(saved.getValue().colBookingDate()).isNull();
+  }
+
+  @Test
+  void pdfProfileStillNeedsAName() {
+    StatementProfile submitted = StatementProfile.blankPdf();
+
+    assertThatThrownBy(() -> service().save(submitted))
+        .isInstanceOf(StatementFormatException.class)
+        .hasMessageContaining("name");
+    verify(repository, never()).insert(any());
+  }
 }

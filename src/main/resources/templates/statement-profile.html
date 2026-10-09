@@ -20,19 +20,20 @@
         th:action="@{/statements/profiles/save}"
         enctype="multipart/form-data"
         id="profile-form"
-        hx-post="/statements/profiles/preview"
+        th:attr="hx-post=${profile.isPdf()} ? null : '/statements/profiles/preview'"
         hx-target="#preview"
         hx-trigger="change, keyup changed delay:500ms"
         hx-encoding="multipart/form-data"
       >
         <input type="hidden" name="statementProfileId" th:value="${profile.statementProfileId()}" />
-        <input type="hidden" name="format" value="csv" />
+        <input type="hidden" name="format" th:value="${profile.format()}" />
         <div class="profile-grid">
           <div class="field field--wide">
             <label class="field__label" for="name">Name</label>
             <input class="input" id="name" name="name" th:value="${profile.name()}" required />
           </div>
 
+          <th:block th:unless="${profile.isPdf()}">
           <div class="field">
             <label class="field__label" for="csvDelimiter">Delimiter</label>
             <input class="input" id="csvDelimiter" name="csvDelimiter" th:value="${profile.csvDelimiter()}" />
@@ -117,6 +118,8 @@
             <input class="input" id="colIban" name="colIban" th:value="${profile.colIban()}" />
           </div>
 
+          </th:block>
+
           <div class="field">
             <label class="field__label" for="windowDaysBefore">
               Window: days before<span
@@ -129,9 +132,18 @@
             <label class="field__label" for="windowDaysAfter">Window: days after</label>
             <input class="input" id="windowDaysAfter" name="windowDaysAfter" type="number" min="0" th:value="${profile.windowDaysAfter()}" />
           </div>
+
+          <div class="field field--wide" th:if="${profile.isPdf()}">
+            <label class="field__label" for="aiNote">
+              AI note<span
+                th:replace="~{fragments/help-marker :: marker('Guidance for the parser about this bank, appended to the built-in instructions, for example: the Description column carries the original currency and rate.')}"
+              ></span>
+            </label>
+            <textarea class="input" id="aiNote" name="aiNote" rows="3" th:text="${profile.aiNote()}"></textarea>
+          </div>
         </div>
 
-        <div class="field">
+        <div class="field" th:unless="${profile.isPdf()}">
           <label class="field__label" for="sample">Sample file for the preview</label>
           <input class="input" id="sample" name="sample" type="file" />
         </div>
@@ -142,7 +154,7 @@
         </p>
       </form>
 
-      <div id="preview" th:fragment="preview" class="statement-preview">
+      <div id="preview" th:fragment="preview" class="statement-preview" th:unless="${profile != null and profile.isPdf()}">
         <p class="muted" th:if="${hint}" th:text="${hint}">Pick a sample file.</p>
         <p class="statements__error" th:if="${error}" th:text="${error}">Column not found.</p>
         <div th:if="${csv != null}" class="statements-list">

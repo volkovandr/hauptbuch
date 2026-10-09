@@ -53,6 +53,8 @@ dependencies {
 	// transitive dependencies. Deliberately NOT `com.google.zxing:javase`, which exists for
 	// raster output through ImageIO/AWT; we emit the BitMatrix as inline SVG ourselves.
 	implementation 'com.google.zxing:core:3.5.3'
+	// Statement PDFs (statements.md §3.2): local text extraction only — the PDF itself is never sent.
+	implementation 'org.apache.pdfbox:pdfbox:3.0.5'
 	runtimeOnly 'org.springframework.modulith:spring-modulith-runtime'
 	runtimeOnly 'org.postgresql:postgresql'
 	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
@@ -236,6 +238,8 @@ testing {
 				implementation 'org.testcontainers:testcontainers-junit-jupiter'
 				implementation 'org.testcontainers:testcontainers-postgresql'
 				implementation 'org.joda:joda-money:2.0.1'
+				// Builds the sample statement PDFs the upload tests send.
+				implementation 'org.apache.pdfbox:pdfbox:3.0.5'
 				runtimeOnly 'org.postgresql:postgresql'
 				runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 			}
