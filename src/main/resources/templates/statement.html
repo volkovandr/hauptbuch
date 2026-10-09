@@ -72,6 +72,34 @@
     <section class="panel">
       <p class="eyebrow">Matching</p>
       <p class="muted" th:if="${#lists.isEmpty(reviewLines)}">The file had no lines.</p>
+      <p class="statement-view" th:unless="${#lists.isEmpty(reviewLines)}">
+        Show:
+        <a
+          class="btn statement-view__choice"
+          th:classappend="${!showAttentionOnly} ? 'statement-view__choice--active'"
+          th:href="@{/statements/{id}(id=${statement.statementId()},show='all')}"
+          th:attr="hx-get=@{/statements/{id}(id=${statement.statementId()},show='all')}"
+          hx-target="main"
+          hx-select="main"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+          >All (<span th:text="${#lists.size(reviewLines)}">12</span>)</a
+        >
+        <a
+          class="btn statement-view__choice"
+          th:classappend="${showAttentionOnly} ? 'statement-view__choice--active'"
+          th:href="@{/statements/{id}(id=${statement.statementId()},show='attention')}"
+          th:attr="hx-get=@{/statements/{id}(id=${statement.statementId()},show='attention')}"
+          hx-target="main"
+          hx-select="main"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+          >Needs attention (<span th:text="${attentionCount}">1</span>)</a
+        >
+      </p>
+      <p class="muted" th:if="${showAttentionOnly and attentionCount == 0 and !#lists.isEmpty(reviewLines)}">
+        Every line is matched.
+      </p>
       <form
         method="post"
         th:action="@{/statements/{id}/accept-all(id=${statement.statementId()})}"
@@ -99,7 +127,10 @@
             </tr>
           </thead>
           <tbody>
-            <th:block th:each="r : ${reviewLines}">
+            <th:block
+              th:each="r : ${reviewLines}"
+              th:if="${!showAttentionOnly or r.needsAttention() or keptLine == r.lineId()}"
+            >
             <tr>
               <td th:text="${r.bookingDate()}">02.05.2026</td>
               <td class="num" th:text="${r.amount()}">-3,50</td>
@@ -302,7 +333,8 @@
     </section>
 
     <section class="panel">
-      <p class="eyebrow">Lines</p>
+      <details class="statement-contents">
+        <summary class="statement-contents__summary">Edit statement contents</summary>
       <p class="muted" th:if="${#lists.isEmpty(lines)}">The file had no lines.</p>
       <form
         th:unless="${#lists.isEmpty(lines)}"
@@ -361,6 +393,7 @@
           </span>
         </p>
       </form>
+      </details>
     </section>
 
     <section class="panel">

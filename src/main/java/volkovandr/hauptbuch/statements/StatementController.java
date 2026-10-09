@@ -147,10 +147,11 @@ class StatementController {
       @RequestParam(required = false) Long dock,
       @RequestParam(required = false) Long posting,
       @RequestParam(required = false) Long extra,
+      @RequestParam(required = false) String show,
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      pageAssembler.addPage(id, model);
+      pageAssembler.addPage(id, show, model);
     } catch (StatementFormatException e) {
       redirectAttributes.addFlashAttribute(ERROR, e.getMessage());
       return REDIRECT_BASE;

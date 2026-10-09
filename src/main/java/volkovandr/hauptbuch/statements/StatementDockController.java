@@ -151,7 +151,7 @@ class StatementDockController {
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      pageAssembler.addPage(id, model);
+      pageAssembler.addPage(id, null, model);
       pageAssembler.addDock(reopen.apply(reason), model);
       return "statement";
     } catch (StatementFormatException gone) {
