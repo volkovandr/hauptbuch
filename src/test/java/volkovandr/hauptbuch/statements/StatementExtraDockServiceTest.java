@@ -155,7 +155,7 @@ class StatementExtraDockServiceTest {
 
     assertThatThrownBy(() -> service.prefill(STATEMENT, LEG))
         .isInstanceOf(StatementFormatException.class)
-        .hasMessageContaining("register");
+        .isInstanceOf(RegisterOnlyException.class);
   }
 
   @Test
