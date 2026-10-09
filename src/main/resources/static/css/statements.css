@@ -122,3 +122,8 @@ main:has(table.statements) {
 table.statements .btn {
   white-space: nowrap;
 }
+
+/* A button-styled link sits on the same line as the form buttons beside it, not above them. */
+table.statements a.btn {
+  display: inline-block;
+}

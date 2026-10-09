@@ -55,3 +55,6 @@ The register's dock did not say a leg was reconciled by a statement.
   throw `RegisterOnlyException`, and the refusal row ends in a "Change it in the register" link to
   `/register?selected=<transaction>`, which opens that transaction in the register's edit dock.
   Focus moves to the dock's Date on open.
+- **Round 3, wish:** a perfectly matched transaction could only be unmatched or re-matched, never
+  edited. Matched lines get an "Edit in register" button in their own column, linking to
+  `/register?selected=<transaction>` (the register's jump opens the edit dock).

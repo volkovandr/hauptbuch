@@ -168,6 +168,15 @@ class StatementDockBrowserTest extends BrowserTest {
     page.getByText("Save and match").click();
     assertThat(page.locator(".statements__notice"))
         .containsText("Transaction created and matched.");
+
+    double unmatchTop = top("button:has-text('Unmatch')");
+    double editTop = top("a:has-text('Edit in register')");
+    org.assertj.core.api.Assertions.assertThat(editTop).isBetween(unmatchTop - 1, unmatchTop + 1);
+  }
+
+  private double top(String selector) {
+    Object y = page.locator(selector).first().evaluate("e => e.getBoundingClientRect().top");
+    return y instanceof Number n ? n.doubleValue() : -1;
   }
 
   @Test
