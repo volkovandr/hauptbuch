@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.statements.repository;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.statements.StatementLine;
@@ -113,6 +114,21 @@ public class StatementLineRepository {
         .sql("delete from statement_line where statement_id = :statementId")
         .param(STATEMENT_ID, statementId)
         .update();
+  }
+
+  /** The foreign charge printed on the line, when it has both an amount and a known currency. */
+  public Optional<OriginalCharge> findOriginalCharge(long statementLineId) {
+    return jdbcClient
+        .sql(
+            """
+            select original_amount, original_currency_code
+            from statement_line
+            where statement_line_id = :lineId
+              and original_amount is not null and original_currency_code is not null
+            """)
+        .param("lineId", statementLineId)
+        .query((rs, rowNum) -> new OriginalCharge(rs.getBigDecimal(1), rs.getString(2)))
+        .optional();
   }
 
   /** The statement's lines in file order. */

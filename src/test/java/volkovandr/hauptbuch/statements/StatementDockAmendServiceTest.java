@@ -51,6 +51,7 @@ class StatementDockAmendServiceTest {
   @Mock private DockCommitService dockCommitService;
   @Mock private DockEditService dockEditService;
   @Mock private LedgerService ledgerService;
+  @Mock private StatementCrossCurrencyService crossCurrencyService;
 
   private StatementDockService service;
 
@@ -64,7 +65,8 @@ class StatementDockAmendServiceTest {
             dockPrefillService,
             dockCommitService,
             dockEditService,
-            ledgerService);
+            ledgerService,
+            crossCurrencyService);
   }
 
   private static StatementLine line() {

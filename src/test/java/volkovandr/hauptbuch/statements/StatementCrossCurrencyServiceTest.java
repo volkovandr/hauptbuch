@@ -2,6 +2,8 @@ package volkovandr.hauptbuch.statements;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +21,8 @@ import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.CrossCurrencyFields;
 import volkovandr.hauptbuch.ledger.CrossCurrencyFieldsService;
 import volkovandr.hauptbuch.statements.StatementCrossCurrencyService.CrossCurrencyView;
+import volkovandr.hauptbuch.statements.repository.OriginalCharge;
+import volkovandr.hauptbuch.statements.repository.StatementLineRepository;
 
 /**
  * Unit tier: what the statement dock asks for when a missing line is a transfer into another
@@ -38,6 +42,7 @@ class StatementCrossCurrencyServiceTest {
   @Mock private StatementMatchService matchService;
   @Mock private AccountService accountService;
   @Mock private CrossCurrencyFieldsService crossCurrencyFieldsService;
+  @Mock private StatementLineRepository lineRepository;
 
   private StatementCrossCurrencyService service;
 
@@ -45,7 +50,11 @@ class StatementCrossCurrencyServiceTest {
   void setUp() {
     service =
         new StatementCrossCurrencyService(
-            statementService, matchService, accountService, crossCurrencyFieldsService);
+            statementService,
+            matchService,
+            accountService,
+            crossCurrencyFieldsService,
+            lineRepository);
   }
 
   private static Account account(long id, String currency) {
@@ -90,7 +99,7 @@ class StatementCrossCurrencyServiceTest {
     when(crossCurrencyFieldsService.prefillFundingTotal("USD", "EUR", DATE, "12,50"))
         .thenReturn("13,89");
 
-    Optional<CrossCurrencyView> view = service.forTransfer(STATEMENT, LINE_ID, TARGET, "TO", DATE);
+    Optional<CrossCurrencyView> view = service.forTarget(STATEMENT, LINE_ID, TARGET, "TO", DATE);
 
     assertThat(view).contains(new CrossCurrencyView("USD", "13,89", false, null));
   }
@@ -103,7 +112,7 @@ class StatementCrossCurrencyServiceTest {
     when(crossCurrencyFieldsService.resolve(any()))
         .thenReturn(new CrossCurrencyFields("EUR", "USD", true, true, null, "11,00"));
 
-    Optional<CrossCurrencyView> view = service.forTransfer(STATEMENT, LINE_ID, TARGET, "TO", DATE);
+    Optional<CrossCurrencyView> view = service.forTarget(STATEMENT, LINE_ID, TARGET, "TO", DATE);
 
     assertThat(view.orElseThrow().showBase()).isTrue();
     assertThat(view.orElseThrow().baseAmount()).isEqualTo("11,00");
@@ -117,7 +126,7 @@ class StatementCrossCurrencyServiceTest {
     when(crossCurrencyFieldsService.resolve(any()))
         .thenReturn(new CrossCurrencyFields("EUR", "USD", true, false, null, null));
 
-    Optional<CrossCurrencyView> view = service.forTransfer(STATEMENT, LINE_ID, TARGET, "TO", DATE);
+    Optional<CrossCurrencyView> view = service.forTarget(STATEMENT, LINE_ID, TARGET, "TO", DATE);
 
     assertThat(view.orElseThrow().counterpartAmount()).isNull();
   }
@@ -127,14 +136,94 @@ class StatementCrossCurrencyServiceTest {
     statementOnEurAccount();
     when(accountService.findById(TARGET)).thenReturn(Optional.of(account(TARGET, "EUR")));
 
-    assertThat(service.forTransfer(STATEMENT, LINE_ID, TARGET, "TO", DATE)).isEmpty();
+    assertThat(service.forTarget(STATEMENT, LINE_ID, TARGET, "TO", DATE)).isEmpty();
   }
 
   @Test
   void noTransferTargetAsksForNothing() {
-    assertThat(service.forTransfer(STATEMENT, LINE_ID, null, "TO", DATE)).isEmpty();
-    assertThat(service.forTransfer(STATEMENT, LINE_ID, TARGET, null, DATE)).isEmpty();
-    assertThat(service.forTransfer(STATEMENT, LINE_ID, TARGET, " ", DATE)).isEmpty();
+    assertThat(service.forTarget(STATEMENT, LINE_ID, null, "TO", DATE)).isEmpty();
+    assertThat(service.forTarget(STATEMENT, LINE_ID, null, null, DATE)).isEmpty();
     verifyNoInteractions(accountService, crossCurrencyFieldsService);
+  }
+
+  @Test
+  void categoryOnLineWithoutForeignChargeAsksForNothing() {
+    assertThat(service.forTarget(STATEMENT, LINE_ID, TARGET, null, DATE)).isEmpty();
+    assertThat(service.forTarget(STATEMENT, LINE_ID, TARGET, " ", DATE)).isEmpty();
+    verifyNoInteractions(accountService, crossCurrencyFieldsService);
+  }
+
+  @Test
+  void nothingPickedYetOnForeignChargeLineStillProposesTheCharge() {
+    statementOnEurAccount();
+    bankLineOf("-12.50");
+    when(lineRepository.findOriginalCharge(LINE_ID))
+        .thenReturn(Optional.of(new OriginalCharge(new BigDecimal("-14.00"), "USD")));
+    when(crossCurrencyFieldsService.resolve(any()))
+        .thenReturn(new CrossCurrencyFields("EUR", "USD", true, false, null, null));
+
+    Optional<CrossCurrencyView> view = service.forTarget(STATEMENT, LINE_ID, null, null, DATE);
+
+    assertThat(view).contains(new CrossCurrencyView("USD", "14,00", false, null));
+  }
+
+  @Test
+  void categoryOnForeignChargeLineProposesTheChargeAsTheCounterpartAmount() {
+    statementOnEurAccount();
+    bankLineOf("-12.50");
+    when(lineRepository.findOriginalCharge(LINE_ID))
+        .thenReturn(Optional.of(new OriginalCharge(new BigDecimal("-14.00"), "USD")));
+    when(crossCurrencyFieldsService.resolve(any()))
+        .thenReturn(new CrossCurrencyFields("EUR", "USD", true, false, null, null));
+
+    Optional<CrossCurrencyView> view = service.forTarget(STATEMENT, LINE_ID, TARGET, null, DATE);
+
+    assertThat(view).contains(new CrossCurrencyView("USD", "14,00", false, null));
+  }
+
+  @Test
+  void withForeignChargeSetsTheFieldsOnTheInputAndLeavesOthersAlone() {
+    statementOnEurAccount();
+    bankLineOf("-12.50");
+    when(lineRepository.findOriginalCharge(LINE_ID))
+        .thenReturn(Optional.of(new OriginalCharge(new BigDecimal("-14.00"), "USD")));
+    when(crossCurrencyFieldsService.resolve(any()))
+        .thenReturn(new CrossCurrencyFields("EUR", "USD", true, true, null, null));
+    DockInput input =
+        new DockInput(
+            DATE, "", TARGET, "Food", null, null, null, null, null, List.of(), null, null, null,
+            null);
+
+    DockInput filled = service.withForeignCharge(input, STATEMENT, LINE_ID, DATE);
+
+    assertThat(filled.categoryCurrencyCode()).isEqualTo("USD");
+    assertThat(filled.categoryAmount()).isEqualTo("14,00");
+    assertThat(filled.baseAmount()).isEmpty();
+    assertThat(filled.categoryId()).isEqualTo(TARGET);
+  }
+
+  @Test
+  void chargeInTheAccountsOwnCurrencyAsksForNothing() {
+    statementOnEurAccount();
+    when(lineRepository.findOriginalCharge(LINE_ID))
+        .thenReturn(Optional.of(new OriginalCharge(new BigDecimal("-12.50"), "EUR")));
+
+    assertThat(service.forTarget(STATEMENT, LINE_ID, TARGET, null, DATE)).isEmpty();
+  }
+
+  @Test
+  void transferIntoTheChargesCurrencyTakesTheChargeInsteadOfTheRate() {
+    statementOnEurAccount();
+    bankLineOf("-12.50");
+    when(accountService.findById(TARGET)).thenReturn(Optional.of(account(TARGET, "USD")));
+    when(lineRepository.findOriginalCharge(LINE_ID))
+        .thenReturn(Optional.of(new OriginalCharge(new BigDecimal("-14.00"), "USD")));
+    when(crossCurrencyFieldsService.resolve(any()))
+        .thenReturn(new CrossCurrencyFields("EUR", "USD", true, false, null, null));
+
+    Optional<CrossCurrencyView> view = service.forTarget(STATEMENT, LINE_ID, TARGET, "TO", DATE);
+
+    assertThat(view.orElseThrow().counterpartAmount()).isEqualTo("14,00");
+    verify(crossCurrencyFieldsService, never()).prefillFundingTotal(any(), any(), any(), any());
   }
 }

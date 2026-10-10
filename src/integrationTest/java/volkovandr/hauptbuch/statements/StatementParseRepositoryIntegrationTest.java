@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
+import volkovandr.hauptbuch.statements.repository.OriginalCharge;
 import volkovandr.hauptbuch.statements.repository.ParseUsage;
 import volkovandr.hauptbuch.statements.repository.StatementLineRepository;
 import volkovandr.hauptbuch.statements.repository.StatementProfileRepository;
@@ -244,6 +245,32 @@ class StatementParseRepositoryIntegrationTest {
 
     assertThat(lines.deleteByStatement(statementId)).isEqualTo(1);
     assertThat(lines.findByStatement(statementId)).isEmpty();
+  }
+
+  @Test
+  void findOriginalChargeReadsTheForeignAmountAndCurrencyOnlyWhenBothAreKnown() {
+    StatementLine line =
+        new StatementLine(
+            null,
+            0,
+            LocalDate.of(2026, 5, 9),
+            null,
+            new BigDecimal("-50.00"),
+            "c",
+            "d",
+            "b",
+            "raw",
+            null);
+    long foreign =
+        lines.insertParsed(statementId, line, new BigDecimal("-55.00"), "USD", BigDecimal.ONE);
+    long unknownCurrency =
+        lines.insertParsed(statementId, line, new BigDecimal("-55.00"), "QQQ", BigDecimal.ONE);
+    long plain = lines.insertParsed(statementId, line, null, null, null);
+
+    assertThat(lines.findOriginalCharge(foreign))
+        .contains(new OriginalCharge(new BigDecimal("-55.0000"), "USD"));
+    assertThat(lines.findOriginalCharge(unknownCurrency)).isEmpty();
+    assertThat(lines.findOriginalCharge(plain)).isEmpty();
   }
 
   @Test

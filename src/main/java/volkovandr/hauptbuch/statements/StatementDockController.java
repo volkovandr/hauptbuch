@@ -42,8 +42,9 @@ class StatementDockController {
   }
 
   /**
-   * The counterpart-amount fields for a transfer target the dock just resolved, or nothing when the
-   * entry is not a transfer into another currency (issue statements/09).
+   * The counterpart-amount fields for a target the dock just resolved: a transfer into another
+   * currency (issue statements/09) or a category on a line with a foreign charge (issue
+   * statements/12); nothing otherwise.
    */
   @GetMapping(BASE_PATH + "/{id}/lines/{lineId}/cross-currency")
   String crossCurrency(
@@ -56,7 +57,7 @@ class StatementDockController {
     model.addAttribute(
         "cross",
         crossCurrencyService
-            .forTransfer(id, lineId, categoryId, transferDirection, date)
+            .forTarget(id, lineId, categoryId, transferDirection, date)
             .orElse(null));
     return "fragments/statement-dock :: crossFieldsFor(cross=${cross})";
   }
