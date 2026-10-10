@@ -246,6 +246,25 @@ class StatementMatchServiceTest {
   }
 
   @Test
+  void reversingTheSignsFlipsTheLinesWhenNothingIsMatched() {
+    when(matchRepository.findMatches(STATEMENT)).thenReturn(List.of());
+
+    service.reverseSigns(STATEMENT);
+
+    verify(statementService).negateLines(STATEMENT);
+  }
+
+  @Test
+  void reversingTheSignsIsRefusedWhileAnyLineIsMatched() {
+    when(matchRepository.findMatches(STATEMENT)).thenReturn(List.of(match(LINE_ID, POSTING)));
+
+    assertThatThrownBy(() -> service.reverseSigns(STATEMENT))
+        .isInstanceOf(StatementFormatException.class)
+        .hasMessageContaining("Unmatch");
+    verify(statementService, never()).negateLines(anyLong());
+  }
+
+  @Test
   void unmatchRefusesLineWithoutMatch() {
     reviewing(new LineReview(line(LINE_ID), LineStatus.MISSING, null, List.of()));
 

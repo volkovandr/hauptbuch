@@ -245,6 +245,13 @@ class StatementController {
         redirectAttributes);
   }
 
+  /** Flip the sign of every line (statement issue 11); refused while any line is matched. */
+  @PostMapping(BASE_PATH + "/{id}/reverse-signs")
+  String reverseSigns(@PathVariable long id, RedirectAttributes redirectAttributes) {
+    return saved(
+        id, () -> matchService.reverseSigns(id), "The signs were reversed.", redirectAttributes);
+  }
+
   /** Save the edited line grid. */
   @PostMapping(BASE_PATH + "/{id}/lines")
   String saveLines(
