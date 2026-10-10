@@ -80,7 +80,10 @@ class ToonStatementDecoderTest {
   @Test
   void dropsUnreadableHeaderValueAndToleratesMissingHeader() {
     ParsedStatement badHeader =
-        decoder.decode("statement:\n  periodStart: soon\n  openingBalance: lots\n").orElseThrow();
+        decoder
+            .decode(
+                "statement:\n  periodStart: soon\n  openingBalance: lots\n" + COLUMNS.formatted(0))
+            .orElseThrow();
     assertThat(badHeader.periodStart()).isNull();
     assertThat(badHeader.openingBalance()).isNull();
     assertThat(badHeader.lines()).isEmpty();
@@ -92,8 +95,14 @@ class ToonStatementDecoderTest {
   }
 
   @Test
+  void bodyWithoutLinesTableIsUndecodable() {
+    assertThat(decoder.decode(HEADER)).isEmpty();
+  }
+
+  @Test
   void stripsCodeFence() {
-    Optional<ParsedStatement> parsed = decoder.decode("```toon\n" + HEADER + "```");
+    Optional<ParsedStatement> parsed =
+        decoder.decode("```toon\n" + HEADER + COLUMNS.formatted(0) + "```");
 
     assertThat(parsed).isPresent();
     assertThat(parsed.orElseThrow().closingBalance()).isEqualByComparingTo("1138.00");

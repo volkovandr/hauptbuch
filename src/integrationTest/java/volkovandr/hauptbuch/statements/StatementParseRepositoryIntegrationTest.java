@@ -192,7 +192,7 @@ class StatementParseRepositoryIntegrationTest {
   }
 
   @Test
-  void insertParsedKeepsTheForeignChargeAndDropsAnUnknownCurrency() {
+  void insertParsedKeepsTheForeignChargeAndFlagsAnUnknownCurrency() {
     StatementLine line =
         new StatementLine(
             null,
@@ -216,6 +216,13 @@ class StatementParseRepositoryIntegrationTest {
 
     assertThat(originalCurrency(withUsd)).isEqualTo("USD");
     assertThat(originalCurrency(withUnknown)).isNull();
+    assertThat(
+            jdbcClient
+                .sql("select problem from statement_line where statement_line_id = :id")
+                .param("id", withUnknown)
+                .query(String.class)
+                .single())
+        .contains("QQQ");
     assertThat(originalCurrency(without)).isNull();
     assertThat(
             jdbcClient

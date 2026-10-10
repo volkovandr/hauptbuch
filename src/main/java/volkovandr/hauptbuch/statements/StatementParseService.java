@@ -70,7 +70,7 @@ public class StatementParseService {
     try {
       return callAndStore(statement);
     } catch (StatementParseException e) {
-      LOG.warn("Statement {} parse failed", statementId, e);
+      LOG.warn("Statement {} parse failed: {}", statementId, e.getMessage());
       results.failTransport(statementId, e.getMessage());
     } catch (RuntimeException e) {
       LOG.error("Statement {} parse errored unexpectedly", statementId, e);
@@ -83,6 +83,9 @@ public class StatementParseService {
     long statementId = statement.statementId();
     AiSettings config = settingsService.aiConfig();
     String sentText = statementRepository.findSentText(statementId).orElse("");
+    if (sentText.isBlank()) {
+      throw new StatementParseException("The statement has no text to parse");
+    }
     String aiNote = profileService.getIncludingDeleted(statement.statementProfileId()).aiNote();
     StatementParseResult result =
         parser.parse(

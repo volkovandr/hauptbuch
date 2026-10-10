@@ -5,6 +5,7 @@ import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.errors.AnthropicException;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
+import com.anthropic.models.messages.StopReason;
 import com.anthropic.models.messages.Usage;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
@@ -41,11 +42,19 @@ class AnthropicStatementParser implements StatementParser {
     LOG.debug("Statement parse request: model={}", request.model());
     try {
       Message response = clientFor(request.apiKey()).messages().create(params);
+      if (response.stopReason().filter(StopReason.MAX_TOKENS::equals).isPresent()) {
+        throw new StatementParseException(
+            "The response was cut off at the output limit — the statement is too long to parse"
+                + " in one call");
+      }
       StatementParseResult result = resultOf(response);
       LOG.debug("Statement parse response: {}", result.rawToon());
       return result;
     } catch (AnthropicException e) {
-      throw new StatementParseException("Statement parse call failed: " + e.getMessage(), e);
+      String message = String.valueOf(e.getMessage());
+      // Defence in depth: the message is stored and shown, so it must never carry the key.
+      String safe = message.replace(request.apiKey(), "***");
+      throw new StatementParseException("Statement parse call failed: " + safe, e);
     }
   }
 

@@ -50,7 +50,8 @@ public class StatementLineRepository {
 
   /**
    * Insert a line the AI read, with the foreign charge the bank printed. An original currency the
-   * book does not know is dropped (the line itself is kept) rather than failing the whole parse.
+   * book does not know is dropped and the line flagged with a problem, rather than failing the
+   * whole parse.
    */
   public long insertParsed(
       long statementId,
@@ -66,7 +67,11 @@ public class StatementLineRepository {
                description, bank_category, raw_text, problem,
                original_amount, original_currency_code, original_rate)
             select :statementId, :sortOrder, :bookingDate, :valueDate, :amount, :counterparty,
-                   :description, :bankCategory, :rawText, :problem,
+                   :description, :bankCategory, :rawText,
+                   coalesce(cast(:problem as text),
+                            case when given.code is not null and c.currency_code is null
+                                 then 'The original currency ' || given.code || ' is not known.'
+                            end),
                    :originalAmount, c.currency_code, :originalRate
             from (select cast(:originalCurrency as text) as code) given
             left join currency c on c.currency_code = given.code

@@ -134,6 +134,18 @@ class StatementParseServiceTest {
   }
 
   @Test
+  void blankTextFailsWithoutCallingTheParser() {
+    statementAwaitingParse();
+    when(settingsService.aiConfig()).thenReturn(CONFIG);
+    when(statementRepository.findSentText(STATEMENT_ID)).thenReturn(Optional.of("  "));
+
+    assertThat(service.parse(STATEMENT_ID)).isFalse();
+
+    verify(results).failTransport(STATEMENT_ID, "The statement has no text to parse");
+    verifyNoInteractions(parser);
+  }
+
+  @Test
   void anUnexpectedErrorStillLandsFailedNotStuckProcessing() {
     statementAwaitingParse();
     callPrerequisites();
