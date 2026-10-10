@@ -115,6 +115,24 @@ class StatementScreenIntegrationTest {
   }
 
   @Test
+  void theStatementPageLinksToDownloadOfTheOriginalFile() throws Exception {
+    long statementId = uploadAndCreate(saveProfile());
+
+    mockMvc
+        .perform(get("/statements/" + statementId))
+        .andExpect(content().string(containsString("/statements/" + statementId + "/file")));
+    mockMvc
+        .perform(get("/statements/" + statementId + "/file"))
+        .andExpect(status().isOk())
+        .andExpect(
+            result ->
+                assertThat(result.getResponse().getHeader("Content-Disposition"))
+                    .contains("filename=\"2026-05.csv\""))
+        .andExpect(content().bytes(StatementFixtures.csvBytes()));
+    mockMvc.perform(get("/statements/999999/file")).andExpect(status().isNotFound());
+  }
+
+  @Test
   void theStatementPageShowsLiveProposalsMissingLinesAndExtras() throws Exception {
     long statementId = uploadAndCreate(saveProfile());
     long shop = insertId("insert into payee (name) values ('ShopAaa') returning payee_id");

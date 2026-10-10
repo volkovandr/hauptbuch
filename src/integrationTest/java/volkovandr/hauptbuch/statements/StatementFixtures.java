@@ -37,6 +37,11 @@ final class StatementFixtures {
 
   private StatementFixtures() {}
 
+  /** The bytes of {@link #CSV} as uploaded. */
+  static byte[] csvBytes() {
+    return CSV.getBytes(StandardCharsets.UTF_8);
+  }
+
   /** Save the profile for {@link #CSV} through the screen and return its id. */
   static long saveProfile(MockMvc mockMvc, JdbcClient jdbcClient) throws Exception {
     mockMvc
