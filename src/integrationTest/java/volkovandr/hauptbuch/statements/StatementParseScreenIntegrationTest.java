@@ -145,6 +145,26 @@ class StatementParseScreenIntegrationTest {
   }
 
   @Test
+  void reverseSignsFlipsEveryParsedLine() throws Exception {
+    when(parser.parse(any())).thenReturn(new StatementParseResult(GOOD_BODY, 1, 1, 0, 0));
+    mockMvc.perform(post("/statements/" + statementId + "/parse"));
+
+    mockMvc
+        .perform(post("/statements/" + statementId + "/reverse-signs"))
+        .andExpect(redirectedUrl("/statements/" + statementId))
+        .andExpect(flash().attribute("notice", "The signs were reversed."));
+
+    List<BigDecimal> amounts =
+        jdbcClient
+            .sql("select amount from statement_line where statement_id = :id order by sort_order")
+            .param("id", statementId)
+            .query(BigDecimal.class)
+            .list();
+    assertThat(amounts.get(0)).isEqualByComparingTo("12.50");
+    assertThat(amounts.get(1)).isEqualByComparingTo("50.00");
+  }
+
+  @Test
   void anUndecodableBodyFailsKeepingTheRawResponse() throws Exception {
     when(parser.parse(any()))
         .thenReturn(new StatementParseResult("lines[2]{a,b}:\n  one\n", 10, 5, 0, 0));

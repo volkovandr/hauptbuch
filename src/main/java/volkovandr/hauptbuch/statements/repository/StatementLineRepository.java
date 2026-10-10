@@ -94,6 +94,19 @@ public class StatementLineRepository {
         .single();
   }
 
+  /** Flip the sign of every line's amount and foreign amount (the bank prints them reversed). */
+  public int negateAmounts(long statementId) {
+    return jdbcClient
+        .sql(
+            """
+            update statement_line
+            set amount = -amount, original_amount = -original_amount
+            where statement_id = :statementId
+            """)
+        .param(STATEMENT_ID, statementId)
+        .update();
+  }
+
   /** Delete every line of the statement (a parse replaces them). */
   public int deleteByStatement(long statementId) {
     return jdbcClient

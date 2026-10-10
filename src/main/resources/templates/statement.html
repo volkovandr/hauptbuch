@@ -75,7 +75,8 @@
     </section>
 
     <section class="panel" th:if="${sentText != null}">
-      <p class="eyebrow">PDF text</p>
+     <details th:open="${statement.state() != 'processed'}">
+      <summary class="statement-contents__summary">PDF text</summary>
       <p class="muted">
         The text extracted from the PDF, masked of your account numbers and any IBAN. Edit it
         freely — remove your name, your address, anything else. Exactly this text is what will be
@@ -99,18 +100,45 @@
         method="post"
         th:if="${statement.state() == 'new' or statement.state() == 'failed'}"
         th:action="@{/statements/{id}/parse(id=${statement.statementId()})}"
+        th:attr="hx-post=@{/statements/{id}/parse(id=${statement.statementId()})}"
+        hx-target="main"
+        hx-select="main"
+        hx-swap="outerHTML"
+        hx-disable-elt="find button"
       >
         <p class="actions">
-          <button type="submit" class="btn">Parse with AI</button>
+          <button type="submit" class="btn statement-parse">
+            <span class="statement-parse__idle">Parse with AI</span>
+            <span class="statement-parse__busy">Processing…</span>
+          </button>
           <span class="muted">
             Sends the text above — save any edit first — in one call and waits for the answer.
           </span>
         </p>
       </form>
+     </details>
     </section>
 
     <section class="panel">
       <p class="eyebrow">Matching</p>
+      <form
+        method="post"
+        th:unless="${#lists.isEmpty(reviewLines)}"
+        th:action="@{/statements/{id}/reverse-signs(id=${statement.statementId()})}"
+        th:attr="hx-post=@{/statements/{id}/reverse-signs(id=${statement.statementId()})}"
+        hx-target="main"
+        hx-select="main"
+        hx-swap="outerHTML"
+      >
+        <p class="actions statement-reverse">
+          <button type="submit" class="btn" th:disabled="${review.matched() > 0}">
+            Reverse the sign
+          </button>
+          <span
+            th:replace="~{fragments/help-marker :: marker('The negative sign indicates expenses or outgoing payments, positive sign indicates income or inbound payments. Your bank might report that differently. Use this button to fix the issue. Only possible when no transactions are matched.')}"
+          ></span>
+        </p>
+      </form>
       <p class="muted" th:if="${#lists.isEmpty(reviewLines)}">The file had no lines.</p>
       <p class="statement-view" th:unless="${#lists.isEmpty(reviewLines)}">
         Show:

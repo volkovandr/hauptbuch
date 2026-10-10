@@ -109,6 +109,7 @@ public class StatementParseService {
             cost);
     Optional<ParsedStatement> decoded = decoder.decode(result.rawToon());
     if (decoded.isEmpty()) {
+      LOG.warn("Statement {} parse response could not be decoded", statementId);
       results.failUndecodable(
           statementId, "Could not decode the parser response", usage, result.rawToon());
       return false;

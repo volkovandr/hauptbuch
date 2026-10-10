@@ -100,6 +100,19 @@ public class StatementMatchService {
   }
 
   /**
+   * Flip the sign of every line, for a bank that prints expenses as positive (a credit card).
+   *
+   * @throws StatementFormatException when any line is already matched
+   */
+  @Transactional
+  public void reverseSigns(long statementId) {
+    if (!matchRepository.findMatches(statementId).isEmpty()) {
+      throw new StatementFormatException("Unmatch every line before reversing the signs.");
+    }
+    statementService.negateLines(statementId);
+  }
+
+  /**
    * Save the edited line grid. A matched line whose booking date or amount changed is no longer the
    * line the match was made on, so it is unmatched like {@link #unmatch}; text edits keep matches.
    */

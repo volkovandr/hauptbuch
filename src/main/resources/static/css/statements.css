@@ -186,3 +186,26 @@ table.statements a.btn {
   font-family: ui-monospace, monospace;
   white-space: pre;
 }
+
+/* The parse button swaps its label while its request runs (htmx adds .htmx-request to the form). */
+.statement-parse__busy {
+  display: none;
+}
+
+.htmx-request .statement-parse__idle {
+  display: none;
+}
+
+.htmx-request .statement-parse__busy {
+  display: inline;
+}
+
+/* The Reverse-the-sign marker sits near the window's left edge, where the default left-growing
+   bubble (base.css) runs off it — open it to the right of the icon instead. */
+.statement-reverse .help__text {
+  right: auto;
+  left: 100%;
+  bottom: auto;
+  top: 0;
+  margin: 0 0 0 0.4rem;
+}
