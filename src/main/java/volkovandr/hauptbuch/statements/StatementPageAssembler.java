@@ -66,6 +66,7 @@ class StatementPageAssembler {
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("statement", statement);
     model.addAttribute("sentText", pdfService.sentText(id));
+    model.addAttribute("parseError", pdfService.parseError(id));
     model.addAttribute("accountName", statementService.accountName(statement.accountId()));
     model.addAttribute("profileName", profileService.nameOf(statement.statementProfileId()));
     model.addAttribute("opening", StatementController.number(statement.openingBalance()));

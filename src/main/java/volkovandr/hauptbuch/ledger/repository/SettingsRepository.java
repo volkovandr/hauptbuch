@@ -106,6 +106,23 @@ public class SettingsRepository {
         .update();
   }
 
+  /** The operator-edited statement-parser system prompt, or null when none is stored. */
+  public String loadStatementSystemPrompt() {
+    return jdbcClient
+        .sql("select statement_system_prompt from settings where settings_id = 1")
+        .query(String.class)
+        .optional()
+        .orElse(null);
+  }
+
+  /** Set (or clear, when null) the operator-edited statement-parser system prompt. */
+  public void updateStatementSystemPrompt(String systemPrompt) {
+    jdbcClient
+        .sql("update settings set statement_system_prompt = :prompt where settings_id = 1")
+        .param("prompt", systemPrompt)
+        .update();
+  }
+
   /** Set the four per-million-token USD price rates a parse's frozen cost is computed from. */
   public void updateAiPrices(
       BigDecimal priceIn,

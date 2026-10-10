@@ -160,6 +160,22 @@ public class SettingsService {
         systemPrompt == null || systemPrompt.isBlank() ? null : systemPrompt);
   }
 
+  /**
+   * The operator-edited statement-parser system prompt, or null when none is stored (the built-in
+   * default is used at parse time). Stored opaquely, like {@link #aiSystemPrompt()}.
+   */
+  public String statementSystemPrompt() {
+    String stored = settingsRepository.loadStatementSystemPrompt();
+    return stored == null || stored.isBlank() ? null : stored;
+  }
+
+  /** Set (or clear, when blank) the operator-edited statement-parser system prompt. */
+  @Transactional
+  public void setStatementSystemPrompt(String systemPrompt) {
+    settingsRepository.updateStatementSystemPrompt(
+        systemPrompt == null || systemPrompt.isBlank() ? null : systemPrompt);
+  }
+
   /** Set the four per-million-token USD price rates the frozen parse cost is computed from. */
   @Transactional
   public void setAiPrices(

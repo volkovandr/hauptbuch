@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<!--
+  Statement-parser prompt editor (statements sub-plan slice e2). The operator edits the system
+  prompt here; unlike the receipt prompt, nothing is injected after it. Reached from the Settings
+  screen's AI section. Standard server-rendered form POSTs re-render this page; no bespoke JS.
+-->
+<html
+  lang="en"
+  xmlns:th="http://www.thymeleaf.org"
+  th:replace="~{layout :: page(~{:: content})}"
+>
+  <main class="content ledger" th:fragment="content">
+    <p>
+      <a class="btn" th:href="@{/settings}">← Settings</a>
+    </p>
+
+    <section class="panel">
+      <p class="eyebrow">Statement parse prompt</p>
+      <p class="muted">
+        The instructions the statement parser is sent, ahead of the statement text. Edit freely —
+        it is stored with the book and reused on every parse.
+        <span th:if="${isCustom}">A custom prompt is in effect.</span>
+        <span th:unless="${isCustom}">The built-in default is in effect.</span>
+      </p>
+
+      <form method="post" th:action="@{/statements/ai-prompt}" class="form" style="max-width: 90%">
+        <div class="field">
+          <label class="field__label" for="instructions">Instructions</label>
+          <textarea
+            id="instructions"
+            name="instructions"
+            rows="22"
+            class="input"
+            style="font-family: var(--font-num); white-space: pre-wrap; overflow-wrap: normal; overflow-x: auto;"
+            th:text="${instructions}"
+          ></textarea>
+        </div>
+        <label class="receipt-edit__toggle">
+          <input type="checkbox" name="reset" value="true" /> Reset to the built-in default (discards
+          the custom prompt)
+        </label>
+        <p class="actions"><button type="submit" class="btn">Save prompt</button></p>
+      </form>
+    </section>
+
+  </main>
+</html>
