@@ -86,6 +86,7 @@
               <th>Period</th>
               <th>Profile</th>
               <th class="num">Lines</th>
+              <th>Green</th>
               <th>File</th>
             </tr>
           </thead>
@@ -110,6 +111,7 @@
                   >(<span th:text="${r.problemCount()}">2</span> with a problem)</span
                 >
               </td>
+              <td th:text="${green[r.statementId()]} ? '✓' : ''">✓</td>
               <td class="muted" th:text="${r.originalFilename()}">2026-05.csv</td>
             </tr>
           </tbody>

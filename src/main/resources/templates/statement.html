@@ -38,6 +38,35 @@
         >
       </p>
 
+      <p class="statement-green" th:if="${green}">
+        <strong>Green</strong> — every line matched, nothing left over, balances agree.
+      </p>
+      <table class="statement-balances" th:unless="${#lists.isEmpty(balanceViews)}">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="num">Bank</th>
+            <th class="num">Ledger</th>
+            <th class="num">Explained</th>
+            <th class="num">Unexplained</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="b : ${balanceViews}">
+            <th th:text="${b.label()}">Opening</th>
+            <td class="num" th:text="${b.bank()}">100,00</td>
+            <td class="num" th:text="${b.ledger()}">90,00</td>
+            <td class="num" th:text="${b.explained()}">10,00</td>
+            <td class="num" th:classappend="${b.agrees()} ? 'statement-balances__ok' : 'warning'"
+                th:text="${b.unexplained()}">0,00</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted" th:unless="${#lists.isEmpty(balanceViews)}">
+        Explained: postings matched to this statement but dated outside its period, and boundary
+        extras. Only the unexplained remainder counts.
+      </p>
+
       <form
         method="post"
         th:action="@{/statements/{id}/header(id=${statement.statementId()})}"

@@ -132,6 +132,31 @@ final class StatementReviewViews {
     }
   }
 
+  /** One balance check as the header shows it. */
+  record BalanceView(
+      String label, String bank, String ledger, String explained, String unexplained, boolean agrees) {
+
+    /** The views of the checks that exist, opening first. */
+    static List<BalanceView> of(StatementBalances balances) {
+      return Stream.of(
+              of("Opening", balances.opening()), of("Closing", balances.closing()))
+          .filter(v -> v != null)
+          .toList();
+    }
+
+    private static BalanceView of(String label, StatementBalanceCheck check) {
+      return check == null
+          ? null
+          : new BalanceView(
+              label,
+              number(check.bank()),
+              number(check.ledger()),
+              number(check.explained()),
+              number(check.unexplained()),
+              check.agrees());
+    }
+  }
+
   private static String suffix(ProposedCandidate proposed) {
     if (proposed.tier() == ProposedCandidate.Tier.WRONG_ACCOUNT) {
       return "on " + proposed.candidate().accountName();

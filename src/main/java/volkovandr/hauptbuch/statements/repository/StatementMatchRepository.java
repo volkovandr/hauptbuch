@@ -1,5 +1,7 @@
 package volkovandr.hauptbuch.statements.repository;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -156,6 +158,27 @@ public class StatementMatchRepository {
         .param(STATEMENT_ID, statementId)
         .query(StatementExtra.class)
         .list();
+  }
+
+  /**
+   * The account's ledger balance through a date: the sum of its legs in live transactions dated on
+   * or before it (statements.md §6.2), zero when there are none.
+   */
+  public BigDecimal ledgerBalance(long accountId, LocalDate through) {
+    return jdbcClient
+        .sql(
+            """
+            select coalesce(sum(p.amount), 0)
+            from posting p
+            join transaction t on t.transaction_id = p.transaction_id
+            where p.account_id = :accountId
+              and t.deleted_at is null
+              and t.date <= :through
+            """)
+        .param("accountId", accountId)
+        .param("through", through)
+        .query(BigDecimal.class)
+        .single();
   }
 
   /** Record the confirmed match of one line to one posting. */

@@ -48,6 +48,7 @@ class StatementController {
   private final StatementParseService parseService;
   private final StatementProfileService profileService;
   private final StatementMatchService matchService;
+  private final StatementReviewService reviewService;
   private final StatementPageAssembler pageAssembler;
 
   StatementController(
@@ -56,12 +57,14 @@ class StatementController {
       StatementParseService parseService,
       StatementProfileService profileService,
       StatementMatchService matchService,
+      StatementReviewService reviewService,
       StatementPageAssembler pageAssembler) {
     this.statementService = statementService;
     this.pdfService = pdfService;
     this.parseService = parseService;
     this.profileService = profileService;
     this.matchService = matchService;
+    this.reviewService = reviewService;
     this.pageAssembler = pageAssembler;
   }
 
@@ -69,7 +72,9 @@ class StatementController {
   @GetMapping(BASE_PATH)
   String list(@RequestParam(required = false) Long account, Model model) {
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
-    model.addAttribute("rows", statementService.rows(account));
+    List<StatementRow> rows = statementService.rows(account);
+    model.addAttribute("rows", rows);
+    model.addAttribute("green", reviewService.green(rows));
     model.addAttribute("accounts", statementService.statementAccounts());
     model.addAttribute("profiles", profileService.live());
     model.addAttribute("accountFilter", account);
