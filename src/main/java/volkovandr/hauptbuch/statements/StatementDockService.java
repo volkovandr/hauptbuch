@@ -26,6 +26,8 @@ import volkovandr.hauptbuch.statements.ProposedCandidate.Tier;
  * is matched in one database transaction — a save that fails matches nothing. The bank's amount is
  * the funding leg's amount, whatever the category's direction.
  */
+// CouplingBetweenObjects: the dock is the one place that books, amends and pre-fills a line.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class StatementDockService {
 
@@ -46,6 +48,7 @@ public class StatementDockService {
   private final DockCommitService dockCommitService;
   private final DockEditService dockEditService;
   private final LedgerService ledgerService;
+  private final StatementCrossCurrencyService crossCurrencyService;
 
   StatementDockService(
       StatementService statementService,
@@ -54,7 +57,8 @@ public class StatementDockService {
       DockPrefillService dockPrefillService,
       DockCommitService dockCommitService,
       DockEditService dockEditService,
-      LedgerService ledgerService) {
+      LedgerService ledgerService,
+      StatementCrossCurrencyService crossCurrencyService) {
     this.statementService = statementService;
     this.matchService = matchService;
     this.payeeService = payeeService;
@@ -62,6 +66,7 @@ public class StatementDockService {
     this.dockCommitService = dockCommitService;
     this.dockEditService = dockEditService;
     this.ledgerService = ledgerService;
+    this.crossCurrencyService = crossCurrencyService;
   }
 
   /**
@@ -93,6 +98,10 @@ public class StatementDockService {
             null,
             null,
             null);
+    // A line with a foreign charge opens with the charge's fields, before any category is picked.
+    input =
+        crossCurrencyService.withForeignCharge(
+            input, statementId, statementLineId, line.bookingDate());
     return dock(line, Kind.CREATE, 0, "", input, null);
   }
 

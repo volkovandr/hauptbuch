@@ -54,6 +54,7 @@ class StatementDockServiceTest {
   @Mock private DockCommitService dockCommitService;
   @Mock private DockEditService dockEditService;
   @Mock private LedgerService ledgerService;
+  @Mock private StatementCrossCurrencyService crossCurrencyService;
 
   private StatementDockService service;
 
@@ -67,7 +68,8 @@ class StatementDockServiceTest {
             dockPrefillService,
             dockCommitService,
             dockEditService,
-            ledgerService);
+            ledgerService,
+            crossCurrencyService);
   }
 
   private static StatementLine line() {
@@ -132,6 +134,8 @@ class StatementDockServiceTest {
     when(payeeService.entryValueFor(5L)).thenReturn(Optional.of("ShopAaa - Berlin"));
     when(dockPrefillService.lastCategoryOf(5L))
         .thenReturn(Optional.of(new GhostSuggestion(8L, "Food")));
+    when(crossCurrencyService.withForeignCharge(any(), eq(STATEMENT), eq(LINE_ID), any()))
+        .thenAnswer(inv -> inv.getArgument(0));
 
     DockPrefill prefill = service.prefill(STATEMENT, LINE_ID);
 
@@ -144,9 +148,26 @@ class StatementDockServiceTest {
   }
 
   @Test
+  void prefillOfForeignChargeLineOpensWithTheChargesFieldsBeforeAnyCategoryIsPicked() {
+    when(matchService.lineOf(STATEMENT, LINE_ID)).thenReturn(review(LineStatus.MISSING));
+    when(payeeService.longestNameIn(any())).thenReturn(Optional.empty());
+    when(crossCurrencyService.withForeignCharge(any(), eq(STATEMENT), eq(LINE_ID), any()))
+        .thenAnswer(inv -> ((DockInput) inv.getArgument(0)).withCrossCurrency("USD", "14,00", ""));
+
+    DockPrefill prefill = service.prefill(STATEMENT, LINE_ID);
+
+    assertThat(prefill.crossCurrency()).isTrue();
+    assertThat(prefill.input().categoryCurrencyCode()).isEqualTo("USD");
+    assertThat(prefill.input().categoryAmount()).isEqualTo("14,00");
+    assertThat(prefill.input().baseAmount()).isEmpty();
+  }
+
+  @Test
   void prefillWithoutKnownPayeeLeavesPayeeAndCategoryEmpty() {
     when(matchService.lineOf(STATEMENT, LINE_ID)).thenReturn(review(LineStatus.MISSING));
     when(payeeService.longestNameIn(any())).thenReturn(Optional.empty());
+    when(crossCurrencyService.withForeignCharge(any(), eq(STATEMENT), eq(LINE_ID), any()))
+        .thenAnswer(inv -> inv.getArgument(0));
 
     DockPrefill prefill = service.prefill(STATEMENT, LINE_ID);
 

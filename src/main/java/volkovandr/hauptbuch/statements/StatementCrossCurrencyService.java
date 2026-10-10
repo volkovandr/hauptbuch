@@ -8,11 +8,15 @@ import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.CrossCurrencyFields;
 import volkovandr.hauptbuch.ledger.CrossCurrencyFieldsQuery;
 import volkovandr.hauptbuch.ledger.CrossCurrencyFieldsService;
+import volkovandr.hauptbuch.statements.repository.OriginalCharge;
+import volkovandr.hauptbuch.statements.repository.StatementLineRepository;
 
 /**
  * The counterpart amounts the statement dock asks for when a missing line is a transfer to an
  * account in another currency (statements.md §6.4): the bank only knows its own side, so the other
- * side's native amount is proposed from the rate feed for the operator to keep or overwrite.
+ * side's native amount is proposed from the rate feed for the operator to keep or overwrite. A line
+ * that carries a foreign charge (issue statements/12) asks the same fields for a category, filled
+ * from the charge the bank printed.
  */
 @Service
 class StatementCrossCurrencyService {
@@ -21,57 +25,92 @@ class StatementCrossCurrencyService {
   private final StatementMatchService matchService;
   private final AccountService accountService;
   private final CrossCurrencyFieldsService crossCurrencyFieldsService;
+  private final StatementLineRepository lineRepository;
 
   StatementCrossCurrencyService(
       StatementService statementService,
       StatementMatchService matchService,
       AccountService accountService,
-      CrossCurrencyFieldsService crossCurrencyFieldsService) {
+      CrossCurrencyFieldsService crossCurrencyFieldsService,
+      StatementLineRepository lineRepository) {
     this.statementService = statementService;
     this.matchService = matchService;
     this.accountService = accountService;
     this.crossCurrencyFieldsService = crossCurrencyFieldsService;
+    this.lineRepository = lineRepository;
   }
 
   /**
-   * The extra fields for the line's dock, or empty when the entry is not a transfer into another
-   * currency (a category or person follows the paying account's currency).
+   * The extra fields for the line's dock, or empty when none are needed: a transfer into another
+   * currency asks for the counterpart's amount; anything else on a line with a foreign charge asks
+   * for the charge's amount, picked or not.
    *
-   * @param transferTarget the resolved target account id, or null
+   * @param target the resolved category or transfer-target account id, or null
    * @param transferDirection {@code TO}/{@code FROM} for a transfer target, else null or blank
    * @param date the transaction date the rates are looked up as of; may be null
    */
-  Optional<CrossCurrencyView> forTransfer(
+  Optional<CrossCurrencyView> forTarget(
       long statementId,
       long statementLineId,
-      Long transferTarget,
+      Long target,
       String transferDirection,
       LocalDate date) {
-    if (transferTarget == null || transferDirection == null || transferDirection.isBlank()) {
+    boolean transfer = transferDirection != null && !transferDirection.isBlank();
+    Optional<OriginalCharge> charge = lineRepository.findOriginalCharge(statementLineId);
+    if (!transfer) {
+      // Not a transfer (a category, or nothing picked yet): the charge's fields, if it has one.
+      return charge.flatMap(c -> view(statementId, statementLineId, c.currencyCode(), c, date));
+    }
+    if (target == null) {
       return Optional.empty();
     }
-    Optional<Account> target = accountService.findById(transferTarget);
+    Optional<Account> targetAccount = accountService.findById(target);
+    return targetAccount.flatMap(
+        t -> view(statementId, statementLineId, t.currencyCode(), charge.orElse(null), date));
+  }
+
+  /**
+   * The dock input with the foreign charge's fields set, when the line carries one; otherwise the
+   * input unchanged.
+   */
+  DockInput withForeignCharge(
+      DockInput input, long statementId, long statementLineId, LocalDate date) {
+    return forTarget(statementId, statementLineId, input.categoryId(), null, date)
+        .map(
+            v ->
+                input.withCrossCurrency(
+                    v.currencyCode(),
+                    v.counterpartAmount(),
+                    v.showBase() ? DockForms.orEmpty(v.baseAmount()) : null))
+        .orElse(input);
+  }
+
+  /** The fields toward {@code currency}, or empty when it is the paying account's own. */
+  private Optional<CrossCurrencyView> view(
+      long statementId,
+      long statementLineId,
+      String currency,
+      OriginalCharge charge,
+      LocalDate date) {
     Optional<Account> funding =
         accountService.findById(statementService.get(statementId).accountId());
-    if (target.isEmpty() || funding.isEmpty()) {
+    if (funding.isEmpty() || funding.get().currencyCode().equals(currency)) {
       return Optional.empty();
     }
     String fundingCurrency = funding.get().currencyCode();
-    String targetCurrency = target.get().currencyCode();
-    if (fundingCurrency.equals(targetCurrency)) {
-      return Optional.empty();
-    }
     String bankAmount =
         StatementController.number(line(statementId, statementLineId).amount().abs());
     CrossCurrencyFields fields =
         crossCurrencyFieldsService.resolve(
-            new CrossCurrencyFieldsQuery(
-                fundingCurrency, targetCurrency, date, bankAmount, null, null));
+            new CrossCurrencyFieldsQuery(fundingCurrency, currency, date, bankAmount, null, null));
+    boolean printed = charge != null && currency.equals(charge.currencyCode());
     return Optional.of(
         new CrossCurrencyView(
-            targetCurrency,
-            crossCurrencyFieldsService.prefillFundingTotal(
-                targetCurrency, fundingCurrency, date, bankAmount),
+            currency,
+            printed
+                ? StatementController.number(charge.amount().abs())
+                : crossCurrencyFieldsService.prefillFundingTotal(
+                    currency, fundingCurrency, date, bankAmount),
             fields.neitherIsBase(),
             fields.baseAmountText()));
   }
