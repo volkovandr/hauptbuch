@@ -160,12 +160,20 @@
       </form>
 
       <div class="field">
-        <span class="field__label">Parse prompt</span>
+        <span class="field__label">Receipt parse prompt</span>
         <p class="muted">
           The instructions the parser is sent, plus a read-only preview of the category list as the
           AI sees it.
         </p>
         <p class="actions"><a class="btn" th:href="@{/receipts/ai-prompt}">Edit parse prompt</a></p>
+      </div>
+
+      <div class="field">
+        <span class="field__label">Statement parse prompt</span>
+        <p class="muted">The instructions the bank-statement parser is sent.</p>
+        <p class="actions">
+          <a class="btn" th:href="@{/statements/ai-prompt}">Edit statement parse prompt</a>
+        </p>
       </div>
     </section>
 

@@ -69,4 +69,17 @@ class SettingsAiRepositoryIntegrationTest {
     settingsRepository.updateAiSystemPrompt(null);
     assertThat(settingsRepository.loadAiSystemPrompt()).isNull();
   }
+
+  @Test
+  void statementSystemPromptRoundTripsAndClears() {
+    assertThat(settingsRepository.loadStatementSystemPrompt()).isNull();
+
+    settingsRepository.updateStatementSystemPrompt("my statement instructions");
+    assertThat(settingsRepository.loadStatementSystemPrompt())
+        .isEqualTo("my statement instructions");
+    assertThat(settingsRepository.loadAiSystemPrompt()).isNull();
+
+    settingsRepository.updateStatementSystemPrompt(null);
+    assertThat(settingsRepository.loadStatementSystemPrompt()).isNull();
+  }
 }

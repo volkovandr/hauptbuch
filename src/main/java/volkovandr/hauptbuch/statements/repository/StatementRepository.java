@@ -110,6 +110,110 @@ public class StatementRepository {
         .update();
   }
 
+  /**
+   * Claim a live PDF statement for parsing ({@code new} or {@code failed} to {@code processing}),
+   * clearing the previous error. Atomic, so a double click parses once.
+   *
+   * @return true when the statement was claimed
+   */
+  public boolean claimForParse(long statementId) {
+    return jdbcClient
+            .sql(
+                """
+                update statement set state = 'processing', parse_error = null, updated_at = now()
+                where statement_id = :statementId and deleted_at is null
+                  and sent_text is not null and state in ('new', 'failed')
+                """)
+            .param(STATEMENT_ID, statementId)
+            .update()
+        > 0;
+  }
+
+  /** Land a parse that could not complete: {@code failed} with the reason, no usage recorded. */
+  public void markFailed(long statementId, String parseError) {
+    jdbcClient
+        .sql(
+            """
+            update statement set state = 'failed', parse_error = :parseError, updated_at = now()
+            where statement_id = :statementId
+            """)
+        .param(STATEMENT_ID, statementId)
+        .param("parseError", parseError)
+        .update();
+  }
+
+  /** Land a parse whose body would not decode: {@code failed}, keeping the raw body and usage. */
+  public void markFailedWithResult(
+      long statementId, String parseError, ParseUsage usage, String parseRaw) {
+    jdbcClient
+        .sql(
+            """
+            update statement
+            set state = 'failed', parse_error = :parseError, parse_raw = :parseRaw,
+                tokens_in = :tokensIn, tokens_out = :tokensOut,
+                tokens_cache_write = :tokensCacheWrite, tokens_cache_read = :tokensCacheRead,
+                parse_cost = :parseCost, updated_at = now()
+            where statement_id = :statementId
+            """)
+        .param(STATEMENT_ID, statementId)
+        .param("parseError", parseError)
+        .param("parseRaw", parseRaw)
+        .params(usage.asParams())
+        .update();
+  }
+
+  /** Land a decoded parse: {@code processed} with the header, the raw body and the usage. */
+  public void markProcessed(
+      long statementId,
+      LocalDate periodStart,
+      LocalDate periodEnd,
+      BigDecimal openingBalance,
+      BigDecimal closingBalance,
+      ParseUsage usage,
+      String parseRaw) {
+    jdbcClient
+        .sql(
+            """
+            update statement
+            set state = 'processed', parse_error = null, parse_raw = :parseRaw,
+                period_start = :periodStart, period_end = :periodEnd,
+                opening_balance = :openingBalance, closing_balance = :closingBalance,
+                tokens_in = :tokensIn, tokens_out = :tokensOut,
+                tokens_cache_write = :tokensCacheWrite, tokens_cache_read = :tokensCacheRead,
+                parse_cost = :parseCost, updated_at = now()
+            where statement_id = :statementId
+            """)
+        .param(STATEMENT_ID, statementId)
+        .param("parseRaw", parseRaw)
+        .param("periodStart", periodStart)
+        .param("periodEnd", periodEnd)
+        .param("openingBalance", openingBalance)
+        .param("closingBalance", closingBalance)
+        .params(usage.asParams())
+        .update();
+  }
+
+  /** Fail every statement left {@code processing} by a restart; returns how many. */
+  public int failOrphanedProcessing(String parseError) {
+    return jdbcClient
+        .sql(
+            """
+            update statement set state = 'failed', parse_error = :parseError, updated_at = now()
+            where state = 'processing'
+            """)
+        .param("parseError", parseError)
+        .update();
+  }
+
+  /** The reason the last parse failed, or empty when it did not (or never ran). */
+  public Optional<String> findParseError(long statementId) {
+    return jdbcClient
+        .sql("select parse_error from statement where statement_id = :statementId")
+        .param(STATEMENT_ID, statementId)
+        .query(String.class)
+        .optional();
+  }
+
   /** A statement by id, live or soft-deleted. */
   public Optional<Statement> findById(long statementId) {
     return jdbcClient

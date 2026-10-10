@@ -10,8 +10,8 @@ import volkovandr.hauptbuch.statements.repository.StatementRepository;
 /**
  * The PDF way into a statement (statements.md §3.2, slice e1): extract the text locally, propose
  * the account from the unmasked text, mask the operator's own identifiers, and keep the result as
- * the statement's editable text. The AI call that turns the text into lines is slice e2; until then
- * a PDF statement stays {@code new}, with no lines.
+ * the statement's editable text. The AI call that turns the text into lines is {@link StatementParseService}'s; until
+ * then a PDF statement stays {@code new}, with no lines.
  */
 @Service
 public class StatementPdfService {
@@ -72,6 +72,11 @@ public class StatementPdfService {
   /** The statement's text as it stands, or null for a statement that did not come from a PDF. */
   public String sentText(long statementId) {
     return statementRepository.findSentText(statementId).orElse(null);
+  }
+
+  /** Why the last parse failed, or null when it did not. */
+  public String parseError(long statementId) {
+    return statementRepository.findParseError(statementId).orElse(null);
   }
 
   /**

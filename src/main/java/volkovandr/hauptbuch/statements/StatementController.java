@@ -43,6 +43,7 @@ class StatementController {
 
   private final StatementService statementService;
   private final StatementPdfService pdfService;
+  private final StatementParseService parseService;
   private final StatementProfileService profileService;
   private final StatementMatchService matchService;
   private final StatementPageAssembler pageAssembler;
@@ -50,11 +51,13 @@ class StatementController {
   StatementController(
       StatementService statementService,
       StatementPdfService pdfService,
+      StatementParseService parseService,
       StatementProfileService profileService,
       StatementMatchService matchService,
       StatementPageAssembler pageAssembler) {
     this.statementService = statementService;
     this.pdfService = pdfService;
+    this.parseService = parseService;
     this.profileService = profileService;
     this.matchService = matchService;
     this.pageAssembler = pageAssembler;
@@ -223,6 +226,21 @@ class StatementController {
   String saveText(
       @PathVariable long id, @RequestParam String text, RedirectAttributes redirectAttributes) {
     return saved(id, () -> pdfService.updateText(id, text), "Text saved.", redirectAttributes);
+  }
+
+  /** Send the statement's text to the AI and seed the lines and header (statements.md §3.2). */
+  @PostMapping(BASE_PATH + "/{id}/parse")
+  String parse(@PathVariable long id, RedirectAttributes redirectAttributes) {
+    return saved(
+        id,
+        () -> {
+          if (!parseService.parse(id)) {
+            throw new StatementFormatException(
+                "The parse failed — the reason is shown above the text.");
+          }
+        },
+        "Statement parsed. Check the header and the lines against the PDF.",
+        redirectAttributes);
   }
 
   /** Save the edited line grid. */
