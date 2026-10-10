@@ -81,6 +81,9 @@
         freely — remove your name, your address, anything else. Exactly this text is what will be
         sent for parsing; the PDF itself never is.
       </p>
+      <p class="statements__error" th:if="${parseError != null}" th:text="${parseError}">
+        Statement parse call failed.
+      </p>
       <form method="post" th:action="@{/statements/{id}/text(id=${statement.statementId()})}">
         <textarea
           class="input statement-text"
@@ -91,6 +94,18 @@
           th:text="${sentText}"
         ></textarea>
         <p class="actions"><button type="submit" class="btn">Save text</button></p>
+      </form>
+      <form
+        method="post"
+        th:if="${statement.state() == 'new' or statement.state() == 'failed'}"
+        th:action="@{/statements/{id}/parse(id=${statement.statementId()})}"
+      >
+        <p class="actions">
+          <button type="submit" class="btn">Parse with AI</button>
+          <span class="muted">
+            Sends the text above — save any edit first — in one call and waits for the answer.
+          </span>
+        </p>
       </form>
     </section>
 

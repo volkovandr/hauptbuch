@@ -174,6 +174,26 @@ class SettingsServiceTest {
   }
 
   @Test
+  void statementSystemPromptIsNullWhenBlankAndStoredOtherwise() {
+    SettingsService service = new SettingsService(settingsRepository, currencyRepository, "");
+    when(settingsRepository.loadStatementSystemPrompt()).thenReturn("  ", "custom");
+
+    assertThat(service.statementSystemPrompt()).isNull();
+    assertThat(service.statementSystemPrompt()).isEqualTo("custom");
+  }
+
+  @Test
+  void setStatementSystemPromptStoresNonBlankAndClearsBlank() {
+    SettingsService service = new SettingsService(settingsRepository, currencyRepository, "");
+
+    service.setStatementSystemPrompt("edited");
+    verify(settingsRepository).updateStatementSystemPrompt("edited");
+
+    service.setStatementSystemPrompt("  ");
+    verify(settingsRepository).updateStatementSystemPrompt(null);
+  }
+
+  @Test
   void costOfSumsPerRateComponents() {
     AiSettings rates =
         new AiSettings(
