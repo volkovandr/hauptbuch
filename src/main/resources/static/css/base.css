@@ -137,6 +137,13 @@ h2 {
   color: var(--paper);
 }
 
+.btn:disabled {
+  border-color: var(--feint);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: not-allowed;
+}
+
 /* The one destructive control: oxblood, reserved for irreversible actions (category delete). */
 .btn--danger {
   border-color: var(--oxblood);

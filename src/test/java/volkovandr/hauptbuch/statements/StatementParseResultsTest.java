@@ -1,9 +1,11 @@
 package volkovandr.hauptbuch.statements;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -80,5 +82,51 @@ class StatementParseResultsTest {
     verify(statements).markFailedWithResult(ID, "bad", USAGE, "raw");
     verify(statements).markFailed(ID, "down");
     verify(lines, never()).deleteByStatement(any(Long.class));
+  }
+
+  @Test
+  void reseedReplacesTheLinesThenTheHeaderKeepingTheUsage() {
+    StatementLine line =
+        new StatementLine(
+            null, 0, LocalDate.of(2026, 5, 2), null, BigDecimal.ONE, null, null, null, null, null);
+    ParsedStatement parsed =
+        new ParsedStatement(
+            LocalDate.of(2026, 5, 1),
+            LocalDate.of(2026, 5, 31),
+            BigDecimal.TEN,
+            BigDecimal.ONE,
+            List.of(new ParsedLine(line, null, null, null)));
+    when(statements.markReseeded(
+            ID,
+            LocalDate.of(2026, 5, 1),
+            LocalDate.of(2026, 5, 31),
+            BigDecimal.TEN,
+            BigDecimal.ONE,
+            "raw"))
+        .thenReturn(1);
+
+    new StatementParseResults(statements, lines).applyReseed(ID, parsed, "raw");
+
+    InOrder order = inOrder(lines, statements);
+    order.verify(lines).deleteByStatement(ID);
+    order.verify(lines).insertParsed(ID, line, null, null, null);
+    order
+        .verify(statements)
+        .markReseeded(
+            ID,
+            LocalDate.of(2026, 5, 1),
+            LocalDate.of(2026, 5, 31),
+            BigDecimal.TEN,
+            BigDecimal.ONE,
+            "raw");
+  }
+
+  @Test
+  void reseedOfStatementThatCannotBeReseededThrowsSoTheLinesRollBack() {
+    ParsedStatement parsed = new ParsedStatement(null, null, null, null, List.of());
+
+    assertThatThrownBy(
+            () -> new StatementParseResults(statements, lines).applyReseed(ID, parsed, "raw"))
+        .isInstanceOf(StatementFormatException.class);
   }
 }
