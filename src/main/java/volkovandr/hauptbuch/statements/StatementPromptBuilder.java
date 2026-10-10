@@ -51,11 +51,12 @@ class StatementPromptBuilder {
       - originalAmount, originalCurrency, originalRate: fill ONLY when the line shows a charge in \
       another currency (amount, ISO code and exchange rate as printed). Otherwise leave blank.
       - bankCategory: the bank's own category label for the line, copied as printed, else blank.
-      - counterparty and description: copied as printed. In case a value contains a comma or \
-      starts with a space, double quote the value.
+      - counterparty and description: copied as printed. Always double quote these fields.
       - openingBalance and closingBalance: the balances as printed, with the sign of the balance \
       itself; leave blank if absent.
       - skip every row that is not a booking (headings, running-balance rows, totals, notes).
+      - use a dot for the decimal comma, never a thousands separator; remove thousands separators \
+      that appear in the text.
       """;
 
   /** The instructions to send: the operator's override when set, else the built-in default. */
