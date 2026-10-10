@@ -190,6 +190,17 @@ public class StatementService {
   }
 
   /**
+   * Flip the sign of every line; callers check that none is matched ({@link
+   * StatementMatchService}).
+   */
+  @Transactional
+  public void negateLines(long statementId) {
+    get(statementId);
+    lineRepository.negateAmounts(statementId);
+    LOG.debug("Reversed the signs of statement {}", statementId);
+  }
+
+  /**
    * Soft-delete a statement; its file stays on the Pi (statements.md §5). Callers remove its
    * matches first — {@link StatementMatchService#deleteStatement} does.
    */

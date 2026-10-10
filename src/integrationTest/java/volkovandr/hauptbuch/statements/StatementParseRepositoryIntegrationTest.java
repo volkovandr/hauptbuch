@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -243,6 +244,38 @@ class StatementParseRepositoryIntegrationTest {
 
     assertThat(lines.deleteByStatement(statementId)).isEqualTo(1);
     assertThat(lines.findByStatement(statementId)).isEmpty();
+  }
+
+  @Test
+  void negateAmountsFlipsAmountAndForeignAmountOfEveryLineOfThatStatementOnly() {
+    StatementLine line =
+        new StatementLine(
+            null,
+            0,
+            LocalDate.of(2026, 5, 9),
+            null,
+            new BigDecimal("-50.00"),
+            "ShopBbb",
+            "d",
+            "c",
+            "raw",
+            null);
+    long foreign =
+        lines.insertParsed(statementId, line, new BigDecimal("55.00"), "USD", BigDecimal.ONE);
+    long plain = lines.insertParsed(statementId, line, null, null, null);
+
+    assertThat(lines.negateAmounts(statementId)).isEqualTo(2);
+
+    List<StatementLine> read = lines.findByStatement(statementId);
+    assertThat(read).extracting(StatementLine::amount).allMatch(a -> a.signum() > 0);
+    assertThat(
+            jdbcClient
+                .sql("select original_amount from statement_line where statement_line_id = :id")
+                .param("id", foreign)
+                .query(BigDecimal.class)
+                .single())
+        .isEqualByComparingTo("-55.00");
+    assertThat(read).extracting(StatementLine::statementLineId).contains(foreign, plain);
   }
 
   private String originalCurrency(long lineId) {
