@@ -166,6 +166,61 @@ class StatementDockCrossCurrencyIntegrationTest {
     assertThat((BigDecimal) legs.get(1).get("base_amount")).isEqualByComparingTo("12.50");
   }
 
+  private long foodWithForeignCharge() {
+    long food = accountService.insertLeaf("Food", "expense", null, "EUR").accountId();
+    jdbcClient
+        .sql(
+            "update statement_line set original_amount = -14.00, original_currency_code = 'USD'"
+                + " where statement_line_id = :id")
+        .param("id", shopLine)
+        .update();
+    return food;
+  }
+
+  @Test
+  void categoryOnForeignChargeLineAsksForTheChargesAmount() throws Exception {
+    long food = foodWithForeignCharge();
+
+    mockMvc
+        .perform(
+            get(crossUrl()).param("categoryId", String.valueOf(food)).param("date", "2026-05-02"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Counterpart amount (")))
+        .andExpect(content().string(containsString("value=\"14,00\"")));
+  }
+
+  @Test
+  void saveBooksTheForeignPurchaseOnTheCategorysCurrencyLeafAndMatchesTheBankLeg()
+      throws Exception {
+    long food = foodWithForeignCharge();
+
+    mockMvc
+        .perform(
+            post("/statements/" + statementId + "/lines/" + shopLine + "/create")
+                .param("date", "2026-05-02")
+                .param("categoryId", String.valueOf(food))
+                .param("categoryCurrencyCode", "USD")
+                .param("categoryAmount", "14,00"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(flash().attribute("notice", "Transaction created and matched."));
+
+    List<Map<String, Object>> legs =
+        jdbcClient
+            .sql(
+                "select p.account_id, a.currency_code, p.amount, p.base_amount, p.reconciliation"
+                    + " from posting p join account a on a.account_id = p.account_id order by"
+                    + " p.amount")
+            .query()
+            .listOfRows();
+    assertThat(legs).hasSize(2);
+    assertThat(legs.get(0).get("account_id")).isEqualTo(accountId);
+    assertThat((BigDecimal) legs.get(0).get("amount")).isEqualByComparingTo("-12.50");
+    assertThat(legs.get(0).get("reconciliation")).isEqualTo("reconciled");
+    assertThat(legs.get(1).get("currency_code")).isEqualTo("USD");
+    assertThat((BigDecimal) legs.get(1).get("amount")).isEqualByComparingTo("14.00");
+    assertThat((BigDecimal) legs.get(1).get("base_amount")).isEqualByComparingTo("12.50");
+  }
+
   @Test
   void saveWithoutTheCounterpartAmountReopensTheDockAndKeepsTheFields() throws Exception {
     mockMvc

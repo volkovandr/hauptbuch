@@ -48,6 +48,25 @@ public record DockInput(
     tagId = tagId == null ? List.of() : List.copyOf(tagId);
   }
 
+  /** This input with the cross-currency counterpart fields set (a blank base asks for one). */
+  public DockInput withCrossCurrency(String currencyCode, String counterpartAmount, String base) {
+    return new DockInput(
+        date,
+        payeeText,
+        categoryId,
+        categoryText,
+        transferDirection,
+        personName,
+        personDirection,
+        personRevive,
+        note,
+        tagId,
+        amount,
+        currencyCode,
+        counterpartAmount,
+        base);
+  }
+
   /** This input with a different frozen base amount (blank asks the operator to enter one). */
   public DockInput withBaseAmount(String newBaseAmount) {
     return new DockInput(
