@@ -106,7 +106,7 @@
   `settings.statement_system_prompt` column and its editor + the profile's AI note; TOON decode into
   header and lines; `parse_raw`, token telemetry, frozen cost; `failed` with the error kept.
   *Done when:* a real bank-B and bank-C statement parse into correct lines and balances.
-- **e3 — Fixing a bad parse.** Raw response editable with Re-seed (replaces lines and header, no API
+- ✅ **e3 — Fixing a bad parse.** Raw response editable with Re-seed (replaces lines and header, no API
   call), refused while any line is matched. *Done when:* a mis-dated line is fixable either way.
 
 ## f — Balance checks
