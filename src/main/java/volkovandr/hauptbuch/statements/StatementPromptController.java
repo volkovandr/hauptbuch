@@ -10,9 +10,8 @@ import volkovandr.hauptbuch.web.NavItem;
 
 /**
  * The statement-parser prompt editor (statements.md §3.2): the operator edits the system prompt the
- * statement parser is sent. Reached from the Settings screen's AI section, beside the receipt
- * parse prompt. The text is stored opaquely on the settings row; parsing instructions only
- * (ARCH-08).
+ * statement parser is sent. Reached from the Settings screen's AI section, beside the receipt parse
+ * prompt. The text is stored opaquely on the settings row; parsing instructions only (ARCH-08).
  */
 @Controller
 class StatementPromptController {

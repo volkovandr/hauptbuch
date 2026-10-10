@@ -26,7 +26,8 @@ class StatementPromptBuilder {
           periodEnd: <yyyy-mm-dd>
           openingBalance: <the balance at the start of the period, digits and a dot decimal>
           closingBalance: <the balance at the end of the period>
-        lines[N]{bookingDate,valueDate,amount,counterparty,description,bankCategory,originalAmount,originalCurrency,originalRate}:
+        lines[N]{bookingDate,valueDate,amount,counterparty,description,bankCategory,\
+      originalAmount,originalCurrency,originalRate}:
           <one row per booking, in the order printed>
 
       Worked example:
@@ -35,9 +36,11 @@ class StatementPromptBuilder {
           periodEnd: 2026-05-31
           openingBalance: 1200.50
           closingBalance: 1138.00
-        lines[2]{bookingDate,valueDate,amount,counterparty,description,bankCategory,originalAmount,originalCurrency,originalRate}:
+        lines[2]{bookingDate,valueDate,amount,counterparty,description,bankCategory,\
+      originalAmount,originalCurrency,originalRate}:
           2026-05-02,2026-05-02,-12.50,ShopAaa,Card payment ShopAaa,Groceries,,,
-          2026-05-09,2026-05-10,-50.00,"ShopBbb, Ltd",Card payment 55.00 USD at 1.10,Shopping,55.00,USD,1.10
+          2026-05-09,2026-05-10,-50.00,"ShopBbb, Ltd",Card payment 55.00 USD at 1.10,\
+      Shopping,55.00,USD,1.10
 
       Rules:
       - dates: always yyyy-mm-dd. Read the statement's own date format carefully (day.month.year \
