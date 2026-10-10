@@ -126,6 +126,11 @@ public class StatementService {
         .orElseThrow(() -> new StatementFormatException("That statement no longer exists."));
   }
 
+  /** The bytes of the file the statement was made from, as uploaded. */
+  public byte[] originalFile(long statementId) {
+    return storage.read(get(statementId).filePath());
+  }
+
   /** The statement's lines in file order. */
   public List<StatementLine> lines(long statementId) {
     return lineRepository.findByStatement(statementId);

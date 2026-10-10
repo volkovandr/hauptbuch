@@ -18,7 +18,12 @@
       </h1>
       <p class="muted">
         <span th:text="${profileName}">BankAaa CSV</span> ·
-        <span th:text="${statement.originalFilename()}">2026-05.csv</span>
+        <a
+          th:href="@{/statements/{id}/file(id=${statement.statementId()})}"
+          th:text="${statement.originalFilename()}"
+          title="Download the original file"
+          >2026-05.csv</a
+        >
       </p>
       <p class="statements__notice" th:if="${notice}" th:text="${notice}">Header saved.</p>
       <p class="statements__error" th:if="${error}" th:text="${error}">Not a date.</p>

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -118,6 +120,16 @@ class StatementServiceTest {
     verify(lineRepository).insert(77L, lines.get(0));
     verify(lineRepository).insert(77L, lines.get(1));
     verify(lineRepository).insert(77L, lines.get(2));
+  }
+
+  @Test
+  void originalFileIsReadFromTheStatementsStoredPath() {
+    Statement statement = mock(Statement.class);
+    when(statement.filePath()).thenReturn(PATH);
+    when(statementRepository.findById(5L)).thenReturn(Optional.of(statement));
+    when(storage.read(PATH)).thenReturn(new byte[] {1, 2});
+
+    assertThat(service.originalFile(5L)).containsExactly(1, 2);
   }
 
   @Test
