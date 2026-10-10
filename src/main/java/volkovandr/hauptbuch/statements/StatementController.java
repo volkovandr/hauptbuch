@@ -30,6 +30,8 @@ import volkovandr.hauptbuch.web.NavItem;
  * statement. Accept, pick, Unmatch and the overlap decision are the match actions of slice c2; the
  * dock's saves (slice d) are {@link StatementDockController}'s.
  */
+// CouplingBetweenObjects: one controller for the statement page; each slice adds a collaborator.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Controller
 class StatementController {
 

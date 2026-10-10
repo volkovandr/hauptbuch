@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Test;
 import volkovandr.hauptbuch.statements.ParsedStatement.ParsedLine;
 
 /**
- * Unit tier: the lenient TOON decode of a statement — the header, the lines, the foreign charge,
- * a line it cannot read kept with a problem, and a body that is not TOON at all.
+ * Unit tier: the lenient TOON decode of a statement — the header, the lines, the foreign charge, a
+ * line it cannot read kept with a problem, and a body that is not TOON at all.
  */
 class ToonStatementDecoderTest {
 
@@ -24,7 +24,7 @@ class ToonStatementDecoderTest {
       """;
   private static final String COLUMNS =
       "lines[%d]{bookingDate,valueDate,amount,counterparty,description,bankCategory,"
-          + "originalAmount,originalCurrency,originalRate}:\n";
+          + "originalAmount,originalCurrency,originalRate}:%n";
 
   private final ToonStatementDecoder decoder = new ToonStatementDecoder();
 
@@ -62,7 +62,7 @@ class ToonStatementDecoderTest {
   }
 
   @Test
-  void keepsALineWithAnUnreadableDateOrAmountAsAProblem() {
+  void keepsLineWithUnreadableDateOrAmountAsProblem() {
     String body =
         HEADER
             + COLUMNS.formatted(2)
@@ -78,11 +78,9 @@ class ToonStatementDecoderTest {
   }
 
   @Test
-  void dropsAHeaderValueItCannotReadAndToleratesAMissingHeader() {
+  void dropsUnreadableHeaderValueAndToleratesMissingHeader() {
     ParsedStatement badHeader =
-        decoder
-            .decode("statement:\n  periodStart: soon\n  openingBalance: lots\n")
-            .orElseThrow();
+        decoder.decode("statement:\n  periodStart: soon\n  openingBalance: lots\n").orElseThrow();
     assertThat(badHeader.periodStart()).isNull();
     assertThat(badHeader.openingBalance()).isNull();
     assertThat(badHeader.lines()).isEmpty();
@@ -94,7 +92,7 @@ class ToonStatementDecoderTest {
   }
 
   @Test
-  void stripsACodeFence() {
+  void stripsCodeFence() {
     Optional<ParsedStatement> parsed = decoder.decode("```toon\n" + HEADER + "```");
 
     assertThat(parsed).isPresent();

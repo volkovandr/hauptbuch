@@ -35,7 +35,15 @@ class StatementParseResultsTest {
   void appliesTheParseReplacingTheLinesThenTheHeader() {
     StatementLine line =
         new StatementLine(
-            null, 0, LocalDate.of(2026, 5, 2), null, new BigDecimal("-1"), null, null, null, null,
+            null,
+            0,
+            LocalDate.of(2026, 5, 2),
+            null,
+            new BigDecimal("-1"),
+            null,
+            null,
+            null,
+            null,
             null);
     ParsedStatement parsed =
         new ParsedStatement(
@@ -43,13 +51,13 @@ class StatementParseResultsTest {
             LocalDate.of(2026, 5, 31),
             BigDecimal.TEN,
             BigDecimal.ONE,
-            List.of(new ParsedLine(line, new BigDecimal("2"), "USD", new BigDecimal("1.1"))));
+            List.of(new ParsedLine(line, BigDecimal.TWO, "USD", new BigDecimal("1.1"))));
 
     new StatementParseResults(statements, lines).applyProcessed(ID, parsed, USAGE, "raw");
 
     InOrder order = inOrder(lines, statements);
     order.verify(lines).deleteByStatement(ID);
-    order.verify(lines).insertParsed(ID, line, new BigDecimal("2"), "USD", new BigDecimal("1.1"));
+    order.verify(lines).insertParsed(ID, line, BigDecimal.TWO, "USD", new BigDecimal("1.1"));
     order
         .verify(statements)
         .markProcessed(
