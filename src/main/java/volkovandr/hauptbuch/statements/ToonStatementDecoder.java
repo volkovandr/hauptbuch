@@ -17,8 +17,8 @@ import volkovandr.hauptbuch.statements.ParsedStatement.ParsedLine;
  * Decodes the model's raw TOON body into a {@link ParsedStatement}, leniently: an absent or blank
  * cell is null, a header value that will not parse is dropped, and a line whose date or amount will
  * not parse is kept with a {@code problem} (like a CSV row the profile cannot read) so the operator
- * sees and fixes it. A body jtoon cannot parse at all yields empty — the statement keeps it in
- * {@code parse_raw} and fails.
+ * sees and fixes it. A body jtoon cannot parse, or one without a `lines` table, yields empty — the
+ * statement keeps it in {@code parse_raw} and fails.
  */
 @Component
 class ToonStatementDecoder {
@@ -35,7 +35,7 @@ class ToonStatementDecoder {
     }
     try {
       Object tree = JToon.decode(unfence(rawToon));
-      if (!(tree instanceof Map<?, ?> root)) {
+      if (!(tree instanceof Map<?, ?> root) || !(root.get("lines") instanceof List<?>)) {
         return Optional.empty();
       }
       Map<?, ?> header = root.get("statement") instanceof Map<?, ?> m ? m : Map.of();
