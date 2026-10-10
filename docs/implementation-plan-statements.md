@@ -102,7 +102,7 @@
   layer refused); account proposed from the unmasked text; pre-masking of own IBANs/account numbers
   and IBAN/BIC-shaped strings; the text editor; state `new`. *Done when:* a bank-B PDF shows its
   masked, editable text.
-- **e2 — The AI call.** The statement parser (Anthropic SDK, synchronous), the built-in prompt + the
+- ✅ **e2 — The AI call.** The statement parser (Anthropic SDK, synchronous), the built-in prompt + the
   `settings.statement_system_prompt` column and its editor + the profile's AI note; TOON decode into
   header and lines; `parse_raw`, token telemetry, frozen cost; `failed` with the error kept.
   *Done when:* a real bank-B and bank-C statement parse into correct lines and balances.
