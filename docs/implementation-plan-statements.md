@@ -98,7 +98,7 @@
 
 ## e — PDF in
 
-- **e1 — PDF text.** Upload a PDF against a PDF profile; PDFBox text extraction (a PDF without a text
+- ✅ **e1 — PDF text.** Upload a PDF against a PDF profile; PDFBox text extraction (a PDF without a text
   layer refused); account proposed from the unmasked text; pre-masking of own IBANs/account numbers
   and IBAN/BIC-shaped strings; the text editor; state `new`. *Done when:* a bank-B PDF shows its
   masked, editable text.
