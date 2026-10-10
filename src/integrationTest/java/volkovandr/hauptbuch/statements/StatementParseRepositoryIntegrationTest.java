@@ -313,4 +313,67 @@ class StatementParseRepositoryIntegrationTest {
         .optional()
         .orElse(null);
   }
+
+  @Test
+  void markReseededReplacesHeaderAndRawBodyButKeepsTheBilledUsage() {
+    statements.claimForParse(statementId);
+    statements.markProcessed(
+        statementId,
+        LocalDate.of(2026, 5, 1),
+        LocalDate.of(2026, 5, 31),
+        BigDecimal.TEN,
+        BigDecimal.ONE,
+        USAGE,
+        "old raw");
+
+    int updated =
+        statements.markReseeded(
+            statementId,
+            LocalDate.of(2026, 6, 1),
+            LocalDate.of(2026, 6, 30),
+            BigDecimal.ONE,
+            BigDecimal.TWO,
+            "new raw");
+
+    assertThat(updated).isEqualTo(1);
+    assertThat(statements.findParseRaw(statementId)).contains("new raw");
+    Statement read = statements.findById(statementId).orElseThrow();
+    assertThat(read.state()).isEqualTo("processed");
+    assertThat(read.periodStart()).isEqualTo(LocalDate.of(2026, 6, 1));
+    assertThat(read.closingBalance()).isEqualByComparingTo("2");
+    Integer tokensIn =
+        jdbcClient
+            .sql("select tokens_in from statement where statement_id = :id")
+            .param("id", statementId)
+            .query(Integer.class)
+            .single();
+    assertThat(tokensIn).isEqualTo(1000);
+  }
+
+  @Test
+  void markReseededTouchesNothingWhileTheStatementIsStillNew() {
+    int updated = statements.markReseeded(statementId, null, null, null, null, "raw");
+
+    assertThat(updated).isZero();
+    assertThat(statements.findParseRaw(statementId)).isEmpty();
+  }
+
+  @Test
+  void findParseUsageReadsTheBilledUsageBackAndIsEmptyBeforeAnyParse() {
+    assertThat(statements.findParseUsage(statementId)).isEmpty();
+    statements.markProcessed(
+        statementId,
+        LocalDate.of(2026, 5, 1),
+        LocalDate.of(2026, 5, 31),
+        BigDecimal.TEN,
+        BigDecimal.ONE,
+        USAGE,
+        "raw");
+
+    ParseUsage read = statements.findParseUsage(statementId).orElseThrow();
+
+    assertThat(read.tokensIn()).isEqualTo(1000);
+    assertThat(read.tokensCacheRead()).isEqualTo(40);
+    assertThat(read.cost()).isEqualByComparingTo("0.0123");
+  }
 }

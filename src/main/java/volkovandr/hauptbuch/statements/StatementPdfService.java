@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.accounts.PayingAccountDetector;
+import volkovandr.hauptbuch.statements.repository.ParseUsage;
 import volkovandr.hauptbuch.statements.repository.StatementRepository;
 
 /**
@@ -72,6 +73,16 @@ public class StatementPdfService {
   /** The statement's text as it stands, or null for a statement that did not come from a PDF. */
   public String sentText(long statementId) {
     return statementRepository.findSentText(statementId).orElse(null);
+  }
+
+  /** The raw parser response as stored, or null when the statement has none. */
+  public String parseRaw(long statementId) {
+    return statementRepository.findParseRaw(statementId).orElse(null);
+  }
+
+  /** What the parse was billed, or null when no call has been billed. */
+  public ParseUsage parseUsage(long statementId) {
+    return statementRepository.findParseUsage(statementId).orElse(null);
   }
 
   /** Why the last parse failed, or null when it did not. */

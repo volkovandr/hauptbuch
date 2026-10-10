@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.ledger.AiSettings;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.statements.repository.ParseUsage;
+import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
 import volkovandr.hauptbuch.statements.repository.StatementRepository;
 
 /**
@@ -32,6 +33,7 @@ public class StatementParseService {
   private final ToonStatementDecoder decoder;
   private final StatementParseResults results;
   private final SettingsService settingsService;
+  private final StatementMatchRepository matchRepository;
 
   StatementParseService(
       StatementRepository statementRepository,
@@ -41,7 +43,8 @@ public class StatementParseService {
       StatementPromptBuilder promptBuilder,
       ToonStatementDecoder decoder,
       StatementParseResults results,
-      SettingsService settingsService) {
+      SettingsService settingsService,
+      StatementMatchRepository matchRepository) {
     this.statementRepository = statementRepository;
     this.profileService = profileService;
     this.statementService = statementService;
@@ -50,6 +53,29 @@ public class StatementParseService {
     this.decoder = decoder;
     this.results = results;
     this.settingsService = settingsService;
+    this.matchRepository = matchRepository;
+  }
+
+  /**
+   * Replace the statement's lines and header from the operator's edited response text, without
+   * another API call (statements.md §3.2). Refused while any line is matched, and when the text
+   * does not decode — then nothing changes.
+   *
+   * @throws StatementFormatException when a line is matched, the text does not decode, or the
+   *     statement is not a parsed or failed PDF statement
+   */
+  public void reseed(long statementId, String rawToon) {
+    statementService.get(statementId);
+    if (!matchRepository.findMatches(statementId).isEmpty()) {
+      throw new StatementFormatException("Unmatch every line before re-seeding.");
+    }
+    ParsedStatement parsed =
+        decoder
+            .decode(rawToon)
+            .orElseThrow(
+                () -> new StatementFormatException("Could not decode the text — nothing changed."));
+    results.applyReseed(statementId, parsed, rawToon);
+    LOG.info("Statement {} re-seeded: lines={}", statementId, parsed.lines().size());
   }
 
   /**

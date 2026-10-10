@@ -45,6 +45,34 @@ class StatementParseResults {
         rawToon);
   }
 
+  /**
+   * Replace the lines and header with a decode of the operator's edited response — no API call, so
+   * the usage stays. All or nothing: a statement that cannot be re-seeded rolls the lines back.
+   */
+  @Transactional
+  void applyReseed(long statementId, ParsedStatement parsed, String rawToon) {
+    lineRepository.deleteByStatement(statementId);
+    for (ParsedLine parsedLine : parsed.lines()) {
+      lineRepository.insertParsed(
+          statementId,
+          parsedLine.line(),
+          parsedLine.originalAmount(),
+          parsedLine.originalCurrency(),
+          parsedLine.originalRate());
+    }
+    int updated =
+        statementRepository.markReseeded(
+            statementId,
+            parsed.periodStart(),
+            parsed.periodEnd(),
+            parsed.openingBalance(),
+            parsed.closingBalance(),
+            rawToon);
+    if (updated == 0) {
+      throw new StatementFormatException("This statement cannot be re-seeded.");
+    }
+  }
+
   /** The call completed but its body would not decode: failed, raw body and billed usage kept. */
   @Transactional
   void failUndecodable(long statementId, String reason, ParseUsage usage, String rawToon) {

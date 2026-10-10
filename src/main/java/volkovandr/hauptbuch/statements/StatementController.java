@@ -245,6 +245,19 @@ class StatementController {
         redirectAttributes);
   }
 
+  /**
+   * Replace the lines and header from the edited parser response, no AI call (statements.md §3.2).
+   */
+  @PostMapping(BASE_PATH + "/{id}/reseed")
+  String reseed(
+      @PathVariable long id, @RequestParam String raw, RedirectAttributes redirectAttributes) {
+    return saved(
+        id,
+        () -> parseService.reseed(id, raw),
+        "Re-seeded from the edited response. Check the header and the lines.",
+        redirectAttributes);
+  }
+
   /** Flip the sign of every line (statement issue 11); refused while any line is matched. */
   @PostMapping(BASE_PATH + "/{id}/reverse-signs")
   String reverseSigns(@PathVariable long id, RedirectAttributes redirectAttributes) {

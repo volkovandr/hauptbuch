@@ -119,6 +119,50 @@
      </details>
     </section>
 
+    <section class="panel" th:if="${parseRaw != null}">
+     <details>
+      <summary class="statement-contents__summary">Parser response</summary>
+      <p class="muted" th:if="${parseUsage != null}">
+        <span class="num" th:text="${parseUsage.tokensIn()}">1200</span> in /
+        <span class="num" th:text="${parseUsage.tokensOut()}">300</span> out /
+        <span class="num" th:text="${parseUsage.tokensCacheWrite()}">0</span> cache write /
+        <span class="num" th:text="${parseUsage.tokensCacheRead()}">0</span> cache read tokens ·
+        $<span class="num" th:text="${parseUsage.cost()}">0.006</span>
+      </p>
+      <p class="muted">
+        The raw answer the parser gave. Fix a mistake in it — a mis-read date, a dropped line — and
+        re-seed: the header and lines are replaced from this text without another AI call. Refused
+        while any line is matched; unmatch first.
+      </p>
+      <form
+        method="post"
+        th:action="@{/statements/{id}/reseed(id=${statement.statementId()})}"
+        th:attr="hx-post=@{/statements/{id}/reseed(id=${statement.statementId()})}"
+        hx-target="main"
+        hx-select="main"
+        hx-swap="outerHTML"
+      >
+        <textarea
+          class="input statement-text"
+          name="raw"
+          rows="20"
+          spellcheck="false"
+          aria-label="Parser response"
+          th:text="${parseRaw}"
+        ></textarea>
+        <p class="actions">
+          <span
+            th:title="${review.matched() > 0} ? 'Unmatch all lines of this statement first — re-seeding replaces the lines.'"
+          >
+            <button type="submit" class="btn" th:disabled="${review.matched() > 0}">
+              Re-seed from this text
+            </button>
+          </span>
+        </p>
+      </form>
+     </details>
+    </section>
+
     <section class="panel">
       <p class="eyebrow">Matching</p>
       <form
