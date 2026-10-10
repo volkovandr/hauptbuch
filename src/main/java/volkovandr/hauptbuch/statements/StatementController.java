@@ -1,10 +1,15 @@
 package volkovandr.hauptbuch.statements;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.function.Supplier;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.MultiValueMap;
@@ -173,6 +178,26 @@ class StatementController {
     }
     pageAssembler.addDock(id, dock, posting, extra, model);
     return "statement";
+  }
+
+  /** The file the statement was made from, downloaded under its original name. */
+  @GetMapping(BASE_PATH + "/{id}/file")
+  ResponseEntity<byte[]> file(@PathVariable long id) {
+    try {
+      Statement statement = statementService.get(id);
+      byte[] bytes = statementService.originalFile(id);
+      return ResponseEntity.ok()
+          .contentType(MediaType.APPLICATION_OCTET_STREAM)
+          .header(
+              HttpHeaders.CONTENT_DISPOSITION,
+              ContentDisposition.attachment()
+                  .filename(statement.originalFilename(), StandardCharsets.UTF_8)
+                  .build()
+                  .toString())
+          .body(bytes);
+    } catch (StatementFormatException e) {
+      return ResponseEntity.notFound().build();
+    }
   }
 
   /** Save the period and the balances. */
