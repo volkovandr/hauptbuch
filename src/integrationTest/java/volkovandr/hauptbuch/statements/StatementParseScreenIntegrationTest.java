@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -228,5 +230,55 @@ class StatementParseScreenIntegrationTest {
         .param("id", statementId)
         .query()
         .singleRow();
+  }
+
+  @Test
+  void reseedFixesMisDatedLineFromTheEditedResponseWithoutAnotherAiCall() throws Exception {
+    when(parser.parse(any())).thenReturn(new StatementParseResult(GOOD_BODY, 1000, 200, 0, 0));
+    mockMvc.perform(post("/statements/" + statementId + "/parse"));
+
+    mockMvc
+        .perform(
+            post("/statements/" + statementId + "/reseed")
+                .param("raw", GOOD_BODY.replace("2026-05-02,2026-05-02", "2026-02-05,2026-02-05")))
+        .andExpect(redirectedUrl("/statements/" + statementId))
+        .andExpect(flash().attributeExists("notice"));
+
+    List<String> dates =
+        jdbcClient
+            .sql(
+                "select booking_date::text from statement_line where statement_id = :id"
+                    + " order by sort_order")
+            .param("id", statementId)
+            .query(String.class)
+            .list();
+    assertThat(dates).containsExactly("2026-02-05", "2026-05-09");
+    assertThat(statementRow().get("state")).isEqualTo("processed");
+    assertThat(statementRow().get("tokens_in")).isEqualTo(1000);
+    verify(parser, times(1)).parse(any());
+    mockMvc
+        .perform(get("/statements/" + statementId))
+        .andExpect(content().string(containsString("Re-seed from this text")))
+        .andExpect(content().string(containsString("cache read tokens")));
+  }
+
+  @Test
+  void reseedWithUndecodableTextKeepsTheLinesAndSaysSo() throws Exception {
+    when(parser.parse(any())).thenReturn(new StatementParseResult(GOOD_BODY, 1, 1, 0, 0));
+    mockMvc.perform(post("/statements/" + statementId + "/parse"));
+
+    mockMvc
+        .perform(
+            post("/statements/" + statementId + "/reseed").param("raw", "lines[2]{a,b}:\n  x\n"))
+        .andExpect(flash().attribute("error", containsString("decode")));
+
+    Integer lineCount =
+        jdbcClient
+            .sql("select count(*) from statement_line where statement_id = :id")
+            .param("id", statementId)
+            .query(Integer.class)
+            .single();
+    assertThat(lineCount).isEqualTo(2);
+    assertThat(statementRow().get("parse_raw")).isEqualTo(GOOD_BODY);
   }
 }

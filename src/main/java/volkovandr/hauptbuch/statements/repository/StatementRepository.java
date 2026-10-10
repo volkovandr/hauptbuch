@@ -18,6 +18,8 @@ import volkovandr.hauptbuch.statements.StatementRow;
 public class StatementRepository {
 
   private static final String STATEMENT_ID = "statementId";
+  private static final String PERIOD_START = "periodStart";
+  private static final String PERIOD_END = "periodEnd";
 
   private final JdbcClient jdbcClient;
 
@@ -48,8 +50,8 @@ public class StatementRepository {
         .param("accountId", accountId)
         .param("originalFilename", originalFilename)
         .param("filePath", filePath)
-        .param("periodStart", periodStart)
-        .param("periodEnd", periodEnd)
+        .param(PERIOD_START, periodStart)
+        .param(PERIOD_END, periodEnd)
         .query(Long.class)
         .single();
   }
@@ -185,11 +187,77 @@ public class StatementRepository {
             """)
         .param(STATEMENT_ID, statementId)
         .param("parseRaw", parseRaw)
-        .param("periodStart", periodStart)
-        .param("periodEnd", periodEnd)
+        .param(PERIOD_START, periodStart)
+        .param(PERIOD_END, periodEnd)
         .param("openingBalance", openingBalance)
         .param("closingBalance", closingBalance)
         .params(usage.asParams())
+        .update();
+  }
+
+  /** The raw parser response as stored (or last re-seeded), or empty when there is none. */
+  public Optional<String> findParseRaw(long statementId) {
+    return jdbcClient
+        .sql("select parse_raw from statement where statement_id = :statementId")
+        .param(STATEMENT_ID, statementId)
+        .query(String.class)
+        .optional();
+  }
+
+  /** The billed usage and frozen cost of the statement's parse, or empty when none was billed. */
+  public Optional<ParseUsage> findParseUsage(long statementId) {
+    return jdbcClient
+        .sql(
+            """
+            select tokens_in, tokens_out,
+                   coalesce(tokens_cache_write, 0) as tokens_cache_write,
+                   coalesce(tokens_cache_read, 0) as tokens_cache_read, parse_cost
+            from statement
+            where statement_id = :statementId and tokens_in is not null and parse_cost is not null
+            """)
+        .param(STATEMENT_ID, statementId)
+        .query(
+            (rs, rowNum) ->
+                new ParseUsage(
+                    rs.getInt("tokens_in"),
+                    rs.getInt("tokens_out"),
+                    rs.getInt("tokens_cache_write"),
+                    rs.getInt("tokens_cache_read"),
+                    rs.getBigDecimal("parse_cost")))
+        .optional();
+  }
+
+  /**
+   * Re-seed a parsed PDF statement from edited response text: the header and raw body are replaced,
+   * the state becomes {@code processed} and the error is cleared. Usage and cost stay — they record
+   * the call that was actually billed.
+   *
+   * @return the number of statements updated (0 when it is not a parsed or failed PDF statement)
+   */
+  public int markReseeded(
+      long statementId,
+      LocalDate periodStart,
+      LocalDate periodEnd,
+      BigDecimal openingBalance,
+      BigDecimal closingBalance,
+      String parseRaw) {
+    return jdbcClient
+        .sql(
+            """
+            update statement
+            set state = 'processed', parse_error = null, parse_raw = :parseRaw,
+                period_start = :periodStart, period_end = :periodEnd,
+                opening_balance = :openingBalance, closing_balance = :closingBalance,
+                updated_at = now()
+            where statement_id = :statementId and deleted_at is null
+              and sent_text is not null and state in ('processed', 'failed')
+            """)
+        .param(STATEMENT_ID, statementId)
+        .param("parseRaw", parseRaw)
+        .param(PERIOD_START, periodStart)
+        .param(PERIOD_END, periodEnd)
+        .param("openingBalance", openingBalance)
+        .param("closingBalance", closingBalance)
         .update();
   }
 
@@ -251,8 +319,8 @@ public class StatementRepository {
             where statement_id = :statementId and deleted_at is null
             """)
         .param(STATEMENT_ID, statementId)
-        .param("periodStart", periodStart)
-        .param("periodEnd", periodEnd)
+        .param(PERIOD_START, periodStart)
+        .param(PERIOD_END, periodEnd)
         .param("openingBalance", openingBalance)
         .param("closingBalance", closingBalance)
         .update();

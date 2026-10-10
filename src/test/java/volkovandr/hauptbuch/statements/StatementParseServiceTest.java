@@ -22,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.ledger.AiSettings;
 import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.statements.repository.ParseUsage;
+import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
 import volkovandr.hauptbuch.statements.repository.StatementRepository;
 
 /**
@@ -52,6 +53,7 @@ class StatementParseServiceTest {
   @Mock private ToonStatementDecoder decoder;
   @Mock private StatementParseResults results;
   @Mock private SettingsService settingsService;
+  @Mock private StatementMatchRepository matchRepository;
 
   private StatementParseService service;
 
@@ -66,7 +68,8 @@ class StatementParseServiceTest {
             new StatementPromptBuilder(),
             decoder,
             results,
-            settingsService);
+            settingsService,
+            matchRepository);
   }
 
   private void statementAwaitingParse() {
@@ -219,5 +222,43 @@ class StatementParseServiceTest {
         null,
         null,
         null);
+  }
+
+  @Test
+  void reseedReplacesTheLinesFromTheEditedTextWithoutCallingTheParser() {
+    when(statementService.get(STATEMENT_ID)).thenReturn(statement());
+    when(matchRepository.findMatches(STATEMENT_ID)).thenReturn(List.of());
+    ParsedStatement parsed = new ParsedStatement(null, null, null, null, List.of());
+    when(decoder.decode(RAW)).thenReturn(Optional.of(parsed));
+
+    service.reseed(STATEMENT_ID, RAW);
+
+    verify(results).applyReseed(STATEMENT_ID, parsed, RAW);
+    verifyNoInteractions(parser);
+  }
+
+  @Test
+  void reseedIsRefusedWhileAnyLineIsMatched() {
+    when(statementService.get(STATEMENT_ID)).thenReturn(statement());
+    when(matchRepository.findMatches(STATEMENT_ID))
+        .thenReturn(
+            List.of(new StatementMatch(1L, 2L, 3L, null, null, BigDecimal.ONE, "reconciled")));
+
+    assertThatThrownBy(() -> service.reseed(STATEMENT_ID, RAW))
+        .isInstanceOf(StatementFormatException.class)
+        .hasMessageContaining("Unmatch");
+    verify(results, never()).applyReseed(anyLong(), any(), any());
+  }
+
+  @Test
+  void reseedWithUndecodableTextChangesNothing() {
+    when(statementService.get(STATEMENT_ID)).thenReturn(statement());
+    when(matchRepository.findMatches(STATEMENT_ID)).thenReturn(List.of());
+    when(decoder.decode("garbage")).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.reseed(STATEMENT_ID, "garbage"))
+        .isInstanceOf(StatementFormatException.class)
+        .hasMessageContaining("decode");
+    verify(results, never()).applyReseed(anyLong(), any(), any());
   }
 }
