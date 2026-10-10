@@ -4,8 +4,8 @@ import java.math.BigDecimal;
 import java.util.Map;
 
 /**
- * The billed token counts and the frozen cost of one parse, as stored on the statement. The cost
- * is computed once at parse time from the {@code settings} price rates and never recomputed.
+ * The billed token counts and the frozen cost of one parse, as stored on the statement. The cost is
+ * computed once at parse time from the {@code settings} price rates and never recomputed.
  *
  * @param tokensIn input tokens billed
  * @param tokensOut output tokens billed

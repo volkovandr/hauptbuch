@@ -3,6 +3,7 @@ package volkovandr.hauptbuch.statements;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -39,6 +40,8 @@ import volkovandr.hauptbuch.ledger.SettingsService;
  * land {@code failed} with the reason shown and the text still editable; the statement prompt
  * editor saves and resets. Each test is rolled back.
  */
+// ExcessiveImports: an end-to-end screen test needs the MockMvc, settings and statement fixtures.
+@SuppressWarnings("PMD.ExcessiveImports")
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
@@ -53,7 +56,8 @@ class StatementParseScreenIntegrationTest {
         periodEnd: 2026-05-31
         openingBalance: 1200.50
         closingBalance: 1138.00
-      lines[2]{bookingDate,valueDate,amount,counterparty,description,bankCategory,originalAmount,originalCurrency,originalRate}:
+      lines[2]{bookingDate,valueDate,amount,counterparty,description,bankCategory,\
+      originalAmount,originalCurrency,originalRate}:
         2026-05-02,2026-05-02,-12.50,ShopAaa,Card payment,Groceries,,,
         2026-05-09,2026-05-10,-50.00,ShopBbb,Card 55.00 USD,Shopping,55.00,USD,1.10
       """;
@@ -82,13 +86,12 @@ class StatementParseScreenIntegrationTest {
                     LocalDate.parse("2026-01-01"),
                     BigDecimal.ZERO))
             .accountId();
-    mockMvc
-        .perform(
-            post("/statements/profiles/save")
-                .param("name", "BankBbb PDF")
-                .param("format", "pdf")
-                .param("windowDaysBefore", "10")
-                .param("windowDaysAfter", "3"));
+    mockMvc.perform(
+        post("/statements/profiles/save")
+            .param("name", "BankBbb PDF")
+            .param("format", "pdf")
+            .param("windowDaysBefore", "10")
+            .param("windowDaysAfter", "3"));
     long profileId =
         jdbcClient
             .sql("select statement_profile_id from statement_profile where name = 'BankBbb PDF'")
@@ -129,8 +132,7 @@ class StatementParseScreenIntegrationTest {
     assertThat((BigDecimal) row.get("parse_cost")).isEqualByComparingTo("0.006");
     List<Map<String, Object>> lines =
         jdbcClient
-            .sql(
-                "select * from statement_line where statement_id = :id order by sort_order")
+            .sql("select * from statement_line where statement_id = :id order by sort_order")
             .param("id", statementId)
             .query()
             .listOfRows();
@@ -160,14 +162,14 @@ class StatementParseScreenIntegrationTest {
   }
 
   @Test
-  void aTransportFailureFailsWithTheReasonAndCanBeRetried() throws Exception {
+  void transportFailureFailsWithTheReasonAndCanBeRetried() throws Exception {
     when(parser.parse(any()))
         .thenThrow(new StatementParseException("No Anthropic API key configured"));
     mockMvc.perform(post("/statements/" + statementId + "/parse"));
     assertThat(statementRow().get("state")).isEqualTo("failed");
     assertThat(statementRow().get("parse_error")).isEqualTo("No Anthropic API key configured");
 
-    when(parser.parse(any())).thenReturn(new StatementParseResult(GOOD_BODY, 1, 1, 0, 0));
+    doReturn(new StatementParseResult(GOOD_BODY, 1, 1, 0, 0)).when(parser).parse(any());
     mockMvc.perform(post("/statements/" + statementId + "/parse"));
 
     assertThat(statementRow().get("state")).isEqualTo("processed");
@@ -175,7 +177,7 @@ class StatementParseScreenIntegrationTest {
   }
 
   @Test
-  void aProcessedStatementCannotBeParsedAgain() throws Exception {
+  void processedStatementCannotBeParsedAgain() throws Exception {
     when(parser.parse(any())).thenReturn(new StatementParseResult(GOOD_BODY, 1, 1, 0, 0));
     mockMvc.perform(post("/statements/" + statementId + "/parse"));
 

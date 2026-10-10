@@ -15,10 +15,10 @@ import volkovandr.hauptbuch.statements.ParsedStatement.ParsedLine;
 
 /**
  * Decodes the model's raw TOON body into a {@link ParsedStatement}, leniently: an absent or blank
- * cell is null, a header value that will not parse is dropped, and a line whose date or amount
- * will not parse is kept with a {@code problem} (like a CSV row the profile cannot read) so the
- * operator sees and fixes it. A body jtoon cannot parse at all yields empty — the statement keeps
- * it in {@code parse_raw} and fails.
+ * cell is null, a header value that will not parse is dropped, and a line whose date or amount will
+ * not parse is kept with a {@code problem} (like a CSV row the profile cannot read) so the operator
+ * sees and fixes it. A body jtoon cannot parse at all yields empty — the statement keeps it in
+ * {@code parse_raw} and fails.
  */
 @Component
 class ToonStatementDecoder {

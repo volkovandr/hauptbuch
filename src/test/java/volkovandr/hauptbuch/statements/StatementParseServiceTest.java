@@ -78,7 +78,8 @@ class StatementParseServiceTest {
     when(settingsService.aiConfig()).thenReturn(CONFIG);
     when(settingsService.statementSystemPrompt()).thenReturn(null);
     when(statementRepository.findSentText(STATEMENT_ID)).thenReturn(Optional.of(TEXT));
-    when(profileService.getIncludingDeleted(PROFILE_ID)).thenReturn(profileWithNote("Rate in text"));
+    when(profileService.getIncludingDeleted(PROFILE_ID))
+        .thenReturn(profileWithNote("Rate in text"));
   }
 
   @Test
@@ -122,7 +123,7 @@ class StatementParseServiceTest {
   }
 
   @Test
-  void aTransportFailureFailsWithItsMessageAndNoUsage() {
+  void transportFailureFailsWithItsMessageAndNoUsage() {
     statementAwaitingParse();
     callPrerequisites();
     when(parser.parse(any())).thenThrow(new StatementParseException("401 unauthorized"));
@@ -144,7 +145,7 @@ class StatementParseServiceTest {
   }
 
   @Test
-  void aStatementThatCannotBeClaimedIsRefusedWithoutACall() {
+  void unclaimableStatementIsRefusedWithoutCall() {
     when(statementService.get(STATEMENT_ID)).thenReturn(statement());
     when(statementRepository.claimForParse(STATEMENT_ID)).thenReturn(false);
 
@@ -165,13 +166,46 @@ class StatementParseServiceTest {
 
   private static Statement statement() {
     return new Statement(
-        STATEMENT_ID, PROFILE_ID, 11L, "processing", "may.pdf", "p", null, null, null, null, null,
+        STATEMENT_ID,
+        PROFILE_ID,
+        11L,
+        "processing",
+        "may.pdf",
+        "p",
+        null,
+        null,
+        null,
+        null,
+        null,
         null);
   }
 
   private static StatementProfile profileWithNote(String note) {
     return new StatementProfile(
-        PROFILE_ID, "BankBbb PDF", "pdf", 10, 3, note, null, null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null, null, null, null, null);
+        PROFILE_ID,
+        "BankBbb PDF",
+        "pdf",
+        10,
+        3,
+        note,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,17 +19,18 @@ import volkovandr.hauptbuch.statements.repository.StatementProfileRepository;
 import volkovandr.hauptbuch.statements.repository.StatementRepository;
 
 /**
- * Integration tier (CLAUDE.md §6): the repository methods of a statement parse (slice e2) round-trip
- * against real Postgres — the claim, the three outcomes (processed, failed with the raw body kept,
- * failed with the reason only), the orphan sweep, and the parsed line with its foreign charge. Each
- * test is rolled back.
+ * Integration tier (CLAUDE.md §6): the repository methods of a statement parse (slice e2)
+ * round-trip against real Postgres — the claim, the three outcomes (processed, failed with the raw
+ * body kept, failed with the reason only), the orphan sweep, and the parsed line with its foreign
+ * charge. Each test is rolled back.
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @Transactional
 class StatementParseRepositoryIntegrationTest {
 
-  private static final ParseUsage USAGE = new ParseUsage(1000, 200, 30, 40, new BigDecimal("0.0123"));
+  private static final ParseUsage USAGE =
+      new ParseUsage(1000, 200, 30, 40, new BigDecimal("0.0123"));
 
   @Autowired StatementProfileRepository profiles;
   @Autowired StatementRepository statements;
@@ -49,13 +51,36 @@ class StatementParseRepositoryIntegrationTest {
     long profileId =
         profiles.insert(
             new StatementProfile(
-                null, "BankBbb PDF", "pdf", 10, 3, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null));
+                null,
+                "BankBbb PDF",
+                "pdf",
+                10,
+                3,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null));
     statementId = statements.insertPdf(profileId, accountId, "may.pdf", "2026/05/x.pdf", "text");
   }
 
   @Test
-  void claimMovesANewStatementToProcessingOnce() {
+  void claimMovesNewStatementToProcessingOnce() {
     assertThat(statements.claimForParse(statementId)).isTrue();
     assertThat(statements.findById(statementId).orElseThrow().state()).isEqualTo("processing");
 
@@ -63,7 +88,7 @@ class StatementParseRepositoryIntegrationTest {
   }
 
   @Test
-  void aFailedStatementCanBeClaimedAgainAndItsErrorIsCleared() {
+  void failedStatementCanBeClaimedAgainAndItsErrorIsCleared() {
     statements.markFailed(statementId, "401 unauthorized");
     assertThat(statements.findParseError(statementId)).hasValue("401 unauthorized");
 
@@ -73,7 +98,7 @@ class StatementParseRepositoryIntegrationTest {
   }
 
   @Test
-  void aCsvStatementOrADeletedOneCannotBeClaimed() {
+  void csvOrDeletedStatementCannotBeClaimed() {
     long csvId =
         statements.insert(
             jdbcClient
@@ -115,7 +140,7 @@ class StatementParseRepositoryIntegrationTest {
     assertThat(read.periodEnd()).isEqualTo(LocalDate.of(2026, 5, 31));
     assertThat(read.openingBalance()).isEqualByComparingTo("1200.50");
     assertThat(read.closingBalance()).isEqualByComparingTo("1138.00");
-    var stored =
+    Map<String, Object> stored =
         jdbcClient
             .sql(
                 "select parse_raw, tokens_in, tokens_out, tokens_cache_write, tokens_cache_read,"
@@ -149,7 +174,7 @@ class StatementParseRepositoryIntegrationTest {
   }
 
   @Test
-  void aFailedStatementsTextIsStillEditable() {
+  void failedStatementTextIsStillEditable() {
     statements.markFailed(statementId, "down");
 
     assertThat(statements.updateSentText(statementId, "edited")).isEqualTo(1);
@@ -170,13 +195,23 @@ class StatementParseRepositoryIntegrationTest {
   void insertParsedKeepsTheForeignChargeAndDropsAnUnknownCurrency() {
     StatementLine line =
         new StatementLine(
-            null, 0, LocalDate.of(2026, 5, 9), null, new BigDecimal("-50.00"), "ShopBbb",
-            "Card 55.00 USD", "Shopping", "raw", null);
+            null,
+            0,
+            LocalDate.of(2026, 5, 9),
+            null,
+            new BigDecimal("-50.00"),
+            "ShopBbb",
+            "Card 55.00 USD",
+            "Shopping",
+            "raw",
+            null);
 
     long withUsd =
-        lines.insertParsed(statementId, line, new BigDecimal("55.00"), "USD", new BigDecimal("1.1"));
+        lines.insertParsed(
+            statementId, line, new BigDecimal("55.00"), "USD", new BigDecimal("1.1"));
     long withUnknown =
-        lines.insertParsed(statementId, line, new BigDecimal("55.00"), "QQQ", new BigDecimal("1.1"));
+        lines.insertParsed(
+            statementId, line, new BigDecimal("55.00"), "QQQ", new BigDecimal("1.1"));
     long without = lines.insertParsed(statementId, line, null, null, null);
 
     assertThat(originalCurrency(withUsd)).isEqualTo("USD");
@@ -195,8 +230,8 @@ class StatementParseRepositoryIntegrationTest {
   @Test
   void deleteByStatementRemovesOnlyThatStatementsLines() {
     StatementLine line =
-        new StatementLine(null, 0, LocalDate.of(2026, 5, 9), null, BigDecimal.ONE, null, null, null,
-            null, null);
+        new StatementLine(
+            null, 0, LocalDate.of(2026, 5, 9), null, BigDecimal.ONE, null, null, null, null, null);
     lines.insertParsed(statementId, line, null, null, null);
 
     assertThat(lines.deleteByStatement(statementId)).isEqualTo(1);
