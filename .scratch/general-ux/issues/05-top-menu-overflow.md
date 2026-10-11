@@ -16,7 +16,7 @@ comfortably.
 - Built as a native `<details>`/`<summary>` dropdown styled with CSS — **no new JS leaf**
   (CLAUDE.md §1.6). It must work with the keyboard and close the way a `<details>` does.
 - When the current page is one of the overflow items, the `⋯` entry carries the "current" style.
-- Ships as slice **a** of `docs/implementation-plan-statements.md`. The Statements item itself is
+- Ships as slice **a** of the statements work (`docs/implementation-plan.md` §3). The Statements item itself is
   added by slice b1, together with its page — never a link to nothing.
 
 ## Comments

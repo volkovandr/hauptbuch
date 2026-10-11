@@ -29,7 +29,7 @@
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
 - **v0.53 (2026-10-04):** **Bank statement reconciliation grilled, designed, and sequenced** into the
-  sub-plan `implementation-plan-statements.md` (slices 0a–f). New authoritative doc
+  sub-plan `implementation-plan-statements.md` (slices 0a–f; since folded into §3). New authoritative doc
   **`docs/statements.md`** (the eighth) and **ADR 0003** (postings edited in place; one leg per real
   own account) — an engine change that also fixes dock edits wiping imported `R` marks. Scope
   changes: **FR-IMP-05's generic CSV importer is absorbed** by the statement CSV profile (it no
@@ -669,13 +669,32 @@ shipped; everything after it is unbuilt.
   revisited **with budgets**, since "fact against budget" is the half that makes it worth writing.
 - **Register follow-ons:** column re-sorting with the balance-hide rule (register §2.7) — deferred
   from stage 7a until missed.
-- **Bank statement reconciliation** (FR-STMT, FR-IMP-05; grilled 2026-10-03/04). **`docs/statements.md`**
-  is the authoritative doc; the engine prerequisites are ADR 0003; the schema is data-model §15.
-  CSV through statement profiles and PDF through operator-redacted text to the AI; live matching in
-  four confirmed tiers; every fix committed through the dock embedded on the statement page; opening
-  and closing balance checks. Sequenced in the sub-plan **`implementation-plan-statements.md`**
-  (0a data gate, 0b–0c engine, a nav, b CSV in, c matching, d dock, e PDF in, f balance checks).
-  Deliberately **not** a §2 stage; §2 stays closed.
+- **Bank statement reconciliation** (FR-STMT, FR-IMP-05; grilled 2026-10-03/04). ✅ **Complete**
+  (owner-confirmed 2026-10-11). **`docs/statements.md`** is the authoritative doc; the engine
+  prerequisites are ADR 0003; the schema is data-model §15. CSV through statement profiles and PDF
+  through operator-redacted text to the AI; live matching in four confirmed tiers; every fix
+  committed through the dock embedded on the statement page; opening and closing balance checks.
+  Deliberately **not** a §2 stage; §2 stays closed. Built in slices:
+  - **0 — engine prerequisites.** The duplicate-leg data gate; one leg per real own account
+    (data-model §8 invariant 6); postings edited in place, so `posting_id` and `reconciliation`
+    survive an edit and a changed amount drops the leg to `unreconciled` (ADR 0003; `ledger` gains
+    the reconciliation-dropped interface).
+  - **a — navigation.** The `⋯` overflow menu in the top bar.
+  - **b — CSV in.** The statement schema; CSV profiles with a live preview; upload to a statement
+    (file kept on the Pi, account proposed from the IBAN column); the statement page with an
+    editable header and line grid; the Statements list.
+  - **c — matching.** The matcher computed live on open (nothing stored but the match): all four
+    tiers, line statuses, boundary-labelled extras; Accept, Accept all exact, pick, Unmatch, the
+    overlap decision, delete with the keep-`reconciled` question.
+  - **d — the dock on the statement page.** Create missing; amount differs (incl. cross-currency
+    with base re-freeze); wrong-account candidates; extras' Edit / Move / Void.
+  - **e — PDF in.** PDF text extraction with pre-masking and an editable text; the AI call
+    (Anthropic SDK, settings-held prompt, TOON decode, token and cost telemetry); an editable
+    parser response with Re-seed.
+  - **f — balance checks.** Opening and closing: bank / ledger / explained / unexplained, where
+    explained covers postings matched here but dated outside the period, postings matched on a
+    neighbouring statement, and boundary extras; green per `statements.md` §6.5, on the page and as
+    the Match column in the list.
 - **Receipt follow-ons:** duplicate detection at confirm (merchant+date+total) + link-to-existing
   transaction with the Q-RX-2 push-splits question (receipt doc §6.4) — deferred from stage 9;
   shares the statement matcher above, so lands after it (kept out of the statements work by owner
