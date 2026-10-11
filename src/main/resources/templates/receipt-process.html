@@ -203,13 +203,31 @@
           document.body.addEventListener("input", function (e) {
             if (e.target.closest("#receipt-editor")) dirty = true;
           });
+          // The editor is re-queried after a swap (outerHTML replaces the node, so e.target is not
+          // reliable). Save swaps #receipt-editor: clean only with the saved marker. Confirm and
+          // Reopen swap #receipt-pane: clean unless the gate refused (it lists its problems).
           document.body.addEventListener("htmx:afterSwap", function (e) {
-            if (e.target && e.target.id === "receipt-editor") {
-              dirty = !e.target.querySelector("[data-receipt-editor-saved]");
+            var fresh = document.getElementById("receipt-editor");
+            if (!e.target || !fresh) return;
+            if (e.target.id === "receipt-editor") {
+              dirty = !fresh.querySelector("[data-receipt-editor-saved]");
+            } else if (e.target.id === "receipt-pane") {
+              dirty = !!fresh.querySelector("[data-receipt-confirm-problems]");
             }
           });
+          // Confirm saves server-side. A successful one auto-advances via HX-Redirect (a full page
+          // load); that is not discarding anything, so it must not trip the unload warning.
+          document.body.addEventListener("htmx:beforeOnLoad", function (e) {
+            var xhr = e.detail && e.detail.xhr;
+            if (xhr && xhr.getResponseHeader("HX-Redirect")) dirty = false;
+          });
+          // One prompt only: once the operator accepts the app's own confirm, the navigation it
+          // guards must not raise the browser's generic "Leave site?" on top.
           function guard(e) {
-            if (dirty && !window.confirm("Discard your unsaved changes to this receipt?")) {
+            if (!dirty) return;
+            if (window.confirm("Discard your unsaved changes to this receipt?")) {
+              dirty = false;
+            } else {
               e.preventDefault();
             }
           }
