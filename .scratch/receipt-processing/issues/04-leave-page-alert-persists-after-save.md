@@ -1,6 +1,6 @@
 # Browser "leave page?" warning fires after Save, even though the edit was already saved
 
-Status: needs-info
+Status: resolved
 Category: bug
 Severity: medium
 Area: Receipts — post-process editor dirty guard (`receipt-process.html`, plan §9f)
@@ -64,3 +64,22 @@ alone).
 
 Filed 2026-08-07 from an owner note in `docs/potential-feature-ideas.md`. The owner is going to
 retest before this is handed to an agent, so it's deliberately left at `needs-info`.
+
+## 2026-10-11 — owner follow-up, root cause and fix
+
+Two more symptoms of the same guard (`receipt-process.html`, inline dirty-guard script):
+
+1. **Confirm without Save asked "Leave site?".** Confirm already saves server-side
+   (`ReceiptCommitService.confirm` takes the whole form), but `dirty` was only cleared by a Save swap
+   of `#receipt-editor`. Confirm swaps `#receipt-pane` or auto-advances via `HX-Redirect` (a full page
+   load), so `dirty` stayed true and the browser's `beforeunload` prompt fired.
+2. **Two prompts in a row** on Prev/Next/Back with unsaved changes: the app's own
+   `confirm("Discard your unsaved changes…")`, then the browser's generic "Leave site?" because
+   `dirty` was still set when the page unloaded.
+
+Owner decisions: Confirm behaves as Save-then-Confirm with no extra question; only the app's prompt
+stays for in-app navigation, the browser's remains solely for tab close / reload / foreign links.
+
+Fix: accepting the app prompt clears `dirty`; an `HX-Redirect` response clears it; a `#receipt-pane`
+swap (Confirm/Reopen) clears it unless the gate refused (problems list present); the editor is
+re-queried after a swap instead of trusting `e.target`. Covered by `ReceiptDirtyGuardBrowserTest`.
