@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -12,6 +13,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -39,10 +41,17 @@ class ReceiptAnalyserTest {
   @Mock private ReceiptParser receiptParser;
   @Mock private ReceiptPromptBuilder promptBuilder;
   @Mock private ToonReceiptDecoder decoder;
+  @Mock private ToonRepair toonRepair;
   @Mock private ReceiptSeeder seeder;
   @Mock private ReceiptAnalysisService analysisService;
   @Mock private SettingsService settingsService;
   @Mock private AiVocabularyService aiVocabularyService;
+
+  @BeforeEach
+  void repairChangesNothingByDefault() {
+    when(toonRepair.repair(any()))
+        .thenAnswer(call -> new ToonRepair.Result(call.getArgument(0), List.of(), List.of()));
+  }
 
   private ReceiptAnalyser analyser() {
     return new ReceiptAnalyser(
@@ -50,6 +59,7 @@ class ReceiptAnalyserTest {
         receiptParser,
         promptBuilder,
         decoder,
+        toonRepair,
         seeder,
         analysisService,
         settingsService,
@@ -65,6 +75,7 @@ class ReceiptAnalyserTest {
         "orig.jpg",
         "edit.jpg",
         "{}",
+        null,
         null,
         null,
         null,
@@ -118,6 +129,7 @@ class ReceiptAnalyserTest {
         null,
         null,
         rawParse,
+        null,
         null,
         null,
         null,
@@ -267,7 +279,7 @@ class ReceiptAnalyserTest {
     verify(analysisService)
         .applyProcessed(
             eq(ID),
-            eq(new ReceiptParseResult("fixed \"good, toon\"", 10, 5, 0, 0)),
+            eq(new ReceiptParseResult("fixed \"good, toon\"", "bad,toon", 10, 5, 0, 0)),
             eq(new BigDecimal("0.006")),
             eq(seeded));
   }
@@ -374,5 +386,195 @@ class ReceiptAnalyserTest {
     analyser().sweepOrphansOnStartup();
 
     verify(analysisService).sweepOrphans(any());
+  }
+
+  // ── receipt-processing/34: auto-repair and the original response ───────────
+
+  private SeededReceipt stubSeed(ParsedReceipt parsed) {
+    SeededReceipt seeded =
+        new SeededReceipt(
+            new ParsedHeader(null, null, null, null, null, null, null, null, null), List.of());
+    when(seeder.seed(parsed)).thenReturn(seeded);
+    return seeded;
+  }
+
+  @Test
+  void freshResponseThatOnlyDecodesAfterRepairIsStoredRepairedWithTheOriginalKept() {
+    stubUpToParser();
+    when(receiptParser.parse(any(), any()))
+        .thenReturn(new ReceiptParseResult("bad,toon", 10, 5, 0, 0));
+    when(decoder.decode("bad,toon")).thenReturn(Optional.empty());
+    when(toonRepair.repair("bad,toon"))
+        .thenReturn(new ToonRepair.Result("good toon", List.of("quoted"), List.of()));
+    ParsedReceipt parsed = new ParsedReceipt(null, null, List.of());
+    when(decoder.decode("good toon")).thenReturn(Optional.of(parsed));
+    SeededReceipt seeded = stubSeed(parsed);
+
+    analyser().run(ID, false);
+
+    verify(analysisService)
+        .applyProcessed(
+            eq(ID),
+            eq(new ReceiptParseResult("good toon", "bad,toon", 10, 5, 0, 0)),
+            any(BigDecimal.class),
+            eq(seeded));
+    verify(receiptParser, times(1)).parse(any(), any()); // a re-decode, never a second API call
+  }
+
+  @Test
+  void freshResponseThatStaysUndecodableAfterRepairKeepsTheModelsTextAndFails() {
+    stubUpToParser();
+    ReceiptParseResult result = new ReceiptParseResult("bad,toon", 10, 5, 0, 0);
+    when(receiptParser.parse(any(), any())).thenReturn(result);
+    when(decoder.decode(any())).thenReturn(Optional.empty());
+    when(toonRepair.repair("bad,toon"))
+        .thenReturn(new ToonRepair.Result("half fixed", List.of("quoted"), List.of()));
+
+    analyser().run(ID, false);
+
+    verify(analysisService).failUndecodable(eq(ID), any(), eq(result), any(BigDecimal.class));
+    verify(receiptParser, times(1)).parse(any(), any());
+  }
+
+  @Test
+  void cleanFreshResponseIsStoredUntouchedWithoutAnOriginal() {
+    stubUpToParser();
+    ReceiptParseResult result = new ReceiptParseResult("good toon", 10, 5, 0, 0);
+    when(receiptParser.parse(any(), any())).thenReturn(result);
+    ParsedReceipt parsed = new ParsedReceipt(null, null, List.of());
+    when(decoder.decode("good toon")).thenReturn(Optional.of(parsed));
+    stubSeed(parsed);
+
+    analyser().run(ID, false);
+
+    verify(toonRepair, never()).repair(any());
+    verify(analysisService).applyProcessed(eq(ID), eq(result), any(), any());
+  }
+
+  /** The batch poller lands its members through {@code applyParsed}, so it repairs too. */
+  @Test
+  void applyParsedRepairsBatchMemberResponse() {
+    when(decoder.decode("bad,toon")).thenReturn(Optional.empty());
+    when(toonRepair.repair("bad,toon"))
+        .thenReturn(new ToonRepair.Result("good toon", List.of("quoted"), List.of()));
+    ParsedReceipt parsed = new ParsedReceipt(null, null, List.of());
+    when(decoder.decode("good toon")).thenReturn(Optional.of(parsed));
+    SeededReceipt seeded = stubSeed(parsed);
+
+    assertThat(
+            analyser()
+                .applyParsed(
+                    ID, new ReceiptParseResult("bad,toon", 1, 1, 0, 0), BigDecimal.ONE, "reason"))
+        .isTrue();
+
+    verify(analysisService)
+        .applyProcessed(
+            eq(ID),
+            eq(new ReceiptParseResult("good toon", "bad,toon", 1, 1, 0, 0)),
+            eq(BigDecimal.ONE),
+            eq(seeded));
+  }
+
+  @Test
+  void reparseKeepsTheEarliestOriginalAcrossSeveralEdits() {
+    Receipt edited =
+        withOriginal(parsedReceipt(ReceiptState.PROCESSED, "first edit"), "the model said this");
+    when(receiptService.findById(ID)).thenReturn(Optional.of(edited));
+    ParsedReceipt parsed = new ParsedReceipt(null, null, List.of());
+    when(decoder.decode("second edit")).thenReturn(Optional.of(parsed));
+    stubSeed(parsed);
+
+    analyser().reparse(ID, "second edit");
+
+    verify(analysisService)
+        .applyProcessed(
+            eq(ID),
+            eq(new ReceiptParseResult("second edit", "the model said this", 10, 5, 0, 0)),
+            any(),
+            any());
+  }
+
+  @Test
+  void reparseBackToTheOriginalClearsTheEditedMark() {
+    Receipt edited =
+        withOriginal(parsedReceipt(ReceiptState.PROCESSED, "an edit"), "the model said this");
+    when(receiptService.findById(ID)).thenReturn(Optional.of(edited));
+    ParsedReceipt parsed = new ParsedReceipt(null, null, List.of());
+    when(decoder.decode("the model said this")).thenReturn(Optional.of(parsed));
+    stubSeed(parsed);
+
+    analyser().reparse(ID, "the model said this");
+
+    verify(analysisService)
+        .applyProcessed(
+            eq(ID), eq(new ReceiptParseResult("the model said this", 10, 5, 0, 0)), any(), any());
+  }
+
+  /** Browsers post a textarea with CRLF line endings; that alone is not an edit. */
+  @Test
+  void reparseTreatsCrlfLineEndingsFromTheBrowserAsNoEdit() {
+    Receipt edited =
+        withOriginal(parsedReceipt(ReceiptState.PROCESSED, "an edit"), "line one\nline two");
+    when(receiptService.findById(ID)).thenReturn(Optional.of(edited));
+    ParsedReceipt parsed = new ParsedReceipt(null, null, List.of());
+    when(decoder.decode("line one\nline two")).thenReturn(Optional.of(parsed));
+    stubSeed(parsed);
+
+    analyser().reparse(ID, "line one\r\nline two");
+
+    verify(analysisService)
+        .applyProcessed(
+            eq(ID), eq(new ReceiptParseResult("line one\nline two", 10, 5, 0, 0)), any(), any());
+  }
+
+  @Test
+  void reparseThatFailsKeepsTheOriginalToo() {
+    when(receiptService.findById(ID))
+        .thenReturn(Optional.of(parsedReceipt(ReceiptState.FAILED, "bad,toon")));
+    when(decoder.decode("still bad")).thenReturn(Optional.empty());
+
+    analyser().reparse(ID, "still bad");
+
+    verify(analysisService)
+        .failUndecodable(
+            eq(ID), any(), eq(new ReceiptParseResult("still bad", "bad,toon", 10, 5, 0, 0)), any());
+    verify(toonRepair, never()).repair(any()); // the operator's own text is never rewritten
+  }
+
+  private static Receipt withOriginal(Receipt receipt, String original) {
+    return new Receipt(
+        receipt.receiptId(),
+        receipt.state(),
+        receipt.capturedAt(),
+        receipt.source(),
+        receipt.originalPath(),
+        receipt.editedPath(),
+        receipt.editRecipe(),
+        receipt.aiNote(),
+        receipt.batchId(),
+        receipt.warmupBatchId(),
+        receipt.parseRaw(),
+        original,
+        receipt.merchantText(),
+        receipt.receiptDate(),
+        receipt.totalAmount(),
+        receipt.currencyCode(),
+        receipt.accountId(),
+        receipt.transactionId(),
+        receipt.deletedAt(),
+        receipt.parseError(),
+        receipt.tokensIn(),
+        receipt.tokensOut(),
+        receipt.tokensCacheWrite(),
+        receipt.tokensCacheRead(),
+        receipt.parseCost(),
+        receipt.merchantCity(),
+        receipt.merchantCountry(),
+        receipt.receiptTime(),
+        receipt.receiptNumber(),
+        receipt.payeeId(),
+        receipt.note(),
+        receipt.fundingTotal(),
+        receipt.baseTotal());
   }
 }

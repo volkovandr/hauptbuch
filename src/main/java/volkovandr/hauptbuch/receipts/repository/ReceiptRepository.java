@@ -306,7 +306,7 @@ public class ReceiptRepository {
             """
             update receipt set
               state = 'processed', parse_error = null,
-              parse_raw = :parseRaw,
+              parse_raw = :parseRaw, parse_raw_original = :parseRawOriginal,
               tokens_in = :tokensIn, tokens_out = :tokensOut,
               tokens_cache_write = :tokensCacheWrite, tokens_cache_read = :tokensCacheRead,
               parse_cost = :parseCost,
@@ -320,6 +320,7 @@ public class ReceiptRepository {
             """)
         .param("id", receiptId)
         .param("parseRaw", usage.rawToon())
+        .param("parseRawOriginal", usage.originalToon())
         .param("tokensIn", usage.tokensIn())
         .param("tokensOut", usage.tokensOut())
         .param("tokensCacheWrite", usage.tokensCacheWrite())
@@ -367,7 +368,7 @@ public class ReceiptRepository {
             """
             update receipt set
               state = 'failed', parse_error = :parseError,
-              parse_raw = :parseRaw,
+              parse_raw = :parseRaw, parse_raw_original = :parseRawOriginal,
               tokens_in = :tokensIn, tokens_out = :tokensOut,
               tokens_cache_write = :tokensCacheWrite, tokens_cache_read = :tokensCacheRead,
               parse_cost = :parseCost
@@ -376,6 +377,7 @@ public class ReceiptRepository {
         .param("id", receiptId)
         .param(PARSE_ERROR, parseError)
         .param("parseRaw", usage.rawToon())
+        .param("parseRawOriginal", usage.originalToon())
         .param("tokensIn", usage.tokensIn())
         .param("tokensOut", usage.tokensOut())
         .param("tokensCacheWrite", usage.tokensCacheWrite())

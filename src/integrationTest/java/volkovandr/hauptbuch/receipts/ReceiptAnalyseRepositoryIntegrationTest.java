@@ -112,6 +112,32 @@ class ReceiptAnalyseRepositoryIntegrationTest {
     assertThat(r.parseRaw()).isEqualTo("the booked body");
   }
 
+  /** Issue 34: the model's own text survives next to the edited body, and clears again. */
+  @Test
+  void resultWritesStoreAndClearTheOriginalResponse() {
+    long id = preProcessed();
+    receiptRepository.markProcessing(id);
+    ParsedHeader header = new ParsedHeader(null, null, null, null, null, null, null, null, null);
+
+    receiptRepository.applyProcessed(
+        id, new ReceiptParseResult("fixed body", "model body", 1, 1, 0, 0), BigDecimal.ONE, header);
+    Receipt edited = receiptRepository.findById(id).orElseThrow();
+    assertThat(edited.parseRaw()).isEqualTo("fixed body");
+    assertThat(edited.parseRawOriginal()).isEqualTo("model body");
+    assertThat(edited.parseEdited()).isTrue();
+
+    receiptRepository.failUndecodable(
+        id, "bad", new ReceiptParseResult("still bad", "model body", 1, 1, 0, 0), BigDecimal.ONE);
+    assertThat(receiptRepository.findById(id).orElseThrow().parseRawOriginal())
+        .isEqualTo("model body");
+
+    receiptRepository.applyProcessed(
+        id, new ReceiptParseResult("model body", 1, 1, 0, 0), BigDecimal.ONE, header);
+    Receipt reverted = receiptRepository.findById(id).orElseThrow();
+    assertThat(reverted.parseRawOriginal()).isNull();
+    assertThat(reverted.parseEdited()).isFalse();
+  }
+
   /** A receipt already booked: past every result write, with the response that produced it. */
   private long committed() {
     long id = preProcessed();

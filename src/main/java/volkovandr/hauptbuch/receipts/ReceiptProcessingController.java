@@ -238,20 +238,60 @@ class ReceiptProcessingController {
         .map(
             receipt -> {
               ToonRepair.Result result = toonRepair.repair(rawText);
-              model.addAttribute(RECEIPT, receipt);
-              model.addAttribute(STATE_FILTER, state);
-              model.addAttribute(RANGE_FILTER, range);
-              model.addAttribute("toonText", result.text());
-              model.addAttribute("toonChanges", result.changes());
-              model.addAttribute("toonWarnings", result.warnings());
-              model.addAttribute("toonFixed", true);
-              return VIEW
-                  + " :: toonEditor(receipt=${receipt}, text=${toonText},"
-                  + " submitLabel=${receipt.state() == 'failed' ? 'Parse my edited text'"
-                  + " : 'Re-seed from this text'}, fixed=${toonFixed},"
-                  + " changes=${toonChanges}, warnings=${toonWarnings})";
+              return toonEditor(
+                  model, receipt, state, range, result.text(), result.changes(), result.warnings());
             })
         .orElse(REDIRECT_REGISTER);
+  }
+
+  /**
+   * The "Reset to the original" button (issue 34): swap the editor fragment back with what the
+   * model actually said. Read-only like {@link #fixToon} — the operator may only be looking, so
+   * nothing is saved until they press the submit beside it. A receipt never edited has no separate
+   * original; its current text is the model's.
+   */
+  @PostMapping("/receipts/{id}/reset-toon")
+  String resetToon(
+      @PathVariable long id,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
+      @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
+      Model model) {
+    return receiptService
+        .findById(id)
+        .map(
+            receipt ->
+                toonEditor(
+                    model,
+                    receipt,
+                    state,
+                    range,
+                    receipt.parseEdited() ? receipt.parseRawOriginal() : receipt.parseRaw(),
+                    List.of("Loaded the original AI response."),
+                    List.of()))
+        .orElse(REDIRECT_REGISTER);
+  }
+
+  /** The editor fragment, with the notes block shown ({@code fixed}) under the textarea. */
+  private static String toonEditor(
+      Model model,
+      Receipt receipt,
+      String state,
+      String range,
+      String text,
+      List<String> changes,
+      List<String> warnings) {
+    model.addAttribute(RECEIPT, receipt);
+    model.addAttribute(STATE_FILTER, state);
+    model.addAttribute(RANGE_FILTER, range);
+    model.addAttribute("toonText", text);
+    model.addAttribute("toonChanges", changes);
+    model.addAttribute("toonWarnings", warnings);
+    model.addAttribute("toonFixed", true);
+    return VIEW
+        + " :: toonEditor(receipt=${receipt}, text=${toonText},"
+        + " submitLabel=${receipt.state() == 'failed' ? 'Parse my edited text'"
+        + " : 'Save the text and re-seed'}, fixed=${toonFixed},"
+        + " changes=${toonChanges}, warnings=${toonWarnings})";
   }
 
   /**

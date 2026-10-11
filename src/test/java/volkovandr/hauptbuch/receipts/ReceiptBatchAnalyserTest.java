@@ -120,6 +120,7 @@ class ReceiptBatchAnalyserTest {
         null,
         null,
         null,
+        null,
         null);
   }
 

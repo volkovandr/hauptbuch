@@ -297,7 +297,7 @@ class ReceiptAnalyseScreenIntegrationTest {
                 .param("rawText", "items[1]{name,quantity}:\n  Item One,2"))
         .andExpect(status().isOk())
         .andExpect(content().string(Matchers.containsString("Nothing to fix")))
-        .andExpect(content().string(Matchers.containsString("Re-seed from this text")));
+        .andExpect(content().string(Matchers.containsString("Save the text and re-seed")));
   }
 
   @Test
@@ -311,6 +311,57 @@ class ReceiptAnalyseScreenIntegrationTest {
           .andExpect(content().string(Matchers.containsString("Fix TOON automatically")))
           .andExpect(content().string(Matchers.containsString("/receipts/" + id + "/fix-toon")));
     }
+  }
+
+  /** Issue 34: reset loads the model's own text into the editor and saves nothing. */
+  @Test
+  void resetToonRendersTheOriginalResponseAndPersistsNothing() throws Exception {
+    long id = seed("processed");
+    storeRaw(id, "edited text");
+    storeOriginal(id, "what the model said");
+
+    mockMvc
+        .perform(post("/receipts/" + id + "/reset-toon"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(Matchers.containsString("what the model said")))
+        .andExpect(content().string(Matchers.containsString("Loaded the original AI response")))
+        .andExpect(content().string(Matchers.containsString("Save the text and re-seed")));
+
+    org.assertj.core.api.Assertions.assertThat(
+            jdbcClient
+                .sql("select parse_raw from receipt where receipt_id = :id")
+                .param("id", id)
+                .query(String.class)
+                .single())
+        .isEqualTo("edited text");
+  }
+
+  @Test
+  void editedResponseOffersResetAndNotesItOnTheTelemetryLine() throws Exception {
+    long edited = seed("processed");
+    storeRaw(edited, "edited text");
+    storeOriginal(edited, "what the model said");
+    long untouched = seed("processed");
+    storeRaw(untouched, "model text");
+
+    mockMvc
+        .perform(get("/receipts/" + edited))
+        .andExpect(content().string(Matchers.containsString("Reset to the original")))
+        .andExpect(content().string(Matchers.containsString("/receipts/" + edited + "/reset-toon")))
+        .andExpect(content().string(Matchers.containsString("AI response was edited")));
+    mockMvc
+        .perform(get("/receipts/" + untouched))
+        .andExpect(content().string(Matchers.not(Matchers.containsString("Reset to the original"))))
+        .andExpect(
+            content().string(Matchers.not(Matchers.containsString("AI response was edited"))));
+  }
+
+  private void storeOriginal(long receiptId, String original) {
+    jdbcClient
+        .sql("update receipt set parse_raw_original = :original where receipt_id = :id")
+        .param("original", original)
+        .param("id", receiptId)
+        .update();
   }
 
   private void storeRaw(long receiptId, String raw) {
