@@ -8,7 +8,6 @@
 `data-model.md` (§3.6 the posting's `reconciliation`, §8 invariants, §15 the statement schema),
 `ui-transaction-register.md` (§3, the dock this feature embeds),
 `ui-receipt-processing.md` (the AI-parse conventions reused here),
-`implementation-plan-statements.md` (the slices),
 `docs/adr/0003-postings-edited-in-place.md`
 
 > This document records the **design of bank statement reconciliation** — getting a bank's
