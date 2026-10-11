@@ -1,6 +1,6 @@
 # Repair a malformed TOON response automatically, and let the operator reset to the original
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: medium
 Area: Receipts — `ReceiptAnalyser` (parse path), `ToonRepair`, `receipt-process.html`,
@@ -87,3 +87,18 @@ written **once**, the first time the text is changed — by the auto-repair, or 
 ## Comments
 
 Filed 2026-10-11 from the owner's discussion; moved here from `potential-feature-ideas.md`.
+
+### Implementation note (2026-10-11, owner-confirmed)
+
+Branch `docs/auto-toon-repair-issue`. Migration `V36` adds `receipt.parse_raw_original` (and column
+comments); `ReceiptParseResult.edited(body)` owns the copy-on-first-edit / clear-when-equal rule;
+`ReceiptAnalyser.applyParsed` auto-repairs fresh responses (worker + batch), `reparse` does not;
+`POST /receipts/{id}/reset-toon` is the read-only reset; the re-seed button is "Save the text and
+re-seed"; the "AI response was edited" note sits on the telemetry line of the processed pane. The
+failed view has no telemetry line, so there only the Reset button signals an edited response.
+`./gradlew check` green.
+
+Owner-tested: reset to the original, the edited note, the renamed button. The auto-repair on a
+failed decode is covered by unit tests only (the owner had no failing response to try it on). A
+browser posts a textarea with CRLF line endings, so `reparse` normalises them to LF before deciding
+whether the text was edited.

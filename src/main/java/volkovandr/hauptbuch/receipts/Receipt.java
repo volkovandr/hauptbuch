@@ -30,7 +30,11 @@ import java.time.OffsetDateTime;
  *     v3); null outside that window. Non-null means claimed and processing but not yet a member of
  *     any batch — {@code batchId} stays null until the named batch ends and this receipt is
  *     submitted for real
- * @param parseRaw raw AI response retained for audit (9e); null until analysed
+ * @param parseRaw current raw response text (9e): the AI body, or its repaired/edited form; null
+ *     until analysed
+ * @param parseRawOriginal the AI's verbatim body when {@code parseRaw} was changed from it (auto
+ *     repair or an operator edit, receipt-processing/34); null while {@code parseRaw} is untouched,
+ *     which is also what "edited" means
  * @param merchantText parsed merchant (9e); null until processed
  * @param receiptDate parsed receipt date (9e); null until processed
  * @param totalAmount parsed total (9e); null until processed
@@ -71,6 +75,7 @@ public record Receipt(
     String batchId,
     String warmupBatchId,
     String parseRaw,
+    String parseRawOriginal,
     String merchantText,
     LocalDate receiptDate,
     BigDecimal totalAmount,
@@ -92,6 +97,11 @@ public record Receipt(
     String note,
     BigDecimal fundingTotal,
     BigDecimal baseTotal) {
+
+  /** Whether {@link #parseRaw} differs from what the model said (receipt-processing/34). */
+  public boolean parseEdited() {
+    return parseRawOriginal != null;
+  }
 
   /** The image path actually shown: the edited derivative when present, else the raw original. */
   public String displayPath() {

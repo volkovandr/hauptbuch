@@ -428,7 +428,7 @@
         <span class="num" th:text="${receipt.tokensCacheRead()} ?: 0">0</span> cache read</span
       > tokens<span
         th:if="${receipt.parseCost() != null}"> · $<span class="num" th:text="${receipt.parseCost()}">0.006</span></span
-      >.
+      >.<span th:if="${receipt.parseEdited()}"> AI response was edited.</span>
     </p>
 
     <!-- Re-seed (issue tracker #19): the same <details>/textarea/re-parse block the failed view has,
@@ -455,14 +455,15 @@
         so you can fix it there.
       </p>
       <th:block
-        th:replace="~{:: toonEditor(${receipt}, ${receipt.parseRaw()}, 'Re-seed from this text', false, ${null}, ${null})}"
+        th:replace="~{:: toonEditor(${receipt}, ${receipt.parseRaw()}, 'Save the text and re-seed', false, ${null}, ${null})}"
       ></th:block>
     </details>
   </div>
 
-  <!-- ── The AI-response editor (issue 33): the textarea + its two buttons. "Fix TOON automatically"
+  <!-- ── The AI-response editor (issues 33, 34): the textarea + its buttons. "Fix TOON automatically"
        posts the textarea as it stands and swaps this whole block back with the repaired text and the
-       change list; it saves nothing. Only the submit persists (reparse). ── -->
+       change list; "Reset to the original" (only once the text was edited) swaps in what the model
+       actually said. Neither saves anything. Only the submit persists (reparse). ── -->
   <div th:fragment="toonEditor(receipt, text, submitLabel, fixed, changes, warnings)" class="toon-editor">
     <form method="post" th:action="@{/receipts/{id}/reparse(id=${receipt.receiptId()})}">
       <input type="hidden" name="state" th:value="${stateFilter}" />
@@ -478,9 +479,6 @@
         <ul th:if="${!#lists.isEmpty(warnings)}" class="warning">
           <li th:each="warning : ${warnings}" th:text="${warning}">row 2: has fewer fields</li>
         </ul>
-        <p th:if="${!#lists.isEmpty(changes)}" class="muted">
-          Not saved yet — review the text, then use the button on the right.
-        </p>
       </div>
       <p class="actions">
         <button
@@ -493,6 +491,16 @@
           Fix TOON automatically
         </button>
         <button type="submit" class="btn" th:text="${submitLabel}">Parse my edited text</button>
+        <button
+          type="button"
+          class="btn"
+          th:if="${receipt.parseEdited()}"
+          hx-target="closest .toon-editor"
+          hx-swap="outerHTML"
+          th:attr="hx-post=@{/receipts/{id}/reset-toon(id=${receipt.receiptId()})}"
+        >
+          Reset to the original
+        </button>
       </p>
     </form>
   </div>

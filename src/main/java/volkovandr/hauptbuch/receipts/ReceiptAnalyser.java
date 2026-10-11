@@ -56,6 +56,7 @@ public class ReceiptAnalyser {
   private final ReceiptParser receiptParser;
   private final ReceiptPromptBuilder promptBuilder;
   private final ToonReceiptDecoder decoder;
+  private final ToonRepair toonRepair;
   private final ReceiptSeeder seeder;
   private final ReceiptAnalysisService analysisService;
   private final SettingsService settingsService;
@@ -66,6 +67,7 @@ public class ReceiptAnalyser {
       ReceiptParser receiptParser,
       ReceiptPromptBuilder promptBuilder,
       ToonReceiptDecoder decoder,
+      ToonRepair toonRepair,
       ReceiptSeeder seeder,
       ReceiptAnalysisService analysisService,
       SettingsService settingsService,
@@ -74,6 +76,7 @@ public class ReceiptAnalyser {
     this.receiptParser = receiptParser;
     this.promptBuilder = promptBuilder;
     this.decoder = decoder;
+    this.toonRepair = toonRepair;
     this.seeder = seeder;
     this.analysisService = analysisService;
     this.settingsService = settingsService;
@@ -153,15 +156,24 @@ public class ReceiptAnalyser {
       return false;
     }
     Receipt receipt = found.get();
+    // A browser posts a textarea with CRLF line endings; the stored text uses LF, and the
+    // difference alone must not count as an edit (receipt-processing/34).
+    String body = editedRaw.replace("\r\n", "\n");
     ReceiptParseResult result =
         new ReceiptParseResult(
-            editedRaw,
-            orZero(receipt.tokensIn()),
-            orZero(receipt.tokensOut()),
-            orZero(receipt.tokensCacheWrite()),
-            orZero(receipt.tokensCacheRead()));
-    return applyParsedAndLog(
-        receiptId, result, receipt.parseCost(), "Could not decode the edited response");
+                receipt.parseRaw(),
+                receipt.parseRawOriginal(),
+                orZero(receipt.tokensIn()),
+                orZero(receipt.tokensOut()),
+                orZero(receipt.tokensCacheWrite()),
+                orZero(receipt.tokensCacheRead()))
+            .edited(body);
+    return landAndLog(
+        receiptId,
+        result,
+        decoder.decode(body),
+        receipt.parseCost(),
+        "Could not decode the edited response");
   }
 
   /**
@@ -180,16 +192,43 @@ public class ReceiptAnalyser {
   }
 
   /**
-   * Decode a returned body and land the receipt: seeded and {@code processed} when it decodes,
-   * {@code failed} with the raw body kept when it does not. The single-mode worker, the operator's
-   * re-parse, and the 9h batch poller all finish here, so "lenient seeding" means one thing in the
-   * app rather than three.
+   * Decode a <em>fresh</em> AI response and land the receipt: seeded and {@code processed} when it
+   * decodes, {@code failed} with the raw body kept when it does not. A body that does not decode is
+   * first run through {@link ToonRepair} and decoded again — a pure re-decode, never a second API
+   * call (receipt-processing/34); if that works the repaired text is stored (the model's own text
+   * kept as the original), if not the receipt fails with the model's text untouched. The
+   * single-mode worker and the 9h batch poller finish here, so "lenient seeding" means one thing in
+   * the app rather than two.
    *
    * @return true if the body decoded and the receipt is now {@code processed}
    */
   boolean applyParsed(
       long receiptId, ReceiptParseResult result, BigDecimal cost, String undecodableReason) {
     Optional<ParsedReceipt> decoded = decoder.decode(result.rawToon());
+    if (decoded.isPresent()) {
+      return land(receiptId, result, decoded, cost, undecodableReason);
+    }
+    String repaired = toonRepair.repair(result.rawToon()).text();
+    Optional<ParsedReceipt> redecoded =
+        repaired.equals(result.rawToon()) ? Optional.empty() : decoder.decode(repaired);
+    if (redecoded.isPresent()) {
+      LOG.info("Receipt {} response auto-repaired and decoded", receiptId);
+    }
+    return redecoded.isPresent()
+        ? land(receiptId, result.edited(repaired), redecoded, cost, undecodableReason)
+        : land(receiptId, result, decoded, cost, undecodableReason);
+  }
+
+  /**
+   * Land an already-decoded (or not) body: seed + {@code processed}, or {@code failed} keeping the
+   * body. Shared by the fresh-response path and the operator's re-seed.
+   */
+  private boolean land(
+      long receiptId,
+      ReceiptParseResult result,
+      Optional<ParsedReceipt> decoded,
+      BigDecimal cost,
+      String undecodableReason) {
     if (decoded.isEmpty()) {
       analysisService.failUndecodable(receiptId, undecodableReason, result, cost);
       return false;
@@ -218,17 +257,25 @@ public class ReceiptAnalyser {
             result.tokensCacheWrite(),
             result.tokensCacheRead());
 
-    applyParsedAndLog(receipt.receiptId(), result, cost, "Could not decode the parser response");
+    boolean processed =
+        applyParsed(receipt.receiptId(), result, cost, "Could not decode the parser response");
+    logProcessed(receipt.receiptId(), processed, result, cost);
   }
 
-  /**
-   * {@link #applyParsed} plus the "processing finished" INFO line on success — the shape both
-   * single-item callers need (run's fresh parse and reparse's re-seed), never the batch poller's
-   * per-member call into {@link #applyParsed} directly.
-   */
-  private boolean applyParsedAndLog(
-      long receiptId, ReceiptParseResult result, BigDecimal cost, String undecodableReason) {
-    boolean processed = applyParsed(receiptId, result, cost, undecodableReason);
+  /** {@link #land} plus the "processing finished" INFO line, for the operator's re-seed. */
+  private boolean landAndLog(
+      long receiptId,
+      ReceiptParseResult result,
+      Optional<ParsedReceipt> decoded,
+      BigDecimal cost,
+      String undecodableReason) {
+    boolean processed = land(receiptId, result, decoded, cost, undecodableReason);
+    logProcessed(receiptId, processed, result, cost);
+    return processed;
+  }
+
+  private static void logProcessed(
+      long receiptId, boolean processed, ReceiptParseResult result, BigDecimal cost) {
     if (processed) {
       LOG.info(
           "Receipt {} processed: tokensIn={} tokensOut={} tokensCacheWrite={} tokensCacheRead={} "
@@ -240,7 +287,6 @@ public class ReceiptAnalyser {
           result.tokensCacheRead(),
           cost);
     }
-    return processed;
   }
 
   /** On boot, fail orphaned single-mode {@code processing} rows (data-model §13.1). */
