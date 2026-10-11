@@ -381,6 +381,34 @@ class StatementScreenIntegrationTest {
   }
 
   @Test
+  void theStatementPageShowsTheBalanceChecksAndTheListMarksNothingGreenYet() throws Exception {
+    long statementId = uploadAndCreate(saveProfile());
+    mockMvc
+        .perform(
+            post("/statements/" + statementId + "/header")
+                .param("periodStart", "2026-05-01")
+                .param("periodEnd", "2026-05-31")
+                .param("openingBalance", "100,00")
+                .param("closingBalance", "1.321,06"))
+        .andExpect(status().is3xxRedirection());
+
+    mockMvc
+        .perform(get("/statements/" + statementId))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("statement-balances")))
+        .andExpect(content().string(containsString("Opening")))
+        .andExpect(content().string(containsString("Closing")))
+        .andExpect(content().string(containsString("1.321,06")))
+        .andExpect(content().string(containsString("class=\"num warning\"")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(containsString("statement-green"))));
+    mockMvc
+        .perform(get("/statements"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString(">Match</th>")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(containsString("✓"))));
+  }
+
+  @Test
   void theNavigationShowsStatements() throws Exception {
     mockMvc
         .perform(get("/statements"))

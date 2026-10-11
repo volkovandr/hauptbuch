@@ -78,6 +78,9 @@ class StatementPageAssembler {
         statementService.lines(id).stream().map(StatementController.LineView::of).toList());
     StatementReview review = reviewService.review(id);
     model.addAttribute("review", review);
+    StatementBalances balances = reviewService.balances(id, review);
+    model.addAttribute("balanceViews", StatementReviewViews.BalanceView.of(balances));
+    model.addAttribute("green", StatementReviewService.green(review, balances));
     List<StatementReviewViews.ReviewLineView> reviewLines =
         review.lines().stream().map(StatementReviewViews.ReviewLineView::of).toList();
     model.addAttribute("reviewLines", reviewLines);

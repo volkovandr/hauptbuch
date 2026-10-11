@@ -209,3 +209,17 @@ table.statements a.btn {
   top: 0;
   margin: 0 0 0 0.4rem;
 }
+
+.statement-heading {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.statement-heading .statement-title {
+  margin: 0;
+}
+
+.statements__match {
+  text-align: center;
+}

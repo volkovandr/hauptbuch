@@ -237,9 +237,10 @@ on the receipt processing screen. Clicking any row loads the dock; nothing navig
 The ledger's dates are purchase dates, so its balance on 31 May legitimately differs from the bank's
 closing balance by every purchase made in May and booked in June. A plain comparison would almost
 never agree. Each check therefore shows four figures: the **bank's** balance, the **ledger's** balance
-for the account at that date, the **explained** part of the difference — postings matched to this
-statement but dated outside its period, and boundary extras (§6.3) — and the **unexplained**
-remainder. Only the unexplained remainder counts. A CSV statement without balances shows no checks.
+for the account at that date, the **explained** part of the difference — reconciled postings whose
+ledger date and matched statement fall on opposite sides of that date (matched here but dated outside
+the period, or matched on a neighbouring statement), and boundary extras (§6.3) — and the
+**unexplained** remainder. Only the unexplained remainder counts. A CSV statement without balances shows no checks.
 
 ### 6.3 Lines and extras
 

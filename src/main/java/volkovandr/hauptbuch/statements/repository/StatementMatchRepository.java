@@ -1,9 +1,12 @@
 package volkovandr.hauptbuch.statements.repository;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import volkovandr.hauptbuch.statements.NeighbourMatch;
 import volkovandr.hauptbuch.statements.StatementCandidate;
 import volkovandr.hauptbuch.statements.StatementExtra;
 import volkovandr.hauptbuch.statements.StatementMatch;
@@ -156,6 +159,52 @@ public class StatementMatchRepository {
         .param(STATEMENT_ID, statementId)
         .query(StatementExtra.class)
         .list();
+  }
+
+  /**
+   * The matches of the statement's account on its other live statements that have a period, with
+   * the matched leg's date and amount (statements.md §6.2).
+   */
+  public List<NeighbourMatch> findNeighbourMatches(long statementId) {
+    return jdbcClient
+        .sql(
+            """
+            select t.date as transaction_date, p.amount, other.period_end
+            from statement s
+            join statement other on other.account_id = s.account_id
+                                and other.statement_id <> s.statement_id
+            join statement_match m on m.statement_id = other.statement_id
+            join posting p on p.posting_id = m.posting_id
+            join transaction t on t.transaction_id = p.transaction_id
+            where s.statement_id = :statementId
+              and other.deleted_at is null
+              and other.period_end is not null
+              and t.deleted_at is null
+            """)
+        .param(STATEMENT_ID, statementId)
+        .query(NeighbourMatch.class)
+        .list();
+  }
+
+  /**
+   * The account's ledger balance through a date: the sum of its legs in live transactions dated on
+   * or before it (statements.md §6.2), zero when there are none.
+   */
+  public BigDecimal ledgerBalance(long accountId, LocalDate through) {
+    return jdbcClient
+        .sql(
+            """
+            select coalesce(sum(p.amount), 0)
+            from posting p
+            join transaction t on t.transaction_id = p.transaction_id
+            where p.account_id = :accountId
+              and t.deleted_at is null
+              and t.date <= :through
+            """)
+        .param("accountId", accountId)
+        .param("through", through)
+        .query(BigDecimal.class)
+        .single();
   }
 
   /** Record the confirmed match of one line to one posting. */
