@@ -111,6 +111,6 @@
 
 ## f — Balance checks
 
-- **f — Opening and closing.** Bank / ledger / explained / unexplained for both ends (statements.md
+- ✅ **f — Opening and closing.** Bank / ledger / explained / unexplained for both ends (statements.md
   §6.2); green per §6.5 shown on the page and in the list. *Done when:* a fully reconciled PDF month
   reads green, and a month with a boundary purchase explains its difference.
