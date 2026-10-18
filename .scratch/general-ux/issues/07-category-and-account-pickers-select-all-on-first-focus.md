@@ -1,4 +1,4 @@
-# Category pickers select their whole value on first focus, like amount fields
+# Category and account pickers select their whole value on first focus, like amount fields
 
 Status: open
 Type: improvement
@@ -12,17 +12,18 @@ press `Home`, `Shift+End` first, or triple-click.
 
 ## Root cause
 The "select all on first focus" behaviour in `keyboard.js` (`onMouseDownSelect` /
-`onFocusInSelect` / `onMouseUpSelect`) only applies to `.num` inputs (`isNumField`). Category
-inputs are not `.num`, so they get the browser's default caret placement.
+`onFocusInSelect` / `onMouseUpSelect`) only applies to `.num` inputs (`isNumField`). Category and
+account inputs are not `.num`, so they get the browser's default caret placement.
 
 ## Accepted solution (owner's decision)
-Category pickers behave **exactly like amount fields do now**:
+Category pickers and account pickers (the typed `<input list=…>` kind) behave **exactly like
+amount fields do now**:
 - When focus first lands on the field (a single click or Tab), its whole value is selected, so
   typing replaces it.
 - A further click in a field that already has focus places the caret as usual.
 - An empty field (placeholder only) is unchanged.
 
-This applies **everywhere a category picker appears**:
+This applies **everywhere a category or account picker appears**:
 
 | Screen | Field | Template |
 |--------|-------|----------|
@@ -31,19 +32,20 @@ This applies **everywhere a category picker appears**:
 | Receipt processing lines | line category | `fragments/line-editor.html` via `receipt-process.html` |
 | Recurring template editor lines | line category | `fragments/line-editor.html` via `split-panel.html` / `recurring-editor.html` |
 | Statement match dock | category | `fragments/statement-dock.html` |
+| Register entry dock (simple entry) | `#entry-account` | `fragments/entry-dock.html` |
+| Register / recurring split panel header | `#split-account` | `fragments/split-panel.html` |
 
 The import review "New category (Parent - Child)" fields (`import-review.html`) are out of scope:
-they are for typing a new path and usually start empty.
+they are for typing a new path and usually start empty. **Payee and tag pickers are out of scope**
+(owner's decision). The receipt screen's account field is a `<select>` today; turning it into a
+typed picker is a separate issue (`receipt-processing/issues/35-*`), and once it is one it gets
+this behaviour too.
 
 ## Implementation notes
 - Stays inside the existing `keyboard.js` leaf (CLAUDE.md §1.6). Reuse the existing three
   handlers; widen what they match rather than adding a second mechanism. A markup marker on the
   input (instead of growing a list of ids/classes in JS) keeps it markup-driven.
 - Browser test (`browserTest`): extend the existing select-on-focus check in
-  `RegisterKeyboardBrowserTest` (amount field, ~line 144) with a category field: first click
+  `RegisterKeyboardBrowserTest` (amount field, ~line 144) with a category field and an account field: first click
   selects all, second click collapses the selection. One case per host (receipt, statement,
   recurring) only if the field markup differs there.
-
-## Open question
-Payee, account and tag pickers are also datalist inputs with the same caret behaviour. Not part of
-this issue unless the owner says so.
