@@ -1,6 +1,6 @@
 # Category and account pickers select their whole value on first focus, like amount fields
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: minor
 Area: General UX — category and account pickers (`keyboard.js` select-on-focus)
