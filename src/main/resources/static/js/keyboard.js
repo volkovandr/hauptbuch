@@ -587,11 +587,11 @@
 
   // ── Select-all on first focus of a numeric field or picker (register UX) ─────
   // When focus first lands on a `.num` field or a `data-select-on-focus` picker (category / account)
-  // that holds a value — via Tab or a click — select its
-  // whole contents so typing replaces it (the common case). A further click in an already-focused
-  // field positions the caret normally. Empty (placeholder) fields select nothing, so their
-  // behaviour is unchanged. `pendingSelect` defers the mouse path to mouseup, because the browser's
-  // own caret placement on mouseup would otherwise clear a selection made on focus.
+  // that holds a value — via Tab or a click — select its whole contents so typing replaces it (the
+  // common case). A further click in an already-focused field positions the caret normally. Empty
+  // (placeholder) fields select nothing, so their behaviour is unchanged. `pendingSelect` defers
+  // the mouse path to mouseup, because the browser's own caret placement on mouseup would
+  // otherwise clear a selection made on focus.
   let pendingSelect = null;
 
   function isSelectOnFocusField(el) {
