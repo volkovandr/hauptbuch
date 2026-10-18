@@ -1,7 +1,9 @@
 # Category and account pickers select their whole value on first focus, like amount fields
 
-Status: open
-Type: improvement
+Status: ready-for-agent
+Category: enhancement
+Severity: minor
+Area: General UX — category and account pickers (`keyboard.js` select-on-focus)
 
 ## Symptom
 A category picker is a text `<input list=…>` with a datalist. In practice it is used as a
@@ -49,3 +51,7 @@ this behaviour too.
   `RegisterKeyboardBrowserTest` (amount field, ~line 144) with a category field and an account field: first click
   selects all, second click collapses the selection. One case per host (receipt, statement,
   recurring) only if the field markup differs there.
+
+## Comments
+
+Triaged 2026-10-18: enhancement, ready-for-agent. Scope settled by the owner (categories and accounts yes; payees and tags no).

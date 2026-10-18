@@ -1,7 +1,8 @@
 # The receipt screen's Account picker should be a typed picker, like the register's
 
-Status: open
-Type: improvement
+Status: ready-for-agent
+Category: enhancement
+Severity: minor
 Area: Receipts — processing screen, paying-account field (`receipt-process.html` `#receipt-account`)
 
 ## Symptom
@@ -36,3 +37,7 @@ Once this is a typed picker it also gets the select-all-on-first-focus behaviour
 - Reuse the register's account input pattern and the existing account-text resolution; do not
   build a second resolver. The form currently posts `accountId`; the change from id to text (or a
   resolved hidden id) touches the receipt editor's form binding and its MockMvc tests.
+
+## Comments
+
+Triaged 2026-10-18: enhancement, ready-for-agent. Do it together with or after `general-ux/issues/07-*`, so the new field gets select-all-on-first-focus right away.
