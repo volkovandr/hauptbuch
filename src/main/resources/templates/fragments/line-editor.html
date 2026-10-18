@@ -64,6 +64,7 @@
           class="input"
           autocomplete="off"
           placeholder="Category"
+          data-select-on-focus
           th:value="${line.categoryText()}"
           hx-post="/categories/resolve"
           hx-swap="innerHTML"

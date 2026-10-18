@@ -585,26 +585,31 @@
     else form.submit();
   }
 
-  // ── Select-all on first focus of a numeric field (register UX) ───────────────
-  // When focus first lands on a `.num` field that holds a value — via Tab or a click — select its
+  // ── Select-all on first focus of a numeric field or picker (register UX) ─────
+  // When focus first lands on a `.num` field or a `data-select-on-focus` picker (category / account)
+  // that holds a value — via Tab or a click — select its
   // whole contents so typing replaces it (the common case). A further click in an already-focused
   // field positions the caret normally. Empty (placeholder) fields select nothing, so their
   // behaviour is unchanged. `pendingSelect` defers the mouse path to mouseup, because the browser's
   // own caret placement on mouseup would otherwise clear a selection made on focus.
   let pendingSelect = null;
 
-  function isNumField(el) {
-    return Boolean(el) && el.tagName === "INPUT" && el.classList.contains("num");
+  function isSelectOnFocusField(el) {
+    return (
+      Boolean(el) &&
+      el.tagName === "INPUT" &&
+      (el.classList.contains("num") || el.hasAttribute("data-select-on-focus"))
+    );
   }
 
   function onMouseDownSelect(event) {
     const el = event.target;
-    pendingSelect = isNumField(el) && document.activeElement !== el ? el : null;
+    pendingSelect = isSelectOnFocusField(el) && document.activeElement !== el ? el : null;
   }
 
   function onFocusInSelect(event) {
     const el = event.target;
-    if (!isNumField(el)) return;
+    if (!isSelectOnFocusField(el)) return;
     // Keyboard focus (Tab) has no mousedown on this field — select now. The mouse path selects on
     // mouseup instead so the selection is not dropped by caret placement.
     if (pendingSelect !== el) el.select();

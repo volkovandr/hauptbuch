@@ -150,6 +150,24 @@ class RegisterKeyboardBrowserTest extends BrowserTest {
   }
 
   @Test
+  void categoryAndAccountPickersSelectTheirWholeValueOnFirstClickOnly() {
+    openRegister();
+    for (String id : List.of("#entry-account", "#entry-category")) {
+      Locator picker = page.locator(id);
+      picker.fill("Cash");
+      page.locator("#entry-note").click();
+
+      picker.click();
+      assertThat(
+              picker.evaluate("f => f.selectionStart === 0 && f.selectionEnd === f.value.length"))
+          .isEqualTo(true);
+
+      picker.click();
+      assertThat(picker.evaluate("f => f.selectionStart === f.selectionEnd")).isEqualTo(true);
+    }
+  }
+
+  @Test
   void splitShortcutOpensThePanelThatReadsTheRemainingAsTheOperatorTypes() {
     openRegister();
     fillDock("20");
