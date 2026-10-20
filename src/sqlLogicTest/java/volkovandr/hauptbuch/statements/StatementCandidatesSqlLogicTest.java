@@ -469,7 +469,7 @@ class StatementCandidatesSqlLogicTest {
 
   @Test
   void lineScopedCandidatesAreExactlyThatLinesRowsOfTheFullQuery() {
-    long second = line(statementId, 1, BOOKING.plusDays(1), "-7.00", "SHOPBBB", null);
+    final long second = line(statementId, 1, BOOKING.plusDays(1), "-7.00", "SHOPBBB", null);
     expense(BOOKING.minusDays(1), own, "-3.50", null);
     expense(BOOKING.plusDays(1), own, "-7.00", null);
     expense(BOOKING, own, "-3.50", payee("ShopAaa"));
@@ -487,7 +487,7 @@ class StatementCandidatesSqlLogicTest {
   }
 
   @Test
-  void lineScopedCandidatesAreEmptyForAMatchedLine() {
+  void lineScopedCandidatesAreEmptyOnceMatched() {
     long taken = expense(BOOKING, own, "-3.50", null);
     match(statementId, lineId, taken);
 

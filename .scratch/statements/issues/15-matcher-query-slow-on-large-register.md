@@ -1,6 +1,6 @@
 # Statements screen freezes: the candidate query takes seconds on a 27k-transaction register
 
-Status: needs-triage
+Status: resolved
 Category: bug (performance)
 Severity: high — nearly every action on the statements screens blocks for several seconds
 Area: `statements` — `StatementMatchRepository.findCandidates`, `StatementMatchService.lineOf`
