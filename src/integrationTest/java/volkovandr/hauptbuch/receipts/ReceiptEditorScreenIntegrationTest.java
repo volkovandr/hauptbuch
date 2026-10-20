@@ -22,6 +22,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
 
@@ -112,7 +113,7 @@ class ReceiptEditorScreenIntegrationTest {
   }
 
   @Test
-  void undetectedAccountLeavesThePlaceholderSelected() throws Exception {
+  void undetectedAccountLeavesTheTypedFieldAndHiddenIdEmpty() throws Exception {
     // 'Cash' sorts first among the accounts, which is exactly what a browser used to pre-select
     // when detection found nothing — submitting a wrong account that Confirm then waved through.
     account("Cash", "asset", "EUR");
@@ -122,8 +123,16 @@ class ReceiptEditorScreenIntegrationTest {
     mockMvc
         .perform(get("/receipts/" + id))
         .andExpect(status().isOk())
-        .andExpect(content().string(Matchers.containsString("pick an account")))
-        .andExpect(content().string(Matchers.containsString("value=\"\" selected=\"selected\"")));
+        .andExpect(content().string(Matchers.containsString("name=\"accountText\"")))
+        .andExpect(content().string(Matchers.containsString("name=\"accountId\"")))
+        // Neither the typed field nor the hidden id may be pre-filled with the first account.
+        .andExpect(
+            content().string(Matchers.not(Matchers.containsString("value=\"Cash (EUR)\"\n"))))
+        .andExpect(
+            content()
+                .string(
+                    Matchers.matchesPattern(
+                        "(?s).*id=\"receipt-account\"[^>]*?value=\"\"[^>]*>.*")));
   }
 
   @Test
@@ -156,7 +165,7 @@ class ReceiptEditorScreenIntegrationTest {
   }
 
   @Test
-  void detectedAccountLeavesThePlaceholderUnselected() throws Exception {
+  void detectedAccountPrefillsTheTypedFieldAndHiddenId() throws Exception {
     long pay = account("Girocard", "asset", "EUR");
     long id = processedReceipt(pay, "5.00", "EUR");
 
@@ -165,11 +174,68 @@ class ReceiptEditorScreenIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(
             content()
-                .string(Matchers.not(Matchers.containsString("value=\"\" selected=\"selected\""))));
+                .string(
+                    Matchers.matchesPattern(
+                        "(?s).*id=\"receipt-account\"[^>]*?value=\"Girocard \\(EUR\\)\".*")))
+        .andExpect(
+            content().string(Matchers.containsString("name=\"accountId\" value=\"" + pay + "\"")));
   }
 
   @Test
-  void accountSelectAndTransferLineNameNestedAccountsByPathAndOmitTheirGroup() throws Exception {
+  void accountResolveReturnsTheHiddenIdAndRefreshesTheEditor() throws Exception {
+    long pay = account("Cash", "asset", "EUR");
+
+    mockMvc
+        .perform(post("/receipts/account/resolve").param("accountText", "cash"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content().string(Matchers.containsString("name=\"accountId\" value=\"" + pay + "\"")))
+        .andExpect(
+            MockMvcResultMatchers.header()
+                .string("HX-Trigger-After-Swap", "receipt-account-resolved"));
+  }
+
+  @Test
+  void accountResolveOfBlankTextClearsTheIdAndStillRefreshes() throws Exception {
+    account("Cash", "asset", "EUR");
+
+    mockMvc
+        .perform(post("/receipts/account/resolve").param("accountText", ""))
+        .andExpect(status().isOk())
+        .andExpect(content().string(Matchers.containsString("name=\"accountId\" value=\"\"")))
+        .andExpect(
+            MockMvcResultMatchers.header()
+                .string("HX-Trigger-After-Swap", "receipt-account-resolved"));
+  }
+
+  @Test
+  void accountResolveRefusesUnknownTextAndPersonSigilsWithoutRefreshing() throws Exception {
+    account("Cash", "asset", "EUR");
+
+    for (String text : List.of("Nope", "for Max", "by Max")) {
+      mockMvc
+          .perform(post("/receipts/account/resolve").param("accountText", text))
+          .andExpect(status().isOk())
+          .andExpect(content().string(Matchers.containsString("name=\"accountId\" value=\"\"")))
+          .andExpect(content().string(Matchers.containsString("No open account named")))
+          .andExpect(MockMvcResultMatchers.header().doesNotExist("HX-Trigger-After-Swap"));
+    }
+  }
+
+  @Test
+  void accountResolveRefusesGroup() throws Exception {
+    long bank = account("BankAaa", "asset", "EUR");
+    childAccount("Credit card", bank);
+
+    mockMvc
+        .perform(post("/receipts/account/resolve").param("accountText", "BankAaa"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(Matchers.containsString("is a group")))
+        .andExpect(content().string(Matchers.containsString("name=\"accountId\" value=\"\"")));
+  }
+
+  @Test
+  void accountPickerAndTransferLineNameNestedAccountsByPathAndOmitTheirGroup() throws Exception {
     // Issue transaction-register-ui/25: a group is not payable, and a nested leaf needs its path
     // to be told apart from a same-named leaf elsewhere.
     long bank = account("BankAaa", "asset", "EUR");
@@ -180,8 +246,12 @@ class ReceiptEditorScreenIntegrationTest {
     mockMvc
         .perform(get("/receipts/" + id))
         .andExpect(status().isOk())
-        .andExpect(content().string(Matchers.containsString(">BankAaa - Credit card (EUR)<")))
-        .andExpect(content().string(Matchers.not(Matchers.containsString(">BankAaa (EUR)<"))))
+        .andExpect(
+            content()
+                .string(Matchers.containsString("<option value=\"BankAaa - Credit card (EUR)\"")))
+        .andExpect(
+            content()
+                .string(Matchers.not(Matchers.containsString("<option value=\"BankAaa (EUR)\""))))
         .andExpect(content().string(Matchers.containsString("To → BankAaa - Credit card")));
   }
 

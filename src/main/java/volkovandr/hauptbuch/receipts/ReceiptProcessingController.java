@@ -12,6 +12,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.util.UriComponentsBuilder;
+import volkovandr.hauptbuch.accounts.PostToAccount;
+import volkovandr.hauptbuch.accounts.PostToAccountService;
+import volkovandr.hauptbuch.accounts.PostToResolution;
 import volkovandr.hauptbuch.ledger.CurrencyService;
 import volkovandr.hauptbuch.ledger.RegisterService;
 import volkovandr.hauptbuch.web.NavItem;
@@ -55,6 +58,7 @@ class ReceiptProcessingController {
   private final ReceiptCommitService receiptCommitService;
   private final RegisterService registerService;
   private final CurrencyService currencyService;
+  private final PostToAccountService postToAccountService;
 
   ReceiptProcessingController(
       ReceiptService receiptService,
@@ -64,7 +68,8 @@ class ReceiptProcessingController {
       ReceiptEditorService receiptEditorService,
       ReceiptCommitService receiptCommitService,
       RegisterService registerService,
-      CurrencyService currencyService) {
+      CurrencyService currencyService,
+      PostToAccountService postToAccountService) {
     this.receiptService = receiptService;
     this.receiptAnalyser = receiptAnalyser;
     this.toonRepair = toonRepair;
@@ -73,6 +78,7 @@ class ReceiptProcessingController {
     this.receiptCommitService = receiptCommitService;
     this.registerService = registerService;
     this.currencyService = currencyService;
+    this.postToAccountService = postToAccountService;
   }
 
   /**
@@ -415,6 +421,38 @@ class ReceiptProcessingController {
   }
 
   /**
+   * Resolve the editor's typed Account field (issue receipts/35) into the hidden {@code accountId}
+   * the form binds — the register dock's {@code /register/account/resolve} twin, over the same
+   * {@link PostToAccountService#resolve} so the two pickers read a label identically. Own accounts
+   * only: the funding leg is never a person, so a {@code for}/{@code by} sigil is just text no
+   * account answers to. Blank text clears the account (undetected, which Confirm blocks); text that
+   * does not resolve emits no id and the reason, so a stale id can never ride along under changed
+   * text. Only a resolved or cleared value triggers the editor refresh — a refresh on an error
+   * would re-render the field and wipe the text the operator is still correcting.
+   */
+  @PostMapping("/receipts/account/resolve")
+  String resolveAccount(
+      @RequestParam(required = false) String accountText,
+      Model model,
+      HttpServletResponse response) {
+    Long accountId = null;
+    String error = null;
+    if (accountText != null && !accountText.isBlank()) {
+      switch (postToAccountService.resolve(accountText)) {
+        case PostToResolution.Resolved resolved ->
+            accountId = resolved.account().account().accountId();
+        case PostToResolution.Refused refused -> error = refused.message();
+      }
+    }
+    model.addAttribute("accountId", accountId);
+    model.addAttribute("error", error);
+    if (error == null) {
+      response.setHeader("HX-Trigger-After-Swap", "receipt-account-resolved");
+    }
+    return VIEW + " :: accountResolved(accountId=${accountId}, error=${error})";
+  }
+
+  /**
    * Remove a draft line from the editor (§9f). Re-renders the whole editor from the unsaved state.
    */
   @PostMapping("/receipts/{id}/lines/remove-line")
@@ -645,12 +683,23 @@ class ReceiptProcessingController {
     model.addAttribute(RANGE_FILTER, range);
   }
 
+  /** The typed Account field's text for the paying account: its picker label, else empty. */
+  private String accountEntryText(Long accountId) {
+    return postToAccountService.postToAccounts().stream()
+        .filter(a -> a.account().accountId().equals(accountId))
+        .map(PostToAccount::entryLabel)
+        .findFirst()
+        .orElse("");
+  }
+
   /** Put the assembled editor + the shared register datalists on the model. */
   private void addEditor(Receipt receipt, ReceiptEditorForm form, Model model) {
     boolean committed = ReceiptState.COMMITTED.equals(receipt.state());
     model.addAttribute("id", receipt.receiptId());
     model.addAttribute(RECEIPT, receipt);
-    model.addAttribute("editor", receiptEditorService.panel(form));
+    ReceiptEditor editor = receiptEditorService.panel(form);
+    model.addAttribute("editor", editor);
+    model.addAttribute("accountEntryText", accountEntryText(editor.accountId()));
     // datalists(), not view(): the editor only ever reads the option lists below, never
     // register.rows() — view() would additionally resolve the viewed accounts and run the
     // windowed running-balance row query over their entire history for nothing (issue tracker

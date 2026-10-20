@@ -1,6 +1,6 @@
 # The receipt screen's Account picker should be a typed picker, like the register's
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: minor
 Area: Receipts — processing screen, paying-account field (`receipt-process.html` `#receipt-account`)
@@ -41,3 +41,11 @@ Once this is a typed picker it also gets the select-all-on-first-focus behaviour
 ## Comments
 
 Triaged 2026-10-18: enhancement, ready-for-agent. Do it together with or after `general-ux/issues/07-*`, so the new field gets select-all-on-first-focus right away.
+
+Resolved 2026-10-20: the field is an `accountText` input over a datalist of the post-to leaves
+(`data-select-on-focus`), resolved by `POST /receipts/account/resolve` over the same
+`PostToAccountService.resolve` the register uses. The hidden `accountId` the editor binds is
+unchanged, so the form binding and the Confirm gate needed no change. A resolved or cleared value
+fires `receipt-account-resolved`, which refreshes the editor (currency mode); an unresolvable value
+(unknown, ambiguous, group, `for`/`by` sigil) clears the id, shows the reason, and does not refresh,
+so the typed text survives for correction.

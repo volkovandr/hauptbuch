@@ -583,6 +583,15 @@
   <!-- Returned once the parse lands; the endpoint also sets HX-Refresh so the page reloads. -->
   <div th:fragment="statusDone" class="receipt-status" data-receipt-status-done></div>
 
+  <!-- POST /receipts/account/resolve response (issue receipts/35): the hidden accountId the editor
+       binds, swapped into #receipt-account-resolved. An error emits no id, so unresolvable text
+       leaves nothing behind and Confirm blocks it rather than booking against a stale account. -->
+  <th:block th:fragment="accountResolved(accountId, error)">
+    <input th:if="${accountId != null}" type="hidden" name="accountId" th:value="${accountId}" />
+    <input th:if="${accountId == null}" type="hidden" name="accountId" value="" />
+    <span th:if="${error}" class="warning" th:text="${error}"></span>
+  </th:block>
+
   <!-- ── The post-process editor (plan §9f) ──────────────────────────────────────────────────────
     The receipts wrapper around the shared line-editor core. Its own header (date · payee · paying
     account · currency · editable total) and Save/Add/⇄ round-trips post to /receipts/{id}/lines/*;
@@ -659,34 +668,46 @@
         </datalist>
       </div>
 
-      <!-- The paying account (detected, always changeable). A plain select of the real accounts —
-           the receipt's funding leg is an own account, never a person sigil (beneficiaries are a
-           per-line attribution, not the header).
+      <!-- The paying account (detected, always changeable): the register dock's typed picker — an
+           input over a datalist of the real accounts, resolved by /receipts/account/resolve into
+           the hidden accountId the editor binds. The receipt's funding leg is an own account,
+           never a person sigil (beneficiaries are a per-line attribution, not the header), so the
+           datalist offers none and the resolver refuses `for`/`by` text.
 
-           The empty first option is load-bearing: without it a browser pre-selects the first real
-           account whenever detection found nothing, so "undetected" submitted as "the operator
-           chose Cash" (alphabetically first) and Confirm waved it through. Undetected must stay
-           visibly empty and be blocked at Confirm. -->
+           Undetected stays visibly empty with an empty accountId, and Confirm blocks it. Text that
+           does not resolve clears the hidden id (a stale id must never ride along under changed
+           text) and shows the reason; it does not refresh the editor, which would wipe the text.
+           A resolved (or emptied) value fires `receipt-account-resolved` after the swap (it bubbles
+           from the input), and the wrapper refreshes the editor — the account drives the currency mode. -->
       <div
         class="field"
-        hx-trigger="change"
+        hx-trigger="receipt-account-resolved"
         hx-include="closest form"
         hx-target="#receipt-editor"
         hx-swap="outerHTML"
         th:attr="hx-post=@{/receipts/{id}/lines/currency(id=${id})}"
       >
         <label class="field__label" for="receipt-account">Account</label>
-        <select id="receipt-account" name="accountId" class="input">
-          <option value="" th:selected="${editor.accountId() == null}">
-            — pick an account —
-          </option>
-          <option
-            th:each="a : ${register.accounts()}"
-            th:value="${a.accountId()}"
-            th:text="${a.entryValue()}"
-            th:selected="${a.accountId() == editor.accountId()}"
-          ></option>
-        </select>
+        <input
+          id="receipt-account"
+          data-select-on-focus
+          name="accountText"
+          class="input"
+          list="receipt-account-options"
+          autocomplete="off"
+          placeholder="Pick an account"
+          th:value="${accountEntryText}"
+          hx-post="/receipts/account/resolve"
+          hx-trigger="change"
+          hx-target="#receipt-account-resolved"
+          hx-swap="innerHTML"
+        />
+        <datalist id="receipt-account-options">
+          <option th:each="a : ${register.accounts()}" th:value="${a.entryValue()}"></option>
+        </datalist>
+        <span id="receipt-account-resolved">
+          <input type="hidden" name="accountId" th:value="${editor.accountId()}" />
+        </span>
       </div>
 
       <!-- Currency (issue receipts/23): the receipt's own, which the AI read off the scan. Choosing
