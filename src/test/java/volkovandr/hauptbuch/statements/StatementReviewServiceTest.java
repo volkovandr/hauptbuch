@@ -209,7 +209,7 @@ class StatementReviewServiceTest {
   }
 
   @Test
-  void reviewLineLetsACloserRivalLineClaimALowerTierPosting() {
+  void reviewLineYieldsLowerTierPostingToCloserRival() {
     givenStatementWithTwoLines();
     // posting 100 differs in amount from both lines; line 2 is one day closer, so it wins it
     StatementCandidate own = candidate(1L, 100L, "-3.80", true, 2);
@@ -225,7 +225,7 @@ class StatementReviewServiceTest {
   }
 
   @Test
-  void reviewLineSeesASharedExactPostingAsCompeting() {
+  void reviewLineFlagsSharedExactPostingAsCompeting() {
     givenStatementWithTwoLines();
     when(matchRepository.findCandidates(1L, 1L))
         .thenReturn(List.of(candidate(1L, 100L, "-3.50", true, 1)));
@@ -236,7 +236,7 @@ class StatementReviewServiceTest {
   }
 
   @Test
-  void reviewLineIsEmptyForALineThatIsNotOnTheStatement() {
+  void reviewLineIsEmptyForUnknownLine() {
     givenStatementWithTwoLines();
 
     assertThat(service.reviewLine(1L, 99L)).isEmpty();
