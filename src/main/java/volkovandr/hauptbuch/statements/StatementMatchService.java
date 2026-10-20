@@ -141,9 +141,8 @@ public class StatementMatchService {
   }
 
   LineReview lineOf(long statementId, long statementLineId) {
-    return reviewService.review(statementId).lines().stream()
-        .filter(l -> l.line().statementLineId() == statementLineId)
-        .findFirst()
+    return reviewService
+        .reviewLine(statementId, statementLineId)
         .orElseThrow(() -> new StatementFormatException(STALE));
   }
 

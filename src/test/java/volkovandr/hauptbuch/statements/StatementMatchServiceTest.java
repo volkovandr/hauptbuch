@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -89,9 +90,16 @@ class StatementMatchServiceTest {
         "reconciled");
   }
 
-  private void reviewing(LineReview... lines) {
+  /** The whole-statement review, which only {@code acceptAllExact} reads. */
+  private void reviewingStatement(LineReview... lines) {
     when(reviewService.review(STATEMENT))
         .thenReturn(new StatementReview(List.of(lines), List.of()));
+  }
+
+  /** The line-scoped review that {@code lineOf} reads (statements/issues/15). */
+  private void reviewing(LineReview line) {
+    when(reviewService.reviewLine(STATEMENT, line.line().statementLineId()))
+        .thenReturn(Optional.of(line));
   }
 
   @Test
@@ -163,7 +171,7 @@ class StatementMatchServiceTest {
 
   @Test
   void acceptAllExactMatchesOnlyUnambiguousLines() {
-    reviewing(
+    reviewingStatement(
         new LineReview(line(1L), LineStatus.EXACT, null, List.of(proposal(61L, Tier.EXACT))),
         new LineReview(
             line(2L),

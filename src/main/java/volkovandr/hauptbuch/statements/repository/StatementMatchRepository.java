@@ -24,26 +24,8 @@ public class StatementMatchRepository {
   private static final String LINE_ID = "lineId";
   private static final String POSTING_ID = "postingId";
 
-  private final JdbcClient jdbcClient;
-
-  StatementMatchRepository(JdbcClient jdbcClient) {
-    this.jdbcClient = jdbcClient;
-  }
-
-  /**
-   * Window candidates for every unmatched, readable line of the statement (statements.md §4.1–4.3).
-   * A leg is a candidate when its transaction is live and dated within the profile's window around
-   * the line's booking date, and it is either on the statement's account (any amount, when the
-   * payee is similar) or — wrong-account tier — on another open real asset or liability account of
-   * the same currency, not {@code reconciled}, with an equal amount and a similar payee. Legs
-   * already matched to a line of this statement are left out; legs matched on another statement are
-   * returned and flagged. A leg the operator excluded from the line ("a different transaction") is
-   * left out.
-   */
-  public List<StatementCandidate> findCandidates(long statementId) {
-    return jdbcClient
-        .sql(
-            """
+  private static final String CANDIDATES_HEAD =
+      """
             with scored as (
               select l.statement_line_id, l.amount as line_amount,
                      s.account_id as statement_account_id,
@@ -93,6 +75,10 @@ public class StatementMatchRepository {
                 and not exists (select 1 from statement_line_exclusion x
                                 where x.statement_line_id = l.statement_line_id
                                   and x.posting_id = lg.posting_id)
+      """;
+
+  private static final String CANDIDATES_TAIL =
+      """
             )
             select statement_line_id, posting_id, transaction_id, account_id, account_name, amount,
                    transaction_date, payee_name, payee_similar, reconciliation, matched_elsewhere,
@@ -108,8 +94,63 @@ public class StatementMatchRepository {
                    and amount = line_amount
                    and payee_similar)
             order by statement_line_id, day_distance, posting_id
-            """)
+      """;
+
+  private final JdbcClient jdbcClient;
+
+  StatementMatchRepository(JdbcClient jdbcClient) {
+    this.jdbcClient = jdbcClient;
+  }
+
+  /**
+   * Window candidates for every unmatched, readable line of the statement (statements.md §4.1–4.3).
+   * A leg is a candidate when its transaction is live and dated within the profile's window around
+   * the line's booking date, and it is either on the statement's account (any amount, when the
+   * payee is similar) or — wrong-account tier — on another open real asset or liability account of
+   * the same currency, not {@code reconciled}, with an equal amount and a similar payee. Legs
+   * already matched to a line of this statement are left out; legs matched on another statement are
+   * returned and flagged. A leg the operator excluded from the line ("a different transaction") is
+   * left out.
+   */
+  public List<StatementCandidate> findCandidates(long statementId) {
+    return jdbcClient
+        .sql(CANDIDATES_HEAD + CANDIDATES_TAIL)
         .param(STATEMENT_ID, statementId)
+        .query(StatementCandidate.class)
+        .list();
+  }
+
+  /**
+   * {@link #findCandidates(long)} narrowed to one line: the same rows that line has in the
+   * statement-wide query, at the cost of one line's date window instead of the statement's.
+   */
+  public List<StatementCandidate> findCandidates(long statementId, long statementLineId) {
+    return jdbcClient
+        .sql(CANDIDATES_HEAD + "and l.statement_line_id = :lineId\n" + CANDIDATES_TAIL)
+        .param(STATEMENT_ID, statementId)
+        .param(LINE_ID, statementLineId)
+        .query(StatementCandidate.class)
+        .list();
+  }
+
+  /**
+   * The rows other lines of the statement have on these postings: the rivals that decide whether
+   * the line may keep a posting it shares with a closer or better-tiered line (statements.md §4.2).
+   */
+  public List<StatementCandidate> findCandidatesOnPostings(
+      long statementId, long exceptLineId, Collection<Long> postingIds) {
+    if (postingIds.isEmpty()) {
+      return List.of();
+    }
+    return jdbcClient
+        .sql(
+            CANDIDATES_HEAD
+                + "and l.statement_line_id <> :lineId\n"
+                + "and lg.posting_id in (:postingIds)\n"
+                + CANDIDATES_TAIL)
+        .param(STATEMENT_ID, statementId)
+        .param(LINE_ID, exceptLineId)
+        .param("postingIds", postingIds)
         .query(StatementCandidate.class)
         .list();
   }
