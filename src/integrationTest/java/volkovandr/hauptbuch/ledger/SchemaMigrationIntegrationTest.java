@@ -173,6 +173,21 @@ class SchemaMigrationIntegrationTest {
         .isEqualTo("Dortmund");
   }
 
+  @Test
+  void transactionDateIsIndexedForTheStatementMatcherWindowJoin() {
+    // V37: the statement matcher joins every line to the transactions inside a date window; without
+    // this index that scans the whole register (.scratch/statements/issues/15).
+    assertThat(
+            jdbcClient
+                .sql(
+                    "select indexdef from pg_indexes"
+                        + " where tablename = 'transaction' and indexname = 'transaction_date_idx'")
+                .query(String.class)
+                .single())
+        .contains("(date)")
+        .contains("deleted_at IS NULL");
+  }
+
   private String aliasResolvesTo(String alias) {
     return jdbcClient
         .sql("select country_code from country_alias where alias = :alias")

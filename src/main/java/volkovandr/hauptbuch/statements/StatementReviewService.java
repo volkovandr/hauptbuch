@@ -1,8 +1,10 @@
 package volkovandr.hauptbuch.statements;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.statements.repository.StatementLineRepository;
@@ -47,6 +49,42 @@ public class StatementReviewService {
         profile.windowDaysBefore(),
         profile.windowDaysAfter(),
         statement);
+  }
+
+  /**
+   * Review one line of a live statement — the same {@link LineReview} {@link #review} gives it —
+   * without matching the whole statement: its own candidates, plus the other lines' rows on those
+   * same postings, because a posting goes to its best-fitting line (statements/issues/15).
+   *
+   * @return the line's review, or empty when the statement has no such line
+   * @throws StatementFormatException when the statement no longer exists
+   */
+  public Optional<LineReview> reviewLine(long statementId, long statementLineId) {
+    Statement statement = statementService.get(statementId);
+    StatementProfile profile = profileService.getIncludingDeleted(statement.statementProfileId());
+    List<StatementLine> lines = lineRepository.findByStatement(statementId);
+    if (lines.stream().noneMatch(l -> l.statementLineId() == statementLineId)) {
+      return Optional.empty();
+    }
+    List<StatementCandidate> candidates =
+        new ArrayList<>(matchRepository.findCandidates(statementId, statementLineId));
+    candidates.addAll(
+        matchRepository.findCandidatesOnPostings(
+            statementId,
+            statementLineId,
+            candidates.stream().map(StatementCandidate::postingId).distinct().toList()));
+    return StatementMatcher.review(
+            lines,
+            candidates,
+            matchRepository.findMatches(statementId),
+            List.of(),
+            profile.windowDaysBefore(),
+            profile.windowDaysAfter(),
+            statement)
+        .lines()
+        .stream()
+        .filter(l -> l.line().statementLineId() == statementLineId)
+        .findFirst();
   }
 
   /**

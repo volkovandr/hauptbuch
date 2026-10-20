@@ -464,4 +464,57 @@ class StatementCandidatesSqlLogicTest {
 
     assertThat(matcher.findExtras(statementId)).isEmpty();
   }
+
+  // ---- line-scoped candidates (statements/issues/15) ---------------------------------------
+
+  @Test
+  void lineScopedCandidatesAreExactlyThatLinesRowsOfTheFullQuery() {
+    long second = line(statementId, 1, BOOKING.plusDays(1), "-7.00", "SHOPBBB", null);
+    expense(BOOKING.minusDays(1), own, "-3.50", null);
+    expense(BOOKING.plusDays(1), own, "-7.00", null);
+    expense(BOOKING, own, "-3.50", payee("ShopAaa"));
+
+    List<StatementCandidate> full = matcher.findCandidates(statementId);
+
+    assertThat(matcher.findCandidates(statementId, lineId))
+        .isNotEmpty()
+        .containsExactlyElementsOf(
+            full.stream().filter(c -> c.statementLineId() == lineId).toList());
+    assertThat(matcher.findCandidates(statementId, second))
+        .isNotEmpty()
+        .containsExactlyElementsOf(
+            full.stream().filter(c -> c.statementLineId() == second).toList());
+  }
+
+  @Test
+  void lineScopedCandidatesAreEmptyForAMatchedLine() {
+    long taken = expense(BOOKING, own, "-3.50", null);
+    match(statementId, lineId, taken);
+
+    assertThat(matcher.findCandidates(statementId, lineId)).isEmpty();
+  }
+
+  @Test
+  void rivalCandidatesAreTheOtherLinesRowsOnTheGivenPostingsOnly() {
+    long rival = line(statementId, 1, BOOKING.plusDays(1), "-3.50", "SHOPAAA", null);
+    long shared = expense(BOOKING, own, "-3.50", null);
+    long unrelated = expense(BOOKING.plusDays(1), own, "-3.50", null);
+
+    List<StatementCandidate> rivals =
+        matcher.findCandidatesOnPostings(statementId, lineId, List.of(shared));
+
+    assertThat(rivals)
+        .singleElement()
+        .satisfies(
+            c -> {
+              assertThat(c.statementLineId()).isEqualTo(rival);
+              assertThat(c.postingId()).isEqualTo(shared);
+            });
+    assertThat(rivals).extracting(StatementCandidate::postingId).doesNotContain(unrelated);
+  }
+
+  @Test
+  void rivalCandidatesAreEmptyWithoutPostings() {
+    assertThat(matcher.findCandidatesOnPostings(statementId, lineId, List.of())).isEmpty();
+  }
 }

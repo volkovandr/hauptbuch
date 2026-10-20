@@ -151,4 +151,95 @@ class StatementReviewServiceTest {
   private static StatementProfile profile() {
     return org.mockito.Mockito.mock(StatementProfile.class);
   }
+
+  // ---- reviewLine (statements/issues/15) -------------------------------------------------
+
+  private static StatementLine bookedLine(long id, int order, String date, String amount) {
+    return new StatementLine(
+        id,
+        order,
+        LocalDate.parse(date),
+        null,
+        new BigDecimal(amount),
+        "x",
+        null,
+        null,
+        "raw",
+        null);
+  }
+
+  private static StatementCandidate candidate(
+      long lineId, long postingId, String amount, boolean payeeSimilar, int distance) {
+    return new StatementCandidate(
+        lineId,
+        postingId,
+        postingId,
+        ACCOUNT,
+        "Own",
+        new BigDecimal(amount),
+        START,
+        "ShopAaa",
+        payeeSimilar,
+        "unreconciled",
+        false,
+        distance);
+  }
+
+  private void givenStatementWithTwoLines() {
+    when(statementService.get(1L)).thenReturn(statement(1L, START, END, "100.00"));
+    when(profileService.getIncludingDeleted(1L)).thenReturn(profile());
+    when(lineRepository.findByStatement(1L))
+        .thenReturn(
+            List.of(
+                bookedLine(1L, 0, "2026-05-10", "-3.50"),
+                bookedLine(2L, 1, "2026-05-11", "-3.50")));
+  }
+
+  @Test
+  void reviewLineNeverRunsTheWholeStatementCandidateQuery() {
+    givenStatementWithTwoLines();
+    when(matchRepository.findCandidates(1L, 1L)).thenReturn(List.of());
+
+    LineReview review = service.reviewLine(1L, 1L).orElseThrow();
+
+    assertThat(review.line().statementLineId()).isEqualTo(1L);
+    assertThat(review.status()).isEqualTo(LineStatus.MISSING);
+    verify(matchRepository, never()).findCandidates(1L);
+    verify(matchRepository, never()).findExtras(anyLong());
+  }
+
+  @Test
+  void reviewLineLetsACloserRivalLineClaimALowerTierPosting() {
+    givenStatementWithTwoLines();
+    // posting 100 differs in amount from both lines; line 2 is one day closer, so it wins it
+    StatementCandidate own = candidate(1L, 100L, "-3.80", true, 2);
+    StatementCandidate rival = candidate(2L, 100L, "-3.80", true, 1);
+    when(matchRepository.findCandidates(1L, 1L)).thenReturn(List.of(own));
+    when(matchRepository.findCandidatesOnPostings(1L, 1L, List.of(100L)))
+        .thenReturn(List.of(rival));
+
+    LineReview review = service.reviewLine(1L, 1L).orElseThrow();
+
+    assertThat(review.status()).isEqualTo(LineStatus.MISSING);
+    assertThat(review.candidates()).isEmpty();
+  }
+
+  @Test
+  void reviewLineSeesASharedExactPostingAsCompeting() {
+    givenStatementWithTwoLines();
+    when(matchRepository.findCandidates(1L, 1L))
+        .thenReturn(List.of(candidate(1L, 100L, "-3.50", true, 1)));
+    when(matchRepository.findCandidatesOnPostings(1L, 1L, List.of(100L)))
+        .thenReturn(List.of(candidate(2L, 100L, "-3.50", true, 1)));
+
+    assertThat(service.reviewLine(1L, 1L).orElseThrow().status()).isEqualTo(LineStatus.COMPETING);
+  }
+
+  @Test
+  void reviewLineIsEmptyForALineThatIsNotOnTheStatement() {
+    givenStatementWithTwoLines();
+
+    assertThat(service.reviewLine(1L, 99L)).isEmpty();
+    verify(matchRepository, never()).findCandidates(anyLong(), anyLong());
+  }
 }
