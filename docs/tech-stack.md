@@ -117,6 +117,21 @@ constructs the analytics rely on. Tests run on the dev machine, not the Pi, so t
 resources are irrelevant to test cost. Tests double as the living specification: when the owner
 returns to a module after time away, the tests state what it does.
 
+### 2.6 Caching — Spring cache + Caffeine, reference data only
+
+**Decision:** Spring's cache abstraction with **Caffeine**, `@Cacheable` / `@CacheEvict` on the
+**repository** methods that read and write *reference data* — settings, currencies, countries, the
+account/category tree, tags, payees, people. Each cache is evicted (`allEntries`) by every
+repository method that writes its table, so the invalidation sits beside the SQL; the cache names
+are constants in the `shared` kernel (`CacheNames`). The manager is transaction-aware (evictions
+run after commit; reads inside a transaction skip the cache so they see its own writes) and entries expire after an hour as a safety net for edits made outside the app.
+
+**Rationale.** Those lists are read on nearly every page and change rarely. Anything derived from
+postings (balances, register rows, reports, the statement matcher) is **not** cached: its
+invalidation would be "every ledger write", and a stale money read is not acceptable (data-model
+invariants). Tests run with caching off (`hauptbuch.cache.enabled=false`) because rolled-back tests
+would leak cached rows; `ReferenceDataCacheIntegrationTest` covers every cache's read and eviction.
+
 ---
 
 ## 3. Module structure — Spring Modulith
@@ -364,6 +379,7 @@ Both stay in Java — no Python anywhere.
 | DB access | `JdbcClient` + records | ORM (JPA/Hibernate) | Hidden magic; visible SQL aids comprehension |
 | DB access | `JdbcClient` + records | jOOQ | Explicitly rejected by owner |
 | Test DB | Real Postgres (Testcontainers) | H2 | H2 lacks window functions / `generate_series` |
+| Caching | Spring cache + Caffeine on repository methods, reference data only | Caching ledger-derived reads (balances, reports, matcher) | Eviction would be "every ledger write"; a stale money read is unacceptable |
 | Modules | Spring Modulith (boundaries + docs) | Modulith event registry | Outbox complexity unneeded for single-user v1 |
 | UI | Thymeleaf + htmx | React/Svelte SPA | Second ecosystem the owner can't maintain agent-free |
 | Long lists | Bounded views + htmx chunks | Virtualization | Unneeded; view is naturally bounded |

@@ -2,9 +2,11 @@ package volkovandr.hauptbuch.ledger.repository;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.ledger.Country;
+import volkovandr.hauptbuch.shared.CacheNames;
 
 /**
  * Native-SQL read access to the seeded {@code country} reference list (register §3.4, plan stage
@@ -26,11 +28,13 @@ public class CountryRepository {
   }
 
   /** Every seeded country, alphabetical by name — the create-form's country dropdown options. */
+  @Cacheable(cacheNames = CacheNames.COUNTRIES, condition = CacheNames.OUTSIDE_TRANSACTION)
   public List<Country> findAll() {
-    return jdbcClient
-        .sql("select country_code as code, name from country order by name")
-        .query(Country.class)
-        .list();
+    return List.copyOf(
+        jdbcClient
+            .sql("select country_code as code, name from country order by name")
+            .query(Country.class)
+            .list());
   }
 
   /**

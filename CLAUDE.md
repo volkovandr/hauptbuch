@@ -230,6 +230,13 @@ Full detail in `docs/data-model.md`. The traps:
   (`Cash-XXX`, then `YYY`). `EUR` is the real base currency and stays.
 - **Tests are the living spec.** When you return to a module, the tests state what it does — write
   them that way.
+- **Caching: reference data only, on repository methods.** `@Cacheable(cacheNames = CacheNames.X,
+  condition = CacheNames.OUTSIDE_TRANSACTION)` / `@CacheEvict(cacheNames = CacheNames.X, allEntries =
+  true)`, names in `shared.CacheNames`. **Every** repository method that writes a cached table must
+  evict its cache (a new writer without an eviction is a stale-read bug). Cached lists are
+  `List.copyOf`'d. Never cache anything derived from postings/transactions. The test suites run with
+  caching off; add the read-then-write test for a new cache to `ReferenceDataCacheIntegrationTest`
+  (tech-stack §2.6).
 - **Logging:** SLF4J + Logback via Spring Boot's defaults — no structured/JSON output, no
   correlation ids, no custom file appender or rotation (the Pi deployment runs under systemd;
   journald already gives timestamped, rotated, `journalctl`-filterable logs for a single-process

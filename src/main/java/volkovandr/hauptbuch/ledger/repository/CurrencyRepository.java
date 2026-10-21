@@ -1,9 +1,12 @@
 package volkovandr.hauptbuch.ledger.repository;
 
 import java.util.List;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.ledger.Currency;
+import volkovandr.hauptbuch.shared.CacheNames;
 
 /**
  * Native-SQL access to the {@code currency} table (data-model §3.1 — JdbcClient + records, no ORM).
@@ -23,16 +26,18 @@ public class CurrencyRepository {
   }
 
   /** All currencies, ordered by ISO code for a stable dropdown. */
+  @Cacheable(cacheNames = CacheNames.CURRENCIES, condition = CacheNames.OUTSIDE_TRANSACTION)
   public List<Currency> findAll() {
-    return jdbcClient
-        .sql(
-            """
+    return List.copyOf(
+        jdbcClient
+            .sql(
+                """
             select currency_code as code, minor_units, symbol, name
             from currency
             order by currency_code
             """)
-        .query(Currency.class)
-        .list();
+            .query(Currency.class)
+            .list());
   }
 
   /** Whether a currency with this ISO code already exists (its natural key). */
@@ -48,6 +53,9 @@ public class CurrencyRepository {
    * Insert a currency. The {@code createCurrency} operation (plan stage 6d) is now a second writer
    * alongside the V2 seed — a user may add a currency that was not among the seeded seven.
    */
+  @CacheEvict(
+      cacheNames = {CacheNames.CURRENCIES, CacheNames.CURRENCY_OPTIONS},
+      allEntries = true)
   public void insert(Currency currency) {
     jdbcClient
         .sql(

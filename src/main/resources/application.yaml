@@ -50,6 +50,13 @@ spring:
 # The Pi deployment overrides hauptbuch.receipts.storage-root via environment to its data dir; tests
 # point it at a temp directory.
 hauptbuch:
+  # Reference-data caches (.scratch/performance/issues/02). Every write evicts explicitly, so the
+  # expiry is only a safety net for edits made straight in the database. The test suites turn this
+  # off (src/*/resources/application.properties) — their rolled-back tests would leak cached rows.
+  cache:
+    enabled: true
+    expire-after-write: 1h
+    maximum-size: 1000
   # Database backups (.scratch/backup/issues/01-database-backups.md). `automatic` is OFF here on
   # purpose: this file is on the classpath in dev AND in the test suites, and neither has any
   # business shelling out to pg_dump on every context start. The Pi's /etc/hauptbuch/application.yml
