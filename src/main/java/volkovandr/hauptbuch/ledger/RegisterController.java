@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.ledger;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -32,18 +33,21 @@ class RegisterController {
   private final RegisterPickerService registerPickerService;
   private final RegisterFilterViewAssembler registerFilterViewAssembler;
   private final CurrencyService currencyService;
+  private final Clock clock;
 
   RegisterController(
       RegisterService registerService,
       RegisterJumpService registerJumpService,
       RegisterPickerService registerPickerService,
       RegisterFilterViewAssembler registerFilterViewAssembler,
-      CurrencyService currencyService) {
+      CurrencyService currencyService,
+      Clock clock) {
     this.registerService = registerService;
     this.registerJumpService = registerJumpService;
     this.registerPickerService = registerPickerService;
     this.registerFilterViewAssembler = registerFilterViewAssembler;
     this.currencyService = currencyService;
+    this.clock = clock;
   }
 
   /**
@@ -75,11 +79,20 @@ class RegisterController {
       @RequestParam(required = false) LocalDate toDate,
       @RequestParam(required = false) Long payeeId,
       @RequestParam(required = false) boolean pendingOnly,
+      @RequestParam(name = "datePreset", required = false) String datePreset,
       @RequestParam(required = false) Long selected,
       Model model) {
     Optional<RegisterFilter> jump = jumpFilter(selected);
     RegisterFilter filter =
-        jump.orElseGet(() -> filterFrom(accountId, picker, fromDate, toDate, payeeId, pendingOnly));
+        jump.orElseGet(
+            () ->
+                filterFrom(
+                    accountId,
+                    picker,
+                    presetFrom(datePreset, fromDate),
+                    presetTo(datePreset, toDate),
+                    payeeId,
+                    pendingOnly));
     RegisterView register = registerService.view(filter);
 
     model.addAttribute("register", register);
@@ -153,6 +166,20 @@ class RegisterController {
     return new RegisterFilter(selection, active, from, toDate, payeeId, pendingOnly);
   }
 
+  /** The preset's lower bound when a quick preset was pressed, else the typed one. */
+  private LocalDate presetFrom(String datePreset, LocalDate typed) {
+    return DatePreset.fromParam(datePreset)
+        .map(p -> p.rangeAt(LocalDate.now(clock)).from())
+        .orElse(typed);
+  }
+
+  /** The preset's upper bound (null = open) when a quick preset was pressed, else the typed one. */
+  private LocalDate presetTo(String datePreset, LocalDate typed) {
+    return DatePreset.fromParam(datePreset)
+        .map(p -> p.rangeAt(LocalDate.now(clock)).to())
+        .orElse(typed);
+  }
+
   /** The transaction-derived filter for a {@code selected=} jump; empty when there is no jump. */
   private Optional<RegisterFilter> jumpFilter(Long selected) {
     return selected == null ? Optional.empty() : registerJumpService.filterForTransaction(selected);
@@ -175,10 +202,10 @@ class RegisterController {
    * The default lower bound: last 12 months (register §2.3). Applied only when the user gave
    * neither bound — an explicit upper-only bound is honoured as an open-ended lower range.
    */
-  private static LocalDate defaultFrom(LocalDate fromDate, LocalDate toDate) {
+  private LocalDate defaultFrom(LocalDate fromDate, LocalDate toDate) {
     if (fromDate != null || toDate != null) {
       return fromDate;
     }
-    return LocalDate.now().minusMonths(12);
+    return LocalDate.now(clock).minusMonths(12);
   }
 }

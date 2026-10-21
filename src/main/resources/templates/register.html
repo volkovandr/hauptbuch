@@ -169,6 +169,21 @@
           <button type="submit" class="btn">Apply</button>
         </p>
       </div>
+      <!-- Date quick presets (issue transaction-register-ui/12). After Apply in document order so
+           Enter in a field still submits Apply; each sets the dates server-side and keeps the
+           other filter fields. -->
+      <div class="register-filter__row register-filter__presets">
+        <button
+          type="submit"
+          class="btn btn--ghost"
+          name="datePreset"
+          th:each="preset : ${T(volkovandr.hauptbuch.ledger.DatePreset).values()}"
+          th:value="${preset.param()}"
+          th:text="${preset.label()}"
+        >
+          Last 90 days
+        </button>
+      </div>
     </form>
 
     <!-- The whole rows region is a named fragment (a div, not a bare tbody) so the commit response

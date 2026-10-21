@@ -1,6 +1,6 @@
 # Register date-range filter has no quick presets
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Severity: minor
 Area: Transaction register — filters
@@ -39,3 +39,5 @@ filter fields (account picker, payee, pending only) are kept as they are.
 Filed 2026-08-21 from the `potential-feature-ideas.md` idea list.
 
 Triaged 2026-10-18: enhancement, ready-for-agent. Owner fixed the preset list and the date rules above.
+
+Resolved 2026-10-21: `DatePreset` enum + `datePreset` submit buttons on the register filter form (after Apply, so Enter still applies).
