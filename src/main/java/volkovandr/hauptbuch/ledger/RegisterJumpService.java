@@ -11,8 +11,9 @@ import volkovandr.hauptbuch.ledger.repository.TransactionRepository;
  * "Edit transaction" and a Report's drill-down list (reporting.md §12's handoff) land on. It
  * derives the filter from the <em>transaction</em> rather than reusing the last-used one, so the
  * row it lands on is guaranteed visible: the transaction's leading own account is the viewed set
- * and its date is the range's lower bound, left open-ended upward so the row keeps its
- * running-balance context below it.
+ * and its date is both bounds of the range, so the register shows that one day — not an arbitrary
+ * tail of later rows. (The running balance is computed over the whole thread, not the visible
+ * window.)
  *
  * <p>The leading own leg is the credited one, the biggest first — the account the money left: a
  * receipt's paying account (so a receipt that also carries a transfer line, cashback into savings,
@@ -50,7 +51,12 @@ public class RegisterJumpService {
       RegisterOwnLeg leading = legs.get(0);
       return Optional.of(
           new RegisterFilter(
-              List.of(leading.accountId()), RegisterPicker.ALL, leading.date(), null, null, false));
+              List.of(leading.accountId()),
+              RegisterPicker.ALL,
+              leading.date(),
+              leading.date(),
+              null,
+              false));
     }
     return transactionRepository
         .findById(transactionId)
@@ -58,6 +64,11 @@ public class RegisterJumpService {
         .map(
             transaction ->
                 new RegisterFilter(
-                    List.of(), RegisterPicker.ALL, transaction.date(), null, null, false));
+                    List.of(),
+                    RegisterPicker.ALL,
+                    transaction.date(),
+                    transaction.date(),
+                    null,
+                    false));
   }
 }

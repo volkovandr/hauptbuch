@@ -94,6 +94,8 @@ class PeopleOverviewScreenIntegrationTest {
         .andExpect(content().string(containsString("Ben owes you 25,00"))) // expanded wording
         .andExpect(content().string(containsString("View in register")))
         .andExpect(content().string(containsString("accountId=" + benLeaf)))
+        // The register defaults to 90 days; the link asks for the person's whole thread.
+        .andExpect(content().string(containsString("fromDate=1970-01-01")))
         // A wholly-base position shows no base-currency gloss - it would just restate the figure.
         // The gloss is the only place the "≈" marker appears (a per-currency settle link now names
         // the base code too, plan stage 8e), so its absence proves the gloss is suppressed.
