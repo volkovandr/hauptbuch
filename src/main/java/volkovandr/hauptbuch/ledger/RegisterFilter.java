@@ -29,6 +29,12 @@ public record RegisterFilter(
     boolean pendingOnly) {
 
   /**
+   * A {@code fromDate} for inbound links that must show an account's whole history: the register
+   * defaults to the last 90 days when it is given no dates, so such a link names this explicitly.
+   */
+  public static final LocalDate ALL_TIME_FROM = LocalDate.of(1970, 1, 1);
+
+  /**
    * Defensively copy the account ids (null → empty) and default the picker (null → the default).
    */
   public RegisterFilter {

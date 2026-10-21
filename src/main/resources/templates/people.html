@@ -69,7 +69,8 @@
                 <a
                   class="btn"
                   th:unless="${#lists.isEmpty(p.accountIds())}"
-                  th:href="@{/register(accountId=${p.accountIds()})}"
+                  th:href="@{/register(accountId=${p.accountIds()},
+                    fromDate=${T(volkovandr.hauptbuch.ledger.RegisterFilter).ALL_TIME_FROM})}"
                   >View in register</a
                 >
                 <a class="btn" th:href="@{/people/{id}(id=${p.personId()})}">Edit</a>

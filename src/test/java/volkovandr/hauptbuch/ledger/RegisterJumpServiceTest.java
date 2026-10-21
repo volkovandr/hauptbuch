@@ -31,22 +31,22 @@ class RegisterJumpServiceTest {
   }
 
   @Test
-  void viewsTheLeadingOwnLegFromTheTransactionsDate() {
+  void viewsTheLeadingOwnLegOnTheTransactionsDateOnly() {
     when(registerRepository.findOwnLegs(7L))
         .thenReturn(List.of(new RegisterOwnLeg(JAN_5, 3L), new RegisterOwnLeg(JAN_5, 4L)));
 
     assertThat(service.filterForTransaction(7L))
-        .contains(new RegisterFilter(List.of(3L), RegisterPicker.ALL, JAN_5, null, null, false));
+        .contains(new RegisterFilter(List.of(3L), RegisterPicker.ALL, JAN_5, JAN_5, null, false));
   }
 
   @Test
-  void viewsEveryAccountFromTheDateWhenTheTransactionHasNoOwnLeg() {
+  void viewsEveryAccountOnTheTransactionsDateWhenTheTransactionHasNoOwnLeg() {
     // A category-to-category correction: nothing to pre-select, so the register opens unfiltered.
     when(registerRepository.findOwnLegs(7L)).thenReturn(List.of());
     when(transactionRepository.findById(7L)).thenReturn(Optional.of(transaction(null)));
 
     assertThat(service.filterForTransaction(7L))
-        .contains(new RegisterFilter(List.of(), RegisterPicker.ALL, JAN_5, null, null, false));
+        .contains(new RegisterFilter(List.of(), RegisterPicker.ALL, JAN_5, JAN_5, null, false));
   }
 
   @Test
