@@ -198,7 +198,7 @@ class StatementReviewServiceTest {
   @Test
   void reviewLineNeverRunsTheWholeStatementCandidateQuery() {
     givenStatementWithTwoLines();
-    when(matchRepository.findCandidates(1L, 1L)).thenReturn(List.of());
+    when(matchRepository.findCandidatesForLine(1L, 1L)).thenReturn(List.of());
 
     LineReview review = service.reviewLine(1L, 1L).orElseThrow();
 
@@ -214,7 +214,7 @@ class StatementReviewServiceTest {
     // posting 100 differs in amount from both lines; line 2 is one day closer, so it wins it
     StatementCandidate own = candidate(1L, 100L, "-3.80", true, 2);
     StatementCandidate rival = candidate(2L, 100L, "-3.80", true, 1);
-    when(matchRepository.findCandidates(1L, 1L)).thenReturn(List.of(own));
+    when(matchRepository.findCandidatesForLine(1L, 1L)).thenReturn(List.of(own));
     when(matchRepository.findCandidatesOnPostings(1L, 1L, List.of(100L)))
         .thenReturn(List.of(rival));
 
@@ -227,7 +227,7 @@ class StatementReviewServiceTest {
   @Test
   void reviewLineFlagsSharedExactPostingAsCompeting() {
     givenStatementWithTwoLines();
-    when(matchRepository.findCandidates(1L, 1L))
+    when(matchRepository.findCandidatesForLine(1L, 1L))
         .thenReturn(List.of(candidate(1L, 100L, "-3.50", true, 1)));
     when(matchRepository.findCandidatesOnPostings(1L, 1L, List.of(100L)))
         .thenReturn(List.of(candidate(2L, 100L, "-3.50", true, 1)));
@@ -240,6 +240,6 @@ class StatementReviewServiceTest {
     givenStatementWithTwoLines();
 
     assertThat(service.reviewLine(1L, 99L)).isEmpty();
-    verify(matchRepository, never()).findCandidates(anyLong(), anyLong());
+    verify(matchRepository, never()).findCandidatesForLine(anyLong(), anyLong());
   }
 }

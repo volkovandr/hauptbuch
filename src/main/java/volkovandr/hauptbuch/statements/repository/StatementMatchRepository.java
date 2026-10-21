@@ -24,6 +24,10 @@ public class StatementMatchRepository {
   private static final String LINE_ID = "lineId";
   private static final String POSTING_ID = "postingId";
 
+  /**
+   * The candidate query up to its last {@code where} predicate, so a caller can append further
+   * {@code and ...} predicates before {@link #CANDIDATES_TAIL}.
+   */
   private static final String CANDIDATES_HEAD =
       """
             with scored as (
@@ -124,9 +128,9 @@ public class StatementMatchRepository {
    * {@link #findCandidates(long)} narrowed to one line: the same rows that line has in the
    * statement-wide query, at the cost of one line's date window instead of the statement's.
    */
-  public List<StatementCandidate> findCandidates(long statementId, long statementLineId) {
+  public List<StatementCandidate> findCandidatesForLine(long statementId, long statementLineId) {
     return jdbcClient
-        .sql(CANDIDATES_HEAD + "and l.statement_line_id = :lineId\n" + CANDIDATES_TAIL)
+        .sql(CANDIDATES_HEAD + "and l.statement_line_id = :" + LINE_ID + "\n" + CANDIDATES_TAIL)
         .param(STATEMENT_ID, statementId)
         .param(LINE_ID, statementLineId)
         .query(StatementCandidate.class)
@@ -136,6 +140,8 @@ public class StatementMatchRepository {
   /**
    * The rows other lines of the statement have on these postings: the rivals that decide whether
    * the line may keep a posting it shares with a closer or better-tiered line (statements.md §4.2).
+   * The transaction filter lets the planner start from those postings' transactions instead of
+   * joining every other line's date window.
    */
   public List<StatementCandidate> findCandidatesOnPostings(
       long statementId, long exceptLineId, Collection<Long> postingIds) {
@@ -145,7 +151,11 @@ public class StatementMatchRepository {
     return jdbcClient
         .sql(
             CANDIDATES_HEAD
-                + "and l.statement_line_id <> :lineId\n"
+                + "and l.statement_line_id <> :"
+                + LINE_ID
+                + "\n"
+                + "and t.transaction_id in (select rp.transaction_id from posting rp"
+                + " where rp.posting_id in (:postingIds))\n"
                 + "and lg.posting_id in (:postingIds)\n"
                 + CANDIDATES_TAIL)
         .param(STATEMENT_ID, statementId)
