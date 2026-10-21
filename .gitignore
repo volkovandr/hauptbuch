@@ -65,3 +65,7 @@ qif/
 
 # Statement files (dev local root, statements b2)
 .local-statements/
+
+# Docker deployment recipe: local secrets and all runtime state (database, receipts, backups)
+deploy/docker/.env
+deploy/docker/data/

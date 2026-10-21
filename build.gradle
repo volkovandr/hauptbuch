@@ -23,8 +23,9 @@ java {
 	}
 }
 
-// Deployment (tech-stack.md §7): the Pi runs `installDist`'s exploded, non-fat distribution via
-// systemd, not a Docker image — the `application` plugin's start script needs a main class.
+// Deployment (tech-stack.md §7): `installDist`'s exploded, non-fat distribution is run by systemd
+// (deploy/as-service) and is what deploy/docker/Dockerfile packages — the `application` plugin's
+// start script needs a main class.
 application {
 	mainClass = 'volkovandr.hauptbuch.HauptbuchApplication'
 }
