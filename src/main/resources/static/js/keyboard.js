@@ -36,7 +36,8 @@
  *      Enter) a row opens its processing screen. On the processing screen itself (receipt doc §6):
  *      ↑/↓ walk the filtered list, Backspace/Esc is Back (read) / Esc is Cancel (edit), Delete opens
  *      the dialog; in edit mode Enter is Save (except in the note textarea or on a focused button).
- *      A `new` receipt's Prepare button is autofocused in the markup, so Enter starts the editor. Backspace is offered because the browser eats Esc to exit fullscreen. This leaf
+ *      A `new` receipt's Prepare button is autofocused in the markup, so Enter starts the editor.
+ *      Backspace is offered because the browser eats Esc to exit fullscreen. This leaf
  *      only maps keys/clicks onto server-rendered buttons; the Cropper edit mode is owned by the
  *      receipt-editor.js leaf.
  *  10. Auto-submit a [data-autosubmit] file input's form the moment a file is chosen — the mobile
