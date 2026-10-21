@@ -4,12 +4,15 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountDetection;
 import volkovandr.hauptbuch.accounts.AccountDetectionCandidate;
 import volkovandr.hauptbuch.accounts.AccountNode;
+import volkovandr.hauptbuch.shared.CacheNames;
 
 /**
  * Native-SQL access to the {@code account} table (CLAUDE.md §1.3 — JdbcClient + records, no ORM).
@@ -223,32 +226,34 @@ public class AccountRepository {
    * = top level, 1 = child, 2 = grandchild, …) and listed depth-first — every node immediately
    * followed by all of its descendants, alphabetical among siblings at each level.
    */
+  @Cacheable(cacheNames = CacheNames.ACCOUNT_TREE, condition = CacheNames.OUTSIDE_TRANSACTION)
   public List<AccountNode> findLiveByTypesWithDepth(List<String> types) {
-    return jdbcClient
-        .sql(
-            LIVE_TREE_CTE
-                + "select "
-                + TREE_ACCOUNT_COLUMNS
-                + ", depth from tree order by sort_path")
-        .param(TYPES, types)
-        .query(
-            (rs, rowNum) ->
-                new AccountNode(
-                    new Account(
-                        rs.getLong("account_id"),
-                        rs.getString("name"),
-                        rs.getString("type"),
-                        rs.getObject("parent_id", Long.class),
-                        rs.getString("currency_code"),
-                        rs.getObject("hue", Integer.class),
-                        rs.getObject("opened_at", LocalDate.class),
-                        rs.getObject("closed_at", LocalDate.class),
-                        rs.getObject("deleted_at", OffsetDateTime.class),
-                        rs.getBoolean("currency_leaf"),
-                        rs.getBoolean("person_leaf"),
-                        rs.getBoolean("show_on_main_page")),
-                    rs.getInt("depth")))
-        .list();
+    return List.copyOf(
+        jdbcClient
+            .sql(
+                LIVE_TREE_CTE
+                    + "select "
+                    + TREE_ACCOUNT_COLUMNS
+                    + ", depth from tree order by sort_path")
+            .param(TYPES, types)
+            .query(
+                (rs, rowNum) ->
+                    new AccountNode(
+                        new Account(
+                            rs.getLong("account_id"),
+                            rs.getString("name"),
+                            rs.getString("type"),
+                            rs.getObject("parent_id", Long.class),
+                            rs.getString("currency_code"),
+                            rs.getObject("hue", Integer.class),
+                            rs.getObject("opened_at", LocalDate.class),
+                            rs.getObject("closed_at", LocalDate.class),
+                            rs.getObject("deleted_at", OffsetDateTime.class),
+                            rs.getBoolean("currency_leaf"),
+                            rs.getBoolean("person_leaf"),
+                            rs.getBoolean("show_on_main_page")),
+                        rs.getInt("depth")))
+            .list());
   }
 
   /**
@@ -311,6 +316,7 @@ public class AccountRepository {
    *
    * @return the number of rows stamped
    */
+  @CacheEvict(cacheNames = CacheNames.ACCOUNT_TREE, allEntries = true)
   public int softDelete(List<Long> accountIds) {
     if (accountIds.isEmpty()) {
       return 0;
@@ -357,6 +363,7 @@ public class AccountRepository {
   }
 
   /** Insert a new account and return its generated id. */
+  @CacheEvict(cacheNames = CacheNames.ACCOUNT_TREE, allEntries = true)
   public long insert(Account account) {
     return jdbcClient
         .sql(
@@ -434,6 +441,7 @@ public class AccountRepository {
    * Update the paying-account detection config (data-model §13.4): the label list and the
    * cash-account marker, edited on the account-edit screen.
    */
+  @CacheEvict(cacheNames = CacheNames.ACCOUNT_TREE, allEntries = true)
   public int updateDetection(long accountId, String detectionLabels, boolean cashAccount) {
     return jdbcClient
         .sql(
@@ -449,6 +457,7 @@ public class AccountRepository {
   }
 
   /** Update the freely-editable fields: display name and stored hue. */
+  @CacheEvict(cacheNames = CacheNames.ACCOUNT_TREE, allEntries = true)
   public int updateNameAndHue(long accountId, String name, Integer hue) {
     return jdbcClient
         .sql("update account set name = :name, hue = :hue where account_id = :accountId")
@@ -463,6 +472,7 @@ public class AccountRepository {
    * account", issue landing-page/01). Written only from the account editor; the flag is left as-is
    * when the account is closed or deleted.
    */
+  @CacheEvict(cacheNames = CacheNames.ACCOUNT_TREE, allEntries = true)
   public int updateShowOnMainPage(long accountId, boolean showOnMainPage) {
     return jdbcClient
         .sql("update account set show_on_main_page = :showOnMainPage where account_id = :accountId")
@@ -477,6 +487,7 @@ public class AccountRepository {
    * re-parent move ({@code AccountReparenter}, issue account-management/03); the caller owns the
    * validation (same type, parent has no postings, no cycle).
    */
+  @CacheEvict(cacheNames = CacheNames.ACCOUNT_TREE, allEntries = true)
   public int updateParent(long accountId, Long newParentId) {
     return jdbcClient
         .sql("update account set parent_id = :newParentId where account_id = :accountId")
@@ -486,6 +497,7 @@ public class AccountRepository {
   }
 
   /** Stamp {@code closed_at} on a live, still-open account; affects no rows otherwise. */
+  @CacheEvict(cacheNames = CacheNames.ACCOUNT_TREE, allEntries = true)
   public int close(long accountId, LocalDate closedAt) {
     return jdbcClient
         .sql(
@@ -502,6 +514,7 @@ public class AccountRepository {
   }
 
   /** Clear {@code closed_at} on a live, closed account; affects no rows otherwise. */
+  @CacheEvict(cacheNames = CacheNames.ACCOUNT_TREE, allEntries = true)
   public int reopen(long accountId) {
     return jdbcClient
         .sql(

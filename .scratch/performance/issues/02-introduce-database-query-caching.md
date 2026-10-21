@@ -1,6 +1,6 @@
 # Introduce a caching strategy for database queries
 
-Status: needs-triage
+Status: in progress
 Category: enhancement
 Severity: low–medium
 Area: cross-cutting (application-wide)
@@ -18,19 +18,49 @@ the statements list's per-statement "green" check, report queries, the per-reque
 in `CurrencyPickerAdvice`). CLAUDE.md §4 allows a cache "only when *measured* slow"; this issue is
 the placeholder for that decision, to be made once, consistently, rather than ad hoc per query.
 
-## To decide (needs triage / a design pass)
-- What is cached: immutable/near-immutable reference data (settings, currencies, account tree),
-  per-request memoization, or computed results (matcher review, balances).
-- Where it sits (service layer vs repository), the mechanism (Spring Cache + Caffeine vs none), and
-  the single invalidation path per cached thing — the ledger is a write-heavy source of truth, so
-  stale reads must be impossible for money-critical reads.
-- Measure first: record the slow paths and their timings on the Pi before adding anything.
+## Accepted solution (owner, 2026-10-21)
+**Scope: reference data only.** Cached, each evicted by the single repository writer that changes it
+(all writes to these tables are in the repository classes below — verified by grep):
 
-Related: `statements/16` — the owner chose to introduce caching first for the statements list's
-per-statement "green" review (the first measured-slow path); `performance/01` (settings read) should be retired by whatever this introduces.
+| Cache | Cached read | Evicted by |
+|-------|-------------|------------|
+| settings | `SettingsRepository.load()` (never `loadAi()` — it holds the API key) | every `SettingsRepository.update*` |
+| currencies, currencyOptions | `CurrencyRepository.findAll`, `CurrencyOptionRepository.findAll` | `CurrencyRepository.insert` |
+| countries | `CountryRepository.findAll` | nothing writes it |
+| accountTree | `AccountRepository.findLiveByTypesWithDepth(types)` (categories are accounts) | `insert`, `softDelete`, `updateNameAndHue`, `updateShowOnMainPage`, `updateParent`, `updateDetection`, `close`, `reopen` |
+| tagTree, tagLabels | `TagRepository.findLiveWithDepth`, `TagReadRepository.liveTagLabels` | `TagRepository.insert` |
+| payees, payeeFilterOptions | `PayeeRepository.findAllLive`, `findFilterOptions` | `PayeeRepository.insert`, `rename` |
+| people | `PersonRepository.findAllLive` | `PersonRepository.insert`, `updateName`, `softDelete`, `revive` |
 
-**Done when:** an agreed strategy is documented, and the measured-slow paths use it with correct
-invalidation.
+**Not cached:** anything derived from postings/transactions (balances, register rows, reports,
+pinned balances, pending-review count, exchange-rate lookups, `findPostedAccountIds`) and the
+statement matcher / list-page review (`statements/16` problem 2 — needs a computed-result cache with
+eviction on every ledger write; measure first, separate decision).
+
+**Mechanism:**
+- Spring cache abstraction + Caffeine; `@Cacheable` / `@CacheEvict(allEntries = true)` on the
+  **repository** methods, read and writer side by side. Cache names are constants in the `shared`
+  kernel module (`CacheNames`), so a writer in one module can evict a cache another module reads.
+- One `CacheManager` bean in `shared`, wrapped in `TransactionAwareCacheManagerProxy` so evictions
+  and puts happen after commit (a rolled-back write evicts nothing; a concurrent reader cannot
+  refill a stale value before the commit).
+- No TTL is needed for correctness (every write goes through the app); a long safety-net expiry
+  (`hauptbuch.cache.expire-after-write`, default 1 h) covers out-of-band edits in the database.
+- Reads **inside a transaction skip the cache** (`condition = CacheNames.OUTSIDE_TRANSACTION`): the
+  eviction waits for the commit, so a cached read there would miss the transaction's own writes.
+  Controller/picker reads run outside transactions and are cached. (Added after code review.)
+- A reader that loaded old rows just before a commit can put them back just after the eviction; it
+  needs two concurrent requests on a single-user app and ends at the safety-net expiry. Accepted.
+- Cached values are immutable (`List.copyOf` at the cached method).
+- `hauptbuch.cache.enabled=false` swaps in a no-op manager; every test suite runs with it off
+  (rolled-back tests would otherwise leak cached data between tests). Only the dedicated cache
+  integration test turns it on.
+- Tests per cache: read (populates) → change the row with raw JDBC (read still returns the old
+  value: proves it is cached) → call the repository's writer → read shows the new state.
+- Retires `performance/01` (settings read per request).
+
+**Done when:** the strategy above is in CLAUDE.md §4 / tech-stack, each listed cache has its
+read-then-write test, and `./gradlew check` is green.
 
 ## Comments
 Filed 2026-10-18. Not urgent; deliberately separate from the statements performance fix.

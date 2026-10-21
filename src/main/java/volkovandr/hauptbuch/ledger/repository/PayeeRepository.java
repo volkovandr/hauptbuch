@@ -2,11 +2,14 @@ package volkovandr.hauptbuch.ledger.repository;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.ledger.Payee;
+import volkovandr.hauptbuch.shared.CacheNames;
 
 /**
  * Native-SQL CRUD for {@code payee} (data-model §3.4). A payee is true reference data, so plain
@@ -35,6 +38,9 @@ public class PayeeRepository {
   }
 
   /** Insert a payee with an optional city and country; returns its generated id. */
+  @CacheEvict(
+      cacheNames = {CacheNames.PAYEES, CacheNames.PAYEE_FILTER_OPTIONS},
+      allEntries = true)
   public long insert(String name, String city, String countryCode) {
     KeyHolder keyHolder = new GeneratedKeyHolder();
     jdbcClient
@@ -52,11 +58,13 @@ public class PayeeRepository {
   }
 
   /** The live payees, alphabetical — the register's payee filter options (register §2.3). */
+  @Cacheable(cacheNames = CacheNames.PAYEES, condition = CacheNames.OUTSIDE_TRANSACTION)
   public List<Payee> findAllLive() {
-    return jdbcClient
-        .sql(SELECT_PAYEES + "deleted_at is null order by name")
-        .query(Payee.class)
-        .list();
+    return List.copyOf(
+        jdbcClient
+            .sql(SELECT_PAYEES + "deleted_at is null order by name")
+            .query(Payee.class)
+            .list());
   }
 
   /**
@@ -64,10 +72,14 @@ public class PayeeRepository {
    * payee filter options (register §2.3/§3.4), so same-named payees at different addresses are
    * distinguishable in the dropdown. Alphabetical by the label.
    */
+  @Cacheable(
+      cacheNames = CacheNames.PAYEE_FILTER_OPTIONS,
+      condition = CacheNames.OUTSIDE_TRANSACTION)
   public List<PayeeOption> findFilterOptions() {
-    return jdbcClient
-        .sql(
-            """
+    return List.copyOf(
+        jdbcClient
+            .sql(
+                """
             select p.payee_id,
                    p.name
                      || coalesce(' · ' || p.city, '')
@@ -80,8 +92,8 @@ public class PayeeRepository {
             where p.deleted_at is null
             order by label
             """)
-        .query(PayeeOption.class)
-        .list();
+            .query(PayeeOption.class)
+            .list());
   }
 
   /**
@@ -135,6 +147,9 @@ public class PayeeRepository {
    * spelling of an existing payee turns up ({@code REWE} → {@code Rewe}); the address stays put, so
    * this is a name-only update.
    */
+  @CacheEvict(
+      cacheNames = {CacheNames.PAYEES, CacheNames.PAYEE_FILTER_OPTIONS},
+      allEntries = true)
   public void rename(long payeeId, String name) {
     jdbcClient
         .sql("update payee set name = :name where payee_id = :payeeId")

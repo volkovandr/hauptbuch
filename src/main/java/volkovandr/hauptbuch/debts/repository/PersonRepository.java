@@ -2,9 +2,12 @@ package volkovandr.hauptbuch.debts.repository;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.debts.Person;
+import volkovandr.hauptbuch.shared.CacheNames;
 
 /**
  * Repository for {@link Person} entities. All queries scope to `deleted_at is null` (live persons)
@@ -20,6 +23,7 @@ public class PersonRepository {
   }
 
   /** Insert a person and return the persisted row with its generated ID. */
+  @CacheEvict(cacheNames = CacheNames.PEOPLE, allEntries = true)
   public Person insert(String name) {
     return jdbcClient
         .sql("insert into person (name) values (:n) returning *")
@@ -51,11 +55,13 @@ public class PersonRepository {
   }
 
   /** Fetch all live persons, ordered by name. */
+  @Cacheable(cacheNames = CacheNames.PEOPLE, condition = CacheNames.OUTSIDE_TRANSACTION)
   public List<Person> findAllLive() {
-    return jdbcClient
-        .sql("select * from person where deleted_at is null order by name")
-        .query(Person.class)
-        .list();
+    return List.copyOf(
+        jdbcClient
+            .sql("select * from person where deleted_at is null order by name")
+            .query(Person.class)
+            .list());
   }
 
   /** Fetch all live persons matching a name (exact match or substring search). */
@@ -123,6 +129,7 @@ public class PersonRepository {
   }
 
   /** Update the person's name. Soft-deleted persons may be renamed (not on the live-only path). */
+  @CacheEvict(cacheNames = CacheNames.PEOPLE, allEntries = true)
   public Person updateName(Long personId, String newName) {
     return jdbcClient
         .sql("update person set name = :n where person_id = :id returning *")
@@ -133,6 +140,7 @@ public class PersonRepository {
   }
 
   /** Soft-delete a person. Soft-delete is reversible. */
+  @CacheEvict(cacheNames = CacheNames.PEOPLE, allEntries = true)
   public void softDelete(Long personId) {
     jdbcClient
         .sql("update person set deleted_at = now() where person_id = :id")
@@ -141,6 +149,7 @@ public class PersonRepository {
   }
 
   /** Revive a soft-deleted person (set deleted_at to NULL). */
+  @CacheEvict(cacheNames = CacheNames.PEOPLE, allEntries = true)
   public Person revive(Long personId) {
     return jdbcClient
         .sql("update person set deleted_at = null where person_id = :id returning *")

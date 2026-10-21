@@ -1,10 +1,13 @@
 package volkovandr.hauptbuch.ledger.repository;
 
 import java.math.BigDecimal;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.ledger.AiSettings;
 import volkovandr.hauptbuch.ledger.Settings;
+import volkovandr.hauptbuch.shared.CacheNames;
 
 /**
  * Native-SQL access to the single-row {@code settings} entity (data-model §3.8). The row always
@@ -24,6 +27,7 @@ public class SettingsRepository {
   }
 
   /** Load the single settings row (base currency + display name). */
+  @Cacheable(cacheNames = CacheNames.SETTINGS, condition = CacheNames.OUTSIDE_TRANSACTION)
   public Settings load() {
     return jdbcClient
         .sql("select base_currency, display_name from settings where settings_id = 1")
@@ -32,6 +36,7 @@ public class SettingsRepository {
   }
 
   /** Set the base currency (the write-once guard lives in {@code SettingsService}, not here). */
+  @CacheEvict(cacheNames = CacheNames.SETTINGS, allEntries = true)
   public void updateBaseCurrency(String baseCurrency) {
     jdbcClient
         .sql("update settings set base_currency = :baseCurrency where settings_id = 1")
@@ -40,6 +45,7 @@ public class SettingsRepository {
   }
 
   /** Set the freely-editable display name backing the greeting. */
+  @CacheEvict(cacheNames = CacheNames.SETTINGS, allEntries = true)
   public void updateDisplayName(String displayName) {
     jdbcClient
         .sql("update settings set display_name = :displayName where settings_id = 1")
@@ -68,6 +74,7 @@ public class SettingsRepository {
   }
 
   /** Set the Anthropic model id (null resets to the default at resolution time). */
+  @CacheEvict(cacheNames = CacheNames.SETTINGS, allEntries = true)
   public void updateAiModel(String model) {
     jdbcClient
         .sql("update settings set ai_model = :model where settings_id = 1")
@@ -78,6 +85,7 @@ public class SettingsRepository {
   /**
    * Set (or clear, when null) the DB-stored API key — the one secret in the DB (data-model §3.8).
    */
+  @CacheEvict(cacheNames = CacheNames.SETTINGS, allEntries = true)
   public void updateAiApiKey(String apiKey) {
     jdbcClient
         .sql("update settings set ai_api_key = :apiKey where settings_id = 1")
@@ -99,6 +107,7 @@ public class SettingsRepository {
   }
 
   /** Set (or clear, when null) the operator-edited receipt-parser system prompt. */
+  @CacheEvict(cacheNames = CacheNames.SETTINGS, allEntries = true)
   public void updateAiSystemPrompt(String systemPrompt) {
     jdbcClient
         .sql("update settings set ai_system_prompt = :prompt where settings_id = 1")
@@ -116,6 +125,7 @@ public class SettingsRepository {
   }
 
   /** Set (or clear, when null) the operator-edited statement-parser system prompt. */
+  @CacheEvict(cacheNames = CacheNames.SETTINGS, allEntries = true)
   public void updateStatementSystemPrompt(String systemPrompt) {
     jdbcClient
         .sql("update settings set statement_system_prompt = :prompt where settings_id = 1")
@@ -124,6 +134,7 @@ public class SettingsRepository {
   }
 
   /** Set the four per-million-token USD price rates a parse's frozen cost is computed from. */
+  @CacheEvict(cacheNames = CacheNames.SETTINGS, allEntries = true)
   public void updateAiPrices(
       BigDecimal priceIn,
       BigDecimal priceOut,

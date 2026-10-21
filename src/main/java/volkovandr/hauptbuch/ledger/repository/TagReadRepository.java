@@ -4,9 +4,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.ledger.TransactionTag;
+import volkovandr.hauptbuch.shared.CacheNames;
 
 /**
  * Native-SQL reads of the tags carried by postings (register §3.6, plan stage 7e) — the register's
@@ -130,10 +132,12 @@ public class TagReadRepository {
    * §3.6). Soft-deleted tags are not offered (but a tag whose ancestor is deleted still resolves,
    * since the label CTE spans all rows).
    */
+  @Cacheable(cacheNames = CacheNames.TAG_LABELS, condition = CacheNames.OUTSIDE_TRANSACTION)
   public List<String> liveTagLabels() {
-    return jdbcClient
-        .sql(LABELLED + "select label from labelled where deleted_at is null order by label")
-        .query(String.class)
-        .list();
+    return List.copyOf(
+        jdbcClient
+            .sql(LABELLED + "select label from labelled where deleted_at is null order by label")
+            .query(String.class)
+            .list());
   }
 }

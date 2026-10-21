@@ -1,8 +1,10 @@
 package volkovandr.hauptbuch.accounts.repository;
 
 import java.util.List;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import volkovandr.hauptbuch.shared.CacheNames;
 
 /**
  * Read-only lookup of the seeded currencies for the account form's currency select — see {@link
@@ -20,10 +22,12 @@ public class CurrencyOptionRepository {
   }
 
   /** All seeded currencies, ordered by ISO code. */
+  @Cacheable(cacheNames = CacheNames.CURRENCY_OPTIONS, condition = CacheNames.OUTSIDE_TRANSACTION)
   public List<CurrencyOption> findAll() {
-    return jdbcClient
-        .sql("select currency_code as code, name from currency order by currency_code")
-        .query(CurrencyOption.class)
-        .list();
+    return List.copyOf(
+        jdbcClient
+            .sql("select currency_code as code, name from currency order by currency_code")
+            .query(CurrencyOption.class)
+            .list());
   }
 }

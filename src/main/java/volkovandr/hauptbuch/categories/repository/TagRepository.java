@@ -3,12 +3,15 @@ package volkovandr.hauptbuch.categories.repository;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.categories.Tag;
 import volkovandr.hauptbuch.categories.TagNode;
+import volkovandr.hauptbuch.shared.CacheNames;
 
 /**
  * Native-SQL CRUD for the {@code tag} vocabulary (data-model §10.1). A tag is shared-taxonomy
@@ -65,6 +68,9 @@ public class TagRepository {
   }
 
   /** Insert a tag under an optional parent; returns its generated id. */
+  @CacheEvict(
+      cacheNames = {CacheNames.TAG_TREE, CacheNames.TAG_LABELS},
+      allEntries = true)
   public long insert(String name, Long parentId) {
     KeyHolder keyHolder = new GeneratedKeyHolder();
     jdbcClient
@@ -117,18 +123,20 @@ public class TagRepository {
    * (reporting.md §11a.5's Tag filter section), mirroring {@code
    * AccountRepository#findLiveByTypesWithDepth}.
    */
+  @Cacheable(cacheNames = CacheNames.TAG_TREE, condition = CacheNames.OUTSIDE_TRANSACTION)
   public List<TagNode> findLiveWithDepth() {
-    return jdbcClient
-        .sql(LIVE_TREE_CTE + "select " + TAG_COLUMNS + ", depth from tree order by sort_path")
-        .query(
-            (rs, rowNum) ->
-                new TagNode(
-                    new Tag(
-                        rs.getLong("tag_id"),
-                        rs.getString("name"),
-                        rs.getObject("parent_id", Long.class),
-                        rs.getObject("deleted_at", OffsetDateTime.class)),
-                    rs.getInt("depth")))
-        .list();
+    return List.copyOf(
+        jdbcClient
+            .sql(LIVE_TREE_CTE + "select " + TAG_COLUMNS + ", depth from tree order by sort_path")
+            .query(
+                (rs, rowNum) ->
+                    new TagNode(
+                        new Tag(
+                            rs.getLong("tag_id"),
+                            rs.getString("name"),
+                            rs.getObject("parent_id", Long.class),
+                            rs.getObject("deleted_at", OffsetDateTime.class)),
+                        rs.getInt("depth")))
+            .list());
   }
 }
