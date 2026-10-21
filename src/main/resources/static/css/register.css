@@ -123,6 +123,13 @@
   gap: 0.75rem;
 }
 
+/* Every control in the row shares one bottom edge: the shared .field / .actions vertical margins
+   would lift the inputs and Apply above the (margin-less) preset buttons. */
+.register-filter__row > .field,
+.register-filter__row > .actions {
+  margin: 0;
+}
+
 /* One line when it fits: the payee dropdown is the elastic control and gives way first. */
 .register-filter__payee {
   flex: 1 1 8rem;
@@ -136,18 +143,9 @@
 
 /* The presets sit together at the row's start, aligned with the inputs rather than their labels. */
 .register-filter__presets {
+  order: -1;
   display: flex;
   gap: 0.4rem;
-  white-space: nowrap;
-}
-
-/* Clipped, not display:none, so it still counts as the form's default (Enter) submit button. */
-.register-filter__default-submit {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
   white-space: nowrap;
 }
 

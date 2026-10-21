@@ -118,25 +118,6 @@
       </div>
 
       <div class="register-filter__row">
-        <!-- Date quick presets (issue transaction-register-ui/12): each sets the dates server-side
-             and keeps the other filter fields. They come first in the row, so a visually hidden
-             Apply twin leads the form: it is the implicit submitter, so Enter in a field applies
-             the typed filter rather than pressing the first preset. -->
-        <button type="submit" class="register-filter__default-submit" tabindex="-1" aria-hidden="true">
-          Apply
-        </button>
-        <div class="register-filter__presets">
-          <button
-            type="submit"
-            class="btn btn--ghost"
-            name="datePreset"
-            th:each="preset : ${T(volkovandr.hauptbuch.ledger.DatePreset).values()}"
-            th:value="${preset.param()}"
-            th:text="${preset.label()}"
-          >
-            Last 90 days
-          </button>
-        </div>
         <div class="field">
           <label class="field__label" for="fromDate">From</label>
           <input
@@ -187,6 +168,21 @@
                which a tab switch keeps current. -->
           <button type="submit" class="btn">Apply</button>
         </p>
+        <!-- Date quick presets (issue transaction-register-ui/12): each sets the dates server-side
+             and keeps the other filter fields. After Apply in the DOM so Enter in a field still
+             submits Apply; CSS `order` shows them first in the row. -->
+        <div class="register-filter__presets">
+          <button
+            type="submit"
+            class="btn btn--ghost"
+            name="datePreset"
+            th:each="preset : ${T(volkovandr.hauptbuch.ledger.DatePreset).values()}"
+            th:value="${preset.param()}"
+            th:text="${preset.label()}"
+          >
+            Last 90 days
+          </button>
+        </div>
       </div>
     </form>
 

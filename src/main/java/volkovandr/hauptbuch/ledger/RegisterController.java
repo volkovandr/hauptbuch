@@ -83,16 +83,10 @@ class RegisterController {
       @RequestParam(required = false) Long selected,
       Model model) {
     Optional<RegisterFilter> jump = jumpFilter(selected);
+    DatePreset.DateRange range = dateRange(datePreset, fromDate, toDate);
     RegisterFilter filter =
         jump.orElseGet(
-            () ->
-                filterFrom(
-                    accountId,
-                    picker,
-                    presetFrom(datePreset, fromDate),
-                    presetTo(datePreset, toDate),
-                    payeeId,
-                    pendingOnly));
+            () -> filterFrom(accountId, picker, range.from(), range.to(), payeeId, pendingOnly));
     RegisterView register = registerService.view(filter);
 
     model.addAttribute("register", register);
@@ -166,17 +160,15 @@ class RegisterController {
     return new RegisterFilter(selection, active, from, toDate, payeeId, pendingOnly);
   }
 
-  /** The preset's lower bound when a quick preset was pressed, else the typed one. */
-  private LocalDate presetFrom(String datePreset, LocalDate typed) {
+  /**
+   * The date bounds to filter by: the pressed quick preset's range, else the typed one. Both bounds
+   * travel together because a preset's open upper bound is null — resolving them separately would
+   * let a typed To date leak through.
+   */
+  private DatePreset.DateRange dateRange(String datePreset, LocalDate fromDate, LocalDate toDate) {
     return DatePreset.fromParam(datePreset)
-        .map(p -> p.rangeAt(LocalDate.now(clock)).from())
-        .orElse(typed);
-  }
-
-  /** The preset's upper bound (null = open) when a quick preset was pressed, else the typed one. */
-  private LocalDate presetTo(String datePreset, LocalDate typed) {
-    Optional<DatePreset> preset = DatePreset.fromParam(datePreset);
-    return preset.isPresent() ? preset.get().rangeAt(LocalDate.now(clock)).to() : typed;
+        .map(p -> p.rangeAt(LocalDate.now(clock)))
+        .orElseGet(() -> new DatePreset.DateRange(fromDate, toDate));
   }
 
   /** The transaction-derived filter for a {@code selected=} jump; empty when there is no jump. */
