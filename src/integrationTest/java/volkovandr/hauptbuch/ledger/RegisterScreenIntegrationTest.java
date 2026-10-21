@@ -214,6 +214,49 @@ class RegisterScreenIntegrationTest {
         .andExpect(content().string(containsString("name=\"viewPendingOnly\" value=\"true\"")));
   }
 
+  // ── Date quick presets (issue transaction-register-ui/12) ─────────────────
+
+  @Test
+  void last90DaysPresetFillsFromWithAnOpenEndAndKeepsTheOtherFilters() throws Exception {
+    String from = LocalDate.now().minusDays(89).toString();
+
+    mockMvc
+        .perform(
+            get(REGISTER_PATH)
+                .param("datePreset", "last-90-days")
+                .param("fromDate", OPEN_DAY)
+                .param("toDate", "2026-03-03")
+                .param("pendingOnly", "true"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("name=\"fromDate\"")))
+        .andExpect(content().string(containsString("value=\"" + from + "\"")))
+        .andExpect(content().string(not(containsString("value=\"2026-03-03\""))))
+        .andExpect(
+            content()
+                .string(matchesRegex("(?s).*name=\"pendingOnly\"\\s+value=\"true\"\\s+checked.*")));
+  }
+
+  @Test
+  void previousMonthPresetFillsBothBounds() throws Exception {
+    java.time.YearMonth previous = java.time.YearMonth.now().minusMonths(1);
+
+    mockMvc
+        .perform(get(REGISTER_PATH).param("datePreset", "previous-month"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("value=\"" + previous.atDay(1) + "\"")))
+        .andExpect(content().string(containsString("value=\"" + previous.atEndOfMonth() + "\"")));
+  }
+
+  @Test
+  void rendersAButtonPerPreset() throws Exception {
+    mockMvc
+        .perform(get(REGISTER_PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("value=\"last-90-days\"")))
+        .andExpect(content().string(containsString("value=\"last-365-days\"")))
+        .andExpect(content().string(containsString("value=\"previous-month\"")));
+  }
+
   // ── Person legs (register §2.6, plan stage 8c) ────────────────────────────
 
   /** Auto-provision a person's per-currency debt leaf and return its account id. */
