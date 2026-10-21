@@ -93,6 +93,19 @@ class ReceiptProcessingScreenIntegrationTest {
   }
 
   @Test
+  void onlyTheNewReceiptsPrepareButtonIsAutofocused() throws Exception {
+    long newId = upload();
+    long preProcessedId = uploadAndPreProcess();
+
+    mockMvc
+        .perform(get("/receipts/" + newId))
+        .andExpect(content().string(containsString("data-receipt-edit-start autofocus")));
+    mockMvc
+        .perform(get("/receipts/" + preProcessedId))
+        .andExpect(content().string(not(containsString("autofocus"))));
+  }
+
+  @Test
   void preProcessedReceiptShowsEditAndDiscardAndTheEditedImage() throws Exception {
     long id = uploadAndPreProcess();
 

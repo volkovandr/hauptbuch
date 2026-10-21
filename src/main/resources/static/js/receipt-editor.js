@@ -199,6 +199,10 @@
     form.setAttribute("hidden", "");
     if (readView) readView.removeAttribute("hidden");
     if (chrome) chrome.removeAttribute("hidden");
+    // A `new` receipt's Prepare button is autofocused in the markup; give it focus back so Enter
+    // keeps working after a Cancel.
+    var start = root.querySelector("[data-receipt-edit-start][autofocus]");
+    if (start) start.focus();
   }
 
   function destroy() {
