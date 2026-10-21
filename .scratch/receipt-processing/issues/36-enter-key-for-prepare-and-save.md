@@ -1,6 +1,6 @@
 # Enter should trigger "Prepare for analysis" and, in the image editor, "Save"
 
-Status: open
+Status: resolved
 Category: enhancement
 Severity: minor
 Area: Receipts — processing screen (`receipt-process.html`), keyboard leaf (`keyboard.js`)
