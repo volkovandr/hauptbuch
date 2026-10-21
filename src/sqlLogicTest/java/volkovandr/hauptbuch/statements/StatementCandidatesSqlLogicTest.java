@@ -31,6 +31,7 @@ class StatementCandidatesSqlLogicTest {
 
   @Autowired JdbcClient jdbcClient;
   @Autowired StatementMatchRepository matcher;
+  @Autowired StatementReviewService reviewService;
 
   private long own;
   private long otherEur;
@@ -476,11 +477,11 @@ class StatementCandidatesSqlLogicTest {
 
     List<StatementCandidate> full = matcher.findCandidates(statementId);
 
-    assertThat(matcher.findCandidates(statementId, lineId))
+    assertThat(matcher.findCandidatesForLine(statementId, lineId))
         .isNotEmpty()
         .containsExactlyElementsOf(
             full.stream().filter(c -> c.statementLineId() == lineId).toList());
-    assertThat(matcher.findCandidates(statementId, second))
+    assertThat(matcher.findCandidatesForLine(statementId, second))
         .isNotEmpty()
         .containsExactlyElementsOf(
             full.stream().filter(c -> c.statementLineId() == second).toList());
@@ -491,7 +492,7 @@ class StatementCandidatesSqlLogicTest {
     long taken = expense(BOOKING, own, "-3.50", null);
     match(statementId, lineId, taken);
 
-    assertThat(matcher.findCandidates(statementId, lineId)).isEmpty();
+    assertThat(matcher.findCandidatesForLine(statementId, lineId)).isEmpty();
   }
 
   @Test
@@ -516,5 +517,33 @@ class StatementCandidatesSqlLogicTest {
   @Test
   void rivalCandidatesAreEmptyWithoutPostings() {
     assertThat(matcher.findCandidatesOnPostings(statementId, lineId, List.of())).isEmpty();
+  }
+
+  @Test
+  void reviewingOneLineGivesTheSameLineReviewAsReviewingTheStatement() {
+    final long closer = line(statementId, 1, BOOKING.plusDays(1), "-3.50", "SHOPAAA", null);
+    final long third = line(statementId, 2, BOOKING.plusDays(2), "-7.00", "SHOPBBB", null);
+    expense(BOOKING, own, "-3.50", payee("ShopAaa"));
+    expense(BOOKING.plusDays(1), own, "-3.50", null);
+    expense(BOOKING.plusDays(2), own, "-7.00", null);
+
+    List<LineReview> full = reviewService.review(statementId).lines();
+
+    assertThat(full).hasSize(3);
+    for (long id : List.of(lineId, closer, third)) {
+      assertThat(reviewService.reviewLine(statementId, id))
+          .contains(full.stream().filter(l -> l.line().statementLineId() == id).findFirst().get());
+    }
+  }
+
+  @Test
+  void rivalCandidatesIgnoreTheDateWindowsOfOtherLines() {
+    long farLine = line(statementId, 1, BOOKING.plusDays(40), "-9.00", "SHOPCCC", null);
+    long shared = expense(BOOKING, own, "-3.50", null);
+    expense(BOOKING.plusDays(40), own, "-9.00", null);
+
+    assertThat(matcher.findCandidatesOnPostings(statementId, lineId, List.of(shared)))
+        .extracting(StatementCandidate::statementLineId)
+        .doesNotContain(farLine);
   }
 }

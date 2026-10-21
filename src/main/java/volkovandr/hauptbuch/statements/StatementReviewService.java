@@ -41,11 +41,25 @@ public class StatementReviewService {
   public StatementReview review(long statementId) {
     Statement statement = statementService.get(statementId);
     StatementProfile profile = profileService.getIncludingDeleted(statement.statementProfileId());
-    return StatementMatcher.review(
+    return matched(
+        statement,
+        profile,
         lineRepository.findByStatement(statementId),
         matchRepository.findCandidates(statementId),
-        matchRepository.findMatches(statementId),
-        matchRepository.findExtras(statementId),
+        matchRepository.findExtras(statementId));
+  }
+
+  private StatementReview matched(
+      Statement statement,
+      StatementProfile profile,
+      List<StatementLine> lines,
+      List<StatementCandidate> candidates,
+      List<StatementExtra> extras) {
+    return StatementMatcher.review(
+        lines,
+        candidates,
+        matchRepository.findMatches(statement.statementId()),
+        extras,
         profile.windowDaysBefore(),
         profile.windowDaysAfter(),
         statement);
@@ -67,22 +81,13 @@ public class StatementReviewService {
       return Optional.empty();
     }
     List<StatementCandidate> candidates =
-        new ArrayList<>(matchRepository.findCandidates(statementId, statementLineId));
+        new ArrayList<>(matchRepository.findCandidatesForLine(statementId, statementLineId));
     candidates.addAll(
         matchRepository.findCandidatesOnPostings(
             statementId,
             statementLineId,
             candidates.stream().map(StatementCandidate::postingId).distinct().toList()));
-    return StatementMatcher.review(
-            lines,
-            candidates,
-            matchRepository.findMatches(statementId),
-            List.of(),
-            profile.windowDaysBefore(),
-            profile.windowDaysAfter(),
-            statement)
-        .lines()
-        .stream()
+    return matched(statement, profile, lines, candidates, List.of()).lines().stream()
         .filter(l -> l.line().statementLineId() == statementLineId)
         .findFirst();
   }
