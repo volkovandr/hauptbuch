@@ -125,7 +125,7 @@ layout's "→ top" slice.
 
 | Aspect | Default | Notes |
 |--------|---------|-------|
-| Date range | **Last 12 months** | The natural bounded view; keeps render + worst-case re-fetch to hundreds of rows. |
+| Date range | **Last 90 days** | The natural bounded view; keeps render + worst-case re-fetch to hundreds of rows. (Was 12 months; too slow to load — 2026-10-21.) |
 | Accounts | **Last used** picker, all ticked | A one-line tab strip of five pickers (below); multi-account by default (Money showed one at a time — rejected, see §2.5). |
 | Payees | none (all) | Free filter. |
 | Pending only | off | Shows only `pending_review` rows (recurring occurrences awaiting review, zero-amount receipt placeholders). The main page's "pending to review" link opens the register with it on. |

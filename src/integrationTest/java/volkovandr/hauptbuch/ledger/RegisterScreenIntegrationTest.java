@@ -100,7 +100,7 @@ class RegisterScreenIntegrationTest {
   @Test
   void screenRendersTheFilterAndAnEmptyStateOnBook() throws Exception {
     mockMvc
-        .perform(get(REGISTER_PATH))
+        .perform(get(REGISTER_PATH).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("Transaction register")))
         .andExpect(content().string(containsString("No transactions in this view")));
@@ -111,7 +111,7 @@ class RegisterScreenIntegrationTest {
     openAccount(CASH, EUR, "1234.56");
 
     mockMvc
-        .perform(get(REGISTER_PATH))
+        .perform(get(REGISTER_PATH).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString(CASH)))
         // The opening balance renders bare (base currency) and German-formatted, as both the
@@ -128,7 +128,7 @@ class RegisterScreenIntegrationTest {
     spend("2026-02-01", cash, food, "20");
 
     mockMvc
-        .perform(get(REGISTER_PATH))
+        .perform(get(REGISTER_PATH).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         // The Cash leg is the row; its Category cell names the counterpart Food leg (register
         // §2.6).
@@ -156,7 +156,8 @@ class RegisterScreenIntegrationTest {
     // that is the correct default-filter behaviour, so the chip only surfaces on a single-account
     // view. The single-leg filtering itself is pinned in RegisterSqlLogicTest.)
     mockMvc
-        .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
+        .perform(
+            get(REGISTER_PATH).param("accountId", String.valueOf(cash)).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("cat-chip--transfer")))
         .andExpect(content().string(containsString("Giro")));
@@ -167,7 +168,7 @@ class RegisterScreenIntegrationTest {
     openAccount(CASH, EUR, "100");
 
     mockMvc
-        .perform(get(REGISTER_PATH))
+        .perform(get(REGISTER_PATH).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         // The row carries an inline background derived from the account's stored hue (register
         // §2.8).
@@ -181,7 +182,8 @@ class RegisterScreenIntegrationTest {
 
     // Filtering to Cash only: the Giro opening balance (999,00) must not appear.
     mockMvc
-        .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
+        .perform(
+            get(REGISTER_PATH).param("accountId", String.valueOf(cash)).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString(CASH)))
         .andExpect(content().string(not(containsString("999,00"))));
@@ -224,7 +226,7 @@ class RegisterScreenIntegrationTest {
         .perform(
             get(REGISTER_PATH)
                 .param("datePreset", "last-90-days")
-                .param("fromDate", OPEN_DAY)
+                .param("fromDate", "2026-02-02")
                 .param("toDate", "2026-03-03")
                 .param("pendingOnly", "true"))
         .andExpect(status().isOk())
@@ -248,7 +250,17 @@ class RegisterScreenIntegrationTest {
   }
 
   @Test
-  void rendersAButtonPerPreset() throws Exception {
+  void withoutDatesTheRegisterDefaultsToTheLast90Days() throws Exception {
+    String from = LocalDate.now().minusDays(89).toString();
+
+    mockMvc
+        .perform(get(REGISTER_PATH))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("value=\"" + from + "\"")));
+  }
+
+  @Test
+  void rendersOneButtonPerPreset() throws Exception {
     mockMvc
         .perform(get(REGISTER_PATH))
         .andExpect(status().isOk())
@@ -286,7 +298,8 @@ class RegisterScreenIntegrationTest {
     twoLeg("2026-04-01", max, cash, "10");
 
     mockMvc
-        .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
+        .perform(
+            get(REGISTER_PATH).param("accountId", String.valueOf(cash)).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("cat-chip--person")))
         .andExpect(content().string(containsString("Max")))
@@ -302,7 +315,7 @@ class RegisterScreenIntegrationTest {
     twoLeg("2026-05-01", food, max, "10");
 
     mockMvc
-        .perform(get(REGISTER_PATH))
+        .perform(get(REGISTER_PATH).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         // The person's real name shows on the Account side; the cosmetic leaf name never leaks.
         .andExpect(content().string(containsString("Max")))
@@ -329,7 +342,8 @@ class RegisterScreenIntegrationTest {
     long receipt = linkReceipt(txn);
 
     mockMvc
-        .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
+        .perform(
+            get(REGISTER_PATH).param("accountId", String.valueOf(cash)).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("register__receipt")))
         // The paperclip's target is always a committed receipt — carrying that filter (rather than
@@ -347,7 +361,8 @@ class RegisterScreenIntegrationTest {
     spend("2026-06-01", cash, food, "10");
 
     mockMvc
-        .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
+        .perform(
+            get(REGISTER_PATH).param("accountId", String.valueOf(cash)).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         .andExpect(content().string(not(containsString("register__receipt"))));
   }
@@ -428,7 +443,7 @@ class RegisterScreenIntegrationTest {
     openAccount(CASH, EUR, "500");
 
     mockMvc
-        .perform(get(REGISTER_PATH))
+        .perform(get(REGISTER_PATH).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("register-filter__tabs")))
         .andExpect(content().string(containsString(">Last used<")))
@@ -448,7 +463,8 @@ class RegisterScreenIntegrationTest {
     openAccount(GIRO, EUR, "0");
 
     mockMvc
-        .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
+        .perform(
+            get(REGISTER_PATH).param("accountId", String.valueOf(cash)).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         // The All tab is active (its <a> carries the active class and points its hx-get at
         // /filter-panel/all) and shows a ticked count of 1 — the one explicit account.
@@ -515,7 +531,10 @@ class RegisterScreenIntegrationTest {
     // A plain GET with one explicit accountId (as a JS-off Apply would submit) filters to it.
     mockMvc
         .perform(
-            get(REGISTER_PATH).param("picker", "open").param("accountId", String.valueOf(cash)))
+            get(REGISTER_PATH)
+                .param("picker", "open")
+                .param("accountId", String.valueOf(cash))
+                .param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("name=\"accountId\"")))
         .andExpect(content().string(containsString("-20,00")))
@@ -532,7 +551,7 @@ class RegisterScreenIntegrationTest {
 
     // The Closed tab views the closed account's thread, and its panel row is flagged "closed".
     mockMvc
-        .perform(get(REGISTER_PATH).param("picker", "closed"))
+        .perform(get(REGISTER_PATH).param("picker", "closed").param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString(GIRO)))
         .andExpect(content().string(containsString("-5,00")))
@@ -540,7 +559,7 @@ class RegisterScreenIntegrationTest {
 
     // …but the dock's Account datalist still offers only the open account.
     mockMvc
-        .perform(get(REGISTER_PATH))
+        .perform(get(REGISTER_PATH).param("fromDate", OPEN_DAY))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("value=\"" + CASH + " (" + EUR + ")\"")))
         .andExpect(content().string(not(containsString("value=\"" + GIRO + " (" + EUR + ")\""))));

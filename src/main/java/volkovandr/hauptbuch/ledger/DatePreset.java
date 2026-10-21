@@ -25,21 +25,13 @@ public enum DatePreset {
         return new DateRange(previous.atDay(1), previous.atEndOfMonth());
       });
 
-  /**
-   * The dates a preset sets.
-   *
-   * @param from inclusive lower bound
-   * @param to inclusive upper bound; null for open-ended
-   */
-  public record DateRange(LocalDate from, LocalDate to) {}
-
   private final String token;
-  private final String label;
+  private final String text;
   private final Function<LocalDate, DateRange> range;
 
-  DatePreset(String token, String label, Function<LocalDate, DateRange> range) {
+  DatePreset(String token, String text, Function<LocalDate, DateRange> range) {
     this.token = token;
-    this.label = label;
+    this.text = text;
     this.range = range;
   }
 
@@ -50,8 +42,16 @@ public enum DatePreset {
 
   /** The button text. */
   public String label() {
-    return label;
+    return text;
   }
+
+  /**
+   * The dates a preset sets.
+   *
+   * @param from inclusive lower bound
+   * @param to inclusive upper bound; null for open-ended
+   */
+  public record DateRange(LocalDate from, LocalDate to) {}
 
   /** The date range this preset selects when today is {@code today}. */
   public DateRange rangeAt(LocalDate today) {

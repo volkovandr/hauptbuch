@@ -41,3 +41,8 @@ Filed 2026-08-21 from the `potential-feature-ideas.md` idea list.
 Triaged 2026-10-18: enhancement, ready-for-agent. Owner fixed the preset list and the date rules above.
 
 Resolved 2026-10-21: `DatePreset` enum + `datePreset` submit buttons on the register filter form (after Apply, so Enter still applies).
+
+Follow-up 2026-10-21 (owner): the presets share one row with the filters, in the order Last 90 days,
+Last 365 days, Previous month, From, To, Payee (shrinks first), Pending only, Apply, so the filter box
+does not grow. The register's default range is now **Last 90 days** (was 12 months) — 12 months loaded
+too slowly. A visually hidden Apply twin leads the form so Enter still applies the typed filter.
