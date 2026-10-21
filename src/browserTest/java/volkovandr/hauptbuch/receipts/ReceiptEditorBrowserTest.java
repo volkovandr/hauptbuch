@@ -105,7 +105,7 @@ class ReceiptEditorBrowserTest extends BrowserTest {
     assertThat(editor()).isVisible();
 
     page.locator("[data-receipt-cancel]").focus();
-    page.onDialog(dialog -> dialog.accept());
+    page.onDialog(Dialog::accept);
     page.keyboard().press("Enter");
     assertThat(editor()).isHidden();
     assertThat(page.locator("[data-receipt-edit-start]")).isFocused();
