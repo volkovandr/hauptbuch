@@ -28,6 +28,7 @@ import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
 class StatementCandidatesSqlLogicTest {
 
   private static final LocalDate BOOKING = LocalDate.of(2026, 5, 20);
+  private static final int STATEMENT_LINES = 15;
 
   @Autowired JdbcClient jdbcClient;
   @Autowired StatementMatchRepository matcher;
@@ -54,6 +55,11 @@ class StatementCandidatesSqlLogicTest {
 
   private long id(String sql) {
     return jdbcClient.sql(sql).query(Long.class).single();
+  }
+
+  /** Scans of an index so far in this transaction (the class is {@code @Transactional}). */
+  private long indexScans(long indexOid) {
+    return id("select pg_stat_get_xact_numscans(" + indexOid + ")");
   }
 
   private long account(String name, String type, String currency, boolean personLeaf) {
@@ -534,6 +540,72 @@ class StatementCandidatesSqlLogicTest {
       assertThat(reviewService.reviewLine(statementId, id))
           .contains(full.stream().filter(l -> l.line().statementLineId() == id).findFirst().get());
     }
+  }
+
+  // ---- the plan (statements/issues/16) -----------------------------------------------------
+
+  @Test
+  void candidateQueriesWalkTheDateIndexInsteadOfScanningTheRegister() {
+    // A register shaped like the owner's (~28k transactions, ~100 accounts, a few hundred payees
+    // and statement lines): the planner only starts from the line windows when the query forces it.
+    jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code)"
+                + " select 'Bank' || g, 'asset', 'EUR' from generate_series(1, 5) g")
+        .update();
+    jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code)"
+                + " select 'Cat' || g, 'expense', 'EUR' from generate_series(1, 80) g")
+        .update();
+    jdbcClient
+        .sql("insert into payee (name) select 'Shop' || g from generate_series(1, 300) g")
+        .update();
+    jdbcClient
+        .sql(
+            "insert into transaction (date, payee_id)"
+                + " select date '2019-01-01' + (g * 37 % 2850),"
+                + " (select array_agg(payee_id) from payee)[1 + g % 300]"
+                + " from generate_series(1, 28000) g")
+        .update();
+    jdbcClient
+        .sql(
+            "with banks as (select array_agg(account_id) as ids from account"
+                + " where name like 'Bank%' and account_id not in (:own, :other)),"
+                + " cats as (select array_agg(account_id) as ids from account"
+                + " where name like 'Cat%')"
+                + " insert into posting (transaction_id, account_id, amount)"
+                + " select t.transaction_id, banks.ids[1 + t.transaction_id % 5], -1"
+                + " from transaction t, banks"
+                + " union all select t.transaction_id, cats.ids[1 + t.transaction_id % 80], 1"
+                + " from transaction t, cats")
+        .param("own", own)
+        .param("other", otherEur)
+        .update();
+    long profile = id("select min(statement_profile_id) from statement_profile");
+    for (int n = 0; n < 24; n++) {
+      long other = statement(profile, own, "2025-01-01", "2025-01-20");
+      jdbcClient
+          .sql(
+              "insert into statement_line (statement_id, sort_order, booking_date, amount)"
+                  + " select :s, g, date '2025-01-01' + g, -1 from generate_series(1, 15) g")
+          .param("s", other)
+          .update();
+    }
+    for (int order = 1; order < STATEMENT_LINES; order++) {
+      line(statementId, order, BOOKING.plusDays(order * 2L), "-3.50", "SHOPAAA", null);
+    }
+    for (String table : List.of("transaction", "posting", "account", "payee", "statement_line")) {
+      jdbcClient.sql("analyze " + table).update();
+    }
+    long indexId = id("select 'transaction_date_idx'::regclass::oid::bigint");
+    long before = indexScans(indexId);
+
+    matcher.findCandidates(statementId);
+
+    assertThat(indexScans(indexId) - before)
+        .as("the date window is applied through transaction_date_idx, once per line")
+        .isGreaterThanOrEqualTo(STATEMENT_LINES);
   }
 
   @Test

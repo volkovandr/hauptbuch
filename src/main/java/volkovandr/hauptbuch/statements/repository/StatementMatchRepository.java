@@ -27,6 +27,11 @@ public class StatementMatchRepository {
   /**
    * The candidate query up to its last {@code where} predicate, so a caller can append further
    * {@code and ...} predicates before {@link #CANDIDATES_TAIL}.
+   *
+   * <p>The date window is a lateral subquery with {@code offset 0}: that fence stops the planner
+   * flattening it, so it cannot reorder the joins to run the per-transaction leg lookup for the
+   * whole register and apply the window last — it walks {@code transaction_date_idx} once per line
+   * instead (.scratch/statements/issues/16).
    */
   private static final String CANDIDATES_HEAD =
       """
@@ -49,10 +54,14 @@ public class StatementMatchRepository {
               join statement s on s.statement_id = l.statement_id
               join statement_profile sp on sp.statement_profile_id = s.statement_profile_id
               join account sa on sa.account_id = s.account_id
-              join transaction t
-                on t.deleted_at is null
-               and t.date between l.booking_date - sp.window_days_before
-                              and l.booking_date + sp.window_days_after
+              join lateral (
+                select wt.transaction_id, wt.date, wt.payee_id
+                from transaction wt
+                where wt.deleted_at is null
+                  and wt.date between l.booking_date - sp.window_days_before
+                                  and l.booking_date + sp.window_days_after
+                offset 0
+              ) t on true
               join lateral (
                 select p.transaction_id, p.account_id, sum(p.amount) as amount,
                        min(p.posting_id) as posting_id,
