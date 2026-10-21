@@ -81,7 +81,7 @@ class ReceiptEditorBrowserTest extends BrowserTest {
   }
 
   @Test
-  void enterStartsTheEditorOnANewReceiptAndSavesFromWhereverFocusIs() {
+  void enterStartsTheEditorOnNewReceiptAndSavesFromWhereverFocusIs() {
     long id = capture(400, 300, Color.WHITE);
     page.navigate(url("/receipts/" + id));
 
@@ -95,7 +95,7 @@ class ReceiptEditorBrowserTest extends BrowserTest {
   }
 
   @Test
-  void enterInTheNoteInsertsANewlineAndOnCancelDoesNotSave() {
+  void enterInTheNoteInsertsNewlineAndOnCancelDoesNotSave() {
     long id = capture(400, 300, Color.WHITE);
     startEditing(id);
 
