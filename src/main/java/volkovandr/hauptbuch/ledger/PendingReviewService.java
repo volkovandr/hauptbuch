@@ -26,7 +26,7 @@ class PendingReviewService {
   /**
    * The line's counts, or empty when nothing is pending — the line is hidden at zero, so the
    * template never decides whether to draw it. The link opens the register from the earliest
-   * pending date, so it shows every pending row however old, not just the default last 12 months.
+   * pending date, so it shows every pending row however old, not just the default last 90 days.
    */
   Optional<PendingReviewCount> current() {
     PendingReviewCount count = transactionRepository.countPendingReview(LocalDate.now(clock));

@@ -52,16 +52,16 @@ class RegisterController {
 
   /**
    * The register, filtered by the query params. All are optional: no accounts means the default set
-   * (every open own account), and the date range defaults to the last 12 months (register §2.3)
-   * when neither bound is given.
+   * (every open own account), and the date range defaults to the last 90 days (register §2.3) when
+   * neither bound is given.
    *
    * @param accountId the ticked accounts within the picker (repeatable); empty for "the whole
    *     picker" — an all-ticked selection that is submitted in full is collapsed back to this
    * @param picker the active tab-strip picker token; when absent, explicit {@code accountId}s open
    *     the {@code All} tab and no accounts open {@code Last used} (issue
    *     transaction-register-ui/22)
-   * @param fromDate inclusive lower date bound; defaults to 12 months ago when both bounds are
-   *     blank
+   * @param fromDate inclusive lower date bound; defaults to the start of the last 90 days when both
+   *     bounds are blank
    * @param toDate inclusive upper date bound
    * @param payeeId show only this payee's rows; null for all
    * @param pendingOnly show only {@code pending_review} rows (register §2.3) — the main page's
@@ -175,9 +175,8 @@ class RegisterController {
 
   /** The preset's upper bound (null = open) when a quick preset was pressed, else the typed one. */
   private LocalDate presetTo(String datePreset, LocalDate typed) {
-    return DatePreset.fromParam(datePreset)
-        .map(p -> p.rangeAt(LocalDate.now(clock)).to())
-        .orElse(typed);
+    Optional<DatePreset> preset = DatePreset.fromParam(datePreset);
+    return preset.isPresent() ? preset.get().rangeAt(LocalDate.now(clock)).to() : typed;
   }
 
   /** The transaction-derived filter for a {@code selected=} jump; empty when there is no jump. */
@@ -199,13 +198,13 @@ class RegisterController {
   }
 
   /**
-   * The default lower bound: last 12 months (register §2.3). Applied only when the user gave
-   * neither bound — an explicit upper-only bound is honoured as an open-ended lower range.
+   * The default lower bound: last 90 days (register §2.3). Applied only when the user gave neither
+   * bound — an explicit upper-only bound is honoured as an open-ended lower range.
    */
   private LocalDate defaultFrom(LocalDate fromDate, LocalDate toDate) {
     if (fromDate != null || toDate != null) {
       return fromDate;
     }
-    return LocalDate.now(clock).minusMonths(12);
+    return DatePreset.LAST_90_DAYS.rangeAt(LocalDate.now(clock)).from();
   }
 }

@@ -12,7 +12,7 @@
     • Newest at the bottom (§2.1): the page scrolls to the bottom on load (keyboard.js leaf), so
       "now" and the entry dock are co-located.
 
-  Filters (§2.3): date range (default last 12 months), account multi-select, payee — a plain GET
+  Filters (§2.3): date range (default last 90 days), account multi-select, payee — a plain GET
   form; the same view re-renders. Sorting is deferred (plan §14); order is fixed date-ascending.
 
   The entry dock (7b) hx-posts to /register/entry (the commit endpoint lives in operations — plan
@@ -118,6 +118,25 @@
       </div>
 
       <div class="register-filter__row">
+        <!-- Date quick presets (issue transaction-register-ui/12): each sets the dates server-side
+             and keeps the other filter fields. They come first in the row, so a visually hidden
+             Apply twin leads the form: it is the implicit submitter, so Enter in a field applies
+             the typed filter rather than pressing the first preset. -->
+        <button type="submit" class="register-filter__default-submit" tabindex="-1" aria-hidden="true">
+          Apply
+        </button>
+        <div class="register-filter__presets">
+          <button
+            type="submit"
+            class="btn btn--ghost"
+            name="datePreset"
+            th:each="preset : ${T(volkovandr.hauptbuch.ledger.DatePreset).values()}"
+            th:value="${preset.param()}"
+            th:text="${preset.label()}"
+          >
+            Last 90 days
+          </button>
+        </div>
         <div class="field">
           <label class="field__label" for="fromDate">From</label>
           <input
@@ -138,7 +157,7 @@
             th:value="${register.filter().toDate()}"
           />
         </div>
-        <div class="field">
+        <div class="field register-filter__payee">
           <label class="field__label" for="payeeId">Payee</label>
           <select id="payeeId" name="payeeId" class="input">
             <option value="">— all payees —</option>
@@ -168,21 +187,6 @@
                which a tab switch keeps current. -->
           <button type="submit" class="btn">Apply</button>
         </p>
-      </div>
-      <!-- Date quick presets (issue transaction-register-ui/12). After Apply in document order so
-           Enter in a field still submits Apply; each sets the dates server-side and keeps the
-           other filter fields. -->
-      <div class="register-filter__row register-filter__presets">
-        <button
-          type="submit"
-          class="btn btn--ghost"
-          name="datePreset"
-          th:each="preset : ${T(volkovandr.hauptbuch.ledger.DatePreset).values()}"
-          th:value="${preset.param()}"
-          th:text="${preset.label()}"
-        >
-          Last 90 days
-        </button>
       </div>
     </form>
 
