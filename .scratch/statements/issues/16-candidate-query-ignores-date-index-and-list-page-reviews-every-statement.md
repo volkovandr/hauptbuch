@@ -45,12 +45,14 @@ Two separate problems.
   green marker) for now.
 - Caching only removes repeat cost; the first, cold computation stays as slow as problem 1 makes it.
 
-## Open — needs the owner's decision
-- **Problem 1 (query plan fix)** is proposed, not yet accepted: restructure the window join so it is
-  evaluated per line (index used), with a `sqlLogicTest` scenario asserting the rewritten query
-  returns exactly the old query's rows (including line-scoped and rivals variants, which share
-  `CANDIDATES_HEAD`). Recommended to do it alongside or before caching, since a cache still pays the
-  slow cold path after every ledger edit.
+## Problem 1 — implemented 2026-10-21 (owner: "the query plan fix now, do not start caching yet")
+The date window in `CANDIDATES_HEAD` is now a `join lateral (… offset 0) t on true` per line, so the
+planner cannot flatten it and reorder the joins; it walks `transaction_date_idx` once per line. The
+`offset 0` is deliberate and commented at the query. Covered by `sqlLogicTest`:
+`candidateQueriesWalkTheDateIndexInsteadOfScanningTheRegister` (a 28k-transaction register; red on
+the old query — seq scan, `loops=28000` — green now) and the existing candidate/line-scoped/rival
+tests, which pin the results. The rival query (`findCandidatesOnPostings`) shared the bad plan and
+benefits too. Local plan (scratch Postgres, 28k transactions): candidate query ~150 ms → ~4.5 ms; rival query ~107 ms → ~5 ms (136 → 9.5 ms on a 33-line statement). **Awaiting the owner's verification on the Pi.**
 
 **Done when:** opening the statements list and a statement page on the Pi's data completes well
 under a second, the candidate query's plan uses `transaction_date_idx` on a register of that size,
@@ -58,4 +60,4 @@ and `./gradlew check` is green.
 
 ## Comments
 Filed 2026-10-21 from the owner's slow-query log, a production `EXPLAIN` (`loops=27643`) and a local
-reproduction. Nothing is implemented yet.
+reproduction. Problem 1 implemented the same day; problem 2 waits on the caching work.
