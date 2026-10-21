@@ -302,7 +302,10 @@ Full detail in `docs/data-model.md`. The traps:
    the accepted solution, and the owner's decisions (e.g. "overwrite an existing rate"). Commit it
    before, or together with, the code. The owner works in a separate local session that only sees
    the repo, so a change whose *why* lives solely in this conversation is unexplained to it. Mark the
-   issue `Status: resolved` when done.
+   issue `Status: resolved` **only after the owner has verified the fix and said so** — until then
+   leave it `open` / `in progress`. Prefer not committing at all before that verification (a
+   second "mark resolved" commit is overkill for a small issue); if work-in-progress is committed,
+   its issue stays unresolved.
 1. **Read** the relevant `docs/` file for any domain rule you are about to touch.
 2. **Write the test first** (the right tier per §6).
 3. **Implement** following the existing patterns in that module.
