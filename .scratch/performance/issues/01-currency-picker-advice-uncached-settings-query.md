@@ -1,6 +1,6 @@
 # `CurrencyPickerAdvice` runs an uncached `settings` query on every MVC request
 
-Status: needs-triage
+Status: resolved
 Category: enhancement
 Severity: low
 Area: `ledger` — `CurrencyPickerAdvice`, `SettingsService`
@@ -59,7 +59,7 @@ query per MVC request, and the base currency is served from cache with correct i
 ## Comments
 
 Implemented 2026-10-21 by `performance/02`: `SettingsRepository.load()` is cached and evicted by every
-settings writer. Left unresolved until the owner verifies it.
+settings writer. Resolved 2026-10-21 together with `performance/02`.
 
 Filed 2026-09-02 from the `import/qif-plan` branch review (finding 1 of 4; the other three are
 tracked separately or already documented decisions). Not urgent.
