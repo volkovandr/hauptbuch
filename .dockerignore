@@ -1,0 +1,8 @@
+# Keeps the Docker build context (repository root) small and free of local state.
+.git
+.gradle
+build
+.scratch
+docs
+deploy/docker/data
+deploy/docker/.env

@@ -60,7 +60,7 @@ hauptbuch:
   # Database backups (.scratch/backup/issues/01-database-backups.md). `automatic` is OFF here on
   # purpose: this file is on the classpath in dev AND in the test suites, and neither has any
   # business shelling out to pg_dump on every context start. The Pi's /etc/hauptbuch/application.yml
-  # turns it on — see deploy/application.yml.example.
+  # turns it on — see deploy/as-service/application.yml.example.
   backup:
     storage-root: ./.local-backups
     keep-automatic: 30

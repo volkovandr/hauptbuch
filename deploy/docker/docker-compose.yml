@@ -1,0 +1,53 @@
+# Hauptbuch — PostgreSQL + the app, run with Docker Compose. See README.md in this folder.
+#
+# All state lives in ./data next to this file (bind mounts, not named volumes), so the database and
+# receipts survive `docker compose down` and are plain folders you can copy.
+services:
+  postgres:
+    # Keep the major version in step with postgresql-client in Dockerfile.
+    image: postgres:17
+    container_name: hauptbuch-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hauptbuch
+      POSTGRES_USER: hauptbuch
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copy .env.example to .env and set POSTGRES_PASSWORD}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hauptbuch -d hauptbuch"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    # Built from this repository by `docker compose build` — never pulled from a registry.
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: hauptbuch:latest
+    pull_policy: never
+    container_name: hauptbuch-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${HAUPTBUCH_PORT:-8080}:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/hauptbuch
+      SPRING_DATASOURCE_USERNAME: hauptbuch
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      HAUPTBUCH_RECEIPTS_STORAGE_ROOT: /data/receipts
+      HAUPTBUCH_STATEMENTS_STORAGE_ROOT: /data/statements
+      HAUPTBUCH_BACKUP_STORAGE_ROOT: /data/backups
+      HAUPTBUCH_BACKUP_AUTOMATIC: "true"
+      # Optional. URL phones use to reach the app, encoded in the landing page's QR code. Blank = derive
+      # it from the browser's address (the panel is then hidden when you browse via localhost).
+      HAUPTBUCH_PUBLIC_BASE_URL: ${HAUPTBUCH_PUBLIC_BASE_URL:-}
+      # Optional fallback; normally the key is entered in the app's Settings page.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./data/receipts:/data/receipts
+      - ./data/statements:/data/statements
+      - ./data/backups:/data/backups

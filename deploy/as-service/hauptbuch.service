@@ -11,7 +11,7 @@ User=hauptbuch
 Group=hauptbuch
 WorkingDirectory=/opt/hauptbuch
 # /etc/hauptbuch/ carries application.yml (DB creds, ANTHROPIC_API_KEY, receipts storage-root) —
-# see deploy/application.yml.example. A trailing slash tells Spring Boot to treat this as a
+# see deploy/as-service/application.yml.example. A trailing slash tells Spring Boot to treat this as a
 # directory and look for application.yml (and application-<profile>.yml) inside it; values there
 # take priority over src/main/resources/application.yaml on the classpath.
 ExecStart=/opt/hauptbuch/bin/hauptbuch --spring.config.additional-location=file:/etc/hauptbuch/

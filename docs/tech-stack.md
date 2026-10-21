@@ -362,6 +362,11 @@ Both stay in Java — no Python anywhere.
   → systemd unit running the generated `bin/hauptbuch` script (ARCH-01, revised 2026-08-17 — Docker
   dropped: a single-JVM single-user app with Postgres already native gains nothing from a second
   daemon on a Pi). **PostgreSQL native on the Pi** (ARCH-02), not containerised.
+- **Second recipe for non-technical users (2026-10-21):** `deploy/docker/` — Docker Compose with a
+  PostgreSQL container and the app image built from source by a multi-stage
+  `Dockerfile` (`docker compose up -d --build`; only Docker is needed on the host; the runtime image
+  adds `pg_dump` for the in-app backups; state bind-mounted under `data/`). It is an alternative, not a replacement: the systemd recipe (`deploy/as-service/`)
+  remains the reference deployment.
 - **Footprint:** a Spring Boot app idles ~250–400 MB and starts in a few seconds; a Pi 4/5 with
   4 GB+ runs it comfortably for one user. Footprint is explicitly not a primary concern.
 - **Escape hatch (not a starting choice):** GraalVM native image (Spring Boot supports it) cuts

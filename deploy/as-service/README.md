@@ -1,4 +1,6 @@
-# Deploying to the Raspberry Pi
+# Deploying to the Raspberry Pi as a systemd service
+
+> Prefer not to install Java or manage a service? See the Docker recipe in [`../docker/`](../docker/README.md).
 
 Packaging decision and rationale: `docs/tech-stack.md` §7 (ARCH-01, revised 2026-08-17). No
 Docker — `./gradlew installDist` produces a plain (non-fat) distribution; systemd runs its
@@ -17,7 +19,7 @@ the home network until one of those lands.
 
 **Where each command runs** is called out on its comment line — either `# on the dev machine, from
 the project root` or `# on the Pi`. Nothing here assumes the full repo is checked out on the Pi;
-only the built distribution and the two `deploy/` files get copied over.
+only the built distribution and the two `deploy/as-service/` files get copied over.
 
 ## Prerequisites on the Pi
 
@@ -54,11 +56,11 @@ sudo apt-get install postgresql postgresql-contrib
 
 ## One-time Pi setup
 
-Stage the two `deploy/` files onto the Pi first, then do the rest over SSH.
+Stage the two `deploy/as-service/` files onto the Pi first, then do the rest over SSH.
 
 ```bash
 # on the dev machine, from the project root
-scp deploy/hauptbuch.service deploy/application.yml.example <pi-user>@<pi-host>:/tmp/
+scp deploy/as-service/hauptbuch.service deploy/as-service/application.yml.example <pi-user>@<pi-host>:/tmp/
 ```
 
 ```bash
@@ -142,7 +144,7 @@ rather than the Pi. The backup settings are the current example: without a `haup
 the root defaults to `./.local-backups`, resolved against `WorkingDirectory=/opt/hauptbuch` — which
 `ProtectSystem=strict` makes read-only, since the unit only grants write access to
 `/var/lib/hauptbuch`. Taking a backup then fails with a read-only-filesystem error naming that
-path. Diff your file against `deploy/application.yml.example` after a redeploy and copy across
+path. Diff your file against `deploy/as-service/application.yml.example` after a redeploy and copy across
 anything new.
 
 ## Backup and restore
@@ -150,7 +152,7 @@ anything new.
 The app takes its own database backups: a `pg_dump` custom-format file per backup, written to
 `/var/lib/hauptbuch/backups` (inside the data dir the unit already lists in `ReadWritePaths`, so no
 unit change is needed). Configured under `hauptbuch.backup` in `/etc/hauptbuch/application.yml` —
-see `deploy/application.yml.example`.
+see `deploy/as-service/application.yml.example`.
 
 - **By hand:** Settings → Manage backups → *Take a backup now*.
 - **Automatically:** one per night at `daily-cron` (03:00 by default), plus a catch-up at startup if
