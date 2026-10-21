@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.lang.reflect.Method;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
@@ -87,7 +88,7 @@ class ReferenceDataCacheIntegrationTest {
           .update();
     }
     // The raw deletes above bypass the repositories' evictions, so empty every cache by hand.
-    CacheNames.ALL.forEach(name -> cacheManager.getCache(name).clear());
+    CacheNames.ALL.forEach(name -> Objects.requireNonNull(cacheManager.getCache(name)).clear());
   }
 
   /**
