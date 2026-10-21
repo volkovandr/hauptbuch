@@ -1,6 +1,6 @@
 # Introduce a caching strategy for database queries
 
-Status: in progress
+Status: resolved
 Category: enhancement
 Severity: low–medium
 Area: cross-cutting (application-wide)
@@ -64,3 +64,7 @@ read-then-write test, and `./gradlew check` is green.
 
 ## Comments
 Filed 2026-10-18. Not urgent; deliberately separate from the statements performance fix.
+
+Resolved 2026-10-21 on the owner's confirmation: `./gradlew check` green and the app tried locally without
+issues (not yet on the Pi). The statements list page's per-statement review stays uncached by decision;
+revisit only if it measures slow after `statements/16`.
