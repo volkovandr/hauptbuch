@@ -26,7 +26,8 @@ the placeholder for that decision, to be made once, consistently, rather than ad
   stale reads must be impossible for money-critical reads.
 - Measure first: record the slow paths and their timings on the Pi before adding anything.
 
-Related: `performance/01` (settings read) should be retired by whatever this introduces.
+Related: `statements/16` — the owner chose to introduce caching first for the statements list's
+per-statement "green" review (the first measured-slow path); `performance/01` (settings read) should be retired by whatever this introduces.
 
 **Done when:** an agreed strategy is documented, and the measured-slow paths use it with correct
 invalidation.
