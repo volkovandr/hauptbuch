@@ -35,7 +35,8 @@
  *   9. Receipt register selection + right-click context menu (receipt doc §5.2); double-click (or
  *      Enter) a row opens its processing screen. On the processing screen itself (receipt doc §6):
  *      ↑/↓ walk the filtered list, Backspace/Esc is Back (read) / Esc is Cancel (edit), Delete opens
- *      the dialog. Backspace is offered because the browser eats Esc to exit fullscreen. This leaf
+ *      the dialog; in edit mode Enter is Save (except in the note textarea or on a focused button).
+ *      A `new` receipt's Prepare button is autofocused in the markup, so Enter starts the editor. Backspace is offered because the browser eats Esc to exit fullscreen. This leaf
  *      only maps keys/clicks onto server-rendered buttons; the Cropper edit mode is owned by the
  *      receipt-editor.js leaf.
  *  10. Auto-submit a [data-autosubmit] file input's form the moment a file is chosen — the mobile
@@ -128,6 +129,25 @@
         return;
       }
       clearReceiptOverlays();
+      return;
+    }
+
+    // Editor (receipt doc §6.1): Enter saves, wherever focus is (the operator has just been working
+    // the crop frame or a slider, so the Save button is not focused). A textarea keeps Enter for its
+    // newline; a focused button/link keeps it for its own activation (Tab → Cancel → Enter cancels).
+    if (
+      event.key === "Enter" &&
+      !event.repeat &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.shiftKey &&
+      receiptProcess() &&
+      receiptEditActive() &&
+      !isEnterConsumer(event.target)
+    ) {
+      event.preventDefault();
+      clickIfPresent("[data-receipt-save]");
       return;
     }
 
@@ -548,6 +568,12 @@
   function clickIfPresent(selector) {
     const el = document.querySelector(selector);
     if (el) el.click();
+  }
+
+  /** Elements for which Enter already means something: a newline, or activating themselves. */
+  function isEnterConsumer(target) {
+    const tag = (target && target.tagName ? target.tagName : "").toLowerCase();
+    return tag === "textarea" || tag === "button" || tag === "a" || tag === "summary";
   }
 
   function isTyping(target) {

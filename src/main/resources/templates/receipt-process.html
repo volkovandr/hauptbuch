@@ -45,7 +45,7 @@
 
           <!-- `new`: nothing baked yet → the one action is to prepare it. -->
           <div class="receipt-process__actions" th:if="${receipt.state() == 'new'}">
-            <button type="button" class="btn" data-receipt-edit-start>Prepare for analysis</button>
+            <button type="button" class="btn" data-receipt-edit-start autofocus>Prepare for analysis</button>
           </div>
 
           <!-- `pre_processed`: re-edit, discard the edits, or (later) analyse. -->

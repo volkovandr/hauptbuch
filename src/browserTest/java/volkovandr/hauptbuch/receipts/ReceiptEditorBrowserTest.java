@@ -81,6 +81,37 @@ class ReceiptEditorBrowserTest extends BrowserTest {
   }
 
   @Test
+  void enterStartsTheEditorOnANewReceiptAndSavesFromWhereverFocusIs() {
+    long id = capture(400, 300, Color.WHITE);
+    page.navigate(url("/receipts/" + id));
+
+    page.keyboard().press("Enter");
+    assertThat(page.locator(".cropper-crop-box")).isVisible();
+
+    page.locator(".cropper-crop-box").click();
+    page.waitForNavigation(() -> page.keyboard().press("Enter"));
+    page.waitForURL(Pattern.compile(".*/receipts/" + id + "\\b.*"));
+    assertThat(page.locator("[data-receipt-edit-start]").first()).hasText("Edit");
+  }
+
+  @Test
+  void enterInTheNoteInsertsANewlineAndOnCancelDoesNotSave() {
+    long id = capture(400, 300, Color.WHITE);
+    startEditing(id);
+
+    page.locator("[data-receipt-ainote]").fill("a");
+    page.keyboard().press("Enter");
+    assertThat(page.locator("[data-receipt-ainote]")).hasValue("a\n");
+    assertThat(editor()).isVisible();
+
+    page.locator("[data-receipt-cancel]").focus();
+    page.onDialog(dialog -> dialog.accept());
+    page.keyboard().press("Enter");
+    assertThat(editor()).isHidden();
+    assertThat(page.locator("[data-receipt-edit-start]")).isFocused();
+  }
+
+  @Test
   void cancelAfterAnAdjustmentAsksFirstAndDecliningKeepsTheEditor() {
     long id = capture(400, 300, Color.WHITE);
     startEditing(id);
