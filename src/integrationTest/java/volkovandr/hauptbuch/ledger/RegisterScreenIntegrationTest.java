@@ -250,13 +250,17 @@ class RegisterScreenIntegrationTest {
   }
 
   @Test
-  void withoutDatesTheRegisterDefaultsToTheLast90Days() throws Exception {
-    String from = LocalDate.now().minusDays(89).toString();
+  void withoutDatesTheRegisterShowsOnlyTheLast90Days() throws Exception {
+    long cash = openAccount(CASH, EUR, "500");
+    long food = insertCategory(FOOD, EUR);
+    spend(LocalDate.now().minusDays(89).toString(), cash, food, "11");
+    spend(LocalDate.now().minusDays(90).toString(), cash, food, "22");
 
     mockMvc
-        .perform(get(REGISTER_PATH))
+        .perform(get(REGISTER_PATH).param("accountId", String.valueOf(cash)))
         .andExpect(status().isOk())
-        .andExpect(content().string(containsString("value=\"" + from + "\"")));
+        .andExpect(content().string(containsString("-11,00")))
+        .andExpect(content().string(not(containsString("-22,00"))));
   }
 
   @Test
