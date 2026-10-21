@@ -1,6 +1,6 @@
 # Statements: candidate query still scans the whole register, and the list page runs it once per statement
 
-Status: open
+Status: resolved
 Category: bug (performance)
 Severity: high — the statements list page runs one multi-second query per statement
 Area: `statements` — `StatementMatchRepository` (`CANDIDATES_HEAD`), `StatementController.list`, `StatementReviewService.green(rows)`
@@ -52,7 +52,7 @@ planner cannot flatten it and reorder the joins; it walks `transaction_date_idx`
 `candidateQueriesWalkTheDateIndexInsteadOfScanningTheRegister` (a 28k-transaction register; red on
 the old query — seq scan, `loops=28000` — green now) and the existing candidate/line-scoped/rival
 tests, which pin the results. The rival query (`findCandidatesOnPostings`) shared the bad plan and
-benefits too. Local plan (scratch Postgres, 28k transactions): candidate query ~150 ms → ~4.5 ms; rival query ~107 ms → ~5 ms (136 → 9.5 ms on a 33-line statement). **Awaiting the owner's verification on the Pi.**
+benefits too. Local plan (scratch Postgres, 28k transactions): candidate query ~150 ms → ~4.5 ms; rival query ~107 ms → ~5 ms (136 → 9.5 ms on a 33-line statement). **Verified by the owner on the Pi (2026-10-21): much faster.**
 
 **Done when:** opening the statements list and a statement page on the Pi's data completes well
 under a second, the candidate query's plan uses `transaction_date_idx` on a register of that size,
@@ -61,3 +61,6 @@ and `./gradlew check` is green.
 ## Comments
 Filed 2026-10-21 from the owner's slow-query log, a production `EXPLAIN` (`loops=27643`) and a local
 reproduction. Problem 1 implemented the same day; problem 2 waits on the caching work.
+
+Resolved 2026-10-21 on the owner's confirmation. Problem 2 (the list page's per-statement review) is not
+fixed here; it is carried by `performance/02` (caching), per the owner's decision above.
