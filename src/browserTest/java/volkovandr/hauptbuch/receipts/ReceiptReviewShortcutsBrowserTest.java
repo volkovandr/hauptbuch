@@ -31,6 +31,7 @@ class ReceiptReviewShortcutsBrowserTest extends BrowserTest {
 
   private long cash;
   private long bank;
+  private long doubleFunding;
   private long category;
 
   @BeforeAll
@@ -40,6 +41,7 @@ class ReceiptReviewShortcutsBrowserTest extends BrowserTest {
     }
     cash = openAccount("ShortcutCash");
     bank = openAccount("ShortcutBank");
+    doubleFunding = openAccount("ShortcutOnce");
     category = accountService.insertLeaf("ShortcutFood", "expense", null, "EUR").accountId();
   }
 
@@ -264,5 +266,40 @@ class ReceiptReviewShortcutsBrowserTest extends BrowserTest {
 
     assertThat(page.locator("[data-receipt-confirm]")).isVisible();
     assertThat(stateOf(id)).isEqualTo("processed");
+  }
+
+  @Test
+  void pressingCtrlEnterTwiceBooksTheReceiptOnce() {
+    long id = processedReceipt(doubleFunding, category);
+    open(id);
+
+    page.keyboard().press("Control+Enter");
+    page.keyboard().press("Control+Enter");
+    waitUntilConfirmedAway(id);
+    page.waitForTimeout(500);
+
+    Long postings =
+        jdbcClient
+            .sql("select count(*) from posting where account_id = :account")
+            .param("account", doubleFunding)
+            .query(Long.class)
+            .single();
+    assertThat(postings).isEqualTo(1L);
+  }
+
+  @Test
+  void theShortcutsStandDownWhileDialogIsOpen() {
+    long id = processedReceipt(cash, category);
+    open(id);
+    page.locator("[data-receipt-delete]").click();
+    assertThat(page.locator("#receipt-dialog [data-receipt-dialog]")).isVisible();
+    page.evaluate("document.activeElement.blur()");
+
+    page.keyboard().press("Control+Enter");
+    page.keyboard().press("a");
+    page.waitForTimeout(300);
+
+    assertThat(stateOf(id)).isEqualTo("processed");
+    assertThat(page.locator("#receipt-account")).not().isFocused();
   }
 }

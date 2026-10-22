@@ -156,7 +156,13 @@
     }
 
     // Review shortcuts (receipt doc §6.4): Ctrl+Enter confirms from anywhere, text fields included.
-    if (receiptProcess() && !receiptEditActive() && isConfirmChord(event)) {
+    // Never behind an open dialog or menu (the Delete dialog's own buttons own the keys then).
+    if (
+      receiptProcess() &&
+      !receiptEditActive() &&
+      !anyReceiptOverlayOpen() &&
+      isConfirmChord(event)
+    ) {
       if (document.querySelector("[data-receipt-confirm]")) {
         event.preventDefault();
         confirmReceipt();
@@ -168,7 +174,7 @@
     // opens the dialog — but only in read mode, and never while typing (a slider/textarea keeps the
     // key). Backspace is offered alongside Esc because the browser also eats Esc to leave fullscreen.
     if (receiptProcess() && !receiptEditActive() && !isTyping(event.target)) {
-      if (!hasModifier(event) && jumpToReviewField(event.key.toLowerCase())) {
+      if (!hasModifier(event) && !anyReceiptOverlayOpen() && jumpToReviewField(event.key.toLowerCase())) {
         event.preventDefault();
         return;
       }
@@ -604,6 +610,7 @@
   // typing and no modifier is held (Ctrl+C stays Copy). Ctrl is the chord on every platform — Cmd
   // does nothing.
   let lastCategoryJump = null;
+  let confirming = false;
 
   function hasModifier(event) {
     return event.ctrlKey || event.altKey || event.metaKey;
@@ -662,6 +669,8 @@
    * that — and the editor refresh it triggers — has settled, or it would book the stale account.
    */
   function confirmReceipt() {
+    if (confirming) return;
+    confirming = true;
     const active = document.activeElement;
     if (active && active !== document.body && active.blur) active.blur();
     let quietChecks = 0;
@@ -674,6 +683,10 @@
         setTimeout(whenSettled, 50);
         return;
       }
+      // One Confirm in flight at a time: a second Ctrl+Enter before the response must not book twice.
+      const release = () => (confirming = false);
+      document.addEventListener("htmx:afterRequest", release, { once: true });
+      setTimeout(release, 3000); // a click that sent nothing (a declined prompt) must not wedge it
       clickIfPresent("[data-receipt-confirm]");
     })();
   }
