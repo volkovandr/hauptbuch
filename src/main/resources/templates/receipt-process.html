@@ -431,6 +431,12 @@
       >.<span th:if="${receipt.parseEdited()}"> AI response was edited.</span>
     </p>
 
+    <!-- The review shortcuts (keyboard.js, issue receipt-processing/37): worth a line only while the
+         pane is editable, since a booked receipt is read-only. -->
+    <p class="receipt-telemetry muted" th:unless="${readOnly}">
+      Shortcuts: A account · D date · C next uncategorised item · Ctrl+Enter confirm.
+    </p>
+
     <!-- Re-seed (issue tracker #19): the same <details>/textarea/re-parse block the failed view has,
          extended to a processed receipt. Seeding resolves tags, categories and people against the
          taxonomy as it stands NOW, so a response naming a tag that did not exist when the receipt
