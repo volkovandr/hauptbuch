@@ -32,6 +32,13 @@ screen in **read mode** only — edit mode keeps its own Enter = Save / Esc = Ca
   ignore `metaKey`).
 - A focused button keeps its own Enter, as today.
 
+### Hint
+A one-line hint listing the shortcuts goes directly after the "Parsed with … tokens" paragraph
+(`p.receipt-telemetry` in `receipt-process.html`), in the same style (`muted`, e.g. a sibling
+`<p class="receipt-telemetry muted">`): *A account · D date · C next uncategorised · Ctrl+Enter
+confirm*. Not next to the Confirm button (owner's decision). Issue 38 adds its Ctrl+Backspace entry.
+Per the tooltip rule, no `title`/`.help` is needed for a plain key list.
+
 ### Decisions that shape this (why it is smaller than first discussed)
 - **No plain-Enter confirm.** An earlier idea — Enter confirms when a resolved single-line picker
   has its text selected and the dropdown is closed — was dropped. The tag field's chip-commit /
