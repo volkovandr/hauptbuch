@@ -107,7 +107,7 @@ class ReceiptReviewShortcutsBrowserTest extends BrowserTest {
   // ── A: the paying account ───────────────────────────────────────────────────
 
   @Test
-  void aFocusesTheAccountWithItsWholeContentSelectedSoTypingReplacesIt() {
+  void accountKeyFocusesTheAccountWithItsWholeContentSelectedSoTypingReplacesIt() {
     open(processedReceipt(cash, category));
 
     page.keyboard().press("a");
@@ -120,7 +120,7 @@ class ReceiptReviewShortcutsBrowserTest extends BrowserTest {
   // ── D: the date ─────────────────────────────────────────────────────────────
 
   @Test
-  void dFocusesTheDateField() {
+  void dateKeyFocusesTheDateField() {
     open(processedReceipt(cash, category));
 
     page.keyboard().press("d");
@@ -150,7 +150,7 @@ class ReceiptReviewShortcutsBrowserTest extends BrowserTest {
   }
 
   @Test
-  void theLettersWorkFromAFocusedButton() {
+  void theLettersWorkFromTheFocusedButton() {
     open(processedReceipt(cash, category));
     page.locator("[data-receipt-confirm]").focus();
 
@@ -172,7 +172,7 @@ class ReceiptReviewShortcutsBrowserTest extends BrowserTest {
   // ── C: the next uncategorised item ──────────────────────────────────────────
 
   @Test
-  void cJumpsToTheFirstUncategorisedItemAndAgainToTheNext() {
+  void categoryKeyJumpsToTheFirstUncategorisedItemAndAgainToTheNext() {
     open(processedReceipt(cash, category, null, null));
     Locator categories = page.locator(CATEGORY);
 
@@ -189,7 +189,7 @@ class ReceiptReviewShortcutsBrowserTest extends BrowserTest {
   }
 
   @Test
-  void cDoesNothingWhenEveryItemHasACategory() {
+  void categoryKeyDoesNothingWhenEveryItemHasCategory() {
     open(processedReceipt(cash, category, category));
 
     page.keyboard().press("c");
@@ -200,7 +200,7 @@ class ReceiptReviewShortcutsBrowserTest extends BrowserTest {
   // ── Ctrl+Enter: Confirm from anywhere ───────────────────────────────────────
 
   @Test
-  void ctrlEnterInsideTheNoteConfirmsWithoutAddingANewline() {
+  void ctrlEnterInsideTheNoteConfirmsWithoutAddingNewline() {
     long id = processedReceipt(cash, category);
     open(id);
     Locator note = page.locator("#receipt-editor textarea[name=note]");
