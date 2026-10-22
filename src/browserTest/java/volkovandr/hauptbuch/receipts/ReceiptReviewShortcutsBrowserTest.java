@@ -45,8 +45,7 @@ class ReceiptReviewShortcutsBrowserTest extends BrowserTest {
 
   private long openAccount(String name) {
     return accountService
-        .openAccount(
-            new AccountDraft(name, "asset", null, "EUR", LocalDate.now(), BigDecimal.ZERO))
+        .openAccount(new AccountDraft(name, "asset", null, "EUR", LocalDate.now(), BigDecimal.ZERO))
         .accountId();
   }
 
@@ -102,8 +101,7 @@ class ReceiptReviewShortcutsBrowserTest extends BrowserTest {
   }
 
   private void waitUntilConfirmedAway(long receiptId) {
-    page.waitForURL(
-        url -> !Pattern.matches(".*/receipts/" + receiptId + "(\\?.*)?$", url));
+    page.waitForURL(url -> !Pattern.matches(".*/receipts/" + receiptId + "(\\?.*)?$", url));
   }
 
   // ── A: the paying account ───────────────────────────────────────────────────
@@ -163,7 +161,7 @@ class ReceiptReviewShortcutsBrowserTest extends BrowserTest {
 
   @Test
   void theLettersDoNothingWithCtrlHeldSoCopyAndSelectAllKeepWorking() {
-    open(processedReceipt(cash, null));
+    open(processedReceipt(cash, category));
 
     page.keyboard().press("Control+c");
     page.keyboard().press("Control+d");

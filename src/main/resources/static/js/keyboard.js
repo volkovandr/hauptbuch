@@ -39,7 +39,10 @@
  *      A `new` receipt's Prepare button is autofocused in the markup, so Enter starts the editor.
  *      Backspace is offered because the browser eats Esc to exit fullscreen. This leaf
  *      only maps keys/clicks onto server-rendered buttons; the Cropper edit mode is owned by the
- *      receipt-editor.js leaf.
+ *      receipt-editor.js leaf. In read mode the review shortcuts (receipt doc §6.4) also apply:
+ *      A / D / C focus the paying account (content selected), the date, and the next item with no
+ *      category — plain letters, so only when not typing and with no Ctrl/Alt/Cmd held — and
+ *      Ctrl+Enter presses Confirm from anywhere, text fields included (Ctrl on every platform).
  *  10. Auto-submit a [data-autosubmit] file input's form the moment a file is chosen — the mobile
  *      capture surface uploads on selection instead of a second Upload tap (receipt doc §4). The
  *      Upload button remains as the no-JS fallback: remove this script and capture still works, just
@@ -152,10 +155,23 @@
       return;
     }
 
+    // Review shortcuts (receipt doc §6.4): Ctrl+Enter confirms from anywhere, text fields included.
+    if (receiptProcess() && !receiptEditActive() && isConfirmChord(event)) {
+      if (document.querySelector("[data-receipt-confirm]")) {
+        event.preventDefault();
+        confirmReceipt();
+        return;
+      }
+    }
+
     // Processing screen (receipt doc §6): ↑/↓ walk the filtered list, Backspace goes Back, Delete
     // opens the dialog — but only in read mode, and never while typing (a slider/textarea keeps the
     // key). Backspace is offered alongside Esc because the browser also eats Esc to leave fullscreen.
     if (receiptProcess() && !receiptEditActive() && !isTyping(event.target)) {
+      if (!hasModifier(event) && jumpToReviewField(event.key.toLowerCase())) {
+        event.preventDefault();
+        return;
+      }
       if (event.key === "ArrowUp") {
         event.preventDefault();
         clickIfPresent("[data-receipt-prev]");
@@ -580,6 +596,86 @@
   function isTyping(target) {
     const tag = (target && target.tagName ? target.tagName : "").toLowerCase();
     return tag === "input" || tag === "textarea" || tag === "select";
+  }
+
+  // ── Review shortcuts on a processed receipt (receipt doc §6.4) ───────────────
+  // A / D / C jump to the paying account, the date and the next uncategorised item; Ctrl+Enter
+  // confirms. The letters are plain keys, so the caller only offers them when the operator is not
+  // typing and no modifier is held (Ctrl+C stays Copy). Ctrl is the chord on every platform — Cmd
+  // does nothing.
+  let lastCategoryJump = null;
+
+  function hasModifier(event) {
+    return event.ctrlKey || event.altKey || event.metaKey;
+  }
+
+  function isConfirmChord(event) {
+    return (
+      event.key === "Enter" &&
+      !event.repeat &&
+      event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.shiftKey
+    );
+  }
+
+  /** Focus the field behind `selector` unless it is missing or disabled (a booked receipt). */
+  function focusField(selector, selectContents) {
+    const el = document.querySelector(selector);
+    if (!el || el.matches(":disabled")) return false;
+    el.focus();
+    if (selectContents) el.select();
+    return true;
+  }
+
+  /**
+   * Focus the category input of the first item with none; pressed again, the next one after the
+   * last jump, wrapping. A line the operator has since filled drops out of the list by itself.
+   */
+  function focusNextUncategorised() {
+    const empty = Array.from(document.querySelectorAll('#receipt-editor input[name="categoryText"]'))
+      .filter((input) => input.value.trim() === "" && !input.matches(":disabled"));
+    if (empty.length === 0) return false;
+    const after = empty.find(
+      (input) =>
+        lastCategoryJump &&
+        lastCategoryJump.isConnected &&
+        lastCategoryJump.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    lastCategoryJump = after || empty[0];
+    lastCategoryJump.focus();
+    return true;
+  }
+
+  /** The A / D / C jump for the pressed (lower-cased) key; true when it moved focus. */
+  function jumpToReviewField(key) {
+    if (key === "a") return focusField("#receipt-account", true);
+    if (key === "d") return focusField("#receipt-date", false);
+    if (key === "c") return focusNextUncategorised();
+    return false;
+  }
+
+  /**
+   * Press Confirm the way a mouse click would. Leaving the focused field first fires its `change`
+   * (the account picker resolves its text into the hidden id), and Confirm must not post before
+   * that — and the editor refresh it triggers — has settled, or it would book the stale account.
+   */
+  function confirmReceipt() {
+    const active = document.activeElement;
+    if (active && active !== document.body && active.blur) active.blur();
+    let quietChecks = 0;
+    let waited = 0;
+    (function whenSettled() {
+      const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+      quietChecks = busy ? 0 : quietChecks + 1;
+      waited += 1;
+      if (quietChecks < 2 && waited < 40) {
+        setTimeout(whenSettled, 50);
+        return;
+      }
+      clickIfPresent("[data-receipt-confirm]");
+    })();
   }
 
   // Dismiss overlays on a click that is neither inside the menu/dialog nor a fresh right-click.
