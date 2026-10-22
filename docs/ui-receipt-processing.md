@@ -425,6 +425,12 @@ The `failed` view offers **Retry** (→ `pre_processed`) — or Delete, as every
   - a **missing or mismatched grand total** — Σ lines must equal a *present* total; deliberately
     **no** register-style "update total" shortcut here (a mismatch means the review isn't done);
   - a missing **date** or **account**; and the **cross-currency mismatch** (§6.3).
+- **Review shortcuts** (the `processed` view, via `keyboard.js`): **Ctrl+Enter** presses Confirm from
+  anywhere, text fields included (Ctrl on every platform, never Cmd — same refusals as the button);
+  **A** / **D** / **C** focus the paying account (content selected), the date, and the next item
+  with no category (repeat = next, wrapping). The letters apply only when focus is not in a text
+  field — there they type — and never with Ctrl/Alt/Cmd held. A one-line hint sits under the
+  parse telemetry. (Issue receipt-processing/37.)
 - **Confirm does not navigate** (2026-08-03): the pane flips to the **`committed` view** in place
   — the §6.3 editor rendered **read-only** from the same fragments (image alongside, parse
   telemetry kept) with **Edit transaction** (the §7 jump), **Reopen**, and **Delete** (the 5-way
