@@ -110,9 +110,9 @@
       <table class="receipts" th:unless="${#lists.isEmpty(receipts)}">
         <thead>
           <!-- Sortable headers (issue tracker #11): Captured/Confirmed/Total order in SQL, Txn
-               date/Merchant order in memory over the very lookups their cells render from — all look and
-               behave the same from here. A plain <a> (full-page GET, no JS) so a click applies
-               immediately, independent of the Apply button above, which stays scoped to
+               date/Merchant order in memory over the very lookups their cells render from — all
+               five look and behave the same from here. A plain <a> (full-page GET, no JS) so a click
+               applies immediately, independent of the Apply button above, which stays scoped to
                state/range. Each link carries the current state/range forward since it's its own
                request, not a submit of the filter form. -->
           <tr>
