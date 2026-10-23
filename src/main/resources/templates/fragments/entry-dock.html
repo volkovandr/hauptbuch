@@ -228,7 +228,7 @@
              carrying the currently-typed value along rather than resetting it. -->
         <th:block th:with="entryAmountText=${edit != null} ? ${edit.amountFieldText()}">
           <div
-            th:replace="~{fragments/entry-dock :: amountField(fields=${amountFields}, amountText=${entryAmountText}, oob=false)}"
+            th:replace="~{fragments/entry-dock :: amountField(fields=${amountFields}, amountText=${entryAmountText})}"
           ></div>
         </th:block>
 
@@ -506,26 +506,22 @@
       </div>
     </div>
 
-    <!-- The Amount field itself (register §3.8a, issue transaction-register-ui/04) — its own
-         fragment (hx-swap-oob baked in, inert unless returned as a top-level element of a response)
-         so a currency or account change can refresh just its currency label via
-         /register/currency-fields, below, without resetting whatever the user has already typed.
-         Its own change posts there too, so the Off account / Base proposals follow the Amount as it
-         is typed (issue transaction-register-ui/27); hx-sync drops that refresh when Enter submits
-         the form instead, so a stale response never lands in the freshly reset dock. -->
+    <!-- The Amount field itself (register §3.8a, issue transaction-register-ui/04). A currency or
+         account change refreshes only its LABEL, through /register/currency-fields (the
+         `amountLabel` fragment, out-of-band) — never the input, so a refresh response that was built
+         from an older request can not overwrite a figure typed since (issue
+         transaction-register-ui/29). Its own change posts there too, so the Off account / Base
+         proposals follow the Amount as it is typed (issue transaction-register-ui/27); hx-sync drops
+         that refresh when Enter submits the form instead, so a stale response never lands in the
+         freshly reset dock. -->
     <div
-      th:fragment="amountField(fields, amountText, oob)"
+      th:fragment="amountField(fields, amountText)"
       id="entry-amount-field"
       class="field field--amount"
-      th:attr="hx-swap-oob=${oob} ? 'true'"
     >
       <label
-        class="field__label"
-        for="entry-amount"
-        th:text="'Amount (' + ${fields.categoryCurrencyCode()} + ')'"
-      >
-        Amount (EUR)
-      </label>
+        th:replace="~{fragments/entry-dock :: amountLabel(fields=${fields}, oob=false)}"
+      ></label>
       <input
         id="entry-amount"
         name="amount"
@@ -544,20 +540,34 @@
       />
     </div>
 
+    <!-- The Amount label, "Amount (CUR)" following the category currency. Rendered inside the field
+         on a normal render (oob=false) and returned on its own, out-of-band, by the currency-fields
+         response (oob=true) — the only part of the Amount field that refresh ever changes. -->
+    <label
+      th:fragment="amountLabel(fields, oob)"
+      id="entry-amount-label"
+      class="field__label"
+      for="entry-amount"
+      th:attr="hx-swap-oob=${oob} ? 'true'"
+      th:text="'Amount (' + ${fields.categoryCurrencyCode()} + ')'"
+    >
+      Amount (EUR)
+    </label>
+
     <!-- POST /register/currency-fields response (plan stage 7d.1) — controller-only, never included
          from within `dock` itself (that would duplicate the picker on a plain page load): the
-         currency picker and the Amount field, both out-of-band (each keeps its own shown
+         currency picker and the Amount label, both out-of-band (each keeps its own shown
          value/label in sync with whichever change triggered the recompute — the currency
          selector's own, the funding account's, the payee's, or a transfer target's), plus the
          primary swap of the Off account / Base fields into #entry-currency-amount. -->
     <th:block
-      th:fragment="currencyFieldsResponse(fields, amountText, offAccountText, offAccountSuggestion, baseSuggestion)"
+      th:fragment="currencyFieldsResponse(fields, offAccountText, offAccountSuggestion, baseSuggestion)"
     >
       <div
         th:replace="~{fragments/currency-picker :: picker('entry-category-currency', 'categoryCurrencyCode', ${fields.categoryCurrencyCode()}, true)}"
       ></div>
       <div
-        th:replace="~{fragments/entry-dock :: amountField(fields=${fields}, amountText=${amountText}, oob=true)}"
+        th:replace="~{fragments/entry-dock :: amountLabel(fields=${fields}, oob=true)}"
       ></div>
       <div
         th:replace="~{fragments/entry-dock :: extraAmountFields(fields=${fields}, offAccountText=${offAccountText}, offAccountSuggestion=${offAccountSuggestion}, baseSuggestion=${baseSuggestion})}"

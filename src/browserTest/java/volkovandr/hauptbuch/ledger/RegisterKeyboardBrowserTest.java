@@ -4,9 +4,11 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.microsoft.playwright.Locator;
+import com.microsoft.playwright.Route;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -205,5 +207,39 @@ class RegisterKeyboardBrowserTest extends BrowserTest {
 
     tags.press("Backspace");
     assertThat(chips).hasCount(0);
+  }
+
+  /**
+   * The refresh an Account change posts is sent while Amount is still empty; its response must not
+   * wipe a figure typed after that (register issue 29). The response is held until the amount is
+   * typed, so the race is certain rather than a matter of timing.
+   */
+  @Test
+  void staleCurrencyRefreshDoesNotWipeTheAmountTypedSinceItWasSent() {
+    openRegister();
+    AtomicReference<Route> held = new AtomicReference<>();
+    page.route(
+        "**/register/currency-fields",
+        route -> {
+          if (!held.compareAndSet(null, route)) {
+            route.resume();
+          }
+        });
+
+    page.locator("#entry-account").fill(ACCOUNT + " (EUR)");
+    page.locator("#entry-account").dispatchEvent("change");
+    // Route events are delivered only while the test thread is inside a Playwright call.
+    for (int waited = 0; held.get() == null && waited < 100; waited++) {
+      page.waitForTimeout(50);
+    }
+    assertThat(held.get()).isNotNull();
+    amountField().fill("20");
+
+    // Now let the stale response (built from the empty amount) land.
+    page.waitForResponse(
+        r -> r.url().contains("/register/currency-fields"), () -> held.get().resume());
+    page.waitForTimeout(200);
+
+    assertThat(amountField()).hasValue("20");
   }
 }

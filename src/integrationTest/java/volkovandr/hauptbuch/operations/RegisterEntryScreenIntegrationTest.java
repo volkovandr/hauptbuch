@@ -279,13 +279,15 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
-  void currencyFieldsRelabelsTheFundingAmountFieldWhenTheAccountChangesWithoutLosingItsValue()
+  void currencyFieldsRelabelsTheFundingAmountFieldWhenTheAccountChangesWithoutTouchingTheInput()
       throws Exception {
     long chfCard = openAccount("Cash CHF", "CHF", "500");
     insertCategory("Food");
 
     // Simulates the funding Account select changing to the CHF card: the Amount label switches to
-    // the new account's currency, and the already-typed magnitude rides along unchanged.
+    // the new account's currency. The Amount input is not part of the response at all, so a stale
+    // response can never overwrite what was typed since the request was sent (issue
+    // transaction-register-ui/29).
     mockMvc
         .perform(
             post("/register/currency-fields")
@@ -293,8 +295,9 @@ class RegisterEntryScreenIntegrationTest {
                 .param("accountId", String.valueOf(chfCard))
                 .param("amount", "9,10"))
         .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"entry-amount-label\"")))
         .andExpect(content().string(containsString("Amount (CHF)")))
-        .andExpect(content().string(containsString("value=\"9,10\"")));
+        .andExpect(content().string(not(containsString("id=\"entry-amount\""))));
   }
 
   @Test
@@ -310,10 +313,12 @@ class RegisterEntryScreenIntegrationTest {
                 .param("amount", "9,10")
                 .param("categoryCurrencyCode", "CHF"))
         .andExpect(status().isOk())
-        // The Amount is now typed in CHF, keeping what was typed; the account's own EUR amount
-        // follows it as Off account (issue transaction-register-ui/04).
+        // The Amount is now typed in CHF (only its label is refreshed — the typed value stays in
+        // the
+        // untouched input); the account's own EUR amount follows it as Off account (issue
+        // transaction-register-ui/04).
         .andExpect(content().string(containsString("Amount (CHF)")))
-        .andExpect(content().string(containsString("value=\"9,10\"")))
+        .andExpect(content().string(not(containsString("id=\"entry-amount\""))))
         .andExpect(content().string(containsString("name=\"offAccountAmount\"")))
         .andExpect(content().string(containsString("Off account (EUR)")))
         // The funding account (EUR) is the book's base, so no separate base field is shown (§3.8a).
@@ -711,12 +716,12 @@ class RegisterEntryScreenIntegrationTest {
                 .param("categoryId", String.valueOf(visaChf))
                 .param("transferDirection", "TO"))
         .andExpect(status().isOk())
-        // The Currency picker follows the target account and relabels the Amount, keeping the
-        // typed value (issue transaction-register-ui/04, option a); Off account is the EUR side.
+        // The Currency picker follows the target account and relabels the Amount, leaving the typed
+        // value alone (issue transaction-register-ui/04, option a); Off account is the EUR side.
         .andExpect(
             content().string(matchesPattern("(?s).*value=\"CHF\"\\s+selected=\"selected\".*")))
         .andExpect(content().string(containsString("Amount (CHF)")))
-        .andExpect(content().string(containsString("value=\"20\"")))
+        .andExpect(content().string(not(containsString("id=\"entry-amount\""))))
         .andExpect(content().string(containsString("Off account (EUR)")));
   }
 
