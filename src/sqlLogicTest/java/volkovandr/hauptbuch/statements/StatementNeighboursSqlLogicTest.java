@@ -108,8 +108,8 @@ class StatementNeighboursSqlLogicTest {
 
   @Test
   void otherAccountsAndDeletedStatementsAreNotNeighbours() {
-    long march = statement(accountA, day(3, 1), day(3, 31));
-    long otherAccount = statement(accountB, day(4, 1), day(4, 30));
+    final long march = statement(accountA, day(3, 1), day(3, 31));
+    final long otherAccount = statement(accountB, day(4, 1), day(4, 30));
     long deleted = statement(accountA, day(4, 1), day(4, 30));
     delete(deleted);
     long may = statement(accountA, day(5, 1), day(5, 31));
@@ -121,8 +121,8 @@ class StatementNeighboursSqlLogicTest {
   }
 
   @Test
-  void aStatementWithoutPeriodStartIsPlacedByItsEarliestLine() {
-    long march = statement(accountA, day(3, 1), day(3, 31));
+  void undatedPeriodIsPlacedByTheEarliestLineDate() {
+    final long march = statement(accountA, day(3, 1), day(3, 31));
     long undated = statement(accountA, null, null);
     line(undated, 0, day(4, 20));
     line(undated, 1, day(4, 3));
@@ -136,8 +136,8 @@ class StatementNeighboursSqlLogicTest {
   }
 
   @Test
-  void aStatementWithNoDateAtAllHasNoNeighboursAndIsNobodysNeighbour() {
-    long march = statement(accountA, day(3, 1), day(3, 31));
+  void statementWithoutAnyDateHasNoNeighboursAndIsNobodysNeighbour() {
+    final long march = statement(accountA, day(3, 1), day(3, 31));
     long blank = statement(accountA, null, null);
     line(blank, 0, null);
     long may = statement(accountA, day(5, 1), day(5, 31));
@@ -178,7 +178,7 @@ class StatementNeighboursSqlLogicTest {
 
   @Test
   void nextOfTwoStatementsStartingTogetherIsTheSmallerId() {
-    long march = statement(accountA, day(3, 1), day(3, 31));
+    final long march = statement(accountA, day(3, 1), day(3, 31));
     long first = statement(accountA, day(4, 1), day(4, 30));
     statement(accountA, day(4, 1), day(4, 15));
 

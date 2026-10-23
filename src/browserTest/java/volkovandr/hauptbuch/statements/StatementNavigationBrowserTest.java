@@ -101,7 +101,7 @@ class StatementNavigationBrowserTest extends BrowserTest {
   }
 
   @Test
-  void bracketKeysAreTypedIntoAFieldInsteadOfNavigating() {
+  void bracketKeysAreTypedInsideFieldsInsteadOfNavigating() {
     page.navigate(url("/statements/" + middle));
 
     page.locator("#openingBalance").fill("");
