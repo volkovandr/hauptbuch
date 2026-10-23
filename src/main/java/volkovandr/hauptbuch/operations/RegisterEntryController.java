@@ -235,15 +235,16 @@ class RegisterEntryController {
    * change, or the funding account's (which resets the currency default — its {@code hx-include}
    * deliberately omits the stale {@code categoryCurrencyCode}, so this always re-derives it from
    * the new account). Returns the currency picker and the funding Amount field's currency label,
-   * both out-of-band (so their shown value/label stays in sync — the funding Amount field's typed
-   * value rides along unchanged), plus the primary swap of the extra amount field(s).
+   * both out-of-band (so their shown value/label stays in sync), plus the primary swap of the extra
+   * amount field(s). The Amount <em>input</em> is deliberately not part of the response: it would
+   * be rendered from the request's older amount and could wipe what was typed since (register issue
+   * 29).
    */
   @PostMapping("/register/currency-fields")
   String currencyFields(@ModelAttribute DockEntryForm form, Model model) {
     addAmountAttributes(model, dockAmountFieldsService.amountsFor(form));
-    model.addAttribute("amountText", form.amount());
     return DOCK_FRAGMENT
-        + " :: currencyFieldsResponse(fields=${amountFields}, amountText=${amountText},"
+        + " :: currencyFieldsResponse(fields=${amountFields},"
         + " offAccountText=${offAccountText}, offAccountSuggestion=${offAccountSuggestion},"
         + " baseSuggestion=${baseSuggestion})";
   }
