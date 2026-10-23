@@ -1,6 +1,6 @@
 # The receipt list should show, and sort by, when a receipt was confirmed
 
-Status: open
+Status: resolved
 Category: enhancement
 Severity: moderate
 Area: Receipts — register list (`receipts.html`, `ReceiptSort`, `ReceiptRepository.findForRegister`), `receipt` table
