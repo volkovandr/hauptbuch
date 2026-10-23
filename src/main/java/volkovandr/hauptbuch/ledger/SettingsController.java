@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.ledger;
 
 import java.math.BigDecimal;
+import java.util.OptionalInt;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -60,12 +61,32 @@ class SettingsController {
     return VIEW;
   }
 
-  /** Save how long a receipt-confirmed toast stays on screen (0 switches the toasts off). */
+  /**
+   * Save how long a receipt-confirmed toast stays on screen (0 switches the toasts off). Lenient
+   * like the price fields: an out-of-range value is clamped to 0..60, and a blank or non-numeric
+   * one leaves the stored duration as it was rather than failing the request.
+   */
   @PostMapping("/settings/confirm-toast")
-  String saveConfirmToast(@RequestParam int confirmToastSeconds, Model model) {
-    settingsService.setConfirmToastSeconds(confirmToastSeconds);
+  String saveConfirmToast(@RequestParam(required = false) String confirmToastSeconds, Model model) {
+    toastSeconds(confirmToastSeconds)
+        .ifPresent(
+            seconds ->
+                settingsService.setConfirmToastSeconds(
+                    Math.max(0, Math.min(Settings.MAX_CONFIRM_TOAST_SECONDS, seconds))));
     populate(model);
     return VIEW;
+  }
+
+  /** The typed toast duration, or empty when the field is blank or not a whole number. */
+  private static OptionalInt toastSeconds(String input) {
+    if (input == null || input.isBlank()) {
+      return OptionalInt.empty();
+    }
+    try {
+      return OptionalInt.of(Integer.parseInt(input.trim()));
+    } catch (NumberFormatException e) {
+      return OptionalInt.empty();
+    }
   }
 
   /** Save the AI model id (data-model §3.8) — the model the receipt parser calls. */

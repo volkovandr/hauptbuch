@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.receipts;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -12,10 +13,12 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.locks.ReentrantLock;
+import org.joda.money.CurrencyUnit;
+import org.joda.money.Money;
 import org.springframework.stereotype.Component;
 import volkovandr.hauptbuch.ledger.Settings;
 import volkovandr.hauptbuch.ledger.SettingsService;
+import volkovandr.hauptbuch.shared.MoneyFormat;
 
 /**
  * The receipts just confirmed, held in the HTTP session so a "Confirmed!" toast (receipt issue 38)
@@ -24,7 +27,8 @@ import volkovandr.hauptbuch.ledger.SettingsService;
  *
  * <p>Session state, not a table: a toast lives seconds, and a lost one costs nothing. Entries older
  * than the configured lifetime ({@link Settings#confirmToastSeconds()}) are dropped on every touch,
- * so the list cannot grow.
+ * so the list cannot grow, and re-confirming a receipt replaces its earlier toast. The list is a
+ * copy-on-write one, so concurrent htmx requests of the one session need no further locking.
  */
 @Component
 class RecentConfirms {
@@ -34,7 +38,6 @@ class RecentConfirms {
 
   private final Clock clock;
   private final SettingsService settingsService;
-  private final ReentrantLock lock = new ReentrantLock();
 
   RecentConfirms(Clock clock, SettingsService settingsService) {
     this.clock = clock;
@@ -55,44 +58,35 @@ class RecentConfirms {
             form.payeeText() == null ? "" : form.payeeText().strip(),
             shownAmount(form, settings.baseCurrency()),
             now);
-    lock.lock();
-    try {
-      List<ConfirmToast> kept = entries(session);
-      kept.removeIf(old -> expired(old, now, settings.confirmToastSeconds()));
-      kept.add(toast);
-    } finally {
-      lock.unlock();
-    }
+    List<ConfirmToast> kept = entries(session);
+    kept.removeIf(
+        old -> old.receiptId() == receiptId || expired(old, now, settings.confirmToastSeconds()));
+    kept.add(toast);
   }
 
   /** The toasts still within the configured lifetime, newest first; empty without a session. */
   List<ConfirmToastView> visible(HttpServletRequest request) {
-    int lifetimeSeconds = settingsService.get().confirmToastSeconds();
     HttpSession session = request.getSession(false);
-    if (session == null || lifetimeSeconds <= 0) {
+    if (session == null) {
       return List.of();
     }
+    int lifetimeSeconds = settingsService.get().confirmToastSeconds();
     Instant now = clock.instant();
-    lock.lock();
-    try {
-      List<ConfirmToast> kept = entries(session);
-      kept.removeIf(old -> expired(old, now, lifetimeSeconds));
-      List<ConfirmToast> newestFirst = new ArrayList<>(kept);
-      newestFirst.sort(Comparator.comparing(ConfirmToast::confirmedAt).reversed());
-      return newestFirst.stream()
-          .map(
-              t ->
-                  new ConfirmToastView(
-                      t.receiptId(),
-                      t.date(),
-                      t.payee(),
-                      t.amount(),
-                      lifetimeSeconds,
-                      Duration.between(t.confirmedAt(), now).toMillis() / 1000.0))
-          .toList();
-    } finally {
-      lock.unlock();
-    }
+    List<ConfirmToast> kept = entries(session);
+    kept.removeIf(old -> lifetimeSeconds <= 0 || expired(old, now, lifetimeSeconds));
+    List<ConfirmToast> newestFirst = new ArrayList<>(kept);
+    newestFirst.sort(Comparator.comparing(ConfirmToast::confirmedAt).reversed());
+    return newestFirst.stream()
+        .map(
+            t ->
+                new ConfirmToastView(
+                    t.receiptId(),
+                    t.date(),
+                    t.payee(),
+                    t.amount(),
+                    lifetimeSeconds,
+                    Duration.between(t.confirmedAt(), now).toMillis() / 1000.0))
+        .toList();
   }
 
   private static boolean expired(ConfirmToast toast, Instant now, int lifetimeSeconds) {
@@ -122,11 +116,25 @@ class RecentConfirms {
     }
   }
 
-  /** The typed total, bare in the base currency and suffixed with its code otherwise. */
+  /**
+   * The typed total in the shared display format: German, bare in the base currency and with the
+   * currency symbol otherwise. Text that is not a number (or an unknown currency) is shown as
+   * typed.
+   */
   private static String shownAmount(ReceiptEditorForm form, String baseCurrency) {
-    String total = form.total() == null ? "" : form.total().strip();
-    String currency = form.currencyCode();
-    boolean foreign = currency != null && !currency.isBlank() && !currency.equals(baseCurrency);
-    return foreign ? total + " " + currency : total;
+    String typed = form.total() == null ? "" : form.total().strip();
+    String code =
+        form.currencyCode() == null || form.currencyCode().isBlank()
+            ? baseCurrency
+            : form.currencyCode();
+    if (code == null) {
+      return typed;
+    }
+    try {
+      Money money = Money.of(CurrencyUnit.of(code), MoneyFormat.parse(typed), RoundingMode.HALF_UP);
+      return MoneyFormat.display(money, baseCurrency);
+    } catch (IllegalArgumentException e) {
+      return typed;
+    }
   }
 }

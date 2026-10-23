@@ -169,4 +169,20 @@ class SettingsScreenIntegrationTest {
         .andExpect(content().string(containsString("Toast duration")))
         .andExpect(content().string(containsString("value=\"7\"")));
   }
+
+  @Test
+  void confirmToastDurationIsClampedAndGarbageLeavesItUnchanged() throws Exception {
+    mockMvc
+        .perform(post("/settings/confirm-toast").param("confirmToastSeconds", "120"))
+        .andExpect(content().string(containsString("value=\"60\"")));
+
+    mockMvc
+        .perform(post("/settings/confirm-toast").param("confirmToastSeconds", "soon"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("value=\"60\"")));
+
+    mockMvc
+        .perform(post("/settings/confirm-toast").param("confirmToastSeconds", ""))
+        .andExpect(content().string(containsString("value=\"60\"")));
+  }
 }

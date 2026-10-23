@@ -10,7 +10,7 @@ import java.time.Instant;
  * @param receiptId the confirmed receipt, the target of the toast's edit link
  * @param date the booking date as the operator sees it ({@code dd.MM.yyyy})
  * @param payee the payee as typed; blank when the receipt had none
- * @param amount the receipt total, German-formatted, with the currency code unless it is the base
+ * @param amount the receipt total in the shared German display format, bare in the base currency
  * @param confirmedAt when the Confirm succeeded
  */
 record ConfirmToast(

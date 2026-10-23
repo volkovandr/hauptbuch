@@ -568,8 +568,10 @@ class ReceiptProcessingController {
       model.addAttribute("confirmProblems", e.problems());
       return renderPane(id, form, state, range, model);
     }
-    recentConfirms.record(request.getSession(), id, form);
     if (preCommitNeighbours != null) {
+      // A redirect (full page load) follows, so the toast has a page to appear on; an in-place
+      // pane swap already shows the booked receipt.
+      recentConfirms.record(request.getSession(), id, form);
       response.setHeader("HX-Redirect", advanceUrl(preCommitNeighbours, state, range));
     }
     return renderPane(id, null, state, range, model);

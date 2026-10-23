@@ -101,6 +101,21 @@ class ReceiptConfirmToastIntegrationTest {
         .andExpect(content().string(not(containsString(TOAST_CONTAINER))));
   }
 
+  @Test
+  void confirmThatSwapsThePaneInPlaceLeavesNoToast() throws Exception {
+    long id = processedReceipt();
+    MockHttpSession session = new MockHttpSession();
+
+    // The "all" filter still lists the receipt once committed, so Confirm does not redirect.
+    mockMvc
+        .perform(confirm(id, "42,14").param("state", "all").session(session))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(get("/receipts").session(session))
+        .andExpect(content().string(not(containsString(TOAST_CONTAINER))));
+  }
+
   /** A Confirm POST for the receipt's one Fuel line, with the header total as typed. */
   private MockHttpServletRequestBuilder confirm(long id, String total) {
     return post("/receipts/" + id + "/confirm")

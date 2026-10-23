@@ -160,4 +160,24 @@ class RecentConfirmsTest {
     assertThat(toast.date()).isEqualTo("not a date");
     assertThat(toast.payee()).isEmpty();
   }
+
+  @Test
+  void amountIsShownInGermanFormatHoweverItWasTyped() {
+    recentConfirms.record(session, 1, form("2026-08-03", "ShopAaa", "1234.5", "EUR"));
+
+    assertThat(recentConfirms.visible(request))
+        .extracting(ConfirmToastView::amount)
+        .containsExactly("1.234,50");
+  }
+
+  @Test
+  void reconfirmingReceiptReplacesItsEarlierToast() {
+    recentConfirms.record(session, 1, form("2026-08-03", "ShopAaa", "1,00", "EUR"));
+    advance(1000);
+    recentConfirms.record(session, 1, form("2026-08-03", "ShopAaa", "2,00", "EUR"));
+
+    assertThat(recentConfirms.visible(request))
+        .extracting(ConfirmToastView::amount)
+        .containsExactly("2,00");
+  }
 }
