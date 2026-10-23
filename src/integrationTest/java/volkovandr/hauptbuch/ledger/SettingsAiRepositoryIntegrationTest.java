@@ -82,4 +82,14 @@ class SettingsAiRepositoryIntegrationTest {
     settingsRepository.updateStatementSystemPrompt(null);
     assertThat(settingsRepository.loadStatementSystemPrompt()).isNull();
   }
+
+  @Test
+  void confirmToastDurationDefaultsToThreeSecondsAndRoundTrips() {
+    assertThat(settingsRepository.load().confirmToastSeconds())
+        .isEqualTo(Settings.DEFAULT_CONFIRM_TOAST_SECONDS);
+
+    settingsRepository.updateConfirmToastSeconds(0);
+
+    assertThat(settingsRepository.load().confirmToastSeconds()).isZero();
+  }
 }

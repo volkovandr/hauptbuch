@@ -79,6 +79,31 @@
       </form>
     </section>
 
+    <section class="panel">
+      <p class="eyebrow">Receipts</p>
+      <form method="post" th:action="@{/settings/confirm-toast}" class="form">
+        <p class="muted">
+          How long the "Confirmed!" toast stays on screen after a receipt is confirmed. 0 switches it
+          off.
+        </p>
+        <div class="field">
+          <label class="field__label" for="confirmToastSeconds">Toast duration (seconds)</label>
+          <input
+            id="confirmToastSeconds"
+            name="confirmToastSeconds"
+            type="number"
+            min="0"
+            max="60"
+            class="input"
+            th:value="${settings.confirmToastSeconds()}"
+          />
+        </div>
+        <p class="actions">
+          <button type="submit" class="btn">Save duration</button>
+        </p>
+      </form>
+    </section>
+
     <!--
       AI parsing (stage 9e, data-model §3.8): the model the receipt parser calls, the one DB-stored
       secret (write-only — the key is never rendered back, only its status), and the four per-MTok

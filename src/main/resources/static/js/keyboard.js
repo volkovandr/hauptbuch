@@ -43,6 +43,8 @@
  *      A / D / C focus the paying account (content selected), the date, and the next item with no
  *      category — plain letters, so only when not typing and with no Ctrl/Alt/Cmd held — and
  *      Ctrl+Enter presses Confirm from anywhere, text fields included (Ctrl on every platform).
+ *      On any page, Ctrl+Backspace (not while typing) opens the most recently confirmed receipt for
+ *      as long as its "Confirmed!" toast is on screen (receipt issue 38).
  *  10. Auto-submit a [data-autosubmit] file input's form the moment a file is chosen — the mobile
  *      capture surface uploads on selection instead of a second Upload tap (receipt doc §4). The
  *      Upload button remains as the no-JS fallback: remove this script and capture still works, just
@@ -155,6 +157,15 @@
       return;
     }
 
+    // Ctrl+Backspace (receipt issue 38): while the newest "Confirmed!" toast is still on screen, on any
+    // page, jump to that receipt. Not while typing — Ctrl+Backspace deletes a word there.
+    if (isLastConfirmedChord(event) && !isTyping(event.target) && !anyReceiptOverlayOpen()) {
+      if (openLastConfirmed()) {
+        event.preventDefault();
+        return;
+      }
+    }
+
     // Review shortcuts (receipt doc §6.4): Ctrl+Enter confirms from anywhere, text fields included.
     // Never behind an open dialog or menu (the Delete dialog's own buttons own the keys then).
     if (
@@ -188,7 +199,7 @@
         clickIfPresent("[data-receipt-next]");
         return;
       }
-      if (event.key === "Backspace") {
+      if (event.key === "Backspace" && !hasModifier(event)) {
         event.preventDefault();
         clickIfPresent("[data-receipt-back]");
         return;
@@ -625,6 +636,29 @@
       !event.metaKey &&
       !event.shiftKey
     );
+  }
+
+  function isLastConfirmedChord(event) {
+    return (
+      event.key === "Backspace" &&
+      event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.shiftKey
+    );
+  }
+
+  /**
+   * Go to the most recently confirmed receipt, but only while its toast is still showing (the
+   * server renders the newest toast first and puts its link on the container). The fade-out ends in
+   * `visibility: hidden`, so a toast that has faded no longer counts.
+   */
+  function openLastConfirmed() {
+    const box = document.querySelector("[data-last-confirmed]");
+    const newest = box && box.querySelector(".confirm-toast");
+    if (!newest || getComputedStyle(newest).visibility === "hidden") return false;
+    window.location.href = box.dataset.lastConfirmed;
+    return true;
   }
 
   /** Focus the field behind `selector` unless it is missing or disabled (a booked receipt). */

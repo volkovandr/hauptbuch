@@ -30,7 +30,11 @@ public class SettingsRepository {
   @Cacheable(cacheNames = CacheNames.SETTINGS, condition = CacheNames.OUTSIDE_TRANSACTION)
   public Settings load() {
     return jdbcClient
-        .sql("select base_currency, display_name from settings where settings_id = 1")
+        .sql(
+            """
+            select base_currency, display_name, confirm_toast_seconds
+            from settings where settings_id = 1
+            """)
         .query(Settings.class)
         .single();
   }
@@ -50,6 +54,15 @@ public class SettingsRepository {
     jdbcClient
         .sql("update settings set display_name = :displayName where settings_id = 1")
         .param(DISPLAY_NAME, displayName)
+        .update();
+  }
+
+  /** Set how long a receipt-confirmed toast stays visible, in seconds (0 = no toasts). */
+  @CacheEvict(cacheNames = CacheNames.SETTINGS, allEntries = true)
+  public void updateConfirmToastSeconds(int seconds) {
+    jdbcClient
+        .sql("update settings set confirm_toast_seconds = :seconds where settings_id = 1")
+        .param("seconds", seconds)
         .update();
   }
 

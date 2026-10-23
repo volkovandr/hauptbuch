@@ -80,6 +80,23 @@ public class SettingsService {
     settingsRepository.updateDisplayName(displayName);
   }
 
+  /**
+   * Set how long a receipt-confirmed toast stays visible.
+   *
+   * @param seconds 0 (no toasts) to {@link Settings#MAX_CONFIRM_TOAST_SECONDS}
+   * @throws IllegalArgumentException if outside that range
+   */
+  @Transactional
+  public void setConfirmToastSeconds(int seconds) {
+    if (seconds < 0 || seconds > Settings.MAX_CONFIRM_TOAST_SECONDS) {
+      throw new IllegalArgumentException(
+          "Toast duration must be between 0 and "
+              + Settings.MAX_CONFIRM_TOAST_SECONDS
+              + " seconds.");
+    }
+    settingsRepository.updateConfirmToastSeconds(seconds);
+  }
+
   // ── AI parsing section (data-model §3.8, stage 9e) ──────────────────────────
 
   /**

@@ -31,7 +31,7 @@ class SettingsServiceTest {
 
   @Test
   void setsBaseCurrencyOnFreshBook() {
-    when(settingsRepository.load()).thenReturn(new Settings(null, null));
+    when(settingsRepository.load()).thenReturn(new Settings(null, null, 3));
     SettingsService service = new SettingsService(settingsRepository, currencyRepository, "");
 
     service.setBaseCurrency(EUR);
@@ -41,7 +41,7 @@ class SettingsServiceTest {
 
   @Test
   void refusesToOverwriteAlreadySetBaseCurrency() {
-    when(settingsRepository.load()).thenReturn(new Settings(EUR, null));
+    when(settingsRepository.load()).thenReturn(new Settings(EUR, null, 3));
     SettingsService service = new SettingsService(settingsRepository, currencyRepository, "");
 
     assertThatExceptionOfType(IllegalStateException.class)
@@ -53,7 +53,7 @@ class SettingsServiceTest {
 
   @Test
   void baseCurrencyIsEmptyOnFreshBook() {
-    when(settingsRepository.load()).thenReturn(new Settings(null, null));
+    when(settingsRepository.load()).thenReturn(new Settings(null, null, 3));
     SettingsService service = new SettingsService(settingsRepository, currencyRepository, "");
 
     assertThat(service.baseCurrency()).isEmpty();
@@ -61,7 +61,7 @@ class SettingsServiceTest {
 
   @Test
   void baseCurrencyIsPresentOnceSet() {
-    when(settingsRepository.load()).thenReturn(new Settings(CHF, "Andrey"));
+    when(settingsRepository.load()).thenReturn(new Settings(CHF, "Andrey", 3));
     SettingsService service = new SettingsService(settingsRepository, currencyRepository, "");
 
     assertThat(service.baseCurrency()).contains(CHF);
@@ -206,5 +206,28 @@ class SettingsServiceTest {
 
     // 1000·3 + 200·15 + 0 + 0 = 6000 tok-$/MTok → 0.006000
     assertThat(rates.costOf(1000, 200, 0, 0)).isEqualByComparingTo("0.006000");
+  }
+
+  @Test
+  void savesTheConfirmToastDuration() {
+    SettingsService service = new SettingsService(settingsRepository, currencyRepository, "");
+
+    service.setConfirmToastSeconds(0);
+    service.setConfirmToastSeconds(Settings.MAX_CONFIRM_TOAST_SECONDS);
+
+    verify(settingsRepository).updateConfirmToastSeconds(0);
+    verify(settingsRepository).updateConfirmToastSeconds(Settings.MAX_CONFIRM_TOAST_SECONDS);
+  }
+
+  @Test
+  void refusesAConfirmToastDurationOutsideTheRange() {
+    SettingsService service = new SettingsService(settingsRepository, currencyRepository, "");
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> service.setConfirmToastSeconds(-1));
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> service.setConfirmToastSeconds(Settings.MAX_CONFIRM_TOAST_SECONDS + 1));
+    verify(settingsRepository, never())
+        .updateConfirmToastSeconds(org.mockito.ArgumentMatchers.anyInt());
   }
 }

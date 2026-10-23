@@ -60,6 +60,14 @@ class SettingsController {
     return VIEW;
   }
 
+  /** Save how long a receipt-confirmed toast stays on screen (0 switches the toasts off). */
+  @PostMapping("/settings/confirm-toast")
+  String saveConfirmToast(@RequestParam int confirmToastSeconds, Model model) {
+    settingsService.setConfirmToastSeconds(confirmToastSeconds);
+    populate(model);
+    return VIEW;
+  }
+
   /** Save the AI model id (data-model §3.8) — the model the receipt parser calls. */
   @PostMapping("/settings/ai-model")
   String saveAiModel(@RequestParam(required = false) String aiModel, Model model) {
