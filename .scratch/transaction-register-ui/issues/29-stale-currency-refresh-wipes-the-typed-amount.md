@@ -1,6 +1,6 @@
 # A late currency refresh overwrites the amount typed since it was sent
 
-Status: resolved
+Status: open
 Category: bug
 Severity: medium
 Area: Transaction register — entry dock (`entry-dock.html` `amountField`, `RegisterEntryController.currencyFields`)
