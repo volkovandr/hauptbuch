@@ -194,6 +194,7 @@ class ReceiptCommitServiceTest {
         null,
         null,
         null,
+        null,
         null);
   }
 }

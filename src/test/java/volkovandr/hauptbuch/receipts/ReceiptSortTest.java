@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import volkovandr.hauptbuch.receipts.repository.RegisterOrder;
 
 /**
  * Unit tier (§1.5): {@link ReceiptSort}'s request-token resolution and its {@code sortByLookup}
@@ -20,6 +21,21 @@ class ReceiptSortTest {
   @Test
   void resolveColumnKeepsRecognisedKey() {
     assertThat(ReceiptSort.resolveColumn("total")).isEqualTo("total");
+  }
+
+  @Test
+  void resolveColumnKeepsConfirmedAndItsDefaultIsNewestFirst() {
+    assertThat(ReceiptSort.resolveColumn("confirmed")).isEqualTo(ReceiptSort.CONFIRMED);
+    assertThat(ReceiptSort.defaultDirectionFor(ReceiptSort.CONFIRMED)).isEqualTo(ReceiptSort.DESC);
+  }
+
+  @Test
+  void sqlOrderMapsTheRealColumnsAndLeavesTheInMemoryOnesOnTheDefault() {
+    assertThat(ReceiptSort.sqlOrder(ReceiptSort.TOTAL)).isEqualTo(RegisterOrder.TOTAL);
+    assertThat(ReceiptSort.sqlOrder(ReceiptSort.CONFIRMED)).isEqualTo(RegisterOrder.CONFIRMED);
+    assertThat(ReceiptSort.sqlOrder(ReceiptSort.CAPTURED)).isEqualTo(RegisterOrder.CAPTURED);
+    assertThat(ReceiptSort.sqlOrder(ReceiptSort.TXN_DATE)).isEqualTo(RegisterOrder.CAPTURED);
+    assertThat(ReceiptSort.sqlOrder(ReceiptSort.MERCHANT)).isEqualTo(RegisterOrder.CAPTURED);
   }
 
   @Test
@@ -143,6 +159,7 @@ class ReceiptSortTest {
         OffsetDateTime.parse(instant),
         "mobile",
         "originals/2026/07/x.jpg",
+        null,
         null,
         null,
         null,

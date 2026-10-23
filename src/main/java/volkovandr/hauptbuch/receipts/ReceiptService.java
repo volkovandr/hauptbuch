@@ -18,6 +18,7 @@ import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.receipts.repository.ReceiptLineRepository;
 import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
+import volkovandr.hauptbuch.receipts.repository.RegisterOrder;
 
 /**
  * Receipt lifecycle operations: capture a scan, list it (mobile grid / PC register), serve its
@@ -29,6 +30,8 @@ import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
  * committed} receipt (that takes 9g's 5-way dialog); pre-process/discard-edits are gated to the
  * states that can carry them.
  */
+// CouplingBetweenObjects: the receipts module's one facade over the capture, list and delete paths.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 @Transactional
 public class ReceiptService {
@@ -95,14 +98,14 @@ public class ReceiptService {
 
   /**
    * The PC register list for the given state filter, (optional) capture-date lower bound, and SQL
-   * sort (issue tracker #11) — {@code sortByTotal} is whether the resolved column is {@link
-   * ReceiptSort#TOTAL}, {@code descending} is {@link ReceiptSort#isDescending}. Sorting by Txn date
-   * or Merchant isn't expressible here (neither is a real column); the caller re-orders the result
-   * afterward with {@link ReceiptSort#sortByLookup}.
+   * sort (issue tracker #11) — {@code order} is the SQL column the resolved sort asks for ({@link
+   * ReceiptSort#sqlOrder}), {@code descending} is {@link ReceiptSort#isDescending}. Sorting by Txn
+   * date or Merchant isn't expressible here (neither is a real column); the caller re-orders the
+   * result afterward with {@link ReceiptSort#sortByLookup}.
    */
   public List<Receipt> forRegister(
-      List<String> states, LocalDate from, boolean sortByTotal, boolean descending) {
-    return receiptRepository.findForRegister(states, from, sortByTotal, descending);
+      List<String> states, LocalDate from, RegisterOrder order, boolean descending) {
+    return receiptRepository.findForRegister(states, from, order, descending);
   }
 
   /**
@@ -306,7 +309,8 @@ public class ReceiptService {
     // Prev/Next always walks the default capture order — the processing screen doesn't yet carry
     // the register's active sort (issue tracker #10 covers Prev/Next's filter-consistency gap more
     // broadly; folding sort in belongs there, not here).
-    List<Receipt> list = receiptRepository.findForRegister(states, from, false, true);
+    List<Receipt> list =
+        receiptRepository.findForRegister(states, from, RegisterOrder.CAPTURED, true);
     for (int i = 0; i < list.size(); i++) {
       if (list.get(i).receiptId() == receiptId) {
         Long prev = i > 0 ? list.get(i - 1).receiptId() : null;

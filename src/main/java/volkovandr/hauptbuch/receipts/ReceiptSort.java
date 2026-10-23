@@ -4,13 +4,14 @@ import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import volkovandr.hauptbuch.receipts.repository.RegisterOrder;
 
 /**
  * The register list's sort request tokens (issue tracker #11) and how they resolve to a valid
  * (column, direction) pair — the query-param sibling of {@link ReceiptFilters}, kept separate since
  * sorting reshapes row order, not row membership.
  *
- * <p>Two of the four columns are real {@code receipt} columns and sort in SQL ({@link
+ * <p>Three of the five columns are real {@code receipt} columns and sort in SQL ({@link
  * volkovandr.hauptbuch.receipts.repository.ReceiptRepository#findForRegister}); the other two (Txn
  * date, Merchant) aren't columns at all — both are already resolved as batched, per-list lookups
  * (issue trackers #09, #07) — so those sort in memory afterward ({@link #sortByLookup}), reusing
@@ -30,10 +31,14 @@ final class ReceiptSort {
   /** Sort key: the parsed total amount — a real column, SQL-sortable. */
   static final String TOTAL = "total";
 
+  /** Sort key: when the receipt was last confirmed (issue receipts/39) — a real column. */
+  static final String CONFIRMED = "confirmed";
+
   static final String ASC = "asc";
   static final String DESC = "desc";
 
-  private static final List<String> COLUMNS = List.of(CAPTURED, TXN_DATE, MERCHANT, TOTAL);
+  private static final List<String> COLUMNS =
+      List.of(CAPTURED, TXN_DATE, MERCHANT, TOTAL, CONFIRMED);
 
   private ReceiptSort() {}
 
@@ -58,6 +63,16 @@ final class ReceiptSort {
    */
   static String defaultDirectionFor(String column) {
     return MERCHANT.equals(column) ? ASC : DESC;
+  }
+
+  /**
+   * The SQL ordering a resolved sort key asks of the fetch; the in-memory columns use the default.
+   */
+  static RegisterOrder sqlOrder(String column) {
+    if (TOTAL.equals(column)) {
+      return RegisterOrder.TOTAL;
+    }
+    return CONFIRMED.equals(column) ? RegisterOrder.CONFIRMED : RegisterOrder.CAPTURED;
   }
 
   static boolean isDescending(String direction) {

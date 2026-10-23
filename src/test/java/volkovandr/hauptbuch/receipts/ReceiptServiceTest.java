@@ -26,6 +26,7 @@ import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.PayeeService;
 import volkovandr.hauptbuch.ledger.Transaction;
 import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
+import volkovandr.hauptbuch.receipts.repository.RegisterOrder;
 
 /**
  * Unit tier (§1.5): {@link ReceiptService} orchestration and invariant guards with the repository
@@ -110,6 +111,7 @@ class ReceiptServiceTest {
         null,
         null,
         payeeId,
+        null,
         null,
         null,
         null);
@@ -222,7 +224,7 @@ class ReceiptServiceTest {
 
   @Test
   void neighboursReturnsThePreviousAndNextInTheFilteredList() {
-    when(receiptRepository.findForRegister(any(), any(), eq(false), eq(true)))
+    when(receiptRepository.findForRegister(any(), any(), eq(RegisterOrder.CAPTURED), eq(true)))
         .thenReturn(
             List.of(receipt(1L, "new", null), receipt(2L, "new", null), receipt(3L, "new", null)));
 
@@ -234,7 +236,7 @@ class ReceiptServiceTest {
 
   @Test
   void neighboursAreNullAtTheEndsAndWhenAbsent() {
-    when(receiptRepository.findForRegister(any(), any(), eq(false), eq(true)))
+    when(receiptRepository.findForRegister(any(), any(), eq(RegisterOrder.CAPTURED), eq(true)))
         .thenReturn(List.of(receipt(1L, "new", null), receipt(2L, "new", null)));
 
     assertThat(service.neighbours(1L, List.of("new"), null).prev()).isNull();

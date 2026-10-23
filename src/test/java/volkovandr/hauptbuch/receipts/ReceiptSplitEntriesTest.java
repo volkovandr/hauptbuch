@@ -507,6 +507,7 @@ class ReceiptSplitEntriesTest {
         PAYEE,
         null,
         null,
+        null,
         null);
   }
 }
