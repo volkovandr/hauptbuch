@@ -49,7 +49,9 @@
  *      capture surface uploads on selection instead of a second Upload tap (receipt doc §4). The
  *      Upload button remains as the no-JS fallback: remove this script and capture still works, just
  *      with the extra tap.
- *  11. Nothing else. New shortcuts are added here, by markup convention — never scattered into
+ *  11. Statement neighbours (statements issue 17): "[" and "]" (when not typing, no modifier) follow
+ *      the statement page's [data-statement-prev] / [data-statement-next] links.
+ *  12. Nothing else. New shortcuts are added here, by markup convention — never scattered into
  *      page scripts.
  *
  * It re-scans after htmx swaps so freshly-inserted rows are navigable.
@@ -221,6 +223,19 @@
     // List navigation and single-key shortcuts only apply when not typing into a field.
     const tag = (event.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+    // "[" / "]": the previous / next statement of the account (statements issue 17), if the page
+    // offers one.
+    if ((event.key === "[" || event.key === "]") && !hasModifier(event)) {
+      const link = document.querySelector(
+        event.key === "[" ? "[data-statement-prev]" : "[data-statement-next]"
+      );
+      if (link) {
+        event.preventDefault();
+        link.click();
+        return;
+      }
+    }
 
     // "n": jump to the entry dock's first field (register §3.2), if the page has one.
     if (event.key === "n") {

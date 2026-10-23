@@ -367,4 +367,68 @@ public class StatementRepository {
         .query(StatementRow.class)
         .list();
   }
+
+  /**
+   * The start of each live statement of the current statement's account: its period start, else the
+   * earliest booking date of its lines. A statement with neither has a null start and so no
+   * neighbours (issue statements/17).
+   */
+  private static final String STARTS =
+      """
+      with starts as (
+        select s.statement_id, s.period_end,
+               coalesce(s.period_start,
+                        (select min(l.booking_date) from statement_line l
+                         where l.statement_id = s.statement_id)) as start_date
+        from statement s
+        where s.deleted_at is null
+          and s.account_id = (select c.account_id from statement c
+                              where c.statement_id = :statementId)
+      )
+      """;
+
+  /**
+   * The live statement of the same account that starts closest before this one. Of several with the
+   * same start, the one ending closest before this start without passing it (an end after it, or
+   * unknown, ranks behind), then the smaller id.
+   */
+  public Optional<Long> findPreviousId(long statementId) {
+    return jdbcClient
+        .sql(
+            STARTS
+                + """
+                select o.statement_id
+                from starts o
+                join starts c on c.statement_id = :statementId
+                where o.start_date < c.start_date
+                order by o.start_date desc,
+                         coalesce(o.period_end > c.start_date, true),
+                         o.period_end desc nulls last,
+                         o.statement_id
+                limit 1
+                """)
+        .param(STATEMENT_ID, statementId)
+        .query(Long.class)
+        .optional();
+  }
+
+  /**
+   * The live statement of the same account that starts closest after this one, smaller id first.
+   */
+  public Optional<Long> findNextId(long statementId) {
+    return jdbcClient
+        .sql(
+            STARTS
+                + """
+                select o.statement_id
+                from starts o
+                join starts c on c.statement_id = :statementId
+                where o.start_date > c.start_date
+                order by o.start_date, o.statement_id
+                limit 1
+                """)
+        .param(STATEMENT_ID, statementId)
+        .query(Long.class)
+        .optional();
+  }
 }
