@@ -248,6 +248,54 @@
   box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
 }
 
+/* ── "Confirmed!" toasts (receipt issue 38) ───────────────────────────────
+   Bottom-left, stacked newest on top. Each toast fades out on its own through a CSS animation the
+   template sizes per toast (duration = the configured lifetime, a negative delay for the time
+   already elapsed, so a reload does not restart it). The final keyframe also collapses it, so a
+   finished toast neither blocks clicks nor leaves a gap in the stack. */
+.confirm-toasts {
+  position: fixed;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-width: min(32rem, calc(100vw - 1.5rem));
+}
+.confirm-toast {
+  margin: 0;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--ink);
+  background: var(--paper);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
+  animation-name: confirm-toast-out;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+.confirm-toast__edit {
+  margin-left: 0.4rem;
+}
+@keyframes confirm-toast-out {
+  0%,
+  80% {
+    opacity: 1;
+  }
+  99% {
+    opacity: 0;
+    max-height: 4rem;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+    max-height: 0;
+    padding-block: 0;
+    border-width: 0;
+    overflow: hidden;
+  }
+}
+
 /* ── Phone QR panel (landing page, issue landing-page/03) ────────────────────────────────
    The SVG carries no pixel dimensions — its geometry is in module units with a viewBox — so its
    rendered size is this one width; the height follows from the square aspect ratio. The code

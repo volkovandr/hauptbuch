@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!--
+  "Confirmed!" toasts (receipt issue 38). Rendered by the shared layout on every page from the
+  `confirmToasts` model attribute (ConfirmToastAdvice), newest first. They survive the redirect that
+  follows a Confirm because the server keeps them in the HTTP session; they disappear on their own
+  through a CSS fade-out (no bespoke JS, CLAUDE.md §1.6). The animation runs for the configured
+  lifetime and starts `elapsed` seconds in, so a reload does not restart it.
+
+  The container carries the newest toast's link in data-last-confirmed: keyboard.js jumps there on
+  Ctrl+Backspace while the newest toast is still visible. The "(edit)" link is a plain GET to the
+  receipt's page — it opens committed and read-only, and Reopen is one click away — so Ctrl+click and
+  middle-click open several of them in tabs.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <div
+      th:fragment="toasts"
+      th:if="${confirmToasts != null and !#lists.isEmpty(confirmToasts)}"
+      class="confirm-toasts"
+      th:attr="data-last-confirmed=@{/receipts/{id}(id=${confirmToasts[0].receiptId()})}"
+      role="status"
+      aria-live="polite"
+    >
+      <p
+        th:each="t : ${confirmToasts}"
+        class="confirm-toast"
+        th:style="|animation-duration: ${t.durationSeconds()}s; animation-delay: -${t.elapsedSeconds()}s;|"
+      >
+        <span class="confirm-toast__text">
+          Confirmed!
+          <span class="num" th:text="${t.date()}">03.08.2026</span>
+          <span th:if="${!#strings.isEmpty(t.payee())}" th:text="'· ' + ${t.payee()}">· Shop</span>
+          <span th:if="${!#strings.isEmpty(t.amount())}" class="num" th:text="'· ' + ${t.amount()}"
+            >· 42,14</span
+          >
+        </span>
+        <a class="confirm-toast__edit" th:href="@{/receipts/{id}(id=${t.receiptId()})}">(edit)</a>
+      </p>
+    </div>
+  </body>
+</html>

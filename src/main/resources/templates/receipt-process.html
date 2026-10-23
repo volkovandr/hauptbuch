@@ -434,7 +434,8 @@
     <!-- The review shortcuts (keyboard.js, issue receipt-processing/37): worth a line only while the
          pane is editable, since a booked receipt is read-only. -->
     <p class="receipt-telemetry muted" th:unless="${readOnly}">
-      Shortcuts: A account · D date · C next uncategorised item · Ctrl+Enter confirm.
+      Shortcuts: A account · D date · C next uncategorised item · Ctrl+Enter confirm · Ctrl+Backspace
+      last confirmed.
     </p>
 
     <!-- Re-seed (issue tracker #19): the same <details>/textarea/re-parse block the failed view has,

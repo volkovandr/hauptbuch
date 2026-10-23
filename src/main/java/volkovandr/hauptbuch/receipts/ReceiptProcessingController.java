@@ -1,5 +1,6 @@
 package volkovandr.hauptbuch.receipts;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import org.springframework.stereotype.Controller;
@@ -17,6 +18,7 @@ import volkovandr.hauptbuch.accounts.PostToAccountService;
 import volkovandr.hauptbuch.accounts.PostToResolution;
 import volkovandr.hauptbuch.ledger.CurrencyService;
 import volkovandr.hauptbuch.ledger.RegisterService;
+import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.web.NavItem;
 
 /**
@@ -59,6 +61,8 @@ class ReceiptProcessingController {
   private final RegisterService registerService;
   private final CurrencyService currencyService;
   private final PostToAccountService postToAccountService;
+  private final RecentConfirms recentConfirms;
+  private final SettingsService settingsService;
 
   ReceiptProcessingController(
       ReceiptService receiptService,
@@ -69,7 +73,9 @@ class ReceiptProcessingController {
       ReceiptCommitService receiptCommitService,
       RegisterService registerService,
       CurrencyService currencyService,
-      PostToAccountService postToAccountService) {
+      PostToAccountService postToAccountService,
+      RecentConfirms recentConfirms,
+      SettingsService settingsService) {
     this.receiptService = receiptService;
     this.receiptAnalyser = receiptAnalyser;
     this.toonRepair = toonRepair;
@@ -79,6 +85,8 @@ class ReceiptProcessingController {
     this.registerService = registerService;
     this.currencyService = currencyService;
     this.postToAccountService = postToAccountService;
+    this.recentConfirms = recentConfirms;
+    this.settingsService = settingsService;
   }
 
   /**
@@ -547,6 +555,7 @@ class ReceiptProcessingController {
       @RequestParam(required = false, defaultValue = ReceiptFilters.STATE_QUEUE) String state,
       @RequestParam(required = false, defaultValue = ReceiptFilters.RANGE_90D) String range,
       Model model,
+      HttpServletRequest request,
       HttpServletResponse response) {
     ReceiptEditorForm form = ReceiptEditorForm.bind(params);
     List<String> states = ReceiptFilters.statesFor(state);
@@ -560,6 +569,7 @@ class ReceiptProcessingController {
       model.addAttribute("confirmProblems", e.problems());
       return renderPane(id, form, state, range, model);
     }
+    recentConfirms.record(request.getSession(), id, form, settingsService.get());
     if (preCommitNeighbours != null) {
       response.setHeader("HX-Redirect", advanceUrl(preCommitNeighbours, state, range));
     }

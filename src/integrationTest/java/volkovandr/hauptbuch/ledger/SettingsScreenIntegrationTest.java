@@ -156,4 +156,17 @@ class SettingsScreenIntegrationTest {
         .andExpect(content().string(containsString("2.00")))
         .andExpect(content().string(containsString("10.50")));
   }
+
+  @Test
+  void confirmToastDurationIsSavedAndShownBack() throws Exception {
+    mockMvc
+        .perform(post("/settings/confirm-toast").param("confirmToastSeconds", "7"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("value=\"7\"")));
+
+    mockMvc
+        .perform(get("/settings"))
+        .andExpect(content().string(containsString("Toast duration")))
+        .andExpect(content().string(containsString("value=\"7\"")));
+  }
 }

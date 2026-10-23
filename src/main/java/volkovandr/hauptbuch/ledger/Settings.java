@@ -11,5 +11,13 @@ package volkovandr.hauptbuch.ledger;
  *
  * @param baseCurrency ISO-4217 base currency; null until first-run set, then immutable
  * @param displayName freely-editable greeting name; nullable
+ * @param confirmToastSeconds how long a receipt-confirmed toast stays visible; 0 = no toasts
  */
-public record Settings(String baseCurrency, String displayName) {}
+public record Settings(String baseCurrency, String displayName, int confirmToastSeconds) {
+
+  /** The default lifetime of a receipt-confirmed toast, in seconds (also the column default). */
+  public static final int DEFAULT_CONFIRM_TOAST_SECONDS = 3;
+
+  /** The longest toast lifetime the settings screen accepts, in seconds. */
+  public static final int MAX_CONFIRM_TOAST_SECONDS = 60;
+}

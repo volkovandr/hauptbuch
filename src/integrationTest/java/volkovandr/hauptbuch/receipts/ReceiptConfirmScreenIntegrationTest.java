@@ -21,6 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -155,6 +156,67 @@ class ReceiptConfirmScreenIntegrationTest {
 
     // parse_raw → receipt_line → postings: the middle link survives the commit (data-model §13.2).
     assertThat(lineCount(id)).isEqualTo(1);
+  }
+
+  // ── The "Confirmed!" toast (issue receipts/38) ──────────────────────────────
+
+  @Test
+  void confirmLeavesAToastWithAnEditLinkOnTheNextPage() throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(cash, "42.14", EUR);
+    MockHttpSession session = new MockHttpSession();
+
+    mockMvc
+        .perform(
+            confirm(id, cash, "42,14", fuel, "42,14")
+                .param("payeeText", "ShopAaa")
+                .session(session))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(get("/receipts").session(session))
+        .andExpect(content().string(containsString("class=\"confirm-toasts\"")))
+        .andExpect(content().string(containsString("03.08.2026")))
+        .andExpect(content().string(containsString("ShopAaa")))
+        .andExpect(content().string(containsString("42,14")))
+        .andExpect(content().string(containsString("href=\"/receipts/" + id + "\"")))
+        // The newest toast's link rides on the container for the Ctrl+Backspace jump.
+        .andExpect(
+            content().string(containsString("data-last-confirmed=\"/receipts/" + id + "\"")));
+  }
+
+  @Test
+  void aRefusedConfirmLeavesNoToast() throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(cash, "42.14", EUR);
+    MockHttpSession session = new MockHttpSession();
+
+    mockMvc
+        .perform(confirm(id, cash, "99,00", fuel, "42,14").session(session))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(get("/receipts").session(session))
+        .andExpect(content().string(not(containsString("class=\"confirm-toasts\""))));
+  }
+
+  @Test
+  void aToastDurationOfZeroSwitchesTheToastsOff() throws Exception {
+    settingsService.setConfirmToastSeconds(0);
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(cash, "42.14", EUR);
+    MockHttpSession session = new MockHttpSession();
+
+    mockMvc
+        .perform(confirm(id, cash, "42,14", fuel, "42,14").session(session))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(get("/receipts").session(session))
+        .andExpect(content().string(not(containsString("class=\"confirm-toasts\""))));
   }
 
   // ── Cross-currency (issue receipts/23) ──────────────────────────────────────

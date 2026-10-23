@@ -431,6 +431,12 @@ The `failed` view offers **Retry** (→ `pre_processed`) — or Delete, as every
   with no category (repeat = next, wrapping). The letters apply only when focus is not in a text
   field — there they type — and never with Ctrl/Alt/Cmd held. A one-line hint sits under the
   parse telemetry. (Issue receipt-processing/37.)
+- **"Confirmed!" toast** (issue receipt-processing/38): a successful Confirm leaves a toast —
+  `Confirmed! <date> · <payee> · <amount> (edit)` — on whichever page it redirects to, held in the
+  HTTP session (Confirm ends in a full page load) and faded out by CSS after the *Toast duration*
+  setting (default 3 s, 0 = off). The link opens the receipt committed and read-only; Reopen is one
+  click away. **Ctrl+Backspace** (not while typing) opens the most recently confirmed receipt from
+  any page while its toast is still showing.
 - **Confirm does not navigate** (2026-08-03): the pane flips to the **`committed` view** in place
   — the §6.3 editor rendered **read-only** from the same fragments (image alongside, parse
   telemetry kept) with **Edit transaction** (the §7 jump), **Reopen**, and **Delete** (the 5-way
