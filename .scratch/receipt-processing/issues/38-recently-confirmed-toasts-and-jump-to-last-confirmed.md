@@ -1,6 +1,6 @@
 # A "Confirmed" toast with an edit link, and Ctrl+Backspace to the last confirmed receipt
 
-Status: open
+Status: resolved
 Category: enhancement
 Severity: moderate
 Area: Receipts — confirm flow (`ReceiptProcessingController.confirm`), shell toasts, keyboard leaf, settings
