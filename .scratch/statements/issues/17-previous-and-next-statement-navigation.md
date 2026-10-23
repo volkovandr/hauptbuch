@@ -1,6 +1,6 @@
 # Statements: go to the previous / next statement of the same account
 
-Status: in progress
+Status: resolved
 Category: feature (small)
 Area: `statements` — `StatementRepository`, `StatementController.show` / `StatementPageAssembler`, `statement.html`, `keyboard.js`
 
