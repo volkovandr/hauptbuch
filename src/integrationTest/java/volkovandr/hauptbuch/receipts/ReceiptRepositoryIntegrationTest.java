@@ -16,6 +16,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.TestcontainersConfiguration;
 import volkovandr.hauptbuch.receipts.repository.ReceiptRepository;
+import volkovandr.hauptbuch.receipts.repository.RegisterOrder;
 
 /**
  * Integration tier (§1.5): row-mapping round-trips for {@link ReceiptRepository} against real
@@ -102,7 +103,9 @@ class ReceiptRepositoryIntegrationTest {
     receiptRepository.softDelete(deleted);
 
     List<Long> ids =
-        receiptRepository.findForRegister(List.of("new"), null, false, true).stream()
+        receiptRepository
+            .findForRegister(List.of("new"), null, RegisterOrder.CAPTURED, true)
+            .stream()
             .map(Receipt::receiptId)
             .toList();
 
@@ -148,7 +151,8 @@ class ReceiptRepositoryIntegrationTest {
 
     List<Long> ids =
         receiptRepository
-            .findForRegister(List.of("new"), LocalDate.parse("2026-07-10"), false, true)
+            .findForRegister(
+                List.of("new"), LocalDate.parse("2026-07-10"), RegisterOrder.CAPTURED, true)
             .stream()
             .map(Receipt::receiptId)
             .toList();
@@ -162,7 +166,9 @@ class ReceiptRepositoryIntegrationTest {
     long earlier = capturedAt("2026-07-10T10:00:00Z", "new");
 
     List<Long> ids =
-        receiptRepository.findForRegister(List.of("new"), null, false, true).stream()
+        receiptRepository
+            .findForRegister(List.of("new"), null, RegisterOrder.CAPTURED, true)
+            .stream()
             .map(Receipt::receiptId)
             .toList();
 
@@ -177,7 +183,9 @@ class ReceiptRepositoryIntegrationTest {
     long earlier = capturedAt("2026-07-10T10:00:00Z", "new");
 
     List<Long> ids =
-        receiptRepository.findForRegister(List.of("new"), null, false, false).stream()
+        receiptRepository
+            .findForRegister(List.of("new"), null, RegisterOrder.CAPTURED, false)
+            .stream()
             .map(Receipt::receiptId)
             .toList();
 
@@ -190,11 +198,11 @@ class ReceiptRepositoryIntegrationTest {
     long large = capturedWithTotal("new", "50.00");
 
     List<Long> descending =
-        receiptRepository.findForRegister(List.of("new"), null, true, true).stream()
+        receiptRepository.findForRegister(List.of("new"), null, RegisterOrder.TOTAL, true).stream()
             .map(Receipt::receiptId)
             .toList();
     List<Long> ascending =
-        receiptRepository.findForRegister(List.of("new"), null, true, false).stream()
+        receiptRepository.findForRegister(List.of("new"), null, RegisterOrder.TOTAL, false).stream()
             .map(Receipt::receiptId)
             .toList();
 
@@ -208,11 +216,11 @@ class ReceiptRepositoryIntegrationTest {
     long withTotal = capturedWithTotal("new", "5.00");
 
     List<Long> ascending =
-        receiptRepository.findForRegister(List.of("new"), null, true, false).stream()
+        receiptRepository.findForRegister(List.of("new"), null, RegisterOrder.TOTAL, false).stream()
             .map(Receipt::receiptId)
             .toList();
     List<Long> descending =
-        receiptRepository.findForRegister(List.of("new"), null, true, true).stream()
+        receiptRepository.findForRegister(List.of("new"), null, RegisterOrder.TOTAL, true).stream()
             .map(Receipt::receiptId)
             .toList();
 
@@ -226,7 +234,7 @@ class ReceiptRepositoryIntegrationTest {
     long laterSameTotal = capturedAtWithTotal("2026-07-20T10:00:00Z", "new", "5.00");
 
     List<Long> descending =
-        receiptRepository.findForRegister(List.of("new"), null, true, true).stream()
+        receiptRepository.findForRegister(List.of("new"), null, RegisterOrder.TOTAL, true).stream()
             .map(Receipt::receiptId)
             .toList();
 
@@ -355,6 +363,77 @@ class ReceiptRepositoryIntegrationTest {
     assertThat(reopened.state()).isEqualTo("processed");
     // Reopen writes nothing but the state — the link is what makes the next Confirm a Re-enter.
     assertThat(reopened.transactionId()).isEqualTo(transactionId);
+  }
+
+  @Test
+  void markCommittedStampsConfirmedAtReopenKeepsItAndReEnterMovesItOn() {
+    long id = capturedWithState("processed");
+    assertThat(receiptRepository.findById(id).orElseThrow().confirmedAt()).isNull();
+
+    receiptRepository.markCommitted(id, insertTransaction());
+    OffsetDateTime first = receiptRepository.findById(id).orElseThrow().confirmedAt();
+    assertThat(first).isNotNull();
+
+    receiptRepository.reopen(id);
+    assertThat(receiptRepository.findById(id).orElseThrow().confirmedAt()).isEqualTo(first);
+
+    // Age it, so the Re-enter's now() is distinguishable inside this one test transaction.
+    OffsetDateTime aged = first.minusDays(1);
+    setConfirmedAt(id, aged.toString());
+    receiptRepository.markCommitted(id, insertTransaction());
+    assertThat(receiptRepository.findById(id).orElseThrow().confirmedAt()).isAfter(aged);
+  }
+
+  @Test
+  void findForRegisterOrdersByConfirmedAndAlwaysPlacesNeverConfirmedLast() {
+    long never = capturedWithState("processed");
+    long older = capturedWithState("processed");
+    setConfirmedAt(older, "2026-07-10T10:00:00Z");
+    long newer = capturedWithState("processed");
+    setConfirmedAt(newer, "2026-07-20T10:00:00Z");
+
+    List<Long> descending =
+        receiptRepository
+            .findForRegister(List.of("processed"), null, RegisterOrder.CONFIRMED, true)
+            .stream()
+            .map(Receipt::receiptId)
+            .toList();
+    List<Long> ascending =
+        receiptRepository
+            .findForRegister(List.of("processed"), null, RegisterOrder.CONFIRMED, false)
+            .stream()
+            .map(Receipt::receiptId)
+            .toList();
+
+    // Most recently confirmed first when descending, oldest first when ascending — and a receipt
+    // that was never confirmed is last either way, not first-when-descending like a null total.
+    assertThat(descending).containsSubsequence(newer, older, never);
+    assertThat(ascending).containsSubsequence(older, newer, never);
+  }
+
+  @Test
+  void findForRegisterBreaksConfirmedTiesByCapturedThenReceiptId() {
+    long earlierCaptured = capturedAt("2026-07-10T10:00:00Z", "processed");
+    setConfirmedAt(earlierCaptured, "2026-07-25T10:00:00Z");
+    long laterCaptured = capturedAt("2026-07-20T10:00:00Z", "processed");
+    setConfirmedAt(laterCaptured, "2026-07-25T10:00:00Z");
+
+    List<Long> descending =
+        receiptRepository
+            .findForRegister(List.of("processed"), null, RegisterOrder.CONFIRMED, true)
+            .stream()
+            .map(Receipt::receiptId)
+            .toList();
+
+    assertThat(descending).containsSubsequence(laterCaptured, earlierCaptured);
+  }
+
+  private void setConfirmedAt(long id, String instant) {
+    jdbcClient
+        .sql("update receipt set confirmed_at = :at where receipt_id = :id")
+        .param("at", OffsetDateTime.parse(instant))
+        .param("id", id)
+        .update();
   }
 
   /** A bare transaction row to point a receipt's FK at (its legs are irrelevant here). */

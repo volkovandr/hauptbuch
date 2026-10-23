@@ -549,6 +549,41 @@ class ReceiptRegisterScreenIntegrationTest {
   }
 
   @Test
+  void sortByConfirmedOrdersMostRecentlyConfirmedFirstAndNeverConfirmedLast() throws Exception {
+    long older = upload();
+    setState(older, "committed");
+    setConfirmedAt(older, "2026-07-10T10:00:00Z");
+    long newer = upload();
+    setState(newer, "committed");
+    setConfirmedAt(newer, "2026-07-20T10:00:00Z");
+    long never = upload();
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH).param("state", "all").param("sort", "confirmed"))
+        .andExpect(content().string(rowOrder(newer, older, never)));
+    mockMvc
+        .perform(
+            get(RECEIPTS_PATH).param("state", "all").param("sort", "confirmed").param("dir", "asc"))
+        .andExpect(content().string(rowOrder(older, newer, never)));
+  }
+
+  @Test
+  void confirmedColumnShowsTheConfirmationTimeAndIsEmptyBeforeTheFirstConfirm() throws Exception {
+    long confirmed = upload();
+    setState(confirmed, "committed");
+    setConfirmedAt(confirmed, "2026-07-20T10:15:00Z");
+    upload();
+
+    mockMvc
+        .perform(get(RECEIPTS_PATH).param("state", "all"))
+        .andExpect(content().string(containsString("sort=confirmed")))
+        .andExpect(
+            content()
+                .string(containsString("class=\"receipts__confirmed num\">2026-07-20 10:15</td>")))
+        .andExpect(content().string(containsString("class=\"receipts__confirmed num\"></td>")));
+  }
+
+  @Test
   void invalidSortAndDirFallBackToTheDefaultCapturedDescendingOrder() throws Exception {
     upload();
 
@@ -685,6 +720,18 @@ class ReceiptRegisterScreenIntegrationTest {
         "(?s).*data-receipt-id=\"" + first + "\".*data-receipt-id=\"" + second + "\".*");
   }
 
+  /** As {@link #rowOrder(long, long)}, for three rows in the given order. */
+  private org.hamcrest.Matcher<String> rowOrder(long first, long second, long third) {
+    return org.hamcrest.Matchers.matchesPattern(
+        "(?s).*data-receipt-id=\""
+            + first
+            + "\".*data-receipt-id=\""
+            + second
+            + "\".*data-receipt-id=\""
+            + third
+            + "\".*");
+  }
+
   private void setMerchant(
       long id, String merchantText, String merchantCity, String merchantCountry) {
     jdbcClient
@@ -756,6 +803,14 @@ class ReceiptRegisterScreenIntegrationTest {
     jdbcClient
         .sql("update transaction set deleted_at = now() where transaction_id = :id")
         .param(ID, transactionId)
+        .update();
+  }
+
+  private void setConfirmedAt(long id, String instant) {
+    jdbcClient
+        .sql("update receipt set confirmed_at = :at where receipt_id = :id")
+        .param("at", java.time.OffsetDateTime.parse(instant))
+        .param("id", id)
         .update();
   }
 

@@ -78,31 +78,33 @@ public class ReceiptRepository {
    * §9b). The register's date filter is preset lower-bounds only (last 90 days / last year /
    * everything); an explicit upper bound arrives with a real caller for it.
    *
-   * <p>Ordered by {@code total_amount} when {@code sortByTotal} is true, else by {@code
-   * captured_at} (today's default) — the two real columns the register's sortable-header feature
-   * (issue tracker #11) can order in SQL; the other two sortable columns aren't columns at all and
-   * sort in memory afterward (the {@code receipts} module's {@code ReceiptSort.sortByLookup}), so
-   * any caller ordering by one of those simply leaves {@code sortByTotal} false — the base order
-   * this method picks for them is immaterial, since it's fully overridden downstream. Either way,
-   * {@code descending} sets the direction, with {@code captured_at} then {@code receipt_id} as the
+   * <p>Ordered by {@code order}: {@code total_amount}, {@code confirmed_at}, or {@code captured_at}
+   * (today's default) — the real columns the register's sortable-header feature (issue tracker #11,
+   * receipt issue 39) can order in SQL; the other sortable columns aren't columns at all and sort
+   * in memory afterward (the {@code receipts} module's {@code ReceiptSort.sortByLookup}), so any
+   * caller ordering by one of those passes {@link RegisterOrder#CAPTURED} — the base order this
+   * method picks for them is immaterial, since it's fully overridden downstream. Either way, {@code
+   * descending} sets the direction, with {@code captured_at} then {@code receipt_id} as the
    * tiebreak (both in the same direction) — for the default {@code captured_at} order, that
    * collapses to {@code receipt_id} alone. A null {@code total_amount} (unparsed) places last
-   * ascending, first descending — the standard SQL convention, made explicit here.
+   * ascending, first descending — the standard SQL convention, made explicit here — whereas a null
+   * {@code confirmed_at} (never confirmed) places last in both directions.
    */
   public List<Receipt> findForRegister(
-      List<String> states, LocalDate from, boolean sortByTotal, boolean descending) {
+      List<String> states, LocalDate from, RegisterOrder order, boolean descending) {
     String dir = descending ? "desc" : "asc";
+    String tiebreak = "captured_at " + dir + ", receipt_id " + dir;
     String orderBy =
-        sortByTotal
-            ? "total_amount "
-                + dir
-                + (descending ? " nulls first" : " nulls last")
-                + ", "
-                + "captured_at "
-                + dir
-                + ", receipt_id "
-                + dir
-            : "captured_at " + dir + ", receipt_id " + dir;
+        switch (order) {
+          case TOTAL ->
+              "total_amount " + dir + (descending ? " nulls first, " : " nulls last, ") + tiebreak;
+          // Never-confirmed receipts (null) are last in both directions: sorting by this column
+          // asks
+          // "what did I confirm lately", so the unconfirmed are not what the top of the list is
+          // for.
+          case CONFIRMED -> "confirmed_at " + dir + " nulls last, " + tiebreak;
+          case CAPTURED -> tiebreak;
+        };
     String sql =
         "select * from receipt where deleted_at is null and state in (:states)"
             + (from == null ? "" : " and captured_at >= :from")
@@ -235,14 +237,16 @@ public class ReceiptRepository {
   }
 
   /**
-   * Book a reviewed draft (9g Confirm): link the receipt to the transaction it materialised and
-   * flip it to {@code committed}. Scoped to a live receipt; returns the rows affected.
+   * Book a reviewed draft (9g Confirm): link the receipt to the transaction it materialised, flip
+   * it to {@code committed}, and stamp {@code confirmed_at} (issue receipts/39) — a Re-enter stamps
+   * it again. Scoped to a live receipt; returns the rows affected.
    */
   public int markCommitted(long receiptId, long transactionId) {
     return jdbcClient
         .sql(
             """
-            update receipt set state = 'committed', transaction_id = :transactionId
+            update receipt set state = 'committed', transaction_id = :transactionId,
+                               confirmed_at = now()
             where receipt_id = :id and deleted_at is null
             """)
         .param("transactionId", transactionId)

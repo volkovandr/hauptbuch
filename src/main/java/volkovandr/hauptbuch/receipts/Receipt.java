@@ -62,6 +62,8 @@ import java.time.OffsetDateTime;
  *     time — the card's real charge is on a statement that has not arrived (decision 1)
  * @param baseTotal the base-currency figure freezing that conversion (issue receipts/23); null
  *     unless the receipt is cross-currency <em>and</em> neither leg is the book's base currency
+ * @param confirmedAt when the receipt was last confirmed (issue receipts/39) — set at every
+ *     Confirm, a Re-enter included, and kept through Reopen; null until the first Confirm
  */
 public record Receipt(
     Long receiptId,
@@ -96,7 +98,8 @@ public record Receipt(
     Long payeeId,
     String note,
     BigDecimal fundingTotal,
-    BigDecimal baseTotal) {
+    BigDecimal baseTotal,
+    OffsetDateTime confirmedAt) {
 
   /** Whether {@link #parseRaw} differs from what the model said (receipt-processing/34). */
   public boolean parseEdited() {

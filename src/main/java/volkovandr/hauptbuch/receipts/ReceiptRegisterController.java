@@ -194,7 +194,7 @@ class ReceiptRegisterController {
         receiptService.forRegister(
             ReceiptFilters.statesFor(state),
             ReceiptFilters.rangeFrom(range),
-            ReceiptSort.TOTAL.equals(sortColumn),
+            ReceiptSort.sqlOrder(sortColumn),
             descending);
     Set<Long> voidedReceiptIds = receiptService.voidedReceiptIds(receipts);
     if (ReceiptFilters.STATE_VOIDED.equals(state)) {

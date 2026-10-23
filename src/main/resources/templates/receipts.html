@@ -109,8 +109,8 @@
 
       <table class="receipts" th:unless="${#lists.isEmpty(receipts)}">
         <thead>
-          <!-- Sortable headers (issue tracker #11): Captured/Total order in SQL, Txn date/Merchant
-               order in memory over the very lookups their cells render from — all four look and
+          <!-- Sortable headers (issue tracker #11): Captured/Confirmed/Total order in SQL, Txn
+               date/Merchant order in memory over the very lookups their cells render from — all look and
                behave the same from here. A plain <a> (full-page GET, no JS) so a click applies
                immediately, independent of the Apply button above, which stays scoped to
                state/range. Each link carries the current state/range forward since it's its own
@@ -140,6 +140,20 @@
                 th:href="@{/receipts(state=${stateFilter}, range=${rangeFilter}, sort='txn_date', dir=${sortColumn == 'txn_date' and sortDirection == 'desc' ? 'asc' : 'desc'})}"
                 >Txn date<span
                   th:if="${sortColumn == 'txn_date'}"
+                  th:text="${sortDirection == 'desc' ? ' ↓' : ' ↑'}"
+                > ↓</span
+                ></a
+              >
+            </th>
+            <th
+              scope="col"
+              th:attr="aria-sort=${sortColumn == 'confirmed' ? (sortDirection == 'desc' ? 'descending' : 'ascending') : 'none'}"
+            >
+              <a
+                class="receipts__sort"
+                th:href="@{/receipts(state=${stateFilter}, range=${rangeFilter}, sort='confirmed', dir=${sortColumn == 'confirmed' and sortDirection == 'desc' ? 'asc' : 'desc'})}"
+                >Confirmed<span
+                  th:if="${sortColumn == 'confirmed'}"
                   th:text="${sortDirection == 'desc' ? ' ↓' : ' ↑'}"
                 > ↓</span
                 ></a
@@ -206,6 +220,9 @@
             <!-- The linked transaction's booking date (issue tracker #09), blank until committed —
                  the batched transactionDates lookup, never a per-row query. -->
             <td class="receipts__txn-date num" th:text="${transactionDates.get(r.receiptId())}"></td>
+            <!-- When the receipt was last confirmed (issue receipts/39), blank until its first
+                 Confirm — the safety net for finding a receipt confirmed a moment ago. -->
+            <td class="receipts__confirmed num" th:text="${r.confirmedAt() != null ? #temporals.format(r.confirmedAt(), 'yyyy-MM-dd HH:mm') : ''}"></td>
             <td class="receipts__state">
               <!-- A committed row whose transaction was voided from the register (issue tracker
                    #08) shows a distinct grey "Void" badge in place of "Committed" — the batched

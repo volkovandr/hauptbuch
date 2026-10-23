@@ -157,6 +157,19 @@ class ReceiptConfirmScreenIntegrationTest {
     assertThat(lineCount(id)).isEqualTo(1);
   }
 
+  @Test
+  void confirmStampsConfirmedAtAndRefusedConfirmDoesNot() throws Exception {
+    long cash = openAccount("Cash", EUR);
+    long fuel = category("Fuel", "expense");
+    long id = processedReceipt(cash, "42.14", EUR);
+
+    mockMvc.perform(confirm(id, cash, "99,00", fuel, "42,14")).andExpect(status().isOk());
+    assertThat(header(id, "confirmed_at is not null", Boolean.class)).isFalse();
+
+    mockMvc.perform(confirm(id, cash, "42,14", fuel, "42,14")).andExpect(status().isOk());
+    assertThat(header(id, "confirmed_at is not null", Boolean.class)).isTrue();
+  }
+
   // ── Cross-currency (issue receipts/23) ──────────────────────────────────────
 
   @Test
