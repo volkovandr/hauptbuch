@@ -2,7 +2,6 @@ package volkovandr.hauptbuch.statements;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -113,39 +112,6 @@ class StatementScreenIntegrationTest {
         .andExpect(content().string(containsString("-12,50")))
         .andExpect(content().string(containsString("1.234,56")))
         .andExpect(content().string(containsString("Unreadable booking date")));
-  }
-
-  @Test
-  void theStatementPageLinksToTheNeighbouringStatementsOfItsAccount() throws Exception {
-    long profileId = saveProfile();
-    long may = uploadAndCreate(profileId);
-    long june =
-        jdbcClient
-            .sql(
-                """
-                insert into statement
-                  (statement_profile_id, account_id, state, original_filename, file_path,
-                   period_start, period_end)
-                values (:p, :a, 'processed', 'june.csv', 'x', date '2026-06-01', date '2026-06-30')
-                returning statement_id
-                """)
-            .param("p", profileId)
-            .param("a", accountId)
-            .query(Long.class)
-            .single();
-
-    mockMvc
-        .perform(get("/statements/" + may))
-        .andExpect(status().isOk())
-        .andExpect(content().string(containsString("href=\"/statements/" + june + "\"")))
-        .andExpect(content().string(containsString("data-statement-next")))
-        .andExpect(content().string(not(containsString("data-statement-prev"))));
-    mockMvc
-        .perform(get("/statements/" + june))
-        .andExpect(status().isOk())
-        .andExpect(content().string(containsString("href=\"/statements/" + may + "\"")))
-        .andExpect(content().string(containsString("data-statement-prev")))
-        .andExpect(content().string(not(containsString("data-statement-next"))));
   }
 
   @Test

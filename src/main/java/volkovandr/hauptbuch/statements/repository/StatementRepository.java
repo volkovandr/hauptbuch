@@ -21,6 +21,25 @@ public class StatementRepository {
   private static final String PERIOD_START = "periodStart";
   private static final String PERIOD_END = "periodEnd";
 
+  /**
+   * The start of each live statement of the current statement's account: its period start, else the
+   * earliest booking date of its lines. A statement with neither has a null start and so no
+   * neighbours (issue statements/17).
+   */
+  private static final String STARTS =
+      """
+      with starts as (
+        select s.statement_id, s.period_end,
+               coalesce(s.period_start,
+                        (select min(l.booking_date) from statement_line l
+                         where l.statement_id = s.statement_id)) as start_date
+        from statement s
+        where s.deleted_at is null
+          and s.account_id = (select c.account_id from statement c
+                              where c.statement_id = :statementId)
+      )
+      """;
+
   private final JdbcClient jdbcClient;
 
   StatementRepository(JdbcClient jdbcClient) {
@@ -367,25 +386,6 @@ public class StatementRepository {
         .query(StatementRow.class)
         .list();
   }
-
-  /**
-   * The start of each live statement of the current statement's account: its period start, else the
-   * earliest booking date of its lines. A statement with neither has a null start and so no
-   * neighbours (issue statements/17).
-   */
-  private static final String STARTS =
-      """
-      with starts as (
-        select s.statement_id, s.period_end,
-               coalesce(s.period_start,
-                        (select min(l.booking_date) from statement_line l
-                         where l.statement_id = s.statement_id)) as start_date
-        from statement s
-        where s.deleted_at is null
-          and s.account_id = (select c.account_id from statement c
-                              where c.statement_id = :statementId)
-      )
-      """;
 
   /**
    * The live statement of the same account that starts closest before this one. Of several with the
