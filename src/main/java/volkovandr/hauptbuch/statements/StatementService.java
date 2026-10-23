@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.statements;
 
 import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -124,6 +125,16 @@ public class StatementService {
         .findById(statementId)
         .filter(statement -> statement.deletedAt() == null)
         .orElseThrow(() -> new StatementFormatException("That statement no longer exists."));
+  }
+
+  /** The id of the statement before this one on the same account, by start date, if any. */
+  public Optional<Long> previousId(long statementId) {
+    return statementRepository.findPreviousId(statementId);
+  }
+
+  /** The id of the statement after this one on the same account, by start date, if any. */
+  public Optional<Long> nextId(long statementId) {
+    return statementRepository.findNextId(statementId);
   }
 
   /** The bytes of the file the statement was made from, as uploaded. */

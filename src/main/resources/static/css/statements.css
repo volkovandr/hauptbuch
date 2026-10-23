@@ -220,6 +220,12 @@ table.statements a.btn {
   margin: 0;
 }
 
+.statement-heading__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
 .statements__match {
   text-align: center;
 }

@@ -65,6 +65,8 @@ class StatementPageAssembler {
     Statement statement = statementService.get(id);
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
     model.addAttribute("statement", statement);
+    model.addAttribute("previousStatementId", statementService.previousId(id).orElse(null));
+    model.addAttribute("nextStatementId", statementService.nextId(id).orElse(null));
     model.addAttribute("sentText", pdfService.sentText(id));
     model.addAttribute("parseError", pdfService.parseError(id));
     model.addAttribute("parseRaw", pdfService.parseRaw(id));

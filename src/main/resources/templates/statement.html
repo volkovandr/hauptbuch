@@ -17,7 +17,25 @@
         <h1 class="statement-title">
           <span th:text="${accountName}">BankAaa-EUR</span>
         </h1>
-        <a class="btn btn--ghost" th:href="@{/statements}">Back to statements</a>
+        <span class="statement-heading__actions">
+          <a
+            class="btn btn--ghost"
+            th:if="${previousStatementId != null}"
+            th:href="@{/statements/{id}(id=${previousStatementId})}"
+            data-statement-prev
+            title="Previous statement of this account ( [ )"
+            >&lsaquo; Previous</a
+          >
+          <a
+            class="btn btn--ghost"
+            th:if="${nextStatementId != null}"
+            th:href="@{/statements/{id}(id=${nextStatementId})}"
+            data-statement-next
+            title="Next statement of this account ( ] )"
+            >Next &rsaquo;</a
+          >
+          <a class="btn btn--ghost" th:href="@{/statements}">Back to statements</a>
+        </span>
       </div>
       <p class="muted">
         <span th:text="${profileName}">BankAaa CSV</span> ·
