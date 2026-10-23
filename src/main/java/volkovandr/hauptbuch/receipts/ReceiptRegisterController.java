@@ -179,10 +179,10 @@ class ReceiptRegisterController {
    * other filter, so it always runs regardless of which filter is active.
    *
    * <p>Sort (issue tracker #11) resolves to a column + direction via {@link ReceiptSort}: {@code
-   * captured}/{@code total} order in SQL ({@link ReceiptService#forRegister}); {@code txn_date}/
-   * {@code merchant} order afterward, in memory, over the very maps their cells render from ({@link
-   * ReceiptSort#sortByLookup}) — built here regardless of the active sort, since they back the
-   * Txn-date/Merchant cells on every row either way.
+   * captured}/{@code confirmed}/{@code total} order in SQL ({@link ReceiptService#forRegister});
+   * {@code txn_date}/{@code merchant} order afterward, in memory, over the very maps their cells
+   * render from ({@link ReceiptSort#sortByLookup}) — built here regardless of the active sort,
+   * since they back the Txn-date/Merchant cells on every row either way.
    */
   private void populateList(
       Model model, String state, String range, String rawSort, String rawDir) {

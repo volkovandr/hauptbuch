@@ -94,14 +94,12 @@ public class ReceiptRepository {
       List<String> states, LocalDate from, RegisterOrder order, boolean descending) {
     String dir = descending ? "desc" : "asc";
     String tiebreak = "captured_at " + dir + ", receipt_id " + dir;
+    // Never-confirmed receipts (null confirmed_at) come last in both directions: a sort by
+    // Confirmed asks "what did I confirm lately", so the unconfirmed do not belong at the top.
     String orderBy =
         switch (order) {
           case TOTAL ->
               "total_amount " + dir + (descending ? " nulls first, " : " nulls last, ") + tiebreak;
-          // Never-confirmed receipts (null) are last in both directions: sorting by this column
-          // asks
-          // "what did I confirm lately", so the unconfirmed are not what the top of the list is
-          // for.
           case CONFIRMED -> "confirmed_at " + dir + " nulls last, " + tiebreak;
           case CAPTURED -> tiebreak;
         };
