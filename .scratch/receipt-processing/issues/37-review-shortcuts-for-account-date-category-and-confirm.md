@@ -1,6 +1,6 @@
 # Keyboard shortcuts for reviewing a processed receipt: A, D, C and Ctrl+Enter
 
-Status: open
+Status: resolved
 Category: enhancement
 Severity: minor
 Area: Receipts — processing screen, read mode (`receipt-process.html`), keyboard leaf (`keyboard.js`)
