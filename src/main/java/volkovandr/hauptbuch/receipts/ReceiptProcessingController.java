@@ -18,7 +18,6 @@ import volkovandr.hauptbuch.accounts.PostToAccountService;
 import volkovandr.hauptbuch.accounts.PostToResolution;
 import volkovandr.hauptbuch.ledger.CurrencyService;
 import volkovandr.hauptbuch.ledger.RegisterService;
-import volkovandr.hauptbuch.ledger.SettingsService;
 import volkovandr.hauptbuch.web.NavItem;
 
 /**
@@ -34,6 +33,7 @@ import volkovandr.hauptbuch.web.NavItem;
  * the next receipt). Lives in {@code receipts}: the feature module owns its screens (CLAUDE.md §3).
  */
 @Controller
+@SuppressWarnings("PMD.CouplingBetweenObjects") // the one controller for the processing screen
 class ReceiptProcessingController {
 
   private static final String BASE_PATH = "/receipts";
@@ -62,8 +62,9 @@ class ReceiptProcessingController {
   private final CurrencyService currencyService;
   private final PostToAccountService postToAccountService;
   private final RecentConfirms recentConfirms;
-  private final SettingsService settingsService;
 
+  @SuppressWarnings(
+      "PMD.ExcessiveParameterList") // plain constructor injection of the collaborators
   ReceiptProcessingController(
       ReceiptService receiptService,
       ReceiptAnalyser receiptAnalyser,
@@ -74,8 +75,7 @@ class ReceiptProcessingController {
       RegisterService registerService,
       CurrencyService currencyService,
       PostToAccountService postToAccountService,
-      RecentConfirms recentConfirms,
-      SettingsService settingsService) {
+      RecentConfirms recentConfirms) {
     this.receiptService = receiptService;
     this.receiptAnalyser = receiptAnalyser;
     this.toonRepair = toonRepair;
@@ -86,7 +86,6 @@ class ReceiptProcessingController {
     this.currencyService = currencyService;
     this.postToAccountService = postToAccountService;
     this.recentConfirms = recentConfirms;
-    this.settingsService = settingsService;
   }
 
   /**
@@ -569,7 +568,7 @@ class ReceiptProcessingController {
       model.addAttribute("confirmProblems", e.problems());
       return renderPane(id, form, state, range, model);
     }
-    recentConfirms.record(request.getSession(), id, form, settingsService.get());
+    recentConfirms.record(request.getSession(), id, form);
     if (preCommitNeighbours != null) {
       response.setHeader("HX-Redirect", advanceUrl(preCommitNeighbours, state, range));
     }

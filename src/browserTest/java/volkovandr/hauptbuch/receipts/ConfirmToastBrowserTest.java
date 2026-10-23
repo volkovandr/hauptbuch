@@ -96,7 +96,7 @@ class ConfirmToastBrowserTest extends BrowserTest {
   }
 
   @Test
-  void confirmShowsAToastAndCtrlBackspaceReopensThatReceipt() {
+  void confirmShowsToastAndCtrlBackspaceReopensThatReceipt() {
     settingsService.setConfirmToastSeconds(LONG_LIFETIME);
     long id = processedReceipt();
     confirmFromKeyboard(id);
@@ -144,10 +144,11 @@ class ConfirmToastBrowserTest extends BrowserTest {
     toasts().first().locator("a").click();
 
     page.waitForURL(receiptUrl(id));
+    assertThat(page).hasURL(receiptUrl(id));
   }
 
   @Test
-  void withoutAToastCtrlBackspaceDoesNothing() {
+  void withoutToastCtrlBackspaceDoesNothing() {
     long id = processedReceipt();
     page.navigate(url("/receipts/" + id));
     assertThat(toasts()).hasCount(0);
@@ -163,9 +164,9 @@ class ConfirmToastBrowserTest extends BrowserTest {
     settingsService.setConfirmToastSeconds(1);
     long id = processedReceipt();
     confirmFromKeyboard(id);
-    String landed = page.url();
 
     page.waitForTimeout(1500);
+    String landed = page.url();
     page.keyboard().press("Control+Backspace");
     page.waitForTimeout(300);
 
@@ -173,7 +174,7 @@ class ConfirmToastBrowserTest extends BrowserTest {
   }
 
   @Test
-  void insideATextFieldCtrlBackspaceStillDeletesAWord() {
+  void insideTextFieldCtrlBackspaceStillDeletesWord() {
     settingsService.setConfirmToastSeconds(LONG_LIFETIME);
     long confirmed = processedReceipt();
     long other = processedReceipt();

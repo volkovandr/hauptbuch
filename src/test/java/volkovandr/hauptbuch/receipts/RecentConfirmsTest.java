@@ -1,16 +1,20 @@
 package volkovandr.hauptbuch.receipts;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import volkovandr.hauptbuch.ledger.Settings;
+import volkovandr.hauptbuch.ledger.SettingsService;
 
 /**
  * Unit tier: the session-held "Confirmed!" toasts (receipt issue 38) — what is remembered, how it
@@ -19,20 +23,20 @@ import volkovandr.hauptbuch.ledger.Settings;
 class RecentConfirmsTest {
 
   private static final Instant START = Instant.parse("2026-08-03T10:00:00Z");
-  private static final Settings THREE_SECONDS = new Settings("EUR", null, 3);
 
   private final MockHttpSession session = new MockHttpSession();
-  private final MockHttpServletRequest request = requestOn(session);
+  private final MockHttpServletRequest request = new MockHttpServletRequest();
+  private final SettingsService settingsService = mock(SettingsService.class);
   private Instant now = START;
   private final Clock clock =
       new Clock() {
         @Override
-        public ZoneOffset getZone() {
+        public ZoneId getZone() {
           return ZoneOffset.UTC;
         }
 
         @Override
-        public Clock withZone(java.time.ZoneId zone) {
+        public Clock withZone(ZoneId zone) {
           return this;
         }
 
@@ -41,12 +45,15 @@ class RecentConfirmsTest {
           return now;
         }
       };
-  private final RecentConfirms recentConfirms = new RecentConfirms(clock);
+  private final RecentConfirms recentConfirms = new RecentConfirms(clock, settingsService);
 
-  private static MockHttpServletRequest requestOn(MockHttpSession session) {
-    MockHttpServletRequest request = new MockHttpServletRequest();
+  RecentConfirmsTest() {
     request.setSession(session);
-    return request;
+    lifetime(3);
+  }
+
+  private void lifetime(int seconds) {
+    when(settingsService.get()).thenReturn(new Settings("EUR", null, seconds));
   }
 
   private static ReceiptEditorForm form(String date, String payee, String total, String currency) {
@@ -60,11 +67,10 @@ class RecentConfirmsTest {
   }
 
   @Test
-  void aRecordedConfirmShowsTheDatePayeeAndAmountAsTheOperatorSeesThem() {
-    recentConfirms.record(
-        session, 7, form("2026-08-03", " ShopAaa ", "42,14", "EUR"), THREE_SECONDS);
+  void recordedConfirmShowsDatePayeeAndAmountAsOperatorSeesThem() {
+    recentConfirms.record(session, 7, form("2026-08-03", " ShopAaa ", "42,14", "EUR"));
 
-    List<ConfirmToastView> toasts = recentConfirms.visible(request, 3);
+    List<ConfirmToastView> toasts = recentConfirms.visible(request);
 
     assertThat(toasts).hasSize(1);
     ConfirmToastView toast = toasts.get(0);
@@ -77,77 +83,80 @@ class RecentConfirmsTest {
   }
 
   @Test
-  void aNonBaseCurrencyAmountCarriesItsCode() {
-    recentConfirms.record(session, 7, form("2026-08-03", "ShopAaa", "9,50", "CHF"), THREE_SECONDS);
+  void nonBaseCurrencyAmountCarriesItsCode() {
+    recentConfirms.record(session, 7, form("2026-08-03", "ShopAaa", "9,50", "CHF"));
 
-    assertThat(recentConfirms.visible(request, 3))
+    assertThat(recentConfirms.visible(request))
         .extracting(ConfirmToastView::amount)
         .containsExactly("9,50 CHF");
   }
 
   @Test
   void severalConfirmsListNewestFirstWithTheirOwnElapsedTime() {
-    recentConfirms.record(session, 1, form("2026-08-03", "ShopAaa", "1,00", "EUR"), THREE_SECONDS);
+    recentConfirms.record(session, 1, form("2026-08-03", "ShopAaa", "1,00", "EUR"));
     advance(1500);
-    recentConfirms.record(session, 2, form("2026-08-03", "ShopBbb", "2,00", "EUR"), THREE_SECONDS);
+    recentConfirms.record(session, 2, form("2026-08-03", "ShopBbb", "2,00", "EUR"));
     advance(500);
 
-    List<ConfirmToastView> toasts = recentConfirms.visible(request, 3);
+    List<ConfirmToastView> toasts = recentConfirms.visible(request);
 
     assertThat(toasts).extracting(ConfirmToastView::receiptId).containsExactly(2L, 1L);
     assertThat(toasts).extracting(ConfirmToastView::elapsedSeconds).containsExactly(0.5, 2.0);
   }
 
   @Test
-  void aToastStopsShowingOnceItsLifetimeHasPassed() {
-    recentConfirms.record(session, 1, form("2026-08-03", "ShopAaa", "1,00", "EUR"), THREE_SECONDS);
+  void toastStopsShowingOnceLifetimeHasPassed() {
+    recentConfirms.record(session, 1, form("2026-08-03", "ShopAaa", "1,00", "EUR"));
     advance(2999);
-    assertThat(recentConfirms.visible(request, 3)).hasSize(1);
+    assertThat(recentConfirms.visible(request)).hasSize(1);
 
     advance(1);
 
-    assertThat(recentConfirms.visible(request, 3)).isEmpty();
+    assertThat(recentConfirms.visible(request)).isEmpty();
   }
 
   @Test
-  void aLifetimeOfZeroRecordsNothing() {
-    recentConfirms.record(
-        session, 1, form("2026-08-03", "ShopAaa", "1,00", "EUR"), new Settings("EUR", null, 0));
+  void lifetimeOfZeroRecordsNothing() {
+    lifetime(0);
+    recentConfirms.record(session, 1, form("2026-08-03", "ShopAaa", "1,00", "EUR"));
+    lifetime(3);
 
-    assertThat(recentConfirms.visible(request, 3)).isEmpty();
+    assertThat(recentConfirms.visible(request)).isEmpty();
   }
 
   @Test
-  void aLifetimeOfZeroShowsNothingEvenIfSomethingWasRecordedEarlier() {
-    recentConfirms.record(session, 1, form("2026-08-03", "ShopAaa", "1,00", "EUR"), THREE_SECONDS);
+  void lifetimeOfZeroShowsNothingEvenIfRecordedEarlier() {
+    recentConfirms.record(session, 1, form("2026-08-03", "ShopAaa", "1,00", "EUR"));
+    lifetime(0);
 
-    assertThat(recentConfirms.visible(request, 0)).isEmpty();
+    assertThat(recentConfirms.visible(request)).isEmpty();
   }
 
   @Test
   void recordingDropsEntriesThatAlreadyExpired() {
-    recentConfirms.record(session, 1, form("2026-08-03", "ShopAaa", "1,00", "EUR"), THREE_SECONDS);
+    recentConfirms.record(session, 1, form("2026-08-03", "ShopAaa", "1,00", "EUR"));
     advance(5000);
-    recentConfirms.record(session, 2, form("2026-08-03", "ShopBbb", "2,00", "EUR"), THREE_SECONDS);
+    recentConfirms.record(session, 2, form("2026-08-03", "ShopBbb", "2,00", "EUR"));
+    lifetime(60);
 
-    assertThat(recentConfirms.visible(request, 60))
+    assertThat(recentConfirms.visible(request))
         .extracting(ConfirmToastView::receiptId)
         .containsExactly(2L);
   }
 
   @Test
-  void aRequestWithoutASessionHasNoToastsAndDoesNotStartOne() {
+  void requestWithoutSessionHasNoToastsAndDoesNotStartOne() {
     MockHttpServletRequest sessionless = new MockHttpServletRequest();
 
-    assertThat(recentConfirms.visible(sessionless, 3)).isEmpty();
+    assertThat(recentConfirms.visible(sessionless)).isEmpty();
     assertThat(sessionless.getSession(false)).isNull();
   }
 
   @Test
-  void aMissingPayeeAndAnUnparsableDateDoNotBreakTheToast() {
-    recentConfirms.record(session, 1, form("not a date", null, "1,00", "EUR"), THREE_SECONDS);
+  void missingPayeeAndUnparsableDateDoNotBreakToast() {
+    recentConfirms.record(session, 1, form("not a date", null, "1,00", "EUR"));
 
-    ConfirmToastView toast = recentConfirms.visible(request, 3).get(0);
+    ConfirmToastView toast = recentConfirms.visible(request).get(0);
     assertThat(toast.date()).isEqualTo("not a date");
     assertThat(toast.payee()).isEmpty();
   }

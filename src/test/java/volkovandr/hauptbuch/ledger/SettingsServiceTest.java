@@ -220,7 +220,7 @@ class SettingsServiceTest {
   }
 
   @Test
-  void refusesAConfirmToastDurationOutsideTheRange() {
+  void refusesConfirmToastDurationOutsideRange() {
     SettingsService service = new SettingsService(settingsRepository, currencyRepository, "");
 
     assertThatExceptionOfType(IllegalArgumentException.class)
