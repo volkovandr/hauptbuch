@@ -444,6 +444,8 @@ class StatementScreenIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("✗")))
         .andExpect(content().string(containsString("lines not matched")))
+        .andExpect(
+            content().string(containsString("hx-get=\"/statements/" + statementId + "/check\"")))
         .andExpect(content().string(org.hamcrest.Matchers.not(containsString("✓"))));
   }
 

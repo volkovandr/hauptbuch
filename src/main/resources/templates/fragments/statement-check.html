@@ -38,6 +38,7 @@
         <span class="warning">✗</span>
         <span class="muted statements__reason" th:text="${check.reason()}">2 of 3 lines not matched</span>
       </th:block>
+      <th:block th:replace="~{:: idle(${statementId})}"></th:block>
     </th:block>
   </body>
 </html>
