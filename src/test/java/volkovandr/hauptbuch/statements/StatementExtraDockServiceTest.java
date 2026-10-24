@@ -3,8 +3,11 @@ package volkovandr.hauptbuch.statements;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -22,6 +25,7 @@ import volkovandr.hauptbuch.accounts.Account;
 import volkovandr.hauptbuch.accounts.AccountService;
 import volkovandr.hauptbuch.ledger.LedgerService;
 import volkovandr.hauptbuch.ledger.TransactionTag;
+import volkovandr.hauptbuch.ledger.UnbalancedTransactionException;
 import volkovandr.hauptbuch.operations.DockCommitService;
 import volkovandr.hauptbuch.operations.DockEditModel;
 import volkovandr.hauptbuch.operations.DockEditService;
@@ -195,55 +199,76 @@ class StatementExtraDockServiceTest {
         .hasMessage("An amount is required");
   }
 
-  @Test
-  void moveEditsTheTransactionOntoTheTargetAccountKeepingItsFields() {
+  private void moveSetUp(String sourceCurrency, Account... targets) {
     extraOnStatement();
     statementOnAccount();
-    when(dockEditService.load(TRANSACTION)).thenReturn(model(STATEMENT_ACCOUNT, null));
     when(accountService.findById(STATEMENT_ACCOUNT))
-        .thenReturn(Optional.of(account(STATEMENT_ACCOUNT, "A", "EUR")));
-    when(statementService.statementAccounts()).thenReturn(List.of(account(OTHER_EUR, "B", "EUR")));
+        .thenReturn(Optional.of(account(STATEMENT_ACCOUNT, "A", sourceCurrency)));
+    when(statementService.statementAccounts()).thenReturn(List.of(targets));
+  }
+
+  @Test
+  void moveRebooksTheExtrasLegOntoTheTargetAccount() {
+    moveSetUp("EUR", account(OTHER_EUR, "B", "EUR"));
 
     service.move(STATEMENT, LEG, OTHER_EUR);
 
-    ArgumentCaptor<DockEntry> entry = ArgumentCaptor.forClass(DockEntry.class);
-    verify(dockCommitService).commit(entry.capture());
-    assertThat(entry.getValue().transactionId()).isEqualTo(TRANSACTION);
-    assertThat(entry.getValue().accountId()).isEqualTo(OTHER_EUR);
-    assertThat(entry.getValue().amount()).isEqualTo("3,00");
-    assertThat(entry.getValue().payeeText()).isEqualTo("ShopAaa - Berlin");
-    assertThat(entry.getValue().tagIds()).containsExactly(3L);
+    verify(ledgerService).moveLeg(LEG, OTHER_EUR);
+    verifyNoInteractions(dockCommitService, dockEditService);
   }
 
   @Test
   void moveRefusesAnAccountInAnotherCurrency() {
-    extraOnStatement();
-    statementOnAccount();
-    when(dockEditService.load(TRANSACTION)).thenReturn(model(STATEMENT_ACCOUNT, null));
-    when(accountService.findById(STATEMENT_ACCOUNT))
-        .thenReturn(Optional.of(account(STATEMENT_ACCOUNT, "A", "EUR")));
-    when(statementService.statementAccounts()).thenReturn(List.of(account(OTHER_CHF, "C", "CHF")));
+    moveSetUp("EUR", account(OTHER_CHF, "C", "CHF"));
 
     assertThatThrownBy(() -> service.move(STATEMENT, LEG, OTHER_CHF))
         .isInstanceOf(StatementFormatException.class)
         .hasMessageContaining("EUR");
 
-    verify(dockCommitService, never()).commit(any());
+    verify(ledgerService, never()).moveLeg(anyLong(), anyLong());
   }
 
   @Test
   void moveRefusesAnAccountThatCannotHoldIt() {
-    extraOnStatement();
-    statementOnAccount();
-    when(dockEditService.load(TRANSACTION)).thenReturn(model(STATEMENT_ACCOUNT, null));
-    when(accountService.findById(STATEMENT_ACCOUNT))
-        .thenReturn(Optional.of(account(STATEMENT_ACCOUNT, "A", "EUR")));
-    when(statementService.statementAccounts()).thenReturn(List.of());
+    moveSetUp("EUR");
 
     assertThatThrownBy(() -> service.move(STATEMENT, LEG, 99L))
         .isInstanceOf(StatementFormatException.class);
 
-    verify(dockCommitService, never()).commit(any());
+    verify(ledgerService, never()).moveLeg(anyLong(), anyLong());
+  }
+
+  @Test
+  void moveRefusesTheStatementsOwnAccount() {
+    moveSetUp("EUR", account(STATEMENT_ACCOUNT, "A", "EUR"));
+
+    assertThatThrownBy(() -> service.move(STATEMENT, LEG, STATEMENT_ACCOUNT))
+        .isInstanceOf(StatementFormatException.class)
+        .hasMessageContaining("already");
+
+    verify(ledgerService, never()).moveLeg(anyLong(), anyLong());
+  }
+
+  @Test
+  void moveReportsALedgerRefusalAsAStatementFormatException() {
+    moveSetUp("EUR", account(OTHER_EUR, "B", "EUR"));
+    doThrow(new UnbalancedTransactionException("only one leg on B"))
+        .when(ledgerService)
+        .moveLeg(LEG, OTHER_EUR);
+
+    assertThatThrownBy(() -> service.move(STATEMENT, LEG, OTHER_EUR))
+        .isInstanceOf(StatementFormatException.class)
+        .hasMessage("only one leg on B");
+  }
+
+  @Test
+  void moveOfAnExtraThatIsGoneMovesNothing() {
+    when(reviewService.review(STATEMENT)).thenReturn(new StatementReview(List.of(), List.of()));
+
+    assertThatThrownBy(() -> service.move(STATEMENT, LEG, OTHER_EUR))
+        .isInstanceOf(StatementFormatException.class);
+
+    verify(ledgerService, never()).moveLeg(anyLong(), anyLong());
   }
 
   @Test

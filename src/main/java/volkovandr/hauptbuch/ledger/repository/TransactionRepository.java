@@ -145,6 +145,21 @@ public class TransactionRepository {
         .optional();
   }
 
+  /** A single posting by id, regardless of its transaction's live/deleted state. */
+  public Optional<Posting> findPosting(long postingId) {
+    return jdbcClient
+        .sql(
+            """
+            select posting_id, transaction_id, account_id, amount, base_amount,
+                   reconciliation, note
+            from posting
+            where posting_id = :postingId
+            """)
+        .param(POSTING_ID, postingId)
+        .query(Posting.class)
+        .optional();
+  }
+
   /** The postings of a transaction, regardless of the transaction's live/deleted state. */
   public List<Posting> findPostings(long transactionId) {
     return jdbcClient
@@ -318,6 +333,24 @@ public class TransactionRepository {
         .param(BASE_AMOUNT, posting.baseAmount())
         .param(RECONCILIATION, posting.reconciliation())
         .param(NOTE, posting.note())
+        .update();
+  }
+
+  /**
+   * Re-book one leg onto another account in place (ADR 0003): only {@code account_id} changes, and
+   * the leg starts over as {@code unreconciled} — a match is made against the account's statement.
+   * The caller owns the validation and the report of a dropped {@code reconciled} state.
+   */
+  public void moveLeg(long postingId, long accountId) {
+    jdbcClient
+        .sql(
+            """
+            update posting
+            set account_id = :accountId, reconciliation = 'unreconciled'
+            where posting_id = :postingId
+            """)
+        .param(POSTING_ID, postingId)
+        .param("accountId", accountId)
         .update();
   }
 

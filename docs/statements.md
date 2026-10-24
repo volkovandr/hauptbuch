@@ -275,7 +275,8 @@ same operation**; a save that fails validation matches nothing. What the dock is
   counterpart is left to the operator — splits cannot be resolved automatically.
 - **Wrong account** — the transaction with its leg moved to the statement's account (the existing
   re-threading).
-- **Extras** — Edit, Move to account, or Void, through the same dock.
+- **Extras** — Edit or Void, through the same dock; Move to account re-books just the extra's leg
+  (`LedgerService.moveLeg`), so it works on a split transaction too.
 
 Editing a reconciled leg **from the register** shows a muted notice in the dock ("Giro leg reconciled —
 statement 2026-05"), with no block; if the edit changes the amount, the leg drops to `unreconciled`

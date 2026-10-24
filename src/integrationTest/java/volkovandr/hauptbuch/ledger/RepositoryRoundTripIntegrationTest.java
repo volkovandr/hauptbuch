@@ -160,6 +160,33 @@ class RepositoryRoundTripIntegrationTest {
   }
 
   @Test
+  void moveLegChangesOnlyTheAccountAndUnreconcilesTheLegKeepingItsIdentity() {
+    long cash = insertCashAccount(EUR);
+    long card = insertCashAccount(EUR);
+    long txnId =
+        transactionRepository.insertTransaction(
+            new Transaction(
+                null, LocalDate.of(2026, 6, 1), null, null, CONFIRMED, null, null, null));
+    long postingId =
+        transactionRepository.insertPosting(
+            new Posting(null, txnId, cash, new BigDecimal("-5.0000"), null, "reconciled", "n"));
+
+    transactionRepository.moveLeg(postingId, card);
+
+    Posting moved = transactionRepository.findPosting(postingId).orElseThrow();
+    assertThat(moved.accountId()).isEqualTo(card);
+    assertThat(moved.transactionId()).isEqualTo(txnId);
+    assertThat(moved.amount()).isEqualByComparingTo("-5");
+    assertThat(moved.reconciliation()).isEqualTo(UNRECONCILED);
+    assertThat(moved.note()).isEqualTo("n");
+  }
+
+  @Test
+  void findPostingIsEmptyForAnUnknownId() {
+    assertThat(transactionRepository.findPosting(-1L)).isEmpty();
+  }
+
+  @Test
   void deletePostingRemovesOnlyThatLegAndItsTags() {
     long cash = insertCashAccount(EUR);
     long txnId =

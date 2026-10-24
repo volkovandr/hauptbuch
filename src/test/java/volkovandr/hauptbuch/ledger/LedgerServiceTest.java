@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +47,9 @@ class LedgerServiceTest {
   private static final long FOOD_EUR = 11L;
   private static final long CARD_CHF = 12L;
   private static final long FOOD_PARENT = 99L;
+  private static final long CARD_EUR = 13L;
+  private static final long LEG = 60L;
+  private static final long MOVE_TRANSACTION = 50L;
 
   @Mock private SettingsService settingsService;
   @Mock private ExchangeRateService exchangeRateService;
@@ -887,6 +891,171 @@ class LedgerServiceTest {
                         List.of(
                             PostingDraft.of(CASH_EUR, new BigDecimal("-9.00")),
                             PostingDraft.of(FOOD_EUR, new BigDecimal("9.00"))))));
+  }
+
+  // ── moving one leg to another account (statements extras' Move) ─────────────
+
+  private Posting legOn(long postingId, long accountId, String reconciliation) {
+    return new Posting(
+        postingId,
+        MOVE_TRANSACTION,
+        accountId,
+        new BigDecimal("-5.00"),
+        null,
+        reconciliation,
+        null);
+  }
+
+  /** The leg, in a live transaction. */
+  private void stubLiveLeg(Posting leg) {
+    when(transactionRepository.findPosting(leg.postingId())).thenReturn(Optional.of(leg));
+    when(transactionRepository.findById(MOVE_TRANSACTION))
+        .thenReturn(
+            Optional.of(
+                new Transaction(
+                    MOVE_TRANSACTION,
+                    LocalDate.of(2026, 6, 1),
+                    null,
+                    null,
+                    "confirmed",
+                    null,
+                    null,
+                    null)));
+  }
+
+  /** The leg in a live transaction, which carries these legs; no account is a parent. */
+  private void stubTransactionWithLegs(Posting... legs) {
+    stubLiveLeg(legs[0]);
+    when(transactionRepository.findPostings(MOVE_TRANSACTION)).thenReturn(List.of(legs));
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+  }
+
+  @Test
+  void movingALegChangesOnlyThatLegsAccountAndKeepsTheOtherLegsOfASplit() {
+    stubAccount(CASH_EUR, EUR);
+    stubAccount(CARD_EUR, EUR);
+    stubTransactionWithLegs(
+        legOn(LEG, CASH_EUR, "unreconciled"),
+        legOn(61L, FOOD_EUR, "unreconciled"),
+        legOn(62L, FOOD_EUR, "unreconciled"));
+
+    ledgerService.moveLeg(LEG, CARD_EUR);
+
+    verify(transactionRepository).moveLeg(LEG, CARD_EUR);
+    verify(transactionRepository, never()).deletePosting(anyLong());
+    verify(transactionRepository, never()).insertPosting(any());
+    assertThat(droppedReports).isEmpty();
+  }
+
+  @Test
+  void movingAReconciledLegDropsItsReconciliationAndReportsIt() {
+    stubAccount(CASH_EUR, EUR);
+    stubAccount(CARD_EUR, EUR);
+    stubTransactionWithLegs(
+        legOn(LEG, CASH_EUR, "reconciled"), legOn(61L, FOOD_EUR, "unreconciled"));
+
+    ledgerService.moveLeg(LEG, CARD_EUR);
+
+    verify(transactionRepository).moveLeg(LEG, CARD_EUR);
+    assertThat(droppedReports).containsExactly(List.of(LEG));
+  }
+
+  @Test
+  void movingALegRefusesAnAccountThatAlreadyHasALegInTheTransaction() {
+    stubAccount(CASH_EUR, EUR);
+    stubAccount(CARD_EUR, EUR);
+    stubTransactionWithLegs(
+        legOn(LEG, CASH_EUR, "unreconciled"),
+        legOn(61L, CARD_EUR, "unreconciled"),
+        legOn(62L, FOOD_EUR, "unreconciled"));
+
+    assertThatExceptionOfType(UnbalancedTransactionException.class)
+        .isThrownBy(() -> ledgerService.moveLeg(LEG, CARD_EUR))
+        .withMessageContaining("only one leg");
+
+    verify(transactionRepository, never()).moveLeg(anyLong(), anyLong());
+  }
+
+  @Test
+  void movingALegAllowsAnAccountThatMayRepeat() {
+    stubAccount(CASH_EUR, EUR);
+    stubAccountOfType(FOOD_EUR, "expense", false);
+    stubLiveLeg(legOn(LEG, CASH_EUR, "unreconciled"));
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+
+    ledgerService.moveLeg(LEG, FOOD_EUR);
+
+    verify(transactionRepository).moveLeg(LEG, FOOD_EUR);
+  }
+
+  @Test
+  void movingALegRefusesAnotherCurrency() {
+    stubAccount(CASH_EUR, EUR);
+    stubAccount(CARD_CHF, CHF);
+    stubLiveLeg(legOn(LEG, CASH_EUR, "unreconciled"));
+    when(accountService.findParentAccountIds()).thenReturn(List.of());
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> ledgerService.moveLeg(LEG, CARD_CHF))
+        .withMessageContaining(EUR);
+
+    verify(transactionRepository, never()).moveLeg(anyLong(), anyLong());
+  }
+
+  @Test
+  void movingALegRefusesTheAccountItIsAlreadyOn() {
+    stubLiveLeg(legOn(LEG, CASH_EUR, "unreconciled"));
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> ledgerService.moveLeg(LEG, CASH_EUR))
+        .withMessageContaining("already");
+
+    verify(transactionRepository, never()).moveLeg(anyLong(), anyLong());
+  }
+
+  @Test
+  void movingALegRefusesAParentAccount() {
+    stubAccount(CASH_EUR, EUR);
+    stubAccount(FOOD_PARENT, EUR);
+    stubLiveLeg(legOn(LEG, CASH_EUR, "unreconciled"));
+    when(accountService.findParentAccountIds()).thenReturn(List.of(FOOD_PARENT));
+
+    assertThatExceptionOfType(UnbalancedTransactionException.class)
+        .isThrownBy(() -> ledgerService.moveLeg(LEG, FOOD_PARENT))
+        .withMessageContaining("non-leaf");
+
+    verify(transactionRepository, never()).moveLeg(anyLong(), anyLong());
+  }
+
+  @Test
+  void movingAMissingLegFails() {
+    when(transactionRepository.findPosting(404L)).thenReturn(Optional.empty());
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> ledgerService.moveLeg(404L, CARD_EUR));
+  }
+
+  @Test
+  void movingALegOfAVoidedTransactionFails() {
+    when(transactionRepository.findPosting(LEG))
+        .thenReturn(Optional.of(legOn(LEG, CASH_EUR, "unreconciled")));
+    when(transactionRepository.findById(MOVE_TRANSACTION))
+        .thenReturn(
+            Optional.of(
+                new Transaction(
+                    MOVE_TRANSACTION,
+                    LocalDate.of(2026, 6, 1),
+                    null,
+                    null,
+                    "confirmed",
+                    null,
+                    null,
+                    OffsetDateTime.now())));
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> ledgerService.moveLeg(LEG, CARD_EUR));
+
+    verify(transactionRepository, never()).moveLeg(anyLong(), anyLong());
   }
 
   // ── tag reads (register §3.6, plan stage 7e.3) ───────────────────────────────

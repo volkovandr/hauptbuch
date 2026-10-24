@@ -104,17 +104,17 @@ public class StatementExtraDockService {
   }
 
   /**
-   * Move the extra's transaction to another open own account of the same currency, keeping
-   * everything else.
+   * Move the extra's leg to another open own account of the same currency. Only that leg changes —
+   * the rest of its transaction, split or not, stays as it is.
    *
    * @throws StatementFormatException when the extra is gone, the target is not such an account, or
    *     the ledger refuses the move
    */
   @Transactional
   public void move(long statementId, long postingId, long targetAccountId) {
-    StatementExtra extra = extraOf(statementId, postingId);
-    DockEditModel model = editableModel(statementId, extra);
-    Account source = accountService.findById(model.accountId()).orElseThrow();
+    extraOf(statementId, postingId);
+    Account source =
+        accountService.findById(statementService.get(statementId).accountId()).orElseThrow();
     Account target =
         statementService.statementAccounts().stream()
             .filter(a -> a.accountId() == targetAccountId)
@@ -128,9 +128,11 @@ public class StatementExtraDockService {
       throw new StatementFormatException(
           "Move it to an account in " + source.currencyCode() + ", or edit it in the register.");
     }
-    commit(
-        DockForms.editEntry(
-            DockForms.inputOf(model), extra.transactionId(), target.accountId(), model.amount()));
+    try {
+      ledgerService.moveLeg(postingId, target.accountId());
+    } catch (IllegalArgumentException | UnbalancedTransactionException e) {
+      throw new StatementFormatException(e.getMessage(), e);
+    }
   }
 
   /**
