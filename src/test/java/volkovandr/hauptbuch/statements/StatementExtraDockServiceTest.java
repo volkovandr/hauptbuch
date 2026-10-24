@@ -37,6 +37,9 @@ import volkovandr.hauptbuch.statements.ExtraReview.Boundary;
  * {@code operations} and {@code ledger} mocked — each is checked against the live review, edits
  * book through the register's commit path, and nothing is ever matched.
  */
+// ExcessiveImports: the dock service orchestrates statements, accounts, the ledger and the dock
+// models, and its test names each of them.
+@SuppressWarnings("PMD.ExcessiveImports")
 @ExtendWith(MockitoExtension.class)
 class StatementExtraDockServiceTest {
 
@@ -250,7 +253,7 @@ class StatementExtraDockServiceTest {
   }
 
   @Test
-  void moveReportsALedgerRefusalAsAStatementFormatException() {
+  void moveReportsLedgerRefusalAsStatementFormatException() {
     moveSetUp("EUR", account(OTHER_EUR, "B", "EUR"));
     doThrow(new UnbalancedTransactionException("only one leg on B"))
         .when(ledgerService)
