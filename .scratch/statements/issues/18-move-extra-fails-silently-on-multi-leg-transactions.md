@@ -38,7 +38,14 @@ likely rendered off-screen. (Not reproduced in a browser — this part is inferr
 Verify when fixing.) Unlike the Edit link, Move does not offer the register link
 (`refusalTransactionId`) either.
 
-## Proposed solution (not yet accepted by the owner)
+## Accepted solution (owner, 2026-10-24)
+Implemented as below; reconciliation follows the existing two-leg behaviour (the moved leg ends
+`unreconciled`, its match is dropped through the `ReconciliationDropListener`). An extra is never
+`reconciled` anyway (statements.md §6.3). **Not yet verified by the owner**, and the build could not
+be run in the authoring session (Maven Central unreachable) — run `./gradlew check` first.
+The "surface the refusal near the row" point below is deliberately **not** done: few refusals remain.
+
+### Design
 - Make Move a **leg-level** operation: change `account_id` of the one posting `postingId` to the
   target account, in place (ADR 0003: postings are edited in place, so `posting_id` survives), via
   the ledger/operations layer instead of the dock edit model. No need to understand the other legs.

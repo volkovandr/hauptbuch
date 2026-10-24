@@ -322,6 +322,61 @@ public class LedgerService {
     LOG.debug("Transaction edited: id={}, total={}", transactionId, balanced.debitTotal());
   }
 
+  /**
+   * Re-book one leg of a live transaction onto another account of the same currency, leaving every
+   * other leg alone — however many there are (a split is no obstacle). The leg is updated in place
+   * (ADR 0003), so its {@code posting_id} and tags survive; it starts over as {@code unreconciled},
+   * exactly as an edit that moves a leg to another account does, and a drop out of {@code
+   * reconciled} is reported to the {@link ReconciliationDropListener}s. Because the currency is
+   * unchanged, the transaction still balances and the leg keeps its {@code baseAmount}.
+   *
+   * @throws IllegalArgumentException if the leg or its live transaction is missing, the leg is on
+   *     that account already, or the account is in another currency
+   * @throws UnbalancedTransactionException if the account is not a leaf, or is a real own account
+   *     the transaction already has a leg on
+   */
+  @Transactional
+  public void moveLeg(long postingId, long targetAccountId) {
+    Posting leg =
+        transactionRepository
+            .findPosting(postingId)
+            .orElseThrow(
+                () -> new IllegalArgumentException("No posting with id " + postingId + " to move"));
+    long transactionId = leg.transactionId();
+    transactionRepository
+        .findById(transactionId)
+        .filter(t -> t.deletedAt() == null)
+        .orElseThrow(
+            () ->
+                new IllegalArgumentException(
+                    "No live transaction with id " + transactionId + " to move a leg of"));
+    if (leg.accountId() == targetAccountId) {
+      throw new IllegalArgumentException("The leg is on that account already");
+    }
+
+    Account source = accountService.findById(leg.accountId()).orElseThrow();
+    Account target =
+        requireLeafAccount(targetAccountId, new HashSet<>(accountService.findParentAccountIds()));
+    if (!target.currencyCode().equals(source.currencyCode())) {
+      throw new IllegalArgumentException(
+          "A leg can only move to an account in " + source.currencyCode());
+    }
+    if (isRealOwnAccount(target)
+        && transactionRepository.findPostings(transactionId).stream()
+            .anyMatch(other -> other.accountId() == targetAccountId)) {
+      throw new UnbalancedTransactionException(
+          "A transaction may carry only one leg on account '"
+              + target.name()
+              + "' (one leg per real own account, data-model §8 invariant 6)");
+    }
+
+    transactionRepository.moveLeg(postingId, targetAccountId);
+    LOG.debug("Leg moved: posting={}, transaction={}", postingId, transactionId);
+    if (RECONCILED.equals(leg.reconciliation())) {
+      reportReconciliationDropped(List.of(postingId));
+    }
+  }
+
   /** Carry out the {@link LegEdit} of an edited transaction's legs (ADR 0003). */
   private void reThreadLegs(long transactionId, List<PostingDraft> newLegs, boolean dateChanged) {
     LegEdit edit =
