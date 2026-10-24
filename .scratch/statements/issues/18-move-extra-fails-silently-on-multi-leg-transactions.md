@@ -1,6 +1,6 @@
 # Statements: "Move" on an extra does nothing for a multi-leg (split) transaction
 
-Status: open
+Status: resolved
 Category: bug
 Area: `statements` — `StatementExtraDockService.move` / `editableModel`, `StatementDockController.moveExtra`, `statement.html` (extras table)
 
