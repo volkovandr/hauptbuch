@@ -96,6 +96,7 @@ class StatementController {
       check = new StatementCheck(List.of(e.getMessage()));
     }
     model.addAttribute("check", check);
+    model.addAttribute("statementId", id);
     return "fragments/statement-check :: result";
   }
 
