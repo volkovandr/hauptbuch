@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
+import volkovandr.hauptbuch.shared.MoneyFormat;
 import volkovandr.hauptbuch.statements.repository.StatementLineRepository;
 import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
 
@@ -145,7 +146,7 @@ public class StatementReviewService {
   private static void addBalanceProblem(
       List<String> problems, String label, StatementBalanceCheck balance) {
     if (balance != null && !balance.agrees()) {
-      problems.add(label + " balance off by " + StatementController.number(balance.unexplained()));
+      problems.add(label + " balance off by " + MoneyFormat.number(balance.unexplained(), 2));
     }
   }
 }

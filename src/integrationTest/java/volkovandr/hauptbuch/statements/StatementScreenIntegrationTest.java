@@ -409,7 +409,7 @@ class StatementScreenIntegrationTest {
   }
 
   @Test
-  void theListComputesNothingAndOffersACheckButtonPerStatement() throws Exception {
+  void theListComputesNothingAndOffersOneCheckButtonPerStatement() throws Exception {
     long statementId = uploadAndCreate(saveProfile());
 
     mockMvc
@@ -417,7 +417,7 @@ class StatementScreenIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(
             content().string(containsString("hx-get=\"/statements/" + statementId + "/check\"")))
-        .andExpect(content().string(containsString(">Check all</a>")))
+        .andExpect(content().string(containsString("checkAll=true")))
         .andExpect(content().string(org.hamcrest.Matchers.not(containsString("checking…"))));
   }
 
@@ -436,7 +436,7 @@ class StatementScreenIntegrationTest {
   }
 
   @Test
-  void checkingAStatementShowsACrossAndTheReasonWhenItIsNotGreen() throws Exception {
+  void checkingStatementShowsCrossAndReasonWhenNotGreen() throws Exception {
     long statementId = uploadAndCreate(saveProfile());
 
     mockMvc
@@ -448,7 +448,7 @@ class StatementScreenIntegrationTest {
   }
 
   @Test
-  void checkingAStatementThatIsGoneShowsACrossAndWhy() throws Exception {
+  void checkingGoneStatementShowsCrossAndWhy() throws Exception {
     mockMvc
         .perform(get("/statements/999999/check"))
         .andExpect(status().isOk())

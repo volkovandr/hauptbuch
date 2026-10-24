@@ -118,14 +118,16 @@
                 >
               </td>
               <td class="statements__match">
-                <th:block
-                  th:if="${checkAll}"
-                  th:replace="~{fragments/statement-check :: pending(${r.statementId()})}"
-                ></th:block>
-                <th:block
-                  th:unless="${checkAll}"
-                  th:replace="~{fragments/statement-check :: idle(${r.statementId()})}"
-                ></th:block>
+                <th:block th:if="${checkAll}">
+                  <th:block
+                    th:replace="~{fragments/statement-check :: pending(${r.statementId()})}"
+                  ></th:block>
+                </th:block>
+                <th:block th:unless="${checkAll}">
+                  <th:block
+                    th:replace="~{fragments/statement-check :: idle(${r.statementId()})}"
+                  ></th:block>
+                </th:block>
               </td>
               <td class="muted" th:text="${r.originalFilename()}">2026-05.csv</td>
             </tr>
