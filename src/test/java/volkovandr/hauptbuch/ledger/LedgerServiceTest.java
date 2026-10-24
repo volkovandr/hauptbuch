@@ -931,7 +931,7 @@ class LedgerServiceTest {
   }
 
   @Test
-  void movingALegChangesOnlyThatLegsAccountAndKeepsTheOtherLegsOfASplit() {
+  void movingLegChangesOnlyThatLegsAccountAndKeepsTheOtherLegsOfSplit() {
     stubAccount(CASH_EUR, EUR);
     stubAccount(CARD_EUR, EUR);
     stubTransactionWithLegs(
@@ -948,7 +948,7 @@ class LedgerServiceTest {
   }
 
   @Test
-  void movingAReconciledLegDropsItsReconciliationAndReportsIt() {
+  void movingReconciledLegDropsItsReconciliationAndReportsIt() {
     stubAccount(CASH_EUR, EUR);
     stubAccount(CARD_EUR, EUR);
     stubTransactionWithLegs(
@@ -961,7 +961,7 @@ class LedgerServiceTest {
   }
 
   @Test
-  void movingALegRefusesAnAccountThatAlreadyHasALegInTheTransaction() {
+  void movingLegRefusesAccountThatAlreadyHasLegInTheTransaction() {
     stubAccount(CASH_EUR, EUR);
     stubAccount(CARD_EUR, EUR);
     stubTransactionWithLegs(
@@ -977,7 +977,7 @@ class LedgerServiceTest {
   }
 
   @Test
-  void movingALegAllowsAnAccountThatMayRepeat() {
+  void movingLegAllowsAccountThatMayRepeat() {
     stubAccount(CASH_EUR, EUR);
     stubAccountOfType(FOOD_EUR, "expense", false);
     stubLiveLeg(legOn(LEG, CASH_EUR, "unreconciled"));
@@ -989,7 +989,7 @@ class LedgerServiceTest {
   }
 
   @Test
-  void movingALegRefusesAnotherCurrency() {
+  void movingLegRefusesAnotherCurrency() {
     stubAccount(CASH_EUR, EUR);
     stubAccount(CARD_CHF, CHF);
     stubLiveLeg(legOn(LEG, CASH_EUR, "unreconciled"));
@@ -1003,7 +1003,7 @@ class LedgerServiceTest {
   }
 
   @Test
-  void movingALegRefusesTheAccountItIsAlreadyOn() {
+  void movingLegRefusesTheAccountItIsAlreadyOn() {
     stubLiveLeg(legOn(LEG, CASH_EUR, "unreconciled"));
 
     assertThatExceptionOfType(IllegalArgumentException.class)
@@ -1014,7 +1014,7 @@ class LedgerServiceTest {
   }
 
   @Test
-  void movingALegRefusesAParentAccount() {
+  void movingLegRefusesParentAccount() {
     stubAccount(CASH_EUR, EUR);
     stubAccount(FOOD_PARENT, EUR);
     stubLiveLeg(legOn(LEG, CASH_EUR, "unreconciled"));
@@ -1028,7 +1028,7 @@ class LedgerServiceTest {
   }
 
   @Test
-  void movingAMissingLegFails() {
+  void movingMissingLegFails() {
     when(transactionRepository.findPosting(404L)).thenReturn(Optional.empty());
 
     assertThatExceptionOfType(IllegalArgumentException.class)
@@ -1036,7 +1036,7 @@ class LedgerServiceTest {
   }
 
   @Test
-  void movingALegOfAVoidedTransactionFails() {
+  void movingLegOfVoidedTransactionFails() {
     when(transactionRepository.findPosting(LEG))
         .thenReturn(Optional.of(legOn(LEG, CASH_EUR, "unreconciled")));
     when(transactionRepository.findById(MOVE_TRANSACTION))

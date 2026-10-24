@@ -41,8 +41,7 @@ Verify when fixing.) Unlike the Edit link, Move does not offer the register link
 ## Accepted solution (owner, 2026-10-24)
 Implemented as below; reconciliation follows the existing two-leg behaviour (the moved leg ends
 `unreconciled`, its match is dropped through the `ReconciliationDropListener`). An extra is never
-`reconciled` anyway (statements.md §6.3). **Not yet verified by the owner**, and the build could not
-be run in the authoring session (Maven Central unreachable) — run `./gradlew check` first.
+`reconciled` anyway (statements.md §6.3). **Not yet verified by the owner.** `./gradlew check` is green (2026-10-24).
 The "surface the refusal near the row" point below is deliberately **not** done: few refusals remain.
 
 ### Design
