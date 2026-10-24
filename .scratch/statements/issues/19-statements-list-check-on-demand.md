@@ -1,6 +1,6 @@
 # Statements: the list's green tick is computed on demand ("Check" button), not on every page load
 
-Status: in progress
+Status: resolved
 Category: bug (performance) / UX
 Severity: high — with 50+ statements the list page takes over 30 seconds to open
 Area: `statements` — `StatementController.list`, `StatementReviewService.green(rows)`, `statements.html`
