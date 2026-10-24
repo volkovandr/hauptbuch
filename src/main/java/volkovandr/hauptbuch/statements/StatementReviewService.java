@@ -3,9 +3,7 @@ package volkovandr.hauptbuch.statements;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import volkovandr.hauptbuch.statements.repository.StatementLineRepository;
 import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
@@ -111,26 +109,43 @@ public class StatementReviewService {
   }
 
   /**
-   * Which of these statements are green (statements.md §6.5): every line matched, no extras beyond
-   * boundary extras, and both balance remainders at zero. A statement with no lines is not.
+   * Check one live statement against the green rule (statements.md §6.5): every line matched, no
+   * extras beyond boundary extras, and both balance remainders at zero. Runs the full live review,
+   * so the list page calls it per statement on request, never for every row.
+   *
+   * @throws StatementFormatException when the statement no longer exists
    */
-  public Map<Long, Boolean> green(List<StatementRow> rows) {
-    return rows.stream()
-        .collect(
-            Collectors.toMap(
-                StatementRow::statementId, r -> isGreen(r.statementId()), (a, b) -> a));
+  public StatementCheck check(long statementId) {
+    StatementReview review = review(statementId);
+    return check(review, balances(statementId, review));
   }
 
   /** The green rule (statements.md §6.5) over an already-computed review. */
-  static boolean green(StatementReview review, StatementBalances balances) {
-    return !review.lines().isEmpty()
-        && review.matched() == review.lines().size()
-        && review.extra() == 0
-        && balances.agree();
+  static StatementCheck check(StatementReview review, StatementBalances balances) {
+    List<String> problems = new ArrayList<>();
+    int lines = review.lines().size();
+    if (lines == 0) {
+      problems.add("No lines");
+    } else if (review.matched() < lines) {
+      problems.add((lines - review.matched()) + " of " + lines + " lines not matched");
+    }
+    if (review.extra() > 0) {
+      problems.add(review.extra() + (review.extra() == 1 ? " extra" : " extras"));
+    }
+    addBalanceProblem(problems, "Opening", balances.opening());
+    addBalanceProblem(problems, "Closing", balances.closing());
+    return new StatementCheck(problems);
   }
 
-  private boolean isGreen(long statementId) {
-    StatementReview review = review(statementId);
-    return green(review, balances(statementId, review));
+  /** Whether the review is green (statements.md §6.5). */
+  static boolean green(StatementReview review, StatementBalances balances) {
+    return check(review, balances).green();
+  }
+
+  private static void addBalanceProblem(
+      List<String> problems, String label, StatementBalanceCheck balance) {
+    if (balance != null && !balance.agrees()) {
+      problems.add(label + " balance off by " + StatementController.number(balance.unexplained()));
+    }
   }
 }

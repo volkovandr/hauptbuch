@@ -229,3 +229,17 @@ table.statements a.btn {
 .statements__match {
   text-align: center;
 }
+
+/* The Match cell's Check button is a quiet inline control; the result's reason sits beside the mark. */
+.statements__check {
+  padding: 0.1rem 0.5rem;
+}
+
+.statements__ok {
+  color: var(--green-ink);
+}
+
+.statements__reason {
+  margin-left: 0.4rem;
+  font-size: 0.85em;
+}

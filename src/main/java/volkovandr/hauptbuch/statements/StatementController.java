@@ -70,15 +70,33 @@ class StatementController {
 
   /** The statements, newest first, filterable by account, with the upload form. */
   @GetMapping(BASE_PATH)
-  String list(@RequestParam(required = false) Long account, Model model) {
+  String list(
+      @RequestParam(required = false) Long account,
+      @RequestParam(defaultValue = "false") boolean checkAll,
+      Model model) {
     model.addAttribute("nav", NavItem.sectionsFor(BASE_PATH));
-    List<StatementRow> rows = statementService.rows(account);
-    model.addAttribute("rows", rows);
-    model.addAttribute("green", reviewService.green(rows));
+    model.addAttribute("rows", statementService.rows(account));
+    model.addAttribute("checkAll", checkAll);
     model.addAttribute("accounts", statementService.statementAccounts());
     model.addAttribute("profiles", profileService.live());
     model.addAttribute("accountFilter", account);
     return "statements";
+  }
+
+  /**
+   * One statement's green check as the htmx fragment for its Match cell (statements/issues/19) —
+   * computed on request only, because it runs a full live review.
+   */
+  @GetMapping(BASE_PATH + "/{id}/check")
+  String check(@PathVariable long id, Model model) {
+    StatementCheck check;
+    try {
+      check = reviewService.check(id);
+    } catch (StatementFormatException e) {
+      check = new StatementCheck(List.of(e.getMessage()));
+    }
+    model.addAttribute("check", check);
+    return "fragments/statement-check :: result";
   }
 
   /** Keep the uploaded file, then send the operator to confirm the account. */

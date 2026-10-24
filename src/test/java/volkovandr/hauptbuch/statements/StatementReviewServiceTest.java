@@ -9,7 +9,6 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -135,17 +134,73 @@ class StatementReviewServiceTest {
   }
 
   @Test
-  void greenForTheListIsKeyedByStatementAndRunsTheLiveReview() {
+  void checkRunsTheLiveReviewOfThatOneStatement() {
     Statement statement = statement(1L, START, END, null);
     when(statementService.get(1L)).thenReturn(statement);
     when(profileService.getIncludingDeleted(1L)).thenReturn(profile());
     when(lineRepository.findByStatement(1L)).thenReturn(List.of());
 
-    Map<Long, Boolean> green =
-        service.green(
-            List.of(new StatementRow(1L, "BankAaa-EUR", "p", "may.pdf", START, END, 0, 0)));
+    StatementCheck check = service.check(1L);
 
-    assertThat(green).containsExactly(Map.entry(1L, false));
+    assertThat(check.green()).isFalse();
+    assertThat(check.reason()).isEqualTo("No lines");
+  }
+
+  @Test
+  void aGreenStatementHasNoProblemsAndNoReason() {
+    StatementReview allMatched = new StatementReview(List.of(line(LineStatus.MATCHED)), List.of());
+
+    StatementCheck check = StatementReviewService.check(allMatched, agreeing());
+
+    assertThat(check.green()).isTrue();
+    assertThat(check.reason()).isEmpty();
+  }
+
+  @Test
+  void theReasonCountsTheLinesThatAreNotMatched() {
+    StatementReview review =
+        new StatementReview(
+            List.of(line(LineStatus.MATCHED), line(LineStatus.MISSING), line(LineStatus.EXACT)),
+            List.of());
+
+    assertThat(StatementReviewService.check(review, agreeing()).reason())
+        .isEqualTo("2 of 3 lines not matched");
+  }
+
+  @Test
+  void theReasonCountsTheExtrasButNotTheBoundaryOnes() {
+    StatementExtra extra =
+        new StatementExtra(1L, 1L, START, "ShopAaa", null, new BigDecimal("-5.00"));
+    StatementReview review =
+        new StatementReview(
+            List.of(line(LineStatus.MATCHED)),
+            List.of(
+                new ExtraReview(extra, ExtraReview.Boundary.NONE),
+                new ExtraReview(extra, ExtraReview.Boundary.NEXT)));
+
+    assertThat(StatementReviewService.check(review, agreeing()).reason()).isEqualTo("1 extra");
+  }
+
+  @Test
+  void theReasonNamesEachBalanceThatIsOffAndByHowMuch() {
+    StatementBalanceCheck off =
+        new StatementBalanceCheck(
+            BigDecimal.TEN, BigDecimal.ONE, BigDecimal.ZERO, new BigDecimal("1234.50"));
+    StatementReview matched = new StatementReview(List.of(line(LineStatus.MATCHED)), List.of());
+
+    assertThat(StatementReviewService.check(matched, new StatementBalances(off, off)).reason())
+        .isEqualTo("Opening balance off by 1.234,50; Closing balance off by 1.234,50");
+  }
+
+  @Test
+  void theReasonJoinsEveryProblem() {
+    StatementBalanceCheck off =
+        new StatementBalanceCheck(
+            BigDecimal.TEN, BigDecimal.ONE, BigDecimal.ZERO, new BigDecimal("9"));
+    StatementReview review = new StatementReview(List.of(line(LineStatus.MISSING)), List.of());
+
+    assertThat(StatementReviewService.check(review, new StatementBalances(null, off)).reason())
+        .isEqualTo("1 of 1 lines not matched; Closing balance off by 9,00");
   }
 
   private static StatementProfile profile() {
