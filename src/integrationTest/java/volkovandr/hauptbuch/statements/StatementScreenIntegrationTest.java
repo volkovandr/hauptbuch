@@ -409,6 +409,53 @@ class StatementScreenIntegrationTest {
   }
 
   @Test
+  void theListComputesNothingAndOffersACheckButtonPerStatement() throws Exception {
+    long statementId = uploadAndCreate(saveProfile());
+
+    mockMvc
+        .perform(get("/statements"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content().string(containsString("hx-get=\"/statements/" + statementId + "/check\"")))
+        .andExpect(content().string(containsString(">Check all</a>")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(containsString("checking…"))));
+  }
+
+  @Test
+  void checkAllQueuesEveryStatementsCheckOnLoad() throws Exception {
+    long statementId = uploadAndCreate(saveProfile());
+
+    mockMvc
+        .perform(get("/statements").param("checkAll", "true"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content().string(containsString("hx-get=\"/statements/" + statementId + "/check\"")))
+        .andExpect(content().string(containsString("hx-trigger=\"load\"")))
+        .andExpect(content().string(containsString("hx-sync=\"closest tbody:queue all\"")))
+        .andExpect(content().string(containsString("checking…")));
+  }
+
+  @Test
+  void checkingAStatementShowsACrossAndTheReasonWhenItIsNotGreen() throws Exception {
+    long statementId = uploadAndCreate(saveProfile());
+
+    mockMvc
+        .perform(get("/statements/" + statementId + "/check"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("✗")))
+        .andExpect(content().string(containsString("lines not matched")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(containsString("✓"))));
+  }
+
+  @Test
+  void checkingAStatementThatIsGoneShowsACrossAndWhy() throws Exception {
+    mockMvc
+        .perform(get("/statements/999999/check"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("✗")));
+  }
+
+  @Test
   void theNavigationShowsStatements() throws Exception {
     mockMvc
         .perform(get("/statements"))

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<!--
+  The Match cell of the statements list (statements/issues/19). A statement's green check runs a
+  full live review, so the list renders each cell as a Check button and computes nothing; the
+  button, and Check all's "checking…" cells, hx-get the result into their own <td>. The result is
+  never stored: a refresh brings the buttons back. Check all's cells share one queue (hx-sync on
+  the <tbody>), so the server works through the statements one at a time.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+  <body>
+    <th:block th:fragment="idle(id)">
+      <button
+        type="button"
+        class="btn btn--ghost statements__check"
+        th:attr="hx-get=@{/statements/{id}/check(id=${id})}"
+        hx-target="closest td"
+        hx-swap="innerHTML"
+      >
+        Check
+      </button>
+    </th:block>
+
+    <th:block th:fragment="pending(id)">
+      <span
+        class="muted"
+        th:attr="hx-get=@{/statements/{id}/check(id=${id})}"
+        hx-trigger="load"
+        hx-target="closest td"
+        hx-swap="innerHTML"
+        hx-sync="closest tbody:queue all"
+        >checking…</span
+      >
+    </th:block>
+
+    <th:block th:fragment="result">
+      <span class="statements__ok" th:if="${check.green()}">✓</span>
+      <th:block th:unless="${check.green()}">
+        <span class="warning">✗</span>
+        <span class="muted statements__reason" th:text="${check.reason()}">2 of 3 lines not matched</span>
+      </th:block>
+    </th:block>
+  </body>
+</html>

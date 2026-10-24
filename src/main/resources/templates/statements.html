@@ -69,6 +69,12 @@
           <noscript><button type="submit" class="btn btn--ghost">Filter</button></noscript>
         </form>
         <p class="actions">
+          <a
+            class="btn btn--ghost"
+            th:href="@{/statements(account=${accountFilter},checkAll=true)}"
+            th:if="${!#lists.isEmpty(rows)}"
+            >Check all</a
+          >
           <a class="btn btn--ghost" th:href="@{/statements/profiles}">Profiles</a>
         </p>
       </div>
@@ -111,7 +117,16 @@
                   >(<span th:text="${r.problemCount()}">2</span> with a problem)</span
                 >
               </td>
-              <td class="statements__match" th:text="${green[r.statementId()]} ? '✓' : ''">✓</td>
+              <td class="statements__match">
+                <th:block
+                  th:if="${checkAll}"
+                  th:replace="~{fragments/statement-check :: pending(${r.statementId()})}"
+                ></th:block>
+                <th:block
+                  th:unless="${checkAll}"
+                  th:replace="~{fragments/statement-check :: idle(${r.statementId()})}"
+                ></th:block>
+              </td>
               <td class="muted" th:text="${r.originalFilename()}">2026-05.csv</td>
             </tr>
           </tbody>
