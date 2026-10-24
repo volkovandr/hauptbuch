@@ -147,7 +147,7 @@ class StatementReviewServiceTest {
   }
 
   @Test
-  void aGreenStatementHasNoProblemsAndNoReason() {
+  void greenStatementHasNoProblemsAndNoReason() {
     StatementReview allMatched = new StatementReview(List.of(line(LineStatus.MATCHED)), List.of());
 
     StatementCheck check = StatementReviewService.check(allMatched, agreeing());
