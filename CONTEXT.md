@@ -256,9 +256,15 @@ there is no reconciliation operation to start or commit.
 _Avoid_: bank statement import, reconciliation (for the object), session
 
 **Statement profile**:
-How to read one source: a CSV dialect and column map, or a PDF bank's AI note, plus the matching
-date window. A CSV profile can read any CSV, not only a bank's — it is the generic CSV import.
+How to read one source: a CSV dialect and column map, a PDF bank's AI note, or a PDF bank's parse
+rules, plus the matching date window. A CSV profile can read any CSV, not only a bank's — it is the
+generic CSV import.
 _Avoid_: import profile, template, bank format, mapping
+
+**Parse rule**:
+One regex rule of a PDF (rules) profile — the local, AI-free way to turn a statement's extracted text
+into lines and a header, for a bank whose layout is stable.
+_Avoid_: algorithm, template, script
 
 **Statement line**:
 One booking the bank reports, in the one shape every parser produces: booking date, value date,

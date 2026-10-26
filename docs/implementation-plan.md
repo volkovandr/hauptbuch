@@ -1,8 +1,8 @@
 # Hauptbuch — Implementation Plan
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.53
-**Date:** 2026-10-04
+**Status:** Draft v0.54
+**Date:** 2026-10-26
 **Owner:** volkovandr
 **Companion to:** `requirements.md`, `tech-stack.md`, `data-model.md`,
 `ui-transaction-register.md`, `ui-receipt-processing.md`, `import.md`, `reporting.md`,
@@ -28,6 +28,10 @@
 **Changelog** — *scope changes only* (§8a): work moved between stages, a decision overturned, an
 entity added. Routine implementation lives in git; a completed stage's own description records what
 it shipped. "Stage N complete" needs no recap here.
+
+- **v0.54 (2026-10-26):** **PDF (rules) statement profiles** added to the statements backlog entry
+  (§3, slice g): parse rules in place of the AI call for banks with a stable layout
+  (`statements.md` §3.2a, data-model §15).
 - **v0.53 (2026-10-04):** **Bank statement reconciliation grilled, designed, and sequenced** into the
   sub-plan `implementation-plan-statements.md` (slices 0a–f; since folded into §3). New authoritative doc
   **`docs/statements.md`** (the eighth) and **ADR 0003** (postings edited in place; one leg per real
@@ -695,6 +699,9 @@ shipped; everything after it is unbuilt.
     explained covers postings matched here but dated outside the period, postings matched on a
     neighbouring statement, and boundary extras; green per `statements.md` §6.5, on the page and as
     the Match column in the list.
+  - **g — PDF (rules) profiles** (`statements.md` §3.2a). Unbuilt. Issues
+    `.scratch/statements/issues/20`–`22`: the parse rule engine; the schema and the rules profile
+    editor with *Try*; *Parse* on a `pdf_rules` statement.
 - **Receipt follow-ons:** duplicate detection at confirm (merchant+date+total) + link-to-existing
   transaction with the Q-RX-2 push-splits question (receipt doc §6.4) — deferred from stage 9;
   shares the statement matcher above, so lands after it (kept out of the statements work by owner
