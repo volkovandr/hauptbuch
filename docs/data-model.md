@@ -1,8 +1,8 @@
 # Hauptbuch — Core Data Model
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.16
-**Date:** 2026-10-04
+**Status:** Draft v0.17
+**Date:** 2026-10-26
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (v0.8),
 `tech-stack.md` (v0.3), `reporting.md`, `statements.md`
@@ -17,6 +17,8 @@
 > (§15). Budgets and holdings are deliberately **not modeled here yet** — see §12.
 
 **Changelog**
+- **v0.17 (2026-10-26):** §15 gains the **`pdf_rules`** profile format — `rules_*` settings columns
+  and the `statement_profile_rule` child table (`statements.md` §3.2a).
 - **v0.16 (2026-10-04):** New **§15 Bank statements** (statement reconciliation grilling, design in
   `statements.md`; leaves §12). New **§8 invariant 6 — one leg per real own account per
   transaction** and **postings edited in place** (§3.6), so `posting_id` and `reconciliation`
@@ -1348,7 +1350,7 @@ extras and balance checks are computed on every view (`statements.md` §4.5).
 create table statement_profile (
   statement_profile_id  bigint generated always as identity primary key,
   name                  text not null,
-  format                text not null check (format in ('csv','pdf')),
+  format                text not null check (format in ('csv','pdf','pdf_rules')),
   window_days_before    int  not null default 10 check (window_days_before >= 0), -- ledger date may
   window_days_after     int  not null default 3  check (window_days_after >= 0),  -- precede/follow
                                                                                    -- the booking date
@@ -1373,7 +1375,26 @@ create table statement_profile (
   col_description       text,
   col_bank_category     text,
   col_iban              text,          -- the owner's IBAN, for the account proposal
+  -- pdf_rules settings (statements.md §3.2a) — independent of the csv_ columns
+  rules_thousands_separator   text,
+  rules_decimal_separator     text,
+  rules_minus_position        text check (rules_minus_position in ('leading','trailing')),
+  rules_date_format           text,
+  rules_continuation          text check (rules_continuation in ('previous','next','off')),
+  rules_smart_space_width     int,     -- NULL = smart space off
+  rules_period_start_plus_one boolean,
   deleted_at            timestamptz
+);
+
+create table statement_profile_rule (  -- the parse rules of a pdf_rules profile, in order
+  statement_profile_rule_id bigint generated always as identity primary key,
+  statement_profile_id      bigint not null references statement_profile(statement_profile_id),
+  sort_order                int  not null,
+  kind                      text not null check (kind in
+                              ('header','remove_before','remove_from','remove_between','set','booking')),
+  pattern                   text not null,
+  pattern_end               text,     -- remove_between only: B
+  unique (statement_profile_id, sort_order)
 );
 
 create table statement (

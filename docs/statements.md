@@ -1,8 +1,8 @@
 # Hauptbuch — Bank Statement Reconciliation
 
 **Working title:** Hauptbuch (a Microsoft Money replacement)
-**Status:** Draft v0.1
-**Date:** 2026-10-04
+**Status:** Draft v0.2
+**Date:** 2026-10-26
 **Owner:** volkovandr
 **Companion to:** `requirements.md` (§5.8, FR-STMT-01–07; FR-IMP-05),
 `data-model.md` (§3.6 the posting's `reconciliation`, §8 invariants, §15 the statement schema),
@@ -45,8 +45,8 @@ routine, repeated.
 
 ## 2. Four objects
 
-- **Statement profile** — how to read one source: a CSV dialect and column map, or a PDF bank's AI
-  note. Also carries the matching date window (§4.1). Managed from the Statements page.
+- **Statement profile** — how to read one source: a CSV dialect and column map, a PDF bank's AI
+  note, or a PDF bank's parse rules (§3.2a). Also carries the matching date window (§4.1). Managed from the Statements page.
 - **Statement** — one uploaded file for one account: the file on the Pi (ARCH-07), the period, the
   optional opening and closing balances, and for a PDF the text sent and the AI's response.
   Persisted — it is the evidence you come back to.
@@ -107,6 +107,71 @@ in a grid. Re-seed is **refused while any line of the statement is matched** —
 equivalent of receipts refusing a committed receipt.
 
 ARCH-08 holds: the statement is the document being parsed, and nothing from the ledger is sent.
+
+### 3.2a PDF — parse rules, no AI
+
+A 14-page statement from bank B failed to parse every time: the model spent its output budget on
+thinking and never finished the TOON, though the TOON itself was small. Yet the owner could state the
+conversion as a handful of formal rules. Where a bank's layout is stable, a **PDF (rules)** profile
+(`format = pdf_rules`) replaces the AI with **parse rules** run locally — no cost, no tokens, nothing
+leaves the Pi. A PDF (AI) profile stays for banks whose layout is not.
+
+**The flow is §3.2 with the AI call swapped out.** Upload, local text extraction and the account
+proposal (§3.5) are unchanged; the text is **not pre-masked** — nothing is sent, and masking mangles
+lines that carry an IBAN — and stays editable. *Parse* runs the profile's **current** rules over the
+statement's **current** text and writes **TOON into `parse_raw`**, so the decoder, the editable raw
+response, Re-seed and the line grid work exactly as for an AI parse. A rule that mis-reads a line is
+fixed in the profile (or the line in the TOON) and the statement parsed again. *Parse* is refused while
+any line is matched, like Re-seed. A parse that yields no booking fails with that reason.
+Changing a profile never touches existing statements until they are parsed again.
+
+**The rules.** Every rule is a regex matched against **one line at a time** (`find()` semantics —
+anchor with `^`/`$` where needed). Its **named groups** set fields from a fixed vocabulary: the header
+fields `periodStart`, `periodEnd`, `openingBalance`, `closingBalance`, and the line fields
+`bookingDate`, `valueDate`, `amount`, `counterparty`, `description`, `bankCategory`,
+`originalAmount`, `originalCurrency`, `originalRate`. Four kinds, applied in this order:
+
+1. **Header rule** — run over the **full** text, before anything is removed (the balances sit in the
+   parts that are removed). Header fields only; for each field the first matching line wins.
+2. **Remove rule** — cuts whole lines, the matching lines included, in list order: *before A* (from
+   the start to the **first** match of A), *from A* (from the **last** match of A to the end),
+   *between A and B* (every occurrence) — the first page's letterhead, the last page's footer, the
+   page headers and footers in between.
+3. **Set rule** — "from now on": its line fields hold for **every following booking** until the next
+   set line changes them (`Buchungsdatum: 03.08.2026` dates the bookings below it).
+4. **Booking rule** — a matching line **starts a booking**, its groups filling that booking; its own
+   value wins over a set value.
+
+On each line set rules are tried before booking rules, each kind in list order; the first match
+consumes the line. A line no rule consumes is a **continuation line**, and the profile says where it
+goes: to the **previous** booking, to the **next** booking, or **off** (dropped). Continuation lines
+are concatenated onto `description` (after a captured description) with a space — or, with **smart
+space** on, with no space after a line exactly *width* characters long (trailing whitespace removed),
+which is how a description wrapped at the PDF's column width is rejoined.
+
+**Values.** The profile sets the **thousands separator**, the **decimal separator**, the **minus
+position** (leading or trailing; no minus = money in) and one **date format** for every date group.
+The operator's regex captures the amount; no amount pattern is built in. Every date is a full date — a
+year-less date in the text (bank B's `03.08` value date) is simply not captured. An uncaptured
+`valueDate` is the `bookingDate`. A value that will not convert is written to the TOON as captured, so
+the decoder turns the line into a problem the operator sees. The **+1 day to the period start**
+checkbox serves banks that print the previous statement's closing balance and date ("Alter
+Kontostand vom 31.07.") — statements must not overlap, so the period starts the day after.
+
+For bank B, roughly: header rules `Alter Kontostand vom (?<periodStart>\S+) (?<openingBalance>\S+)`
+and `Neuer Kontostand vom (?<periodEnd>\S+) (?<closingBalance>\S+)` with +1 day; remove *before*
+`^Angaben zu den Umsätzen`, *between* `^Folgeseite` and `^Angaben zu den Umsätzen`, *from*
+`^Guthaben sind als Einlagen`; set `^Buchungsdatum: (?<bookingDate>\S+)$`; booking
+`^(?<counterparty>.*) \d\d\.\d\d (?<amount>[\d.]+,\d\d-?)$`; continuation to the previous booking.
+
+**The profile editor** shows the rules beside a **test text area**. *Upload PDF* extracts a file's
+text into the area and discards the file; pasting works too. The text is never stored — it lives in
+the form only. A bad regex or an unknown (or wrong-kind) group name is flagged on the rule at once;
+*Try* shows the TOON the rules produce. Saving is refused while any rule is invalid, a *between* rule
+lacks B, or there is no booking rule.
+
+Rules are rows of a child table, the settings typed `rules_*` columns on the profile — independent of
+the `csv_*` columns even where they mean the same thing (data-model §15).
 
 ### 3.3 The statement line
 
@@ -330,7 +395,8 @@ it, not from the top menu.
 
 - **`statements`** owns profiles, statements, lines, matches, the CSV reader, the PDF text extraction
   and the parser client. It depends on `ledger` (postings, `PayeeService`, `SettingsService`),
-  `accounts` (detection, the post-to set) and `operations` (the dock's commit services). It implements
+  `accounts` (detection, the post-to set) and `operations` (the dock's commit services). The parse
+  rule engine is plain Java in `statements`, unit-tested with crafted text. It implements
   `ledger`'s reconciliation-dropped interface. The statement-mode dock save is a `statements` service
   that calls the `operations` commit path and records the match in **one** database transaction — the
   receipt-confirm precedent; `operations` never depends on `statements`.
@@ -348,6 +414,8 @@ it, not from the top menu.
 - Batch parsing (the Batches API) — the PDF flow is interactive.
 - 1:n / n:1 matches.
 - Scanned PDFs without a text layer.
+- Parse rules: Soll/Haben (S/H) markers, guessing a year for a year-less date, look-back rules (a
+  value date printed inside the description stays description).
 - A stored "done" or pause state — green is computed.
 - **Receipt duplicate detection / link-to-existing** at receipt confirm (Q-RX-2) — deferred until this
   matcher existed; it is now unblocked but stays a separate §3 follow-on with its own open question.
@@ -367,3 +435,5 @@ it, not from the top menu.
 ## Changelog
 
 - **v0.1 (2026-10-04):** Initial design from the grilling session with the owner.
+- **v0.2 (2026-10-26):** PDF (rules) profiles — parse rules in place of the AI for stable layouts
+  (§3.2a); grilled with the owner 2026-10-26.
