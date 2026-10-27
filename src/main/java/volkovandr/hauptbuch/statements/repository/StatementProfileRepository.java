@@ -22,7 +22,9 @@ public class StatementProfileRepository {
              csv_delimiter, csv_quote, csv_encoding, csv_skip_rows, csv_has_header,
              csv_decimal_separator, csv_date_format, csv_sign_mode, col_booking_date,
              col_value_date, col_amount, col_debit, col_credit, col_currency, col_counterparty,
-             col_description, col_bank_category, col_iban, deleted_at
+             col_description, col_bank_category, col_iban, rules_thousands_separator,
+             rules_decimal_separator, rules_minus_position, rules_date_format, rules_continuation,
+             rules_smart_space_width, rules_period_start_plus_one, deleted_at
       from statement_profile
       """;
 
@@ -42,13 +44,17 @@ public class StatementProfileRepository {
                    csv_quote, csv_encoding, csv_skip_rows, csv_has_header, csv_decimal_separator,
                    csv_date_format, csv_sign_mode, col_booking_date, col_value_date, col_amount,
                    col_debit, col_credit, col_currency, col_counterparty, col_description,
-                   col_bank_category, col_iban)
+                   col_bank_category, col_iban, rules_thousands_separator, rules_decimal_separator,
+                   rules_minus_position, rules_date_format, rules_continuation,
+                   rules_smart_space_width, rules_period_start_plus_one)
                 values
                   (:name, :format, :windowDaysBefore, :windowDaysAfter, :aiNote, :csvDelimiter,
                    :csvQuote, :csvEncoding, :csvSkipRows, :csvHasHeader, :csvDecimalSeparator,
                    :csvDateFormat, :csvSignMode, :colBookingDate, :colValueDate, :colAmount,
                    :colDebit, :colCredit, :colCurrency, :colCounterparty, :colDescription,
-                   :colBankCategory, :colIban)
+                   :colBankCategory, :colIban, :rulesThousandsSeparator, :rulesDecimalSeparator,
+                   :rulesMinusPosition, :rulesDateFormat, :rulesContinuation,
+                   :rulesSmartSpaceWidth, :rulesPeriodStartPlusOne)
                 returning statement_profile_id
                 """),
             profile)
@@ -76,7 +82,12 @@ public class StatementProfileRepository {
                     col_amount = :colAmount, col_debit = :colDebit, col_credit = :colCredit,
                     col_currency = :colCurrency, col_counterparty = :colCounterparty,
                     col_description = :colDescription, col_bank_category = :colBankCategory,
-                    col_iban = :colIban
+                    col_iban = :colIban, rules_thousands_separator = :rulesThousandsSeparator,
+                    rules_decimal_separator = :rulesDecimalSeparator,
+                    rules_minus_position = :rulesMinusPosition,
+                    rules_date_format = :rulesDateFormat, rules_continuation = :rulesContinuation,
+                    rules_smart_space_width = :rulesSmartSpaceWidth,
+                    rules_period_start_plus_one = :rulesPeriodStartPlusOne
                 where statement_profile_id = :statementProfileId and deleted_at is null
                 """),
             profile)
@@ -140,6 +151,13 @@ public class StatementProfileRepository {
         .param("colCounterparty", profile.colCounterparty())
         .param("colDescription", profile.colDescription())
         .param("colBankCategory", profile.colBankCategory())
-        .param("colIban", profile.colIban());
+        .param("colIban", profile.colIban())
+        .param("rulesThousandsSeparator", profile.rulesThousandsSeparator())
+        .param("rulesDecimalSeparator", profile.rulesDecimalSeparator())
+        .param("rulesMinusPosition", profile.rulesMinusPosition())
+        .param("rulesDateFormat", profile.rulesDateFormat())
+        .param("rulesContinuation", profile.rulesContinuation())
+        .param("rulesSmartSpaceWidth", profile.rulesSmartSpaceWidth())
+        .param("rulesPeriodStartPlusOne", profile.rulesPeriodStartPlusOne());
   }
 }

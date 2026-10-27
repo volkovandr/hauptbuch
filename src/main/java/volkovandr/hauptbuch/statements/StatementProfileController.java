@@ -1,7 +1,9 @@
 package volkovandr.hauptbuch.statements;
 
+import java.util.List;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.util.MultiValueMap;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -15,8 +17,10 @@ import volkovandr.hauptbuch.web.NavItem;
 /**
  * The statement profile screens (statements sub-plan slice b1): the list, the editor and its live
  * preview. The preview parses a sample file the operator picks with the settings currently in the
- * form, so a wrong date format is seen before the profile is saved (statements.md §3.1). It is
- * reached from the Statements page, not from the top menu.
+ * form, so a wrong date format is seen before the profile is saved (statements.md §3.1). A PDF
+ * (rules) profile's editor shows its parse rules instead, worked by {@link
+ * ParseRuleEditorController} (§3.2a). It is reached from the Statements page, not from the top
+ * menu.
  */
 @Controller
 class StatementProfileController {
@@ -28,15 +32,20 @@ class StatementProfileController {
   private static final String PROFILE = "profile";
   private static final String ERROR = "error";
   private static final String BAD_NUMBERS =
-      "Check the numbers: the window and the skipped rows are whole numbers.";
+      "Check the numbers: the window, skipped rows and smart space width are whole numbers.";
   private static final int PREVIEW_ROWS = 8;
 
   private final StatementProfileService profileService;
   private final StatementCsvParser parser;
+  private final ParseRuleEngine ruleEngine;
 
-  StatementProfileController(StatementProfileService profileService, StatementCsvParser parser) {
+  StatementProfileController(
+      StatementProfileService profileService,
+      StatementCsvParser parser,
+      ParseRuleEngine ruleEngine) {
     this.profileService = profileService;
     this.parser = parser;
+    this.ruleEngine = ruleEngine;
   }
 
   /** The live profiles with a link to each and to a new one. */
@@ -59,10 +68,22 @@ class StatementProfileController {
     return editor(StatementProfile.blankPdf(), model);
   }
 
+  /** The editor for a new PDF (rules) profile, starting with one empty booking rule. */
+  @GetMapping(BASE_PATH + "/new-pdf-rules")
+  String createPdfRules(Model model) {
+    return editor(
+        StatementProfile.blankPdfRules(),
+        List.of(new ParseRule(ParseRule.BOOKING, "", null)),
+        "",
+        model);
+  }
+
   /** The editor for an existing profile. */
   @GetMapping(BASE_PATH + "/{id}")
   String edit(@PathVariable long id, Model model) {
-    return editor(profileService.get(id), model);
+    StatementProfile profile = profileService.get(id);
+    List<ParseRule> rules = profile.usesParseRules() ? profileService.rules(id) : List.of();
+    return editor(profile, rules, "", model);
   }
 
   /** Save the profile, then back to the profile list; a refusal re-shows the editor. */
@@ -70,17 +91,20 @@ class StatementProfileController {
   String save(
       @ModelAttribute(PROFILE) StatementProfile profile,
       BindingResult binding,
+      @RequestParam MultiValueMap<String, String> params,
+      @RequestParam(name = "testText", defaultValue = "") String testText,
       Model model,
       RedirectAttributes redirectAttributes) {
+    List<ParseRule> rules = ParseRuleForm.rulesOf(params);
     if (binding.hasErrors()) {
       model.addAttribute(ERROR, BAD_NUMBERS);
-      return editor(profile, model);
+      return editor(profile, rules, testText, model);
     }
     try {
-      profileService.save(profile);
+      profileService.save(profile, rules);
     } catch (StatementFormatException e) {
       model.addAttribute(ERROR, e.getMessage());
-      return editor(profile, model);
+      return editor(profile, rules, testText, model);
     }
     redirectAttributes.addFlashAttribute(
         "notice", "Profile '" + profile.name().strip() + "' saved.");
@@ -124,8 +148,18 @@ class StatementProfileController {
   }
 
   private String editor(StatementProfile profile, Model model) {
+    return editor(profile, List.of(), "", model);
+  }
+
+  /** The editor; a PDF (rules) profile also gets its rules, their problems and the test text. */
+  private String editor(
+      StatementProfile profile, List<ParseRule> rules, String testText, Model model) {
     model.addAttribute("nav", NavItem.sectionsFor(STATEMENTS_PATH));
     model.addAttribute(PROFILE, profile);
+    if (profile.usesParseRules()) {
+      ParseRuleForm.addTo(model, rules, profile.rulesSettings(), ruleEngine);
+      model.addAttribute("testText", testText);
+    }
     return VIEW;
   }
 }

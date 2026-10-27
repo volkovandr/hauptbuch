@@ -57,6 +57,13 @@ final class ParseRuleValidation {
       int position = i + 1;
       problem(rules.get(i)).ifPresent(p -> problems.add("Rule " + position + ": " + p));
     }
+    problems.addAll(profileProblems(rules, settings));
+    return problems;
+  }
+
+  /** The problems of the profile as a whole — no booking rule, the settings — not of one rule. */
+  static List<String> profileProblems(List<ParseRule> rules, ParseRuleSettings settings) {
+    List<String> problems = new ArrayList<>();
     if (rules.stream().noneMatch(rule -> ParseRule.BOOKING.equals(rule.kind()))) {
       problems.add("Add at least one booking rule.");
     }

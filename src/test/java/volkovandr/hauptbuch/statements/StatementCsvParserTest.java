@@ -49,6 +49,13 @@ class StatementCsvParserTest {
         "Text",
         "Category",
         "IBAN",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         null);
   }
 
@@ -108,6 +115,13 @@ class StatementCsvParserTest {
             "Text",
             null,
             "IBAN",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             null);
 
     StatementLine line = parser.parse(profile, bytes(csv), "EUR", 10).lines().get(0);
@@ -146,6 +160,13 @@ class StatementCsvParserTest {
             "3",
             null,
             null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             null);
 
     CsvStatement result = parser.parse(profile, bytes(csv), "EUR", 10);
@@ -180,6 +201,13 @@ class StatementCsvParserTest {
             null,
             "Debit",
             "Credit",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             null,
             null,
             null,
@@ -270,6 +298,13 @@ class StatementCsvParserTest {
             null,
             null,
             null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             null);
 
     assertThatThrownBy(() -> parser.parse(profile, bytes(HEADER + "x"), "EUR", 10))
@@ -334,6 +369,13 @@ class StatementCsvParserTest {
         p.colDescription(),
         p.colBankCategory(),
         p.colIban(),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         null);
   }
 
@@ -364,6 +406,13 @@ class StatementCsvParserTest {
         p.colDescription(),
         p.colBankCategory(),
         p.colIban(),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         null);
   }
 
@@ -394,6 +443,13 @@ class StatementCsvParserTest {
         p.colDescription(),
         p.colBankCategory(),
         p.colIban(),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         null);
   }
 
@@ -424,6 +480,13 @@ class StatementCsvParserTest {
         p.colDescription(),
         p.colBankCategory(),
         p.colIban(),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         null);
   }
 }

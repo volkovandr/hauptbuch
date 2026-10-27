@@ -26,3 +26,25 @@ Blocked by: 20
 A rules profile can be created, edited and saved; invalid rules show their error on the rule and
 block Save; Try shows the engine's TOON for uploaded or pasted text; nothing of the test text is
 persisted; MockMvc acceptance covers save, validation and Try; `./gradlew check` is green.
+
+## Comments
+2026-10-27 — implemented on `claude/determined-keller-pl1848`, awaiting the owner's confirmation
+together with issue 20. V40 (format `pdf_rules`, the `rules_*` columns, `statement_profile_rule`);
+`StatementProfileRuleRepository`; `StatementProfileService.save(profile, rules)` validates a rules
+profile through `ParseRuleEngine` and writes it and its rules in one transaction;
+`ParseRuleEditorController` (live check, row buttons, PDF text load, Try) and `ParseRuleForm`.
+Choices made inside the agreed design:
+- `isPdf()` is true for both PDF formats (the file path); `usesParseRules()` picks the parser. Until
+  issue 22 a statement uploaded through a rules profile still takes the AI parse path.
+- The rules are read from the raw request (`ruleKind` / `rulePattern` / `rulePatternEnd`), never as a
+  bound list — Spring would split a lone regex at its commas.
+- A pattern is saved exactly as typed (a space in a regex matters); B is kept only on a *between*
+  rule.
+- The live check posts the form without the test text (`hx-params`), and the rules form is
+  `novalidate`: htmx otherwise runs the browser's `required` check on Name and silently drops every
+  check until a name is typed. Save is still validated on the server. (The CSV profile form has the
+  same latent behaviour — its live preview waits for a name; left as is.)
+- *Load the test text from a PDF* is its own small form below the editor — it cannot nest inside
+  the profile form, and outside it the PDF is never re-sent with every check.
+- Verified in headless Chromium against the running app: live check, add / move, Try, Save, reopen,
+  and loading a real PDF's text.

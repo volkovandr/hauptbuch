@@ -77,6 +77,13 @@ class StatementParseRepositoryIntegrationTest {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null));
     statementId = statements.insertPdf(profileId, accountId, "may.pdf", "2026/05/x.pdf", "text");
   }

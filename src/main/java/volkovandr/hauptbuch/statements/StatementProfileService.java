@@ -5,12 +5,16 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.statements.repository.StatementProfileRepository;
+import volkovandr.hauptbuch.statements.repository.StatementProfileRuleRepository;
 
 /**
- * Statement profiles (statements.md §3.1): validation on top of the plain repository. A profile is
- * reference data, so this is the one place the generic create/update shape is right (CLAUDE.md
- * §1.7); what makes a profile <em>valid</em> lives in {@link StatementCsvParser#validate}.
+ * Statement profiles (statements.md §3.1, §3.2a): validation on top of the plain repositories. A
+ * profile is reference data, so this is the one place the generic create/update shape is right
+ * (CLAUDE.md §1.7); what makes a profile <em>valid</em> lives in {@link
+ * StatementCsvParser#validate} for a CSV profile and in {@link ParseRuleEngine#problems} for a PDF
+ * (rules) profile, whose rules are saved with it.
  */
 @Service
 public class StatementProfileService {
@@ -18,11 +22,19 @@ public class StatementProfileService {
   private static final Logger LOG = LoggerFactory.getLogger(StatementProfileService.class);
 
   private final StatementProfileRepository repository;
+  private final StatementProfileRuleRepository ruleRepository;
   private final StatementCsvParser parser;
+  private final ParseRuleEngine ruleEngine;
 
-  StatementProfileService(StatementProfileRepository repository, StatementCsvParser parser) {
+  StatementProfileService(
+      StatementProfileRepository repository,
+      StatementProfileRuleRepository ruleRepository,
+      StatementCsvParser parser,
+      ParseRuleEngine ruleEngine) {
     this.repository = repository;
+    this.ruleRepository = ruleRepository;
     this.parser = parser;
+    this.ruleEngine = ruleEngine;
   }
 
   /** The live profiles, by name. */
@@ -55,6 +67,11 @@ public class StatementProfileService {
             () -> new StatementFormatException("That statement profile no longer exists."));
   }
 
+  /** A PDF (rules) profile's parse rules, in order; none for any other profile. */
+  public List<ParseRule> rules(long statementProfileId) {
+    return ruleRepository.findByProfile(statementProfileId);
+  }
+
   /** The name of a profile, live or soft-deleted — a statement keeps showing where it came from. */
   public String nameOf(long statementProfileId) {
     return repository
@@ -64,22 +81,29 @@ public class StatementProfileService {
   }
 
   /**
-   * Validate and save {@code submitted}: insert when it has no id, otherwise overwrite.
+   * Validate and save {@code submitted}: insert when it has no id, otherwise overwrite. A PDF
+   * (rules) profile's rules replace the ones it had; any other profile ignores {@code rules}.
    *
    * @return the profile's id
-   * @throws StatementFormatException naming the first setting that is wrong
+   * @throws StatementFormatException naming what is wrong
    */
-  public long save(StatementProfile submitted) {
+  @Transactional
+  public long save(StatementProfile submitted, List<ParseRule> rules) {
     StatementProfile profile = normalised(submitted);
-    validate(profile);
+    List<ParseRule> normalisedRules = normalisedRules(rules);
+    validate(profile, normalisedRules);
+    long id;
     if (profile.statementProfileId() == null) {
-      long id = repository.insert(profile);
+      id = repository.insert(profile);
       LOG.info("Created statement profile {}", id);
-      return id;
+    } else {
+      id = profile.statementProfileId();
+      if (repository.update(id, profile) == 0) {
+        throw new StatementFormatException("That statement profile no longer exists.");
+      }
     }
-    long id = profile.statementProfileId();
-    if (repository.update(id, profile) == 0) {
-      throw new StatementFormatException("That statement profile no longer exists.");
+    if (profile.usesParseRules()) {
+      ruleRepository.replace(id, normalisedRules);
     }
     return id;
   }
@@ -91,21 +115,50 @@ public class StatementProfileService {
     }
   }
 
-  /** Validate {@code submitted} as {@link #save} would, without writing. */
-  void validate(StatementProfile submitted) {
+  /** Validate {@code submitted} and its {@code rules} as {@link #save} would, without writing. */
+  void validate(StatementProfile submitted, List<ParseRule> rules) {
     if (submitted.name() == null || submitted.name().isBlank()) {
       throw new StatementFormatException("Give the profile a name.");
     }
     if (submitted.windowDaysBefore() < 0 || submitted.windowDaysAfter() < 0) {
       throw new StatementFormatException("The date window cannot be negative.");
     }
-    if (!submitted.isPdf()) {
+    if (submitted.usesParseRules()) {
+      validateRules(submitted, rules);
+    } else if (!submitted.isPdf()) {
       parser.validate(submitted);
     }
   }
 
+  private void validateRules(StatementProfile submitted, List<ParseRule> rules) {
+    List<String> problems = ruleEngine.problems(rules, submitted.rulesSettings());
+    if (!problems.isEmpty()) {
+      throw new StatementFormatException(String.join(" ", problems));
+    }
+  }
+
+  /**
+   * The rules as the form sent them, tidied: a pattern is kept exactly (a space in a regex
+   * matters), and an end pattern is kept only on a {@code between} rule.
+   */
+  static List<ParseRule> normalisedRules(List<ParseRule> rules) {
+    return rules.stream()
+        .map(
+            rule ->
+                new ParseRule(
+                    rule.kind(),
+                    rule.pattern() == null ? "" : rule.pattern(),
+                    ParseRule.REMOVE_BETWEEN.equals(rule.kind())
+                        ? blankToNull(rule.patternEnd())
+                        : null))
+        .toList();
+  }
+
   /** {@code submitted} with text trimmed, blank optional columns made null, and defaults filled. */
   static StatementProfile normalised(StatementProfile s) {
+    if (s.usesParseRules()) {
+      return normalisedRulesProfile(s);
+    }
     if (s.isPdf()) {
       return new StatementProfile(
           s.statementProfileId(),
@@ -114,6 +167,13 @@ public class StatementProfileService {
           s.windowDaysBefore(),
           s.windowDaysAfter(),
           blankToNull(s.aiNote()),
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
           null,
           null,
           null,
@@ -159,6 +219,50 @@ public class StatementProfileService {
         blankToNull(s.colDescription()),
         blankToNull(s.colBankCategory()),
         blankToNull(s.colIban()),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  /** A PDF (rules) profile keeps only its name, window and rules settings. */
+  private static StatementProfile normalisedRulesProfile(StatementProfile s) {
+    return new StatementProfile(
+        s.statementProfileId(),
+        s.name() == null ? "" : s.name().strip(),
+        StatementProfile.FORMAT_PDF_RULES,
+        s.windowDaysBefore(),
+        s.windowDaysAfter(),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        Objects.requireNonNullElse(s.rulesThousandsSeparator(), ""),
+        s.rulesDecimalSeparator(),
+        s.rulesMinusPosition(),
+        s.rulesDateFormat() == null ? null : s.rulesDateFormat().strip(),
+        s.rulesContinuation(),
+        s.rulesSmartSpaceWidth(),
+        Boolean.TRUE.equals(s.rulesPeriodStartPlusOne()),
         null);
   }
 

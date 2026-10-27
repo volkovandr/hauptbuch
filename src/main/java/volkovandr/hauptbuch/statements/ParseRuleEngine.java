@@ -42,6 +42,11 @@ class ParseRuleEngine {
     return ParseRuleValidation.problems(rules, settings);
   }
 
+  /** The problems of the profile as a whole, not of one rule — the editor's live summary. */
+  List<String> profileProblems(List<ParseRule> rules, ParseRuleSettings settings) {
+    return ParseRuleValidation.profileProblems(rules, settings);
+  }
+
   /**
    * Run the rules over the text.
    *
