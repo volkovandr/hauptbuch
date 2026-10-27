@@ -38,3 +38,18 @@ Unit tests (crafted text modelled on the bank B sample — placeholder payees `S
 bank details) cover each rule kind, the three continuation modes, smart space, both minus
 positions, the +1 day, set/booking precedence, an unconvertible value, and the validation errors;
 the produced TOON round-trips through `ToonStatementDecoder`; `./gradlew check` is green.
+
+## Comments
+2026-10-27 — implemented on `claude/determined-keller-pl1848`, awaiting the owner's confirmation.
+`ParseRuleEngine` (`toToon`, `problem`, `problems`) with `ParseRule` / `ParseRuleSettings` (the
+public records issue 21 maps to the schema), `ParseRuleRemoval`, `ParseRuleBooking`,
+`ParseRuleValues` (digits and dates read through `TypedValues`, `Locale.ROOT` like the CSV dialect)
+and `ParseRuleValidation`. Choices made inside the agreed design:
+- Amounts are written to the TOON as quoted text (`"-6.80"`), not bare numbers: jtoon decodes a
+  bare number to a `double`, and money never passes through one.
+- Absent fields are written as `null` (jtoon has no bare empty cell; `""` is no clearer).
+- Separators are limited: decimal `,` or `.`; thousands `.` `,` `'` space or none — a `-` or digit
+  separator would silently misread amounts.
+- Blank lines are skipped before any rule is tried, so a catch-all booking pattern cannot turn them
+  into empty bookings.
+- An impossible date (`31.02.`) is clamped to the month's end, exactly as the CSV path does.
