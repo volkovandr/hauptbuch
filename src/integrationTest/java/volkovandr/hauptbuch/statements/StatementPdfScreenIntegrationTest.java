@@ -109,7 +109,8 @@ class StatementPdfScreenIntegrationTest {
         .andExpect(content().string(not(containsString("Booking date column"))));
     mockMvc
         .perform(get("/statements/profiles"))
-        .andExpect(content().string(containsString("New PDF profile")));
+        .andExpect(content().string(containsString("New PDF (AI) profile")))
+        .andExpect(content().string(containsString("New PDF (rules) profile")));
   }
 
   @Test

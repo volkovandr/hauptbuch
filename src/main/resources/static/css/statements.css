@@ -243,3 +243,34 @@ table.statements a.btn {
   margin-left: 0.4rem;
   font-size: 0.85em;
 }
+
+/* The parse rules editor of a PDF (rules) profile (statements.md §3.2a). */
+.parse-rules {
+  margin-top: 1rem;
+}
+
+.parse-rules__table {
+  width: 100%;
+}
+
+/* The kind is a short choice; the patterns get the width. */
+.parse-rules__table td:first-child {
+  width: 13rem;
+}
+
+.parse-rules__pattern {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+}
+
+.parse-rules__buttons {
+  white-space: nowrap;
+}
+
+.parse-rules__load {
+  margin-top: 1rem;
+}
+
+.parse-rules__toon {
+  overflow-x: auto;
+}

@@ -10,8 +10,9 @@ import java.time.OffsetDateTime;
  *
  * @param statementProfileId the id, or null before the first save
  * @param name the operator's name for the source
- * @param format {@code csv}, or {@code pdf} (a PDF profile holds only the name, the window and the
- *     AI note)
+ * @param format {@code csv}, {@code pdf} (read by the AI: the name, the window and the AI note) or
+ *     {@code pdf_rules} (read by parse rules, statements.md §3.2a: the name, the window, the {@code
+ *     rules*} settings and the rules, which are stored apart)
  * @param windowDaysBefore how many days before the booking date a ledger posting may be dated
  * @param windowDaysAfter how many days after the booking date a ledger posting may be dated
  * @param aiNote PDF only: per-bank guidance for the parser
@@ -33,6 +34,14 @@ import java.time.OffsetDateTime;
  * @param colDescription the description column, optional
  * @param colBankCategory the bank's own category column, optional
  * @param colIban the owner's IBAN column, optional, for the account proposal
+ * @param rulesThousandsSeparator PDF (rules): stripped from every amount; empty for none
+ * @param rulesDecimalSeparator PDF (rules): {@code ,} or {@code .}
+ * @param rulesMinusPosition PDF (rules): {@code leading} or {@code trailing}
+ * @param rulesDateFormat PDF (rules): a {@code java.time} pattern for every date field
+ * @param rulesContinuation PDF (rules): {@code previous}, {@code next} or {@code off}
+ * @param rulesSmartSpaceWidth PDF (rules): the description column width, or null for smart space
+ *     off
+ * @param rulesPeriodStartPlusOne PDF (rules): whether the period starts the day after the date read
  * @param deletedAt when the profile was soft-deleted, or null
  */
 public record StatementProfile(
@@ -60,13 +69,23 @@ public record StatementProfile(
     String colDescription,
     String colBankCategory,
     String colIban,
+    String rulesThousandsSeparator,
+    String rulesDecimalSeparator,
+    String rulesMinusPosition,
+    String rulesDateFormat,
+    String rulesContinuation,
+    Integer rulesSmartSpaceWidth,
+    Boolean rulesPeriodStartPlusOne,
     OffsetDateTime deletedAt) {
 
   /** The {@code format} of a CSV profile. */
   public static final String FORMAT_CSV = "csv";
 
-  /** The {@code format} of a PDF profile. */
+  /** The {@code format} of a PDF profile the AI reads. */
   public static final String FORMAT_PDF = "pdf";
+
+  /** The {@code format} of a PDF profile its parse rules read (statements.md §3.2a). */
+  public static final String FORMAT_PDF_RULES = "pdf_rules";
 
   /** The {@code csvSignMode} with one signed amount column. */
   public static final String SIGN_SIGNED = "signed";
@@ -74,9 +93,63 @@ public record StatementProfile(
   /** The {@code csvSignMode} with separate debit and credit columns. */
   public static final String SIGN_DEBIT_CREDIT = "debit_credit";
 
-  /** Whether this profile reads a PDF, which the AI parses, rather than a CSV. */
+  /** Whether this profile reads a PDF — by the AI or by parse rules — rather than a CSV. */
   public boolean isPdf() {
-    return FORMAT_PDF.equals(format);
+    return FORMAT_PDF.equals(format) || FORMAT_PDF_RULES.equals(format);
+  }
+
+  /** Whether this profile's PDFs are read by its parse rules instead of the AI. */
+  public boolean usesParseRules() {
+    return FORMAT_PDF_RULES.equals(format);
+  }
+
+  /** The settings the parse rule engine reads values with; meaningful for a PDF (rules) profile. */
+  public ParseRuleSettings rulesSettings() {
+    return new ParseRuleSettings(
+        rulesThousandsSeparator,
+        rulesDecimalSeparator,
+        rulesMinusPosition,
+        rulesDateFormat,
+        rulesContinuation,
+        rulesSmartSpaceWidth,
+        Boolean.TRUE.equals(rulesPeriodStartPlusOne));
+  }
+
+  /** A new PDF (rules) profile with the defaults the form starts from: German statement style. */
+  public static StatementProfile blankPdfRules() {
+    return new StatementProfile(
+        null,
+        "",
+        FORMAT_PDF_RULES,
+        10,
+        3,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        ".",
+        ",",
+        ParseRuleSettings.MINUS_TRAILING,
+        "dd.MM.yyyy",
+        ParseRuleSettings.CONTINUATION_PREVIOUS,
+        null,
+        false,
+        null);
   }
 
   /** A new PDF profile with the defaults the form starts from. */
@@ -87,6 +160,13 @@ public record StatementProfile(
         FORMAT_PDF,
         10,
         3,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         null,
         null,
         null,
@@ -129,6 +209,13 @@ public record StatementProfile(
         "",
         null,
         "",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         null,
         null,
         null,

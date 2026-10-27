@@ -4,7 +4,10 @@
   column map and the matching window, with a live preview. Picking a sample file shows its first
   rows parsed with the settings as they stand in the form, refreshed as any setting changes, so a
   wrong date format is seen before the profile is saved (statements.md §3.1). The preview is plain
-  htmx; the sample stays in the file input and is never stored. No bespoke JS.
+  htmx; the sample stays in the file input and is never stored. A PDF (rules) profile shows its
+  value settings and parse rules instead (§3.2a): each rule is checked as it is typed (problems
+  swapped in out of band), rows are added, removed and moved through the server, and Try shows the
+  TOON the rules make of the test text — loaded from a PDF or pasted, never stored. No bespoke JS.
 -->
 <html
   lang="en"
@@ -20,9 +23,12 @@
         th:action="@{/statements/profiles/save}"
         enctype="multipart/form-data"
         id="profile-form"
-        th:attr="hx-post=${profile.isPdf()} ? null : '/statements/profiles/preview'"
-        hx-target="#preview"
-        hx-trigger="change, keyup changed delay:500ms"
+        th:novalidate="${profile.usesParseRules()}"
+        th:hx-post="${profile.usesParseRules()} ? '/statements/profiles/rules/check' : (${profile.isPdf()} ? null : '/statements/profiles/preview')"
+        th:hx-target="${profile.usesParseRules()} ? 'this' : '#preview'"
+        th:hx-swap="${profile.usesParseRules()} ? 'none' : null"
+        th:hx-params="${profile.usesParseRules()} ? 'not testText' : null"
+        hx-trigger="change[target.id!='testText'], keyup[target.id!='testText'] changed delay:500ms"
         hx-encoding="multipart/form-data"
       >
         <input type="hidden" name="statementProfileId" th:value="${profile.statementProfileId()}" />
@@ -133,7 +139,7 @@
             <input class="input" id="windowDaysAfter" name="windowDaysAfter" type="number" min="0" th:value="${profile.windowDaysAfter()}" />
           </div>
 
-          <div class="field field--wide" th:if="${profile.isPdf()}">
+          <div class="field field--wide" th:if="${profile.isPdf() and !profile.usesParseRules()}">
             <label class="field__label" for="aiNote">
               AI note<span
                 th:replace="~{fragments/help-marker :: marker('Guidance for the parser about this bank, appended to the built-in instructions, for example: the Description column carries the original currency and rate.')}"
@@ -141,7 +147,131 @@
             </label>
             <textarea class="input" id="aiNote" name="aiNote" rows="3" th:text="${profile.aiNote()}"></textarea>
           </div>
+
+          <th:block th:if="${profile.usesParseRules()}">
+          <div class="field">
+            <label class="field__label" for="rulesThousandsSeparator">Thousands separator</label>
+            <select class="input" id="rulesThousandsSeparator" name="rulesThousandsSeparator">
+              <option value="." th:selected="${profile.rulesThousandsSeparator() == '.'}">. (point)</option>
+              <option value="," th:selected="${profile.rulesThousandsSeparator() == ','}">, (comma)</option>
+              <option value="'" th:selected="${profile.rulesThousandsSeparator() == ''''}">' (apostrophe)</option>
+              <option value=" " th:selected="${profile.rulesThousandsSeparator() == ' '}">space</option>
+              <option value="" th:selected="${profile.rulesThousandsSeparator() == ''}">none</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field__label" for="rulesDecimalSeparator">Decimal separator</label>
+            <select class="input" id="rulesDecimalSeparator" name="rulesDecimalSeparator">
+              <option value="," th:selected="${profile.rulesDecimalSeparator() == ','}">, (comma)</option>
+              <option value="." th:selected="${profile.rulesDecimalSeparator() == '.'}">. (point)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field__label" for="rulesMinusPosition">Minus sign</label>
+            <select class="input" id="rulesMinusPosition" name="rulesMinusPosition">
+              <option value="trailing" th:selected="${profile.rulesMinusPosition() == 'trailing'}">After the amount (6,80-)</option>
+              <option value="leading" th:selected="${profile.rulesMinusPosition() == 'leading'}">Before the amount (-6,80)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field__label" for="rulesDateFormat">Date format</label>
+            <input class="input" id="rulesDateFormat" name="rulesDateFormat" th:value="${profile.rulesDateFormat()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="rulesContinuation">
+              Continuation lines<span
+                th:replace="~{fragments/help-marker :: marker('A line no rule consumes is added to the description of the booking above it or below it, or dropped.')}"
+              ></span>
+            </label>
+            <select class="input" id="rulesContinuation" name="rulesContinuation">
+              <option value="previous" th:selected="${profile.rulesContinuation() == 'previous'}">Booking above</option>
+              <option value="next" th:selected="${profile.rulesContinuation() == 'next'}">Booking below</option>
+              <option value="off" th:selected="${profile.rulesContinuation() == 'off'}">Dropped</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field__label" for="rulesSmartSpaceWidth">
+              Smart space width<span
+                th:replace="~{fragments/help-marker :: marker('The width of the PDF description column. A continuation line exactly this long was wrapped mid-word, so it joins the next line with no space. Empty: always a space.')}"
+              ></span>
+            </label>
+            <input class="input" id="rulesSmartSpaceWidth" name="rulesSmartSpaceWidth" type="number" min="1" th:value="${profile.rulesSmartSpaceWidth()}" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="rulesPeriodStartPlusOne">
+              +1 day to the period start<span
+                th:replace="~{fragments/help-marker :: marker('Statements must not overlap. Tick this when your bank prints the closing balance and date of the previous statement, so the period starts the day after.')}"
+              ></span>
+            </label>
+            <input id="rulesPeriodStartPlusOne" name="rulesPeriodStartPlusOne" type="checkbox" value="true" th:checked="${profile.rulesPeriodStartPlusOne()}" />
+          </div>
+          </th:block>
         </div>
+
+        <th:block th:if="${profile.usesParseRules()}">
+        <div id="rules" th:fragment="rules" class="parse-rules">
+          <p class="eyebrow">
+            Parse rules<span
+              th:replace="~{fragments/help-marker :: marker('Each rule is a regex matched against one line of the text. Named groups set fields: periodStart, periodEnd, openingBalance, closingBalance on a header rule; bookingDate, valueDate, amount, counterparty, description, bankCategory, originalAmount, originalCurrency, originalRate on a set or booking rule. Header rules read the whole text first, remove rules then cut lines, and each remaining line is tried against the set rules, then the booking rules.')}"
+            ></span>
+          </p>
+          <table class="statements parse-rules__table">
+            <thead>
+              <tr>
+                <th>Kind</th>
+                <th>Pattern (A)</th>
+                <th>End (B, between only)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr th:each="rule, row : ${rules}">
+                <td>
+                  <select class="input" name="ruleKind" aria-label="Rule kind">
+                    <option value="header" th:selected="${rule.kind() == 'header'}">Header</option>
+                    <option value="remove_before" th:selected="${rule.kind() == 'remove_before'}">Remove before A</option>
+                    <option value="remove_from" th:selected="${rule.kind() == 'remove_from'}">Remove from A</option>
+                    <option value="remove_between" th:selected="${rule.kind() == 'remove_between'}">Remove between A and B</option>
+                    <option value="set" th:selected="${rule.kind() == 'set'}">Set (from now on)</option>
+                    <option value="booking" th:selected="${rule.kind() == 'booking'}">Booking</option>
+                  </select>
+                </td>
+                <td>
+                  <input class="input parse-rules__pattern" name="rulePattern" spellcheck="false" aria-label="Pattern" th:value="${rule.pattern()}" />
+                  <p class="statements__error" th:id="'rule-problem-' + ${row.index}" th:text="${ruleProblems[row.index]}"></p>
+                </td>
+                <td>
+                  <input class="input parse-rules__pattern" name="rulePatternEnd" spellcheck="false" aria-label="End pattern" th:value="${rule.patternEnd()}" />
+                </td>
+                <td class="parse-rules__buttons">
+                  <button type="button" class="btn btn--ghost" title="Move up" name="op" th:value="'up-' + ${row.index}" hx-post="/statements/profiles/rules/edit" hx-target="#rules" hx-swap="outerHTML">↑</button>
+                  <button type="button" class="btn btn--ghost" title="Move down" name="op" th:value="'down-' + ${row.index}" hx-post="/statements/profiles/rules/edit" hx-target="#rules" hx-swap="outerHTML">↓</button>
+                  <button type="button" class="btn btn--ghost" title="Remove" name="op" th:value="'remove-' + ${row.index}" hx-post="/statements/profiles/rules/edit" hx-target="#rules" hx-swap="outerHTML">✕</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="actions">
+            <button type="button" class="btn btn--ghost" name="op" value="add" hx-post="/statements/profiles/rules/edit" hx-target="#rules" hx-swap="outerHTML">＋ Add rule</button>
+          </p>
+          <div id="rules-problems" th:fragment="profile-problems" th:attr="hx-swap-oob=${oob} ? 'true' : null">
+            <p class="statements__error" th:each="problem : ${profileProblems}" th:text="${problem}">Add at least one booking rule.</p>
+          </div>
+        </div>
+
+        <div class="field field--wide">
+          <label class="field__label" for="testText">
+            Test text<span
+              th:replace="~{fragments/help-marker :: marker('The text of a statement to try the rules on: load it from a PDF below, or paste it. It is never stored.')}"
+            ></span>
+          </label>
+          <textarea class="input statement-text" id="testText" name="testText" rows="20" spellcheck="false" th:text="${testText}"></textarea>
+        </div>
+        <p class="actions">
+          <button type="button" class="btn btn--ghost" hx-post="/statements/profiles/rules/try" hx-target="#try-result" hx-swap="innerHTML" hx-params="*">Try</button>
+        </p>
+        <div id="try-result"></div>
+        </th:block>
 
         <div class="field" th:unless="${profile.isPdf()}">
           <label class="field__label" for="sample">Sample file for the preview</label>
@@ -152,6 +282,20 @@
           <button type="submit" class="btn">Save profile</button>
           <a class="btn btn--ghost" th:href="@{/statements/profiles}">Cancel</a>
         </p>
+      </form>
+
+      <form
+        th:if="${profile.usesParseRules()}"
+        class="parse-rules__load"
+        hx-post="/statements/profiles/rules/test-text"
+        hx-encoding="multipart/form-data"
+        hx-target="#test-pdf-error"
+        hx-swap="outerHTML"
+      >
+        <label class="field__label" for="testPdf">Load the test text from a PDF</label>
+        <input class="input" id="testPdf" name="testPdf" type="file" accept="application/pdf" />
+        <button type="submit" class="btn btn--ghost">Load text</button>
+        <p id="test-pdf-error" class="statements__error"></p>
       </form>
 
       <div id="preview" th:fragment="preview" class="statement-preview" th:unless="${profile != null and profile.isPdf()}">
@@ -190,4 +334,36 @@
       </div>
     </section>
   </main>
+
+  <!-- htmx responses of the parse rules editor (ParseRuleEditorController). -->
+  <th:block th:fragment="checks">
+    <p
+      th:each="problem, row : ${ruleProblems}"
+      class="statements__error"
+      th:id="'rule-problem-' + ${row.index}"
+      hx-swap-oob="true"
+      th:text="${problem}"
+    ></p>
+    <th:block th:with="oob=true"><div th:replace="~{this :: profile-problems}"></div></th:block>
+  </th:block>
+
+  <p id="test-pdf-error" class="statements__error" th:fragment="test-pdf-error" th:text="${error}"></p>
+
+  <th:block th:fragment="test-text-loaded">
+    <p id="test-pdf-error" class="statements__error"></p>
+    <textarea
+      class="input statement-text"
+      id="testText"
+      name="testText"
+      rows="20"
+      spellcheck="false"
+      hx-swap-oob="true"
+      th:text="${testText}"
+    ></textarea>
+  </th:block>
+
+  <th:block th:fragment="try">
+    <p class="statements__error" th:if="${error}" th:text="${error}">Add at least one booking rule.</p>
+    <pre class="statement-text parse-rules__toon" th:if="${toon}" th:text="${toon}">lines[0]:</pre>
+  </th:block>
 </html>

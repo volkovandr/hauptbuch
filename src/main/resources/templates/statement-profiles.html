@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <!--
   The statement profiles list (statements sub-plan slice b1). Reached from the Statements page. A
-  profile says how to read one bank's CSV (statements.md §3.1). No bespoke JS.
+  profile says how to read one source: a CSV (statements.md §3.1), or a PDF by the AI (§3.2) or by
+  parse rules (§3.2a). No bespoke JS.
 -->
 <html
   lang="en"
@@ -14,7 +15,8 @@
       <p class="statements__notice" th:if="${notice}" th:text="${notice}">Profile saved.</p>
       <p class="actions">
         <a class="btn" th:href="@{/statements/profiles/new}">＋ New CSV profile</a>
-        <a class="btn" th:href="@{/statements/profiles/new-pdf}">＋ New PDF profile</a>
+        <a class="btn" th:href="@{/statements/profiles/new-pdf}">＋ New PDF (AI) profile</a>
+        <a class="btn" th:href="@{/statements/profiles/new-pdf-rules}">＋ New PDF (rules) profile</a>
         <a class="btn btn--ghost" th:href="@{/statements}">Back to statements</a>
       </p>
       <p class="muted" th:if="${#lists.isEmpty(profiles)}">No profiles yet.</p>
@@ -33,7 +35,7 @@
                 >BankAaa CSV</a
               >
             </td>
-            <td th:text="${p.format()}">csv</td>
+            <td th:text="${p.usesParseRules()} ? 'PDF (rules)' : (${p.isPdf()} ? 'PDF (AI)' : 'CSV')">CSV</td>
             <td class="num">
               <span th:text="${p.windowDaysBefore()}">10</span> /
               <span th:text="${p.windowDaysAfter()}">3</span>
