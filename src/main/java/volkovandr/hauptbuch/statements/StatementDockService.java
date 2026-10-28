@@ -31,7 +31,7 @@ import volkovandr.hauptbuch.statements.ProposedCandidate.Tier;
 @Service
 public class StatementDockService {
 
-  private static final String STALE = "That line is no longer missing. The page was reloaded.";
+  private static final String STALE = "That line can no longer be created. The page was reloaded.";
   private static final String NO_PROPOSAL =
       "That proposal is no longer available. The page was reloaded.";
   private static final String NOT_ON_ACCOUNT =
@@ -73,10 +73,10 @@ public class StatementDockService {
    * The dock's pre-fill for a missing line: the booking date, the amount, the longest payee name
    * found in the bank's text and that payee's last category.
    *
-   * @throws StatementFormatException when the line is not (or no longer) missing
+   * @throws StatementFormatException when the line cannot (or can no longer) be created
    */
   public DockPrefill prefill(long statementId, long statementLineId) {
-    StatementLine line = missingLine(statementId, statementLineId);
+    StatementLine line = creatableLine(statementId, statementLineId);
     Payee payee = payeeService.longestNameIn(DockForms.bankText(line)).orElse(null);
     String payeeText =
         payee == null ? "" : payeeService.entryValueFor(payee.payeeId()).orElse(payee.name());
@@ -109,10 +109,10 @@ public class StatementDockService {
    * The dock as the operator left it after a refused save: the typed fields, the tag chips and the
    * reason.
    *
-   * @throws StatementFormatException when the line is no longer missing
+   * @throws StatementFormatException when the line can no longer be created
    */
   public DockPrefill reopen(long statementId, long statementLineId, DockInput input, String error) {
-    return dock(missingLine(statementId, statementLineId), Kind.CREATE, 0, "", input, error);
+    return dock(creatableLine(statementId, statementLineId), Kind.CREATE, 0, "", input, error);
   }
 
   /**
@@ -165,12 +165,12 @@ public class StatementDockService {
   /**
    * Book the transaction for a missing line and match it, reconciled, in one database transaction.
    *
-   * @throws StatementFormatException when the line is no longer missing or the ledger refuses the
-   *     transaction (nothing is booked or matched then)
+   * @throws StatementFormatException when the line can no longer be created or the ledger refuses
+   *     the transaction (nothing is booked or matched then)
    */
   @Transactional
   public void createMissing(long statementId, long statementLineId, DockInput input) {
-    StatementLine line = missingLine(statementId, statementLineId);
+    StatementLine line = creatableLine(statementId, statementLineId);
     long accountId = statementService.get(statementId).accountId();
     requireCounterpart(input);
     long transactionId =
@@ -229,9 +229,9 @@ public class StatementDockService {
     }
   }
 
-  private StatementLine missingLine(long statementId, long statementLineId) {
+  private StatementLine creatableLine(long statementId, long statementLineId) {
     LineReview review = matchService.lineOf(statementId, statementLineId);
-    if (review.status() != LineStatus.MISSING) {
+    if (!review.status().canCreate()) {
       throw new StatementFormatException(STALE);
     }
     return review.line();

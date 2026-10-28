@@ -339,6 +339,9 @@ same operation**; a save that fails validation matches nothing. What the dock is
   the foreign native amount pre-filled from the line's original amount when it differs); the existing
   rate write-back then records the real rate (data-model §3.7). For a single-currency transaction the
   counterpart is left to the operator — splits cannot be resolved automatically.
+- **Create beside a fix** — a line whose candidates are only an *Amend* or a *Move here* also offers
+  *Create*, for when that candidate is a different transaction; the new one matches the line and the
+  candidate is left as it was.
 - **Wrong account** — *Move here* is one click, no dock: just that leg is re-booked onto the
   statement's account (`LedgerService.moveLeg`, so a split moves too) and matched. A refusal (another
   currency, the account already in the transaction) shows as a message. Every candidate row also

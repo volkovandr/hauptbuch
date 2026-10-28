@@ -155,6 +155,57 @@ class StatementDockAmendIntegrationTest {
   }
 
   @Test
+  void amountDifferingLineAlsoOffersCreateWhichLeavesTheOtherTransactionAlone() throws Exception {
+    long transaction = booked(accountId, "2026-05-02", "ShopAaa", "12.00");
+    long leg = legOf(transaction, accountId);
+
+    mockMvc
+        .perform(get("/statements/" + statementId))
+        .andExpect(content().string(containsString(">Amend<")))
+        .andExpect(content().string(containsString(">Create<")));
+    mockMvc
+        .perform(
+            post(lineUrl("create"))
+                .param("date", "2026-05-02")
+                .param("payeeText", "ShopAaa")
+                .param("categoryId", String.valueOf(foodId)))
+        .andExpect(flash().attribute("notice", "Transaction created and matched."));
+
+    assertThat(amountOf(leg)).isEqualByComparingTo("-12.00");
+    assertThat(count("select count(*) from transaction")).isEqualTo(2);
+    assertThat(count("select count(*) from statement_match")).isEqualTo(1);
+    assertThat(count("select count(*) from statement_match where posting_id = " + leg)).isZero();
+  }
+
+  @Test
+  void wrongAccountLineAlsoOffersCreateWhichLeavesTheOtherTransactionAlone() throws Exception {
+    long transaction = booked(otherAccountId, "2026-05-02", "ShopAaa", "12.50");
+    long leg = legOf(transaction, otherAccountId);
+
+    mockMvc
+        .perform(get("/statements/" + statementId))
+        .andExpect(content().string(containsString(">Move here<")))
+        .andExpect(content().string(containsString(">Create<")));
+    mockMvc
+        .perform(
+            post(lineUrl("create"))
+                .param("date", "2026-05-02")
+                .param("payeeText", "ShopAaa")
+                .param("categoryId", String.valueOf(foodId)))
+        .andExpect(flash().attribute("notice", "Transaction created and matched."));
+
+    assertThat(
+            count(
+                "select count(*) from posting where posting_id = "
+                    + leg
+                    + " and account_id = "
+                    + otherAccountId))
+        .isEqualTo(1);
+    assertThat(count("select count(*) from transaction")).isEqualTo(2);
+    assertThat(count("select count(*) from statement_match where posting_id = " + leg)).isZero();
+  }
+
+  @Test
   void amendOfSplitTransactionIsRefusedOnTheLineItself() throws Exception {
     long transaction = booked(accountId, "2026-05-02", "ShopAaa", "12.00");
     long leg = legOf(transaction, accountId);

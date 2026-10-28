@@ -32,6 +32,14 @@ public enum LineStatus {
     return this == EXACT || this == COMPETING || this == OVERLAP;
   }
 
+  /**
+   * Whether a new transaction can be created for the line: it has no candidate, or only ones to
+   * amend or move — a different-looking candidate does not make the line matched.
+   */
+  public boolean canCreate() {
+    return this == MISSING || this == AMOUNT_DIFFERS || this == WRONG_ACCOUNT;
+  }
+
   /** The status as the operator reads it. */
   public String label() {
     return text;
