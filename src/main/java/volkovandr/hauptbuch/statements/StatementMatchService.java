@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.ledger.LedgerService;
+import volkovandr.hauptbuch.ledger.UnbalancedTransactionException;
 import volkovandr.hauptbuch.statements.ProposedCandidate.Tier;
 import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
 
@@ -16,7 +17,8 @@ import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
  * checked against the live review, never against what the page showed when it was rendered — a
  * proposal the ledger has since changed is refused rather than applied. A confirmed match makes the
  * posting {@code reconciled} through {@code ledger}; only equal-amount candidates on the
- * statement's own account are accepted here, the rest go through the dock (slice d).
+ * statement's own account are accepted here and a wrong-account leg is moved here; the rest go
+ * through the dock (slice d).
  */
 @Service
 public class StatementMatchService {
@@ -52,6 +54,26 @@ public class StatementMatchService {
   public void accept(long statementId, long statementLineId, long postingId) {
     LineReview line = lineOf(statementId, statementLineId);
     requireOffered(line, postingId, p -> p.tier() == Tier.EXACT);
+    confirm(statementId, List.of(new Pair(statementLineId, postingId)));
+  }
+
+  /**
+   * "Move here": re-book the wrong-account candidate's leg onto the statement's account and match
+   * it to the line. Only that leg changes, so a split transaction moves too (statements.md §6.4).
+   *
+   * @throws StatementFormatException when the posting is not a wrong-account proposal of the line,
+   *     or the ledger refuses the move (another currency, or the statement's account is already in
+   *     the transaction) — then nothing changes
+   */
+  @Transactional
+  public void moveHere(long statementId, long statementLineId, long postingId) {
+    LineReview line = lineOf(statementId, statementLineId);
+    requireOffered(line, postingId, p -> p.tier() == Tier.WRONG_ACCOUNT);
+    try {
+      ledgerService.moveLeg(postingId, statementService.get(statementId).accountId());
+    } catch (IllegalArgumentException | UnbalancedTransactionException e) {
+      throw new StatementFormatException(e.getMessage(), e);
+    }
     confirm(statementId, List.of(new Pair(statementLineId, postingId)));
   }
 

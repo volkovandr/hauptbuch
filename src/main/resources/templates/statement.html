@@ -359,6 +359,18 @@
                 >
                   <button type="submit" class="btn">Unmatch</button>
                 </form>
+                <form
+                  th:each="m : ${r.moves()}"
+                  method="post"
+                  th:action="@{/statements/{id}/lines/{line}/move-here(id=${statement.statementId()},line=${r.lineId()})}"
+                  th:attr="hx-post=@{/statements/{id}/lines/{line}/move-here(id=${statement.statementId()},line=${r.lineId()})}"
+                  hx-target="main"
+                  hx-select="main"
+                  hx-swap="outerHTML"
+                >
+                  <input type="hidden" name="posting" th:value="${m.postingId()}" />
+                  <button type="submit" class="btn" th:text="${m.label()}">Move here</button>
+                </form>
                 <a
                   th:each="f : ${r.fixes()}"
                   class="btn"
@@ -385,9 +397,9 @@
               </td>
               <td>
                 <a
-                  th:if="${r.registerTransactionId() != null}"
+                  th:each="t : ${r.registerTransactionIds()}"
                   class="btn"
-                  th:href="@{/register(selected=${r.registerTransactionId()})}"
+                  th:href="@{/register(selected=${t})}"
                   >Edit in register</a
                 >
               </td>

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -20,6 +21,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import volkovandr.hauptbuch.ledger.LedgerService;
+import volkovandr.hauptbuch.ledger.UnbalancedTransactionException;
 import volkovandr.hauptbuch.statements.ProposedCandidate.Tier;
 import volkovandr.hauptbuch.statements.repository.StatementMatchRepository;
 
@@ -100,6 +102,58 @@ class StatementMatchServiceTest {
   private void reviewing(LineReview line) {
     when(reviewService.reviewLine(STATEMENT, line.line().statementLineId()))
         .thenReturn(Optional.of(line));
+  }
+
+  private void wrongAccountLine() {
+    reviewing(
+        new LineReview(
+            line(LINE_ID),
+            LineStatus.WRONG_ACCOUNT,
+            null,
+            List.of(proposal(POSTING, Tier.WRONG_ACCOUNT))));
+  }
+
+  private static Statement statementOnAccount(long accountId) {
+    return new Statement(
+        STATEMENT, 1L, accountId, "processed", "may.pdf", "p", null, null, null, null, null, null);
+  }
+
+  @Test
+  void moveHereMovesTheLegToTheStatementsAccountThenMatchesIt() {
+    wrongAccountLine();
+    when(statementService.get(STATEMENT)).thenReturn(statementOnAccount(11L));
+
+    service.moveHere(STATEMENT, LINE_ID, POSTING);
+
+    InOrder order = inOrder(ledgerService, matchRepository);
+    order.verify(ledgerService).moveLeg(POSTING, 11L);
+    order.verify(matchRepository).insertMatch(STATEMENT, LINE_ID, POSTING);
+    order.verify(ledgerService).markReconciled(List.of(POSTING));
+  }
+
+  @Test
+  void moveHereRefusedByTheLedgerMatchesNothing() {
+    wrongAccountLine();
+    when(statementService.get(STATEMENT)).thenReturn(statementOnAccount(11L));
+    doThrow(new UnbalancedTransactionException("only one leg per account"))
+        .when(ledgerService)
+        .moveLeg(POSTING, 11L);
+
+    assertThatThrownBy(() -> service.moveHere(STATEMENT, LINE_ID, POSTING))
+        .isInstanceOf(StatementFormatException.class)
+        .hasMessageContaining("only one leg");
+    verify(matchRepository, never()).insertMatch(anyLong(), anyLong(), anyLong());
+  }
+
+  @Test
+  void moveHereOnlyAppliesToWrongAccountProposal() {
+    reviewing(
+        new LineReview(
+            line(LINE_ID), LineStatus.EXACT, null, List.of(proposal(POSTING, Tier.EXACT))));
+
+    assertThatThrownBy(() -> service.moveHere(STATEMENT, LINE_ID, POSTING))
+        .isInstanceOf(StatementFormatException.class);
+    verify(ledgerService, never()).moveLeg(anyLong(), anyLong());
   }
 
   @Test
