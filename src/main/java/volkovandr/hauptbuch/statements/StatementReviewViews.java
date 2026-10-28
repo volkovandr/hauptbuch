@@ -53,7 +53,7 @@ final class StatementReviewViews {
           moves(review),
           review.match() != null,
           overlap ? review.firstProposedPostingId() : null,
-          review.status() == LineStatus.MISSING,
+          review.status().canCreate(),
           registerTransactionIds(review),
           review.status() != LineStatus.MATCHED);
     }
