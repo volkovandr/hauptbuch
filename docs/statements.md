@@ -167,7 +167,8 @@ and `Neuer Kontostand vom (?<periodEnd>\S+) (?<closingBalance>\S+)` with +1 day;
 **The profile editor** shows the rules beside a **test text area**. *Upload PDF* extracts a file's
 text into the area and discards the file; pasting works too. The text is never stored — it lives in
 the form only. A bad regex or an unknown (or wrong-kind) group name is flagged on the rule at once;
-*Try* shows the TOON the rules produce. Saving is refused while any rule is invalid, a *between* rule
+*Try* shows the TOON the rules produce. Below the rules, always visible, are the group names of
+each rule kind as `(?<name>)` snippets to copy, and a short regex cheat sheet. Saving is refused while any rule is invalid, a *between* rule
 lacks B, or there is no booking rule.
 
 Rules are rows of a child table, the settings typed `rules_*` columns on the profile — independent of

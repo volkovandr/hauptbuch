@@ -48,3 +48,6 @@ Choices made inside the agreed design:
   the profile form, and outside it the PDF is never re-sent with every check.
 - Verified in headless Chromium against the running app: live check, add / move, Try, Save, reopen,
   and loading a real PDF's text.
+- 2026-10-28, owner's follow-up: the group names are also shown as an always-visible, copyable
+  block below the rules (rendered from `ParseRule.HEADER_FIELDS` / `LINE_FIELDS`), next to a short
+  regex cheat sheet.
