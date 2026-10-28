@@ -1,6 +1,6 @@
 # Statements: "Move here" moves the leg in one click; "Edit in register" on every candidate
 
-Status: open
+Status: resolved
 Category: enhancement
 Area: `statements` — `StatementReviewViews` (`fixLabel`, `registerTransactionId`), `StatementMatchService` / `StatementDockController`, `statement.html` (line rows)
 Design: `docs/statements.md` §6 (wrong-account tier, "the existing re-threading")
@@ -32,7 +32,7 @@ extras' *Move* uses, issue 18; ADR 0003 keeps `posting_id`).
   look).
 
 ## Implemented
-2026-10-28 on `claude/determined-keller-pl1848`, awaiting the owner's verification. `StatementMatchService.moveHere`
+2026-10-28 on `claude/determined-keller-pl1848`, verified by the owner. `StatementMatchService.moveHere`
 (`POST /statements/{id}/lines/{line}/move-here`) checks the live review (wrong-account proposal only),
 calls `LedgerService.moveLeg` to the statement's account, then confirms the match like *Accept*; a
 ledger refusal becomes the usual flash error and nothing changes. `StatementReviewViews`: `fixes`
