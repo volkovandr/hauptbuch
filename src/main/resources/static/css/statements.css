@@ -274,3 +274,27 @@ table.statements a.btn {
 .parse-rules__toon {
   overflow-x: auto;
 }
+
+/* The always-visible reference beside the rules: the group names to copy, and a regex cheat sheet. */
+.parse-rules__reference {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1rem 2rem;
+  margin-top: 1rem;
+}
+
+.parse-rules__snippets {
+  margin: 0.25rem 0 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, monospace;
+}
+
+.parse-rules__cheats td {
+  padding: 0.1rem 0.75rem 0.1rem 0;
+  vertical-align: top;
+}
+
+.parse-rules__cheats td:first-child {
+  white-space: nowrap;
+}

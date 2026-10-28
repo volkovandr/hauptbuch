@@ -92,6 +92,24 @@ class ParseRuleEditorScreenIntegrationTest {
   }
 
   @Test
+  void rulesEditorShowsEveryGroupNameToCopyAndTheCheatSheet() throws Exception {
+    String page =
+        mockMvc
+            .perform(get("/statements/profiles/new-pdf-rules"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString(StandardCharsets.UTF_8);
+    assertThat(page).contains("Regex cheat sheet");
+    for (String field : ParseRule.HEADER_FIELDS) {
+      assertThat(page).contains("(?&lt;" + field + "&gt;)");
+    }
+    for (String field : ParseRule.LINE_FIELDS) {
+      assertThat(page).contains("(?&lt;" + field + "&gt;)");
+    }
+  }
+
+  @Test
   void savesRulesProfileWithItsRulesAndReopensWithThem() throws Exception {
     mockMvc
         .perform(withRules(withSettings(post("/statements/profiles/save"))).param("name", "Bbb"))
