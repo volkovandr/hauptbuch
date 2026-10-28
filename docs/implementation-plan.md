@@ -699,7 +699,7 @@ shipped; everything after it is unbuilt.
     explained covers postings matched here but dated outside the period, postings matched on a
     neighbouring statement, and boundary extras; green per `statements.md` §6.5, on the page and as
     the Match column in the list.
-  - **g — PDF (rules) profiles** (`statements.md` §3.2a). Unbuilt. Issues
+  - **g — PDF (rules) profiles** (`statements.md` §3.2a). In progress (20 and 21 done, 22 open). Issues
     `.scratch/statements/issues/20`–`22`: the parse rule engine; the schema and the rules profile
     editor with *Try*; *Parse* on a `pdf_rules` statement.
 - **Receipt follow-ons:** duplicate detection at confirm (merchant+date+total) + link-to-existing

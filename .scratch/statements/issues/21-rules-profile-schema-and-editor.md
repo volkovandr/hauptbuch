@@ -1,6 +1,6 @@
 # PDF (rules): schema and the profile editor with Try
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Area: `statements` — migration, `StatementProfile`, `StatementProfileRepository`, profile screen
 Design: `docs/statements.md` §3.2a; schema in `docs/data-model.md` §15
