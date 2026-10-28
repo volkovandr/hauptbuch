@@ -54,6 +54,7 @@ class StatementParseServiceTest {
   @Mock private StatementParseResults results;
   @Mock private SettingsService settingsService;
   @Mock private StatementMatchRepository matchRepository;
+  @Mock private ParseRuleEngine ruleEngine;
 
   private StatementParseService service;
 
@@ -69,11 +70,14 @@ class StatementParseServiceTest {
             decoder,
             results,
             settingsService,
-            matchRepository);
+            matchRepository,
+            ruleEngine);
   }
 
   private void statementAwaitingParse() {
     when(statementService.get(STATEMENT_ID)).thenReturn(statement());
+    when(profileService.getIncludingDeleted(PROFILE_ID))
+        .thenReturn(profileWithNote("Rate in text"));
     when(statementRepository.claimForParse(STATEMENT_ID)).thenReturn(true);
   }
 
@@ -81,8 +85,6 @@ class StatementParseServiceTest {
     when(settingsService.aiConfig()).thenReturn(CONFIG);
     when(settingsService.statementSystemPrompt()).thenReturn(null);
     when(statementRepository.findSentText(STATEMENT_ID)).thenReturn(Optional.of(TEXT));
-    when(profileService.getIncludingDeleted(PROFILE_ID))
-        .thenReturn(profileWithNote("Rate in text"));
   }
 
   @Test
@@ -162,6 +164,7 @@ class StatementParseServiceTest {
   @Test
   void unclaimableStatementIsRefusedWithoutCall() {
     when(statementService.get(STATEMENT_ID)).thenReturn(statement());
+    when(profileService.getIncludingDeleted(PROFILE_ID)).thenReturn(profileWithNote(null));
     when(statementRepository.claimForParse(STATEMENT_ID)).thenReturn(false);
 
     assertThatThrownBy(() -> service.parse(STATEMENT_ID))
@@ -229,6 +232,81 @@ class StatementParseServiceTest {
         null,
         null,
         null);
+  }
+
+  private void rulesStatement() {
+    when(statementService.get(STATEMENT_ID)).thenReturn(statement());
+    when(profileService.getIncludingDeleted(PROFILE_ID))
+        .thenReturn(StatementProfile.blankPdfRules());
+    when(matchRepository.findMatches(STATEMENT_ID)).thenReturn(List.of());
+  }
+
+  @Test
+  void rulesProfileParsesLocallyWithoutClaimingOrCallingTheAi() {
+    rulesStatement();
+    List<ParseRule> rules = List.of(new ParseRule(ParseRule.BOOKING, "^(?<amount>.*)$", null));
+    when(profileService.rules(PROFILE_ID)).thenReturn(rules);
+    when(statementRepository.findSentText(STATEMENT_ID)).thenReturn(Optional.of(TEXT));
+    when(ruleEngine.toToon(TEXT, rules, StatementProfile.blankPdfRules().rulesSettings()))
+        .thenReturn(RAW);
+    ParsedStatement parsed =
+        new ParsedStatement(
+            null,
+            null,
+            null,
+            null,
+            List.of(new ParsedStatement.ParsedLine(null, null, null, null)));
+    when(decoder.decode(RAW)).thenReturn(Optional.of(parsed));
+
+    assertThat(service.parse(STATEMENT_ID)).isTrue();
+
+    verify(results).applyRules(STATEMENT_ID, parsed, RAW);
+    verify(statementRepository, never()).claimForParse(anyLong());
+    verifyNoInteractions(parser, settingsService);
+  }
+
+  @Test
+  void rulesParseWithNoBookingFailsWithThatReason() {
+    rulesStatement();
+    when(profileService.rules(PROFILE_ID)).thenReturn(List.of());
+    when(statementRepository.findSentText(STATEMENT_ID)).thenReturn(Optional.of(TEXT));
+    when(ruleEngine.toToon(any(), any(), any())).thenReturn(RAW);
+    when(decoder.decode(RAW))
+        .thenReturn(Optional.of(new ParsedStatement(null, null, null, null, List.of())));
+
+    assertThat(service.parse(STATEMENT_ID)).isFalse();
+
+    verify(results)
+        .failTransport(eq(STATEMENT_ID), org.mockito.ArgumentMatchers.contains("No booking"));
+    verify(results, never()).applyRules(anyLong(), any(), any());
+  }
+
+  @Test
+  void rulesThatCannotRunFailTheStatementWithTheirProblem() {
+    rulesStatement();
+    when(profileService.rules(PROFILE_ID)).thenReturn(List.of());
+    when(statementRepository.findSentText(STATEMENT_ID)).thenReturn(Optional.of(TEXT));
+    when(ruleEngine.toToon(any(), any(), any()))
+        .thenThrow(new StatementFormatException("There is no booking rule."));
+
+    assertThat(service.parse(STATEMENT_ID)).isFalse();
+
+    verify(results).failTransport(STATEMENT_ID, "There is no booking rule.");
+  }
+
+  @Test
+  void rulesParseIsRefusedWhileAnyLineIsMatched() {
+    when(statementService.get(STATEMENT_ID)).thenReturn(statement());
+    when(profileService.getIncludingDeleted(PROFILE_ID))
+        .thenReturn(StatementProfile.blankPdfRules());
+    when(matchRepository.findMatches(STATEMENT_ID))
+        .thenReturn(
+            List.of(new StatementMatch(1L, 2L, 3L, null, null, BigDecimal.ONE, "reconciled")));
+
+    assertThatThrownBy(() -> service.parse(STATEMENT_ID))
+        .isInstanceOf(StatementFormatException.class)
+        .hasMessageContaining("Unmatch");
+    verify(results, never()).applyRules(anyLong(), any(), any());
   }
 
   @Test

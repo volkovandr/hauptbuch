@@ -46,6 +46,34 @@ class StatementParseResults {
   }
 
   /**
+   * Replace the lines and header with the rules' parse and mark it processed: no usage, no cost,
+   * and any previous AI parse recorded is cleared. All or nothing.
+   */
+  @Transactional
+  void applyRules(long statementId, ParsedStatement parsed, String rawToon) {
+    lineRepository.deleteByStatement(statementId);
+    for (ParsedLine parsedLine : parsed.lines()) {
+      lineRepository.insertParsed(
+          statementId,
+          parsedLine.line(),
+          parsedLine.originalAmount(),
+          parsedLine.originalCurrency(),
+          parsedLine.originalRate());
+    }
+    int updated =
+        statementRepository.markParsedByRules(
+            statementId,
+            parsed.periodStart(),
+            parsed.periodEnd(),
+            parsed.openingBalance(),
+            parsed.closingBalance(),
+            rawToon);
+    if (updated == 0) {
+      throw new StatementFormatException("This statement is not waiting to be parsed.");
+    }
+  }
+
+  /**
    * Replace the lines and header with a decode of the operator's edited response — no API call, so
    * the usage stays. All or nothing: a statement that cannot be re-seeded rolls the lines back.
    */

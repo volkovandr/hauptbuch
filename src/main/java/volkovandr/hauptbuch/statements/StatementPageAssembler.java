@@ -71,6 +71,9 @@ class StatementPageAssembler {
     model.addAttribute("parseError", pdfService.parseError(id));
     model.addAttribute("parseRaw", pdfService.parseRaw(id));
     model.addAttribute("parseUsage", pdfService.parseUsage(id));
+    model.addAttribute(
+        "usesParseRules",
+        profileService.getIncludingDeleted(statement.statementProfileId()).usesParseRules());
     model.addAttribute("accountName", statementService.accountName(statement.accountId()));
     model.addAttribute("profileName", profileService.nameOf(statement.statementProfileId()));
     model.addAttribute("opening", StatementController.number(statement.openingBalance()));

@@ -122,7 +122,7 @@ lines that carry an IBAN — and stays editable. *Parse* runs the profile's **cu
 statement's **current** text and writes **TOON into `parse_raw`**, so the decoder, the editable raw
 response, Re-seed and the line grid work exactly as for an AI parse. A rule that mis-reads a line is
 fixed in the profile (or the line in the TOON) and the statement parsed again. *Parse* is refused while
-any line is matched, like Re-seed. A parse that yields no booking fails with that reason.
+any line is matched, like Re-seed. A parse that yields no booking fails with that reason (a statement already parsed keeps its lines, shown `failed`, until a parse succeeds).
 Changing a profile never touches existing statements until they are parsed again.
 
 **The rules.** Every rule is a regex matched against **one line at a time** (`find()` semantics —

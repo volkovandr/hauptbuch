@@ -34,7 +34,10 @@ public class StatementParseService {
   private final StatementParseResults results;
   private final SettingsService settingsService;
   private final StatementMatchRepository matchRepository;
+  private final ParseRuleEngine ruleEngine;
 
+  // ExcessiveParameterList: one collaborator per step of the two parse paths (AI call, rules).
+  @SuppressWarnings("PMD.ExcessiveParameterList")
   StatementParseService(
       StatementRepository statementRepository,
       StatementProfileService profileService,
@@ -44,7 +47,8 @@ public class StatementParseService {
       ToonStatementDecoder decoder,
       StatementParseResults results,
       SettingsService settingsService,
-      StatementMatchRepository matchRepository) {
+      StatementMatchRepository matchRepository,
+      ParseRuleEngine ruleEngine) {
     this.statementRepository = statementRepository;
     this.profileService = profileService;
     this.statementService = statementService;
@@ -54,6 +58,7 @@ public class StatementParseService {
     this.results = results;
     this.settingsService = settingsService;
     this.matchRepository = matchRepository;
+    this.ruleEngine = ruleEngine;
   }
 
   /**
@@ -79,17 +84,23 @@ public class StatementParseService {
   }
 
   /**
-   * Parse the statement's text now and wait for the outcome.
+   * Parse the statement's text now and wait for the outcome: a PDF (rules) profile runs its parse
+   * rules locally (statements.md §3.2a), any other PDF profile calls the AI.
    *
    * @return true when the response decoded and the statement is {@code processed}; false when it
    *     landed {@code failed} (its error is kept for the page)
-   * @throws StatementFormatException when the statement is not a PDF statement awaiting a parse
+   * @throws StatementFormatException when the statement is not a PDF statement awaiting a parse,
+   *     or, for parse rules, when a line is matched
    */
   // AvoidCatchingGenericException: an unexpected error must still land the statement in `failed`
   // rather than leave it stuck `processing`.
   @SuppressWarnings("PMD.AvoidCatchingGenericException")
   public boolean parse(long statementId) {
     Statement statement = statementService.get(statementId);
+    StatementProfile profile = profileService.getIncludingDeleted(statement.statementProfileId());
+    if (profile.usesParseRules()) {
+      return parseByRules(statement, profile);
+    }
     if (!statementRepository.claimForParse(statementId)) {
       throw new StatementFormatException("This statement is not waiting to be parsed.");
     }
@@ -103,6 +114,43 @@ public class StatementParseService {
       results.failTransport(statementId, "Unexpected error: " + e.getMessage());
     }
     return false;
+  }
+
+  /**
+   * The rules parse: no claim, no call, no usage — the engine is local and instant, so it may run
+   * again on a {@code processed} statement, replacing the TOON, header and lines. Refused while any
+   * line is matched, like a re-seed.
+   */
+  private boolean parseByRules(Statement statement, StatementProfile profile) {
+    long statementId = statement.statementId();
+    if (!matchRepository.findMatches(statementId).isEmpty()) {
+      throw new StatementFormatException("Unmatch every line before parsing again.");
+    }
+    String text = statementRepository.findSentText(statementId).orElse("");
+    if (text.isBlank()) {
+      results.failTransport(statementId, "The statement has no text to parse");
+      return false;
+    }
+    String toon;
+    try {
+      toon =
+          ruleEngine.toToon(
+              text, profileService.rules(statement.statementProfileId()), profile.rulesSettings());
+    } catch (StatementFormatException e) {
+      LOG.warn("Statement {} rules parse failed: {}", statementId, e.getMessage());
+      results.failTransport(statementId, e.getMessage());
+      return false;
+    }
+    Optional<ParsedStatement> decoded = decoder.decode(toon);
+    if (decoded.isEmpty() || decoded.get().lines().isEmpty()) {
+      LOG.warn("Statement {} rules parse found no booking", statementId);
+      results.failTransport(
+          statementId, "No booking found — check the profile's rules against the text");
+      return false;
+    }
+    results.applyRules(statementId, decoded.get(), toon);
+    LOG.info("Statement {} parsed by rules: lines={}", statementId, decoded.get().lines().size());
+    return true;
   }
 
   private boolean callAndStore(Statement statement) {
