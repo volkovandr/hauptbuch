@@ -310,6 +310,20 @@ class StatementController {
         id, () -> matchService.accept(id, lineId, posting), "Line matched.", redirectAttributes);
   }
 
+  /** Move the wrong-account candidate's leg to the statement's account and match it. */
+  @PostMapping(BASE_PATH + "/{id}/lines/{lineId}/move-here")
+  String moveHere(
+      @PathVariable long id,
+      @PathVariable long lineId,
+      @RequestParam long posting,
+      RedirectAttributes redirectAttributes) {
+    return saved(
+        id,
+        () -> matchService.moveHere(id, lineId, posting),
+        "Moved to this account and matched.",
+        redirectAttributes);
+  }
+
   /** Confirm every unambiguous exact proposal. */
   @PostMapping(BASE_PATH + "/{id}/accept-all")
   String acceptAll(@PathVariable long id, RedirectAttributes redirectAttributes) {

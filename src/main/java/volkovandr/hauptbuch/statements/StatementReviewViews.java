@@ -30,10 +30,11 @@ final class StatementReviewViews {
       List<String> details,
       List<Pick> picks,
       List<Pick> fixes,
+      List<Pick> moves,
       boolean canUnmatch,
       Long differentPosting,
       boolean canCreate,
-      Long registerTransactionId,
+      List<Long> registerTransactionIds,
       boolean needsAttention) {
 
     static ReviewLineView of(LineReview review) {
@@ -49,10 +50,11 @@ final class StatementReviewViews {
           details(review),
           picks(review),
           fixes(review),
+          moves(review),
           review.match() != null,
           overlap ? review.firstProposedPostingId() : null,
           review.status() == LineStatus.MISSING,
-          review.match() == null ? null : review.match().transactionId(),
+          registerTransactionIds(review),
           review.status() != LineStatus.MATCHED);
     }
 
@@ -64,19 +66,36 @@ final class StatementReviewViews {
           .toList();
     }
 
-    /** The other proposals, which need the dock: an amount to correct or a leg to move here. */
+    /** The proposals whose amount differs, which need the dock to correct. */
     private static List<Pick> fixes(LineReview review) {
+      return unmatchedProposals(review, ProposedCandidate.Tier.AMOUNT_DIFFERS, "Amend");
+    }
+
+    /** The wrong-account proposals, whose leg moves to the statement's account in one click. */
+    private static List<Pick> moves(LineReview review) {
+      return unmatchedProposals(review, ProposedCandidate.Tier.WRONG_ACCOUNT, "Move here");
+    }
+
+    private static List<Pick> unmatchedProposals(
+        LineReview review, ProposedCandidate.Tier tier, String label) {
       if (review.status() == LineStatus.MATCHED) {
         return List.of();
       }
       return review.candidates().stream()
-          .filter(p -> p.tier() != ProposedCandidate.Tier.EXACT)
-          .map(p -> new Pick(p.candidate().postingId(), fixLabel(p)))
+          .filter(p -> p.tier() == tier)
+          .map(p -> new Pick(p.candidate().postingId(), label))
           .toList();
     }
 
-    private static String fixLabel(ProposedCandidate proposed) {
-      return proposed.tier() == ProposedCandidate.Tier.WRONG_ACCOUNT ? "Move here" : "Amend";
+    /** The transactions to open in the register: the match's, or every proposal's. */
+    private static List<Long> registerTransactionIds(LineReview review) {
+      if (review.match() != null) {
+        return List.of(review.match().transactionId());
+      }
+      return review.candidates().stream()
+          .map(p -> p.candidate().transactionId())
+          .distinct()
+          .toList();
     }
 
     private static String pickLabel(LineStatus status, ProposedCandidate proposed) {

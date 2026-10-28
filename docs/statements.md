@@ -339,8 +339,10 @@ same operation**; a save that fails validation matches nothing. What the dock is
   the foreign native amount pre-filled from the line's original amount when it differs); the existing
   rate write-back then records the real rate (data-model §3.7). For a single-currency transaction the
   counterpart is left to the operator — splits cannot be resolved automatically.
-- **Wrong account** — the transaction with its leg moved to the statement's account (the existing
-  re-threading).
+- **Wrong account** — *Move here* is one click, no dock: just that leg is re-booked onto the
+  statement's account (`LedgerService.moveLeg`, so a split moves too) and matched. A refusal (another
+  currency, the account already in the transaction) shows as a message. Every candidate row also
+  offers *Edit in register* for anything that needs attention.
 - **Extras** — Edit or Void, through the same dock; Move to account re-books just the extra's leg
   (`LedgerService.moveLeg`), so it works on a split transaction too.
 

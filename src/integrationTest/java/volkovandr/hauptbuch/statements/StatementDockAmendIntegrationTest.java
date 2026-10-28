@@ -216,31 +216,68 @@ class StatementDockAmendIntegrationTest {
   }
 
   @Test
-  void wrongAccountTransactionMovesToTheStatementsAccountOnSave() throws Exception {
+  void moveHereMovesTheLegAndMatchesTheLineInOneClick() throws Exception {
     long transaction = booked(otherAccountId, "2026-05-02", "ShopAaa", "12.50");
     long leg = legOf(transaction, otherAccountId);
 
     mockMvc
         .perform(get("/statements/" + statementId))
-        .andExpect(content().string(containsString(">Move here<")));
-    mockMvc
-        .perform(
-            get("/statements/" + statementId)
-                .param("dock", String.valueOf(shopLine))
-                .param("posting", String.valueOf(leg)))
-        .andExpect(content().string(containsString("saving moves it to BankAaa-EUR")));
+        .andExpect(content().string(containsString(">Move here<")))
+        .andExpect(content().string(containsString("selected=" + transaction)));
 
     mockMvc
-        .perform(
-            post(lineUrl("amend/" + leg))
-                .param("date", "2026-05-02")
-                .param("payeeText", "ShopAaa")
-                .param("categoryId", String.valueOf(foodId)))
-        .andExpect(flash().attribute("notice", "Transaction amended and matched."));
+        .perform(post(lineUrl("move-here")).param("posting", String.valueOf(leg)))
+        .andExpect(flash().attribute("notice", "Moved to this account and matched."));
 
     assertThat(count("select count(*) from posting where account_id = " + otherAccountId)).isZero();
-    assertThat(amountOf(legOf(transaction, accountId))).isEqualByComparingTo("-12.50");
+    assertThat(legOf(transaction, accountId)).isEqualTo(leg);
+    assertThat(amountOf(leg)).isEqualByComparingTo("-12.50");
     assertThat(count("select count(*) from statement_match")).isEqualTo(1);
+  }
+
+  @Test
+  void moveHereWorksOnSplitTransaction() throws Exception {
+    long transaction = booked(otherAccountId, "2026-05-02", "ShopAaa", "12.50");
+    long leg = legOf(transaction, otherAccountId);
+    long otherCategory = accountService.insertLeaf("Fun", "expense", null, "EUR").accountId();
+    jdbcClient
+        .sql("update posting set amount = 10.50 where transaction_id = :t and account_id = :f")
+        .param("t", transaction)
+        .param("f", foodId)
+        .update();
+    jdbcClient
+        .sql("insert into posting (transaction_id, account_id, amount) values (:t, :a, 2.00)")
+        .param("t", transaction)
+        .param("a", otherCategory)
+        .update();
+
+    mockMvc
+        .perform(post(lineUrl("move-here")).param("posting", String.valueOf(leg)))
+        .andExpect(flash().attribute("notice", "Moved to this account and matched."));
+
+    assertThat(legOf(transaction, accountId)).isEqualTo(leg);
+    assertThat(count("select count(*) from posting where transaction_id = " + transaction))
+        .isEqualTo(3);
+    assertThat(count("select count(*) from statement_match")).isEqualTo(1);
+  }
+
+  @Test
+  void moveHereRefusedByTheLedgerChangesNothing() throws Exception {
+    long transaction = booked(otherAccountId, "2026-05-02", "ShopAaa", "12.50");
+    long leg = legOf(transaction, otherAccountId);
+    jdbcClient
+        .sql("insert into posting (transaction_id, account_id, amount) values (:t, :a, 0)")
+        .param("t", transaction)
+        .param("a", accountId)
+        .update();
+
+    mockMvc
+        .perform(post(lineUrl("move-here")).param("posting", String.valueOf(leg)))
+        .andExpect(flash().attributeExists("error"));
+
+    assertThat(count("select count(*) from posting where account_id = " + otherAccountId))
+        .isEqualTo(1);
+    assertThat(count("select count(*) from statement_match")).isZero();
   }
 
   @Test
