@@ -1,6 +1,6 @@
 # Statements: Create offered beside Amend and Move here
 
-Status: in progress
+Status: resolved
 Category: enhancement
 Area: `statements` — `LineStatus.canCreate`, `StatementReviewViews`, `StatementDockService` (`creatableLine`)
 Design: `docs/statements.md` §4.4, §6
