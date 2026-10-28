@@ -1,6 +1,6 @@
 # PDF (rules): the parse rule engine — text + rules in, TOON out
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Area: `statements` — new engine class, unit tier
 Design: `docs/statements.md` §3.2a (authoritative); `CONTEXT.md` *Parse rule*
