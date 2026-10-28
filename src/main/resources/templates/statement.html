@@ -128,9 +128,15 @@
      <details th:open="${statement.state() != 'processed'}">
       <summary class="statement-contents__summary">PDF text</summary>
       <p class="muted">
-        The text extracted from the PDF, masked of your account numbers and any IBAN. Edit it
-        freely — remove your name, your address, anything else. Exactly this text is what will be
-        sent for parsing; the PDF itself never is.
+        <th:block th:if="${usesParseRules}">
+          The text extracted from the PDF, as extracted. Exactly this text is what the profile's
+          parse rules read; nothing is sent anywhere.
+        </th:block>
+        <th:block th:unless="${usesParseRules}">
+          The text extracted from the PDF, masked of your account numbers and any IBAN. Edit it
+          freely — remove your name, your address, anything else. Exactly this text is what will be
+          sent for parsing; the PDF itself never is.
+        </th:block>
       </p>
       <p class="statements__error" th:if="${parseError != null}" th:text="${parseError}">
         Statement parse call failed.
@@ -148,7 +154,7 @@
       </form>
       <form
         method="post"
-        th:if="${statement.state() == 'new' or statement.state() == 'failed'}"
+        th:if="${statement.state() == 'new' or statement.state() == 'failed' or (usesParseRules and statement.state() == 'processed')}"
         th:action="@{/statements/{id}/parse(id=${statement.statementId()})}"
         th:attr="hx-post=@{/statements/{id}/parse(id=${statement.statementId()})}"
         hx-target="main"
@@ -158,10 +164,14 @@
       >
         <p class="actions">
           <button type="submit" class="btn statement-parse">
-            <span class="statement-parse__idle">Parse with AI</span>
+            <span class="statement-parse__idle" th:text="${usesParseRules ? 'Parse with rules' : 'Parse with AI'}">Parse with AI</span>
             <span class="statement-parse__busy">Processing…</span>
           </button>
-          <span class="muted">
+          <span class="muted" th:if="${usesParseRules}">
+            Runs the profile's current rules on the text above — save any edit first. Replaces the
+            lines and header; refused while any line is matched.
+          </span>
+          <span class="muted" th:unless="${usesParseRules}">
             Sends the text above — save any edit first — in one call and waits for the answer.
           </span>
         </p>

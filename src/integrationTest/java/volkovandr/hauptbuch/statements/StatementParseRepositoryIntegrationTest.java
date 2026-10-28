@@ -366,6 +366,31 @@ class StatementParseRepositoryIntegrationTest {
   }
 
   @Test
+  void markParsedByRulesProcessesNewStatementAndClearsEarlierAiUsage() {
+    int fromNew =
+        statements.markParsedByRules(
+            statementId, LocalDate.of(2026, 5, 1), null, BigDecimal.TEN, null, "rules raw");
+    assertThat(fromNew).isEqualTo(1);
+    statements.markProcessed(statementId, null, null, null, null, USAGE, "ai raw");
+
+    int again =
+        statements.markParsedByRules(
+            statementId, LocalDate.of(2026, 6, 1), null, null, BigDecimal.ONE, "rules raw 2");
+
+    assertThat(again).isEqualTo(1);
+    assertThat(statements.findParseRaw(statementId)).contains("rules raw 2");
+    assertThat(statements.findParseUsage(statementId)).isEmpty();
+    assertThat(statements.findById(statementId).orElseThrow().state()).isEqualTo("processed");
+  }
+
+  @Test
+  void markParsedByRulesTouchesNothingWhileTheStatementIsProcessing() {
+    statements.claimForParse(statementId);
+
+    assertThat(statements.markParsedByRules(statementId, null, null, null, null, "raw")).isZero();
+  }
+
+  @Test
   void findParseUsageReadsTheBilledUsageBackAndIsEmptyBeforeAnyParse() {
     assertThat(statements.findParseUsage(statementId)).isEmpty();
     statements.markProcessed(

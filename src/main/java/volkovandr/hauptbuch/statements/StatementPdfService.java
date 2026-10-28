@@ -24,18 +24,21 @@ public class StatementPdfService {
   private final StatementPdfText pdfText;
   private final StatementService statementService;
   private final PayingAccountDetector accountDetector;
+  private final StatementProfileService profileService;
 
   StatementPdfService(
       StatementRepository statementRepository,
       StatementStorage storage,
       StatementPdfText pdfText,
       StatementService statementService,
-      PayingAccountDetector accountDetector) {
+      PayingAccountDetector accountDetector,
+      StatementProfileService profileService) {
     this.statementRepository = statementRepository;
     this.storage = storage;
     this.pdfText = pdfText;
     this.statementService = statementService;
     this.accountDetector = accountDetector;
+    this.profileService = profileService;
   }
 
   /**
@@ -51,7 +54,8 @@ public class StatementPdfService {
 
   /**
    * Create the {@code new} statement for a staged PDF: the extracted text, pre-masked of the
-   * operator's own identifiers and any IBAN/BIC-shaped string, ready to edit.
+   * operator's own identifiers and any IBAN/BIC-shaped string, ready to edit — except for a PDF
+   * (rules) profile, whose text is kept as extracted.
    *
    * @return the new statement's id
    * @throws StatementFormatException when the file is unreadable or the account cannot hold a
@@ -62,10 +66,15 @@ public class StatementPdfService {
       long statementProfileId, String filePath, String originalFilename, long accountId) {
     statementService.statementAccount(accountId);
     String text = pdfText.extract(storage.read(filePath));
-    String masked = StatementTextMasker.mask(text, accountDetector.ownIdentifiers());
+    // Parse rules run locally and nothing is sent, so the text stays as extracted: masking mangles
+    // the lines that carry an IBAN (statements.md §3.2a).
+    String stored =
+        profileService.get(statementProfileId).usesParseRules()
+            ? text
+            : StatementTextMasker.mask(text, accountDetector.ownIdentifiers());
     long statementId =
         statementRepository.insertPdf(
-            statementProfileId, accountId, originalFilename, filePath, masked);
+            statementProfileId, accountId, originalFilename, filePath, stored);
     LOG.info("Created PDF statement {} on account {}", statementId, accountId);
     return statementId;
   }

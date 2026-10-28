@@ -19,6 +19,9 @@ public class StatementRepository {
 
   private static final String STATEMENT_ID = "statementId";
   private static final String PERIOD_START = "periodStart";
+  private static final String PARSE_RAW = "parseRaw";
+  private static final String OPENING_BALANCE = "openingBalance";
+  private static final String CLOSING_BALANCE = "closingBalance";
   private static final String PERIOD_END = "periodEnd";
 
   /**
@@ -114,7 +117,8 @@ public class StatementRepository {
 
   /**
    * Overwrite the text of a live PDF statement that has not been parsed yet (state {@code new} or
-   * {@code failed}).
+   * {@code failed}), or of a {@code processed} one whose profile parses by rules — it can be parsed
+   * again after the fix.
    *
    * @return the number of statements updated
    */
@@ -124,7 +128,12 @@ public class StatementRepository {
             """
             update statement set sent_text = :sentText, updated_at = now()
             where statement_id = :statementId and deleted_at is null
-              and sent_text is not null and state in ('new', 'failed')
+              and sent_text is not null
+              and (state in ('new', 'failed')
+                   or (state = 'processed' and exists (
+                         select 1 from statement_profile p
+                         where p.statement_profile_id = statement.statement_profile_id
+                           and p.format = 'pdf_rules')))
             """)
         .param(STATEMENT_ID, statementId)
         .param("sentText", sentText)
@@ -178,7 +187,7 @@ public class StatementRepository {
             """)
         .param(STATEMENT_ID, statementId)
         .param("parseError", parseError)
-        .param("parseRaw", parseRaw)
+        .param(PARSE_RAW, parseRaw)
         .params(usage.asParams())
         .update();
   }
@@ -205,11 +214,11 @@ public class StatementRepository {
             where statement_id = :statementId
             """)
         .param(STATEMENT_ID, statementId)
-        .param("parseRaw", parseRaw)
+        .param(PARSE_RAW, parseRaw)
         .param(PERIOD_START, periodStart)
         .param(PERIOD_END, periodEnd)
-        .param("openingBalance", openingBalance)
-        .param("closingBalance", closingBalance)
+        .param(OPENING_BALANCE, openingBalance)
+        .param(CLOSING_BALANCE, closingBalance)
         .params(usage.asParams())
         .update();
   }
@@ -272,11 +281,46 @@ public class StatementRepository {
               and sent_text is not null and state in ('processed', 'failed')
             """)
         .param(STATEMENT_ID, statementId)
-        .param("parseRaw", parseRaw)
+        .param(PARSE_RAW, parseRaw)
         .param(PERIOD_START, periodStart)
         .param(PERIOD_END, periodEnd)
-        .param("openingBalance", openingBalance)
-        .param("closingBalance", closingBalance)
+        .param(OPENING_BALANCE, openingBalance)
+        .param(CLOSING_BALANCE, closingBalance)
+        .update();
+  }
+
+  /**
+   * Land a parse by rules: {@code processed} with the header and the raw body, and no usage — a
+   * local parse bills nothing, and an earlier AI parse's tokens no longer describe the lines.
+   *
+   * @return the number of statements updated (0 when it is not a new, parsed or failed PDF
+   *     statement)
+   */
+  public int markParsedByRules(
+      long statementId,
+      LocalDate periodStart,
+      LocalDate periodEnd,
+      BigDecimal openingBalance,
+      BigDecimal closingBalance,
+      String parseRaw) {
+    return jdbcClient
+        .sql(
+            """
+            update statement
+            set state = 'processed', parse_error = null, parse_raw = :parseRaw,
+                period_start = :periodStart, period_end = :periodEnd,
+                opening_balance = :openingBalance, closing_balance = :closingBalance,
+                tokens_in = null, tokens_out = null, tokens_cache_write = null,
+                tokens_cache_read = null, parse_cost = null, updated_at = now()
+            where statement_id = :statementId and deleted_at is null
+              and sent_text is not null and state in ('new', 'processed', 'failed')
+            """)
+        .param(STATEMENT_ID, statementId)
+        .param(PARSE_RAW, parseRaw)
+        .param(PERIOD_START, periodStart)
+        .param(PERIOD_END, periodEnd)
+        .param(OPENING_BALANCE, openingBalance)
+        .param(CLOSING_BALANCE, closingBalance)
         .update();
   }
 
@@ -340,8 +384,8 @@ public class StatementRepository {
         .param(STATEMENT_ID, statementId)
         .param(PERIOD_START, periodStart)
         .param(PERIOD_END, periodEnd)
-        .param("openingBalance", openingBalance)
-        .param("closingBalance", closingBalance)
+        .param(OPENING_BALANCE, openingBalance)
+        .param(CLOSING_BALANCE, closingBalance)
         .update();
   }
 

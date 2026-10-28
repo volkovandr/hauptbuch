@@ -38,13 +38,15 @@ class StatementPdfServiceTest {
   @Mock private StatementPdfText pdfText;
   @Mock private StatementService statementService;
   @Mock private PayingAccountDetector detector;
+  @Mock private StatementProfileService profileService;
 
   private StatementPdfService service;
 
   @BeforeEach
   void setUp() {
     service =
-        new StatementPdfService(statementRepository, storage, pdfText, statementService, detector);
+        new StatementPdfService(
+            statementRepository, storage, pdfText, statementService, detector, profileService);
   }
 
   @Test
@@ -61,6 +63,7 @@ class StatementPdfServiceTest {
 
   @Test
   void createStoresTheMaskedTextAsNewStatement() {
+    when(profileService.get(PROFILE_ID)).thenReturn(StatementProfile.blankPdf());
     when(storage.read(PATH)).thenReturn(BYTES);
     when(pdfText.extract(BYTES)).thenReturn(RAW);
     when(detector.ownIdentifiers()).thenReturn(List.of("XX00 1111 2222"));
@@ -71,6 +74,19 @@ class StatementPdfServiceTest {
     assertThat(service.create(PROFILE_ID, PATH, "may.pdf", ACCOUNT_ID)).isEqualTo(STATEMENT_ID);
 
     verify(statementService).statementAccount(ACCOUNT_ID);
+  }
+
+  @Test
+  void createKeepsTextUnmaskedForParseRulesProfile() {
+    when(profileService.get(PROFILE_ID)).thenReturn(StatementProfile.blankPdfRules());
+    when(storage.read(PATH)).thenReturn(BYTES);
+    when(pdfText.extract(BYTES)).thenReturn(RAW);
+    when(statementRepository.insertPdf(PROFILE_ID, ACCOUNT_ID, "may.pdf", PATH, RAW))
+        .thenReturn(STATEMENT_ID);
+
+    assertThat(service.create(PROFILE_ID, PATH, "may.pdf", ACCOUNT_ID)).isEqualTo(STATEMENT_ID);
+
+    verifyNoInteractions(detector);
   }
 
   @Test
