@@ -1,6 +1,6 @@
 # PDF (rules): Parse on a statement uploaded through a rules profile
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Area: `statements` — `StatementPdfService`, the parse service, `statement.html`
 Design: `docs/statements.md` §3.2a
@@ -23,7 +23,7 @@ and header without any AI call; re-parse after a rule change replaces them; re-p
 with a matched line; MockMvc acceptance covers these; `./gradlew check` is green.
 
 ## Comments
-2026-10-28 — implemented on `claude/determined-keller-pl1848`, awaiting the owner's confirmation.
+2026-10-28 — implemented on `claude/determined-keller-pl1848`, confirmed by the owner.
 `StatementPdfService.create` keeps a rules profile's text unmasked; `StatementParseService.parse`
 dispatches on the profile: a rules profile runs `ParseRuleEngine` on the current rules and text
 (no claim, no AI settings), decodes the TOON and stores it through `StatementParseResults.applyRules`
