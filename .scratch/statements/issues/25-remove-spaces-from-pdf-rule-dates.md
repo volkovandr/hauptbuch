@@ -1,6 +1,6 @@
 # Statements: per-profile "Remove spaces from dates" option for PDF rule profiles
 
-Status: open
+Status: resolved
 Category: enhancement
 Area: `statements` — `ParseRuleSettings`, `StatementProfile` (+ service, repository), the profile
 form (`statement-profile.html`), `ParseRuleValues.convert`
