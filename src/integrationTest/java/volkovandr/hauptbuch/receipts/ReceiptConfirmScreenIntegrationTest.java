@@ -66,6 +66,17 @@ class ReceiptConfirmScreenIntegrationTest {
 
   // ── The money-critical flow, end to end ─────────────────────────────────────
 
+  /**
+   * The register for {@code accountId}, with an explicit range around {@link #DAY} so the test
+   * never depends on the 90-day default.
+   */
+  private static MockHttpServletRequestBuilder registerAround(long accountId) {
+    return get("/register")
+        .param("accountId", String.valueOf(accountId))
+        .param("fromDate", "2026-08-01")
+        .param("toDate", "2026-08-31");
+  }
+
   @Test
   void captureThroughConfirmBooksTheTransaction() throws Exception {
     // Capture from the PC (source = pc), then pre-process: the real multipart endpoints, the real
@@ -424,7 +435,7 @@ class ReceiptConfirmScreenIntegrationTest {
     // The register row is muted and dashed, carries no running balance, and keeps its paperclip
     // back to the receipt (register §2.10).
     mockMvc
-        .perform(get("/register").param("accountId", String.valueOf(cash)))
+        .perform(registerAround(cash))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("register__row--pending")))
         .andExpect(content().string(containsString("Pending review")))
@@ -459,7 +470,7 @@ class ReceiptConfirmScreenIntegrationTest {
     assertThat(legsOf(transactionId)).containsExactlyInAnyOrder(leg(cash, "-5"), leg(parking, "5"));
 
     mockMvc
-        .perform(get("/register").param("accountId", String.valueOf(cash)))
+        .perform(registerAround(cash))
         .andExpect(status().isOk())
         .andExpect(content().string(not(containsString("register__row--pending"))));
   }
@@ -585,7 +596,7 @@ class ReceiptConfirmScreenIntegrationTest {
     // …and that is what the register row renders: the row's chip, "#" + the canonical label (the
     // bare label also appears in the tag datalist, so the chip's "#" is what makes this specific).
     mockMvc
-        .perform(get("/register").param("accountId", String.valueOf(cash)))
+        .perform(registerAround(cash))
         .andExpect(status().isOk())
         .andExpect(content().string(containsString("#Trips:France-2026")));
   }
@@ -608,7 +619,7 @@ class ReceiptConfirmScreenIntegrationTest {
 
     // No chip on the register row either — the counterpart to the shared-tag case above.
     mockMvc
-        .perform(get("/register").param("accountId", String.valueOf(cash)))
+        .perform(registerAround(cash))
         .andExpect(status().isOk())
         .andExpect(content().string(not(containsString("#Trips:France-2026"))));
   }
