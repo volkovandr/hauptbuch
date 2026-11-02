@@ -48,7 +48,22 @@ class ParseRuleEngineTest {
           "dd.MM.yyyy",
           ParseRuleSettings.CONTINUATION_PREVIOUS,
           null,
-          true);
+          true,
+          false);
+
+  private static final String SPACED_DATES =
+      "Von 0 1 . 1 1 . 2 0 2 5 bis 3\u00a00 . 1 1 . 2 0 2 5\n2 8 . 1 1 . 2 0 2 5 SHOPAAA 6,80-";
+
+  private static final List<ParseRule> SPACED_RULES =
+      List.of(
+          new ParseRule(
+              ParseRule.HEADER,
+              "^Von (?<periodStart>[\\d .]+) bis (?<periodEnd>[\\d\u00a0 .]+)$",
+              null),
+          new ParseRule(
+              ParseRule.BOOKING,
+              "^(?<bookingDate>[\\d .]+) (?<counterparty>\\S+) (?<amount>[\\d,]+-?)$",
+              null));
 
   private static final ParseRule BOOKING_DATE =
       new ParseRule(ParseRule.SET, "^Buchungsdatum: (?<bookingDate>\\S+)$", null);
@@ -401,6 +416,7 @@ class ParseRuleEngineTest {
             "yyyy-MM-dd",
             ParseRuleSettings.CONTINUATION_OFF,
             null,
+            false,
             false);
     List<ParseRule> rules =
         List.of(
@@ -544,7 +560,7 @@ class ParseRuleEngineTest {
   @Test
   void flagsInvalidSettings() {
     ParseRuleSettings bad =
-        new ParseRuleSettings(",", ",,", "middle", "dd{MM", "sideways", 0, false);
+        new ParseRuleSettings(",", ",,", "middle", "dd{MM", "sideways", 0, false, false);
 
     assertThat(engine.problems(BANK_B, bad)).hasSize(5);
   }
@@ -559,6 +575,7 @@ class ParseRuleEngineTest {
             "dd.MM.yyyy",
             ParseRuleSettings.CONTINUATION_OFF,
             null,
+            false,
             false);
 
     assertThat(engine.problems(BANK_B, minus))
@@ -577,6 +594,7 @@ class ParseRuleEngineTest {
             "dd.MM.yyyy",
             ParseRuleSettings.CONTINUATION_OFF,
             null,
+            false,
             false);
 
     assertThat(engine.problems(BANK_B, same)).hasSize(1);
@@ -589,6 +607,47 @@ class ParseRuleEngineTest {
     assertThatThrownBy(() -> engine.toToon(STATEMENT, rules, SETTINGS))
         .isInstanceOf(StatementFormatException.class)
         .hasMessageContaining("booking rule");
+  }
+
+  @Test
+  void removesSpacesFromSpacedOutBookingDatesWhenSettingIsOn() {
+    ParsedStatement parsed = parse(SPACED_DATES, SPACED_RULES, withDateRemoveSpaces(true));
+
+    StatementLine line = parsed.lines().get(0).line();
+    assertThat(line.problem()).isNull();
+    assertThat(line.bookingDate()).isEqualTo(LocalDate.of(2025, 11, 28));
+    assertThat(line.valueDate()).isEqualTo(LocalDate.of(2025, 11, 28));
+    assertThat(line.amount()).isEqualByComparingTo("-6.80");
+  }
+
+  @Test
+  void removesSpacesFromHeaderDatesIncludingNoBreakSpaces() {
+    ParsedStatement parsed = parse(SPACED_DATES, SPACED_RULES, withDateRemoveSpaces(true));
+
+    assertThat(parsed.periodStart()).isEqualTo(LocalDate.of(2025, 11, 1));
+    assertThat(parsed.periodEnd()).isEqualTo(LocalDate.of(2025, 11, 30));
+  }
+
+  @Test
+  void leavesSpacedDatesUnreadableWhenSettingIsOff() {
+    ParsedStatement parsed = parse(SPACED_DATES, SPACED_RULES, withDateRemoveSpaces(false));
+
+    assertThat(parsed.lines().get(0).line().problem())
+        .isEqualTo("The booking date could not be read.");
+  }
+
+  @Test
+  void passesDateStillInvalidAfterRemovingSpacesThrough() {
+    String text = "Konto 9 9 . 9 9 . 2 0 2 5 1,00";
+    List<ParseRule> rules =
+        List.of(
+            new ParseRule(
+                ParseRule.BOOKING, "^Konto (?<bookingDate>[\\d .]+) (?<amount>[\\d,]+)$", null));
+
+    ParsedStatement parsed = parse(text, rules, withDateRemoveSpaces(true));
+
+    assertThat(parsed.lines().get(0).line().problem())
+        .isEqualTo("The booking date could not be read.");
   }
 
   private ParsedStatement parse(String text, List<ParseRule> rules, ParseRuleSettings settings) {
@@ -604,7 +663,20 @@ class ParseRuleEngineTest {
         "dd.MM.yyyy",
         continuation,
         smartSpaceWidth,
-        periodStartPlusOne);
+        periodStartPlusOne,
+        false);
+  }
+
+  private static ParseRuleSettings withDateRemoveSpaces(boolean removeSpaces) {
+    return new ParseRuleSettings(
+        ".",
+        ",",
+        ParseRuleSettings.MINUS_TRAILING,
+        "dd.MM.yyyy",
+        ParseRuleSettings.CONTINUATION_PREVIOUS,
+        null,
+        false,
+        removeSpaces);
   }
 
   private static List<String> counterparties(ParsedStatement parsed) {

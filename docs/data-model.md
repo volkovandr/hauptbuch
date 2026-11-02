@@ -1383,6 +1383,7 @@ create table statement_profile (
   rules_continuation          text check (rules_continuation in ('previous','next','off')),
   rules_smart_space_width     int,     -- NULL = smart space off
   rules_period_start_plus_one boolean,
+  rules_date_remove_spaces    boolean,  -- NULL/false = off
   deleted_at            timestamptz
 );
 

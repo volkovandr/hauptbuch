@@ -71,6 +71,7 @@ class StatementProfileServiceTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -153,6 +154,7 @@ class StatementProfileServiceTest {
             null,
             null,
             null,
+            null,
             null);
 
     assertThatThrownBy(() -> service().save(badDate, List.of()))
@@ -181,6 +183,7 @@ class StatementProfileServiceTest {
             "Booking",
             null,
             "Amount",
+            null,
             null,
             null,
             null,
@@ -234,6 +237,7 @@ class StatementProfileServiceTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -256,6 +260,7 @@ class StatementProfileServiceTest {
             null,
             "signed",
             "Booking",
+            null,
             null,
             null,
             null,
@@ -331,6 +336,7 @@ class StatementProfileServiceTest {
         blank.rulesContinuation(),
         null,
         null,
+        true,
         null);
   }
 
@@ -351,6 +357,7 @@ class StatementProfileServiceTest {
     assertThat(profile.rulesThousandsSeparator()).isEmpty();
     assertThat(profile.rulesDateFormat()).isEqualTo("dd.MM.yyyy");
     assertThat(profile.rulesPeriodStartPlusOne()).isFalse();
+    assertThat(profile.rulesDateRemoveSpaces()).isTrue();
     verify(ruleRepository)
         .replace(7L, List.of(new ParseRule(ParseRule.BOOKING, BOOKING_RULE.pattern(), null)));
   }

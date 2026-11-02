@@ -192,6 +192,7 @@ public class StatementProfileService {
           null,
           null,
           null,
+          null,
           null);
     }
     return new StatementProfile(
@@ -219,6 +220,7 @@ public class StatementProfileService {
         blankToNull(s.colDescription()),
         blankToNull(s.colBankCategory()),
         blankToNull(s.colIban()),
+        null,
         null,
         null,
         null,
@@ -263,6 +265,7 @@ public class StatementProfileService {
         s.rulesContinuation(),
         s.rulesSmartSpaceWidth(),
         Boolean.TRUE.equals(s.rulesPeriodStartPlusOne()),
+        Boolean.TRUE.equals(s.rulesDateRemoveSpaces()),
         null);
   }
 

@@ -6,6 +6,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Turning what a parse rule captured into the TOON's own convention — ISO dates, signed dot-decimal
@@ -23,6 +24,9 @@ final class ParseRuleValues {
 
   private static final String MINUS = "-";
 
+  /** Every kind of whitespace, no-break and narrow no-break spaces included. */
+  private static final Pattern WHITESPACE = Pattern.compile("[\\p{javaWhitespace}\\p{Z}]+");
+
   private ParseRuleValues() {}
 
   /** The profile's date pattern, read the way the CSV dialect reads its own. */
@@ -33,14 +37,17 @@ final class ParseRuleValues {
   /**
    * The captured {@code raw} value of {@code field}, converted: an ISO date, a plain signed number
    * (kept as text, so the decoder reads it exactly and never through a binary float), or the
-   * stripped text.
+   * stripped text. With {@link ParseRuleSettings#dateRemoveSpaces()} a date is read with all its
+   * whitespace removed.
    */
   static String convert(
       String field, String raw, ParseRuleSettings settings, DateTimeFormatter dateFormat) {
     String text = raw.strip();
     try {
       if (DATE_FIELDS.contains(field)) {
-        LocalDate date = TypedValues.date(dateFormat, text, field);
+        String dateText =
+            settings.dateRemoveSpaces() ? WHITESPACE.matcher(text).replaceAll("") : text;
+        LocalDate date = TypedValues.date(dateFormat, dateText, field);
         return date == null ? text : date.toString();
       }
       if (NUMBER_FIELDS.contains(field)) {

@@ -76,6 +76,7 @@ class StatementProfileRuleRepositoryIntegrationTest {
         ParseRuleSettings.CONTINUATION_NEXT,
         42,
         true,
+        true,
         null);
   }
 
