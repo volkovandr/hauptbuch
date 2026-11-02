@@ -14,6 +14,8 @@ package volkovandr.hauptbuch.statements;
  *     joins the next with no space; null for always a space
  * @param periodStartPlusOne whether the period starts the day after the date the header rule reads
  *     (a bank that prints the previous statement's closing balance and date)
+ * @param dateRemoveSpaces whether every whitespace character is removed from a captured date before
+ *     it is read (a PDF whose text puts a space between all characters)
  */
 // The settings are their components plus the values the choice components take.
 @SuppressWarnings("PMD.DataClass")
@@ -24,7 +26,8 @@ public record ParseRuleSettings(
     String dateFormat,
     String continuation,
     Integer smartSpaceWidth,
-    boolean periodStartPlusOne) {
+    boolean periodStartPlusOne,
+    boolean dateRemoveSpaces) {
 
   /** The minus sign is printed before the amount: {@code -6,80}. */
   public static final String MINUS_LEADING = "leading";

@@ -151,6 +151,9 @@ which is how a description wrapped at the PDF's column width is rejoined.
 
 **Values.** The profile sets the **thousands separator**, the **decimal separator**, the **minus
 position** (leading or trailing; no minus = money in) and one **date format** for every date group.
+The optional **Remove spaces from dates** setting strips all whitespace from a captured date before it is
+read, for PDFs that put a space between every character (`2 8 . 1 1 . 2 0 2 5`); leave it off if the
+date format itself contains a space.
 The operator's regex captures the amount; no amount pattern is built in. Every date is a full date — a
 year-less date in the text (bank B's `03.08` value date) is simply not captured. An uncaptured
 `valueDate` is the `bookingDate`. A value that will not convert is written to the TOON as captured, so

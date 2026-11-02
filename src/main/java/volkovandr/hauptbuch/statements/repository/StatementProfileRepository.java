@@ -24,7 +24,8 @@ public class StatementProfileRepository {
              col_value_date, col_amount, col_debit, col_credit, col_currency, col_counterparty,
              col_description, col_bank_category, col_iban, rules_thousands_separator,
              rules_decimal_separator, rules_minus_position, rules_date_format, rules_continuation,
-             rules_smart_space_width, rules_period_start_plus_one, deleted_at
+             rules_smart_space_width, rules_period_start_plus_one, rules_date_remove_spaces,
+             deleted_at
       from statement_profile
       """;
 
@@ -46,7 +47,7 @@ public class StatementProfileRepository {
                    col_debit, col_credit, col_currency, col_counterparty, col_description,
                    col_bank_category, col_iban, rules_thousands_separator, rules_decimal_separator,
                    rules_minus_position, rules_date_format, rules_continuation,
-                   rules_smart_space_width, rules_period_start_plus_one)
+                   rules_smart_space_width, rules_period_start_plus_one, rules_date_remove_spaces)
                 values
                   (:name, :format, :windowDaysBefore, :windowDaysAfter, :aiNote, :csvDelimiter,
                    :csvQuote, :csvEncoding, :csvSkipRows, :csvHasHeader, :csvDecimalSeparator,
@@ -54,7 +55,8 @@ public class StatementProfileRepository {
                    :colDebit, :colCredit, :colCurrency, :colCounterparty, :colDescription,
                    :colBankCategory, :colIban, :rulesThousandsSeparator, :rulesDecimalSeparator,
                    :rulesMinusPosition, :rulesDateFormat, :rulesContinuation,
-                   :rulesSmartSpaceWidth, :rulesPeriodStartPlusOne)
+                   :rulesSmartSpaceWidth, :rulesPeriodStartPlusOne,
+                   :rulesDateRemoveSpaces)
                 returning statement_profile_id
                 """),
             profile)
@@ -87,7 +89,8 @@ public class StatementProfileRepository {
                     rules_minus_position = :rulesMinusPosition,
                     rules_date_format = :rulesDateFormat, rules_continuation = :rulesContinuation,
                     rules_smart_space_width = :rulesSmartSpaceWidth,
-                    rules_period_start_plus_one = :rulesPeriodStartPlusOne
+                    rules_period_start_plus_one = :rulesPeriodStartPlusOne,
+                    rules_date_remove_spaces = :rulesDateRemoveSpaces
                 where statement_profile_id = :statementProfileId and deleted_at is null
                 """),
             profile)
@@ -158,6 +161,7 @@ public class StatementProfileRepository {
         .param("rulesDateFormat", profile.rulesDateFormat())
         .param("rulesContinuation", profile.rulesContinuation())
         .param("rulesSmartSpaceWidth", profile.rulesSmartSpaceWidth())
-        .param("rulesPeriodStartPlusOne", profile.rulesPeriodStartPlusOne());
+        .param("rulesPeriodStartPlusOne", profile.rulesPeriodStartPlusOne())
+        .param("rulesDateRemoveSpaces", profile.rulesDateRemoveSpaces());
   }
 }

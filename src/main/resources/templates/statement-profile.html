@@ -178,6 +178,14 @@
             <input class="input" id="rulesDateFormat" name="rulesDateFormat" th:value="${profile.rulesDateFormat()}" />
           </div>
           <div class="field">
+            <label class="field__label" for="rulesDateRemoveSpaces">
+              Remove spaces from dates<span
+                th:replace="~{fragments/help-marker :: marker('Tick this when the PDF text has a space between the characters of a date (2 8 . 1 1 . 2 0 2 5). All whitespace is removed from every date before it is read, so leave it off if your date format contains a space.')}"
+              ></span>
+            </label>
+            <input id="rulesDateRemoveSpaces" name="rulesDateRemoveSpaces" type="checkbox" value="true" th:checked="${profile.rulesDateRemoveSpaces()}" />
+          </div>
+          <div class="field">
             <label class="field__label" for="rulesContinuation">
               Continuation lines<span
                 th:replace="~{fragments/help-marker :: marker('A line no rule consumes is added to the description of the booking above it or below it, or dropped.')}"

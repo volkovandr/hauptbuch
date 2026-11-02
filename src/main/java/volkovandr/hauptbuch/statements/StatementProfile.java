@@ -42,6 +42,7 @@ import java.time.OffsetDateTime;
  * @param rulesSmartSpaceWidth PDF (rules): the description column width, or null for smart space
  *     off
  * @param rulesPeriodStartPlusOne PDF (rules): whether the period starts the day after the date read
+ * @param rulesDateRemoveSpaces PDF (rules): whether all whitespace is removed from a captured date
  * @param deletedAt when the profile was soft-deleted, or null
  */
 public record StatementProfile(
@@ -76,6 +77,7 @@ public record StatementProfile(
     String rulesContinuation,
     Integer rulesSmartSpaceWidth,
     Boolean rulesPeriodStartPlusOne,
+    Boolean rulesDateRemoveSpaces,
     OffsetDateTime deletedAt) {
 
   /** The {@code format} of a CSV profile. */
@@ -112,7 +114,8 @@ public record StatementProfile(
         rulesDateFormat,
         rulesContinuation,
         rulesSmartSpaceWidth,
-        Boolean.TRUE.equals(rulesPeriodStartPlusOne));
+        Boolean.TRUE.equals(rulesPeriodStartPlusOne),
+        Boolean.TRUE.equals(rulesDateRemoveSpaces));
   }
 
   /** A new PDF (rules) profile with the defaults the form starts from: German statement style. */
@@ -149,6 +152,7 @@ public record StatementProfile(
         ParseRuleSettings.CONTINUATION_PREVIOUS,
         null,
         false,
+        false,
         null);
   }
 
@@ -160,6 +164,7 @@ public record StatementProfile(
         FORMAT_PDF,
         10,
         3,
+        null,
         null,
         null,
         null,
@@ -209,6 +214,7 @@ public record StatementProfile(
         "",
         null,
         "",
+        null,
         null,
         null,
         null,

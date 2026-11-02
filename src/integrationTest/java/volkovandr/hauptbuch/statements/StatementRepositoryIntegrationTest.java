@@ -84,6 +84,7 @@ class StatementRepositoryIntegrationTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -126,7 +127,7 @@ class StatementRepositoryIntegrationTest {
         new StatementProfile(
             null, "x", "xml", 1, 1, null, null, null, null, null, null, null, null, null, null,
             null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-            null, null, null);
+            null, null, null, null);
 
     assertThatThrownBy(() -> profiles.insert(bad))
         .isInstanceOf(DataIntegrityViolationException.class);

@@ -216,6 +216,48 @@ class ParseRuleEditorScreenIntegrationTest {
   }
 
   @Test
+  void removeSpacesFromDatesIsSavedAndReopensTicked() throws Exception {
+    mockMvc
+        .perform(
+            withRules(withSettings(post("/statements/profiles/save")))
+                .param("name", "Spaced")
+                .param("rulesDateRemoveSpaces", "true"))
+        .andExpect(status().is3xxRedirection());
+
+    long id = profileIdNamed("Spaced");
+    mockMvc
+        .perform(get("/statements/profiles/" + id))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Remove spaces from dates")))
+        .andExpect(content().string(containsString("id=\"rulesDateRemoveSpaces\"")));
+    assertThat(
+            jdbcClient
+                .sql(
+                    "select rules_date_remove_spaces from statement_profile"
+                        + " where statement_profile_id = :id")
+                .param("id", id)
+                .query(Boolean.class)
+                .single())
+        .isTrue();
+  }
+
+  @Test
+  void tryReadsSpacedDateWhenRemoveSpacesIsTicked() throws Exception {
+    mockMvc
+        .perform(
+            withSettings(post("/statements/profiles/rules/try"))
+                .param("ruleKind", "booking")
+                .param(
+                    "rulePattern",
+                    "^(?<bookingDate>[\\d .]+) (?<counterparty>\\S+) (?<amount>[\\d,]+-?)$")
+                .param("rulePatternEnd", "")
+                .param("testText", "0 3 . 0 8 . 2 0 2 6 SHOPAAA 6,80-\n")
+                .param("rulesDateRemoveSpaces", "true"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("2026-08-03")));
+  }
+
+  @Test
   void tryWithoutTestTextAsksForIt() throws Exception {
     mockMvc
         .perform(withRules(withSettings(post("/statements/profiles/rules/try"))))
