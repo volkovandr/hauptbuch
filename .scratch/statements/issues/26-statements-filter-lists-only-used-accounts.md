@@ -1,6 +1,6 @@
 # Statements: the "Filter list by account" dropdown lists only accounts that have statements
 
-Status: in progress
+Status: resolved
 Category: enhancement
 Area: `statements` — `StatementController.list`, `StatementService`, `StatementRepository`,
 `statements.html`
