@@ -381,6 +381,24 @@ class StatementScreenIntegrationTest {
   }
 
   @Test
+  void theFilterOffersOnlyAccountsWithStatementsWhileTheUploadOffersAllOpenOnes() throws Exception {
+    uploadAndCreate(saveProfile());
+    accountService.openAccount(
+        new AccountDraft(
+            "BankBbb-EUR", "asset", null, "EUR", LocalDate.parse("2026-01-01"), BigDecimal.ZERO));
+
+    String page =
+        mockMvc.perform(get("/statements")).andReturn().getResponse().getContentAsString();
+
+    String filter = page.substring(page.indexOf("id=\"filter-account\""));
+    filter = filter.substring(0, filter.indexOf("</select>"));
+    String upload = page.substring(page.indexOf("id=\"upload-account\""));
+    upload = upload.substring(0, upload.indexOf("</select>"));
+    assertThat(filter).contains("BankAaa-EUR").doesNotContain("BankBbb-EUR");
+    assertThat(upload).contains("BankAaa-EUR").contains("BankBbb-EUR");
+  }
+
+  @Test
   void theStatementPageShowsTheBalanceChecksAndTheListMarksNothingGreenYet() throws Exception {
     long statementId = uploadAndCreate(saveProfile());
     mockMvc

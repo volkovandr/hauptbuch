@@ -134,6 +134,40 @@ class StatementRepositoryIntegrationTest {
   }
 
   @Test
+  void filterAccountsListEachAccountWithLiveStatementOnceByName() {
+    statements.insert(profileId, accountId, "a.csv", "2026/05/a.csv", null, null);
+    statements.insert(profileId, accountId, "b.csv", "2026/05/b.csv", null, null);
+    long closedAccount = insertAccount("BankCcc-EUR", "date '2025-01-01'");
+    statements.insert(profileId, closedAccount, "c.csv", "2026/05/c.csv", null, null);
+    insertAccount("BankDdd-EUR", "null"); // no statement at all
+    long deletedOnlyAccount = insertAccount("BankEee-EUR", "null");
+    long deleted =
+        statements.insert(profileId, deletedOnlyAccount, "d.csv", "2026/05/d.csv", null, null);
+    statements.softDelete(deleted);
+
+    List<StatementAccount> found = statements.findLiveStatementAccounts();
+
+    assertThat(found)
+        .extracting(StatementAccount::accountId)
+        .containsExactly(accountId, closedAccount);
+    assertThat(found)
+        .extracting(StatementAccount::name)
+        .containsExactly("BankAaa-EUR", "BankCcc-EUR");
+  }
+
+  private long insertAccount(String name, String closedAt) {
+    return jdbcClient
+        .sql(
+            "insert into account (name, type, currency_code, closed_at) values (:name, 'asset',"
+                + " 'EUR', "
+                + closedAt
+                + ") returning account_id")
+        .param("name", name)
+        .query(Long.class)
+        .single();
+  }
+
+  @Test
   void statementRoundTripsItsHeaderAndSoftDeletes() {
     long id =
         statements.insert(

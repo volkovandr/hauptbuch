@@ -7,6 +7,7 @@ import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import volkovandr.hauptbuch.statements.Statement;
+import volkovandr.hauptbuch.statements.StatementAccount;
 import volkovandr.hauptbuch.statements.StatementRow;
 
 /**
@@ -428,6 +429,24 @@ public class StatementRepository {
             """)
         .param("accountId", accountId)
         .query(StatementRow.class)
+        .list();
+  }
+
+  /**
+   * The accounts with at least one live statement, by name — the list's account filter. A closed
+   * account stays: its statements are still listed.
+   */
+  public List<StatementAccount> findLiveStatementAccounts() {
+    return jdbcClient
+        .sql(
+            """
+            select distinct a.account_id, a.name
+            from statement s
+            join account a on a.account_id = s.account_id
+            where s.deleted_at is null
+            order by a.name, a.account_id
+            """)
+        .query(StatementAccount.class)
         .list();
   }
 

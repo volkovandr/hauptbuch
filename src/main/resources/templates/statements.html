@@ -57,7 +57,7 @@
             <select class="input" id="filter-account" name="account" onchange="this.form.submit()">
               <option value="">All accounts</option>
               <option
-                th:each="a : ${accounts}"
+                th:each="a : ${filterAccounts}"
                 th:value="${a.accountId()}"
                 th:text="${a.name()}"
                 th:selected="${a.accountId() == accountFilter}"

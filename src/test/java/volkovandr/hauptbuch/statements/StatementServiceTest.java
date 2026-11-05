@@ -91,6 +91,14 @@ class StatementServiceTest {
   }
 
   @Test
+  void filterAccountsAreTheAccountsTheRepositoryFindsWithLiveStatements() {
+    List<StatementAccount> used = List.of(new StatementAccount(ACCOUNT_ID, "BankAaa-EUR"));
+    when(statementRepository.findLiveStatementAccounts()).thenReturn(used);
+
+    assertThat(service.filterAccounts()).isEqualTo(used);
+  }
+
+  @Test
   void createsTheStatementWithThePeriodFromTheFirstAndLastBookingDate() {
     openAccountExists();
     StatementProfile profile = StatementProfile.blankCsv();

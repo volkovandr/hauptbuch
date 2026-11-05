@@ -17,6 +17,8 @@ import volkovandr.hauptbuch.statements.repository.StatementRepository;
  * the header and the lines, delete. Matching is {@link StatementMatchService}'s; a delete here is
  * just the soft-delete, after the caller removed the statement's matches.
  */
+// CouplingBetweenObjects: the one service of the statement list, upload and header edits.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class StatementService {
 
@@ -150,6 +152,11 @@ public class StatementService {
   /** The live statements for the list, newest first; {@code accountId} null lists every account. */
   public List<StatementRow> rows(Long accountId) {
     return statementRepository.findLiveRows(accountId);
+  }
+
+  /** The accounts that have a live statement — the list's account filter. */
+  public List<StatementAccount> filterAccounts() {
+    return statementRepository.findLiveStatementAccounts();
   }
 
   /**

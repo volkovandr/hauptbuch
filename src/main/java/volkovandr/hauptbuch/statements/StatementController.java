@@ -78,6 +78,7 @@ class StatementController {
     model.addAttribute("rows", statementService.rows(account));
     model.addAttribute("checkAll", checkAll);
     model.addAttribute("accounts", statementService.statementAccounts());
+    model.addAttribute("filterAccounts", statementService.filterAccounts());
     model.addAttribute("profiles", profileService.live());
     model.addAttribute("accountFilter", account);
     return "statements";
