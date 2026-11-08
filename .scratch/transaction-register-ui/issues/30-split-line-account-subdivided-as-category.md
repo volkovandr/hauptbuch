@@ -58,10 +58,9 @@ category" instead. Applies to the dock's category field if it shares the wiring.
 existing keyboard/htmx markup — no fourth JS leaf (CLAUDE.md §1.6).
 
 ## Tests (write first)
-- Unit (`DockSplitService`): a category-branch line whose account is an `asset` is refused; no
-  leaf is created, nothing is recorded.
-- Integration: `CurrencyLeafService.resolveCurrencyLeaf` on an `asset` account with postings in a
-  different currency throws and leaves the account unchanged (no children, postings in place).
+- Unit (`CurrencyLeafServiceTest`, services are unit-tested with mocked repositories): an `asset`
+  account is refused, whether its currency differs (would subdivide) or matches (would silently
+  post to an account as a "category"); no leaf is created and no posting is moved.
 - Integration (MockMvc) for B's rendered markup, per the htmx-attribute rule; `browserTest` only
   if the clearing is JS behaviour.
 

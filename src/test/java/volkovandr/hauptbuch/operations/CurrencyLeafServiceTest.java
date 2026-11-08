@@ -158,4 +158,32 @@ class CurrencyLeafServiceTest {
         .isThrownBy(() -> currencyLeafService.resolveCurrencyLeaf(FOOD_ID, CHF))
         .withMessageContaining("No category");
   }
+
+  @Test
+  void refusesRealAccountInsteadOfSubdividingItAsCategory() {
+    Account cash =
+        new Account(
+            FOOD_ID, "Cash-SEK", "asset", null, "SEK", null, null, null, null, false, false, false);
+    when(accountService.findById(FOOD_ID)).thenReturn(Optional.of(cash));
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> currencyLeafService.resolveCurrencyLeaf(FOOD_ID, "NOK"))
+        .withMessageContaining("'Cash-SEK' is an account, not a category")
+        .withMessageContaining("To");
+
+    verify(accountService, never()).insertCurrencyLeaf(any(), any(), anyLong());
+    verify(postingReassignmentRepository, never()).reassignPostings(anyLong(), anyLong());
+  }
+
+  @Test
+  void refusesRealAccountEvenWhenItsCurrencyAlreadyMatches() {
+    Account cash =
+        new Account(
+            FOOD_ID, "Cash-SEK", "asset", null, "SEK", null, null, null, null, false, false, false);
+    when(accountService.findById(FOOD_ID)).thenReturn(Optional.of(cash));
+
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> currencyLeafService.resolveCurrencyLeaf(FOOD_ID, "SEK"))
+        .withMessageContaining("is an account, not a category");
+  }
 }
