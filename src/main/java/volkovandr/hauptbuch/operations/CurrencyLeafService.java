@@ -1,6 +1,7 @@
 package volkovandr.hauptbuch.operations;
 
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -38,6 +39,8 @@ public class CurrencyLeafService {
 
   private static final Logger LOG = LoggerFactory.getLogger(CurrencyLeafService.class);
 
+  private static final Set<String> CATEGORY_TYPES = Set.of("income", "expense");
+
   private final AccountService accountService;
   private final PostingReassignmentRepository postingReassignmentRepository;
 
@@ -55,7 +58,9 @@ public class CurrencyLeafService {
    * @param categoryId the semantically-picked category — a leaf or an already-subdivided parent
    * @param currencyCode the paying account's currency (the posting's currency)
    * @return the leaf account the posting must be filed under
-   * @throws IllegalArgumentException if the category does not exist
+   * @throws IllegalArgumentException if the category does not exist, or is a real account (not an
+   *     {@code income}/{@code expense} category) — subdividing one would conjure currency children
+   *     under, say, a cash account and move its postings (issue transaction-register-ui/30)
    */
   @Transactional
   public Account resolveCurrencyLeaf(long categoryId, String currencyCode) {
@@ -63,12 +68,27 @@ public class CurrencyLeafService {
         accountService
             .findById(categoryId)
             .orElseThrow(() -> new IllegalArgumentException("No category with id " + categoryId));
+    requireCategory(category);
 
     List<Account> children = accountService.findChildrenOf(categoryId);
     if (!children.isEmpty()) {
       return resolveUnderParent(category, children, currencyCode);
     }
     return resolveForLeaf(category, currencyCode);
+  }
+
+  /**
+   * Only categories are routed to per-currency leaves (data-model §6.5). A real account reaching
+   * here — a transfer line that lost its {@code TO}/{@code FROM} direction — is refused before
+   * anything is created or moved.
+   */
+  private static void requireCategory(Account account) {
+    if (!CATEGORY_TYPES.contains(account.type())) {
+      throw new IllegalArgumentException(
+          "'"
+              + account.name()
+              + "' is an account, not a category — use To → / From ← to transfer to it");
+    }
   }
 
   /** The picked account is already a parent: use its currency child, or create it on first use. */
