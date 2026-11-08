@@ -365,6 +365,58 @@ class RegisterSplitScreenIntegrationTest {
   }
 
   @Test
+  void commitRefusesLineWhoseTextWasEditedAwayFromItsResolvedCategory() throws Exception {
+    // Issue 30: the resolve round-trip can lose a race with Save, leaving a line's hidden id on the
+    // category it was last resolved to while the text now names another. The commit must not book
+    // to the id the operator no longer sees.
+    long cash = openAccount("Cash", "500");
+    long food = insertCategory("Food", "expense");
+    long fuel = insertCategory("Fuel", "expense");
+
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("categoryText", "Food", "Transport")
+                .param("lineCategoryId", String.valueOf(food), String.valueOf(fuel))
+                .param("lineAmount", "20", "3")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("data-split-panel")))
+        .andExpect(content().string(containsString("Line 2")))
+        .andExpect(content().string(containsString("no longer matches")))
+        .andExpect(header().string("HX-Reswap", "none"));
+
+    assertThat(spendTransactionCount()).isZero();
+  }
+
+  @Test
+  void commitRefusesRealAccountIdCarriedUnderTypedCurrencyText() throws Exception {
+    // Issue 30, the reported incident: a line holding a real account's id with no transfer
+    // direction, its text since replaced by something else, used to subdivide that account.
+    long cash = openAccount("Cash", "500");
+    long savings = openAccount("Savings", "100");
+    long accountsBefore = accountCount();
+
+    mockMvc
+        .perform(
+            post(COMMIT_PATH)
+                .param("date", SPEND_DAY)
+                .param("accountId", String.valueOf(cash))
+                .param("categoryText", "NOK")
+                .param("lineCategoryId", String.valueOf(savings))
+                .param("lineAmount", "20")
+                .param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("no longer matches")))
+        .andExpect(header().string("HX-Reswap", "none"));
+
+    assertThat(accountCount()).isEqualTo(accountsBefore);
+    assertThat(spendTransactionCount()).isZero();
+  }
+
+  @Test
   void crossCurrencySplitWithaWrongCurrencyTransferLineLeavesTheRegisterStanding()
       throws Exception {
     // The exact reported flow (issue 05): funding account Cash EUR, transaction currency CHF, a
@@ -1023,6 +1075,10 @@ class RegisterSplitScreenIntegrationTest {
         .andExpect(status().isOk())
         // The seeded line already carries its id: nothing to re-arm, so no load trigger.
         .andExpect(content().string(not(containsString("change, load"))));
+  }
+
+  private long accountCount() {
+    return jdbcClient.sql("select count(*) from account").query(Long.class).single();
   }
 
   private long expenseAccountCount() {
