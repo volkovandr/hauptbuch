@@ -51,6 +51,7 @@ class RegisterSplitController {
   private final AccountService accountService;
   private final DockAmountFieldsService dockAmountFieldsService;
   private final SplitCurrencyService splitCurrencyService;
+  private final SplitLineConsistency splitLineConsistency;
 
   RegisterSplitController(
       DockSplitService dockSplitService,
@@ -59,7 +60,8 @@ class RegisterSplitController {
       RegisterService registerService,
       AccountService accountService,
       DockAmountFieldsService dockAmountFieldsService,
-      SplitCurrencyService splitCurrencyService) {
+      SplitCurrencyService splitCurrencyService,
+      SplitLineConsistency splitLineConsistency) {
     this.dockSplitService = dockSplitService;
     this.assembler = assembler;
     this.tagPills = tagPills;
@@ -67,6 +69,7 @@ class RegisterSplitController {
     this.accountService = accountService;
     this.dockAmountFieldsService = dockAmountFieldsService;
     this.splitCurrencyService = splitCurrencyService;
+    this.splitLineConsistency = splitLineConsistency;
   }
 
   /**
@@ -228,6 +231,7 @@ class RegisterSplitController {
       return commitError(form, "An account or person is required", model, response);
     }
     try {
+      splitLineConsistency.verify(form);
       dockSplitService.commit(
           new SplitEntry(
               form.transactionId(),

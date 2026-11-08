@@ -51,18 +51,25 @@ the shared `CurrencyLeafService.resolveCurrencyLeaf` so every caller is covered
 a caller legitimately routes non-category ids (verify each before enforcing; do not weaken it).
 Nothing is created or moved when it refuses.
 
-**B — drift fix (root cause).** When a split line's category text is edited, its hidden
-`lineCategoryId` and `lineTransferDirection` are cleared immediately, before any round-trip, so
-a stale id cannot survive an unresolved edit and the commit fails with "Each split line needs a
-category" instead. Applies to the dock's category field if it shares the wiring. Keep it in the
-existing keyboard/htmx markup — no fourth JS leaf (CLAUDE.md §1.6).
+**B — drift guard (root cause), owner chose option 3 on 2026-11-08: server-side.** Rather than
+clear the hidden state from JS (inline `hx-on` or a new handler in `keyboard.js`, both at odds with
+CLAUDE.md §1.6), `SplitLineConsistency` checks the posted form at commit. Each line's visible
+`categoryText` is classified the way `/categories/resolve` does (a `To →`/`From ←` transfer, a
+`for`/`by` person, else a category) and refused, naming the line, when the hidden state does not
+belong to it: a category id whose account name or path is not the text (or is not income/expense),
+a transfer whose direction was lost or whose label resolves to another account, a person line whose
+text names someone else. Only a *positive* mismatch is refused; a line the resolver never finished
+(text but no id) stays with the binder's "needs a category" message. A form that posts no line text
+at all is not compared (the panel always posts it). `operations` cannot call `categories`' resolver
+(module cycle), so it re-reads state through `accounts` lookups.
 
 ## Tests (write first)
 - Unit (`CurrencyLeafServiceTest`, services are unit-tested with mocked repositories): an `asset`
   account is refused, whether its currency differs (would subdivide) or matches (would silently
   post to an account as a "category"); no leaf is created and no posting is moved.
-- Integration (MockMvc) for B's rendered markup, per the htmx-attribute rule; `browserTest` only
-  if the clearing is JS behaviour.
+- Unit (`SplitLineConsistencyTest`): each kind agrees/refuses, blank lines skipped, line numbering.
+- Integration (`RegisterSplitScreenIntegrationTest`): a stale category id and the reported incident
+  shape are refused with the panel re-rendered (`HX-Reswap: none`), nothing recorded or created.
 
 ## Open
 - Why the line currency was NOK while the header was believed to read SEK — unverified; does not
