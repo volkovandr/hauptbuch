@@ -1,6 +1,6 @@
 # Statements: Enter in the Create dock submits the previously resolved category, not the one just picked
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Area: statement dock (`fragments/statement-dock.html`), the category picker's `change` →
 `/categories/resolve` round trip, possibly `keyboard.js`
