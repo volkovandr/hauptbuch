@@ -1,6 +1,6 @@
 # Edit dock shows `to -> personal.EUR` in Category when the person is the counterpart
 
-Status: ready-for-agent
+Status: resolved
 Category: bug
 Area: `operations.DockEditService` (`classifyTransfer`, `accountEntryText`), the edit dock opened
 from the register's pencil button and from statements edit links
