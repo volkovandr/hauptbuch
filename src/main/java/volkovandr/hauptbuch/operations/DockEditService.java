@@ -178,16 +178,22 @@ public class DockEditService {
    * <em>credit</em> side (negative) is {@code by}.
    */
   private String accountEntryText(EditableLegs legs) {
+    return entryTextFor(legs.fundingAccount(), legs.fundingLeg().amount());
+  }
+
+  /**
+   * The re-resolvable entry text for an own-account leg: the {@code for}/{@code by} sigil when the
+   * account is a person's debt leaf (by the leg's sign), otherwise the account picker label.
+   */
+  private String entryTextFor(Account account, BigDecimal legAmount) {
     return personService
-        .personNameForAccount(legs.fundingAccount().accountId())
+        .personNameForAccount(account.accountId())
         .map(
             name ->
                 PersonTarget.option(
-                    legs.fundingLeg().amount().signum() < 0
-                        ? PersonTarget.Direction.BY
-                        : PersonTarget.Direction.FOR,
+                    legAmount.signum() < 0 ? PersonTarget.Direction.BY : PersonTarget.Direction.FOR,
                     name))
-        .orElseGet(() -> accountService.ownAccountEntryLabel(legs.fundingAccount()));
+        .orElseGet(() -> accountService.ownAccountEntryLabel(account));
   }
 
   /**
@@ -272,7 +278,7 @@ public class DockEditService {
         funding.posting(),
         funding.account(),
         counterpart.account().accountId(),
-        accountService.ownAccountEntryLabel(counterpart.account()),
+        entryTextFor(counterpart.account(), counterpart.posting().amount()),
         counterpart.account().type(),
         counterpart.account().currencyCode(),
         categoryAmount,

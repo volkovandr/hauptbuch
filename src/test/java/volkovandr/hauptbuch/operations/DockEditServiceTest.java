@@ -417,6 +417,27 @@ class DockEditServiceTest {
   }
 
   @Test
+  void loadsPaymentToPersonShowingTheForSigilNotTheLeafName() {
+    // Cash lends €20 to Max: Max's leaf is the debit (counterpart) side. The Category field must
+    // re-resolve through /categories/resolve, so it shows `for Max`, never `personal.EUR`.
+    long maxLeafId = 9L;
+    when(ledgerService.findTransaction(TXN_ID)).thenReturn(Optional.of(txn(null, null)));
+    when(ledgerService.findPostings(TXN_ID))
+        .thenReturn(List.of(posting(CASH_ID, "-20"), posting(maxLeafId, "20")));
+    when(accountService.findById(CASH_ID))
+        .thenReturn(Optional.of(account(CASH_ID, "Cash", ASSET, null, EUR)));
+    when(accountService.findById(maxLeafId))
+        .thenReturn(Optional.of(account(maxLeafId, "personal.EUR", ASSET, null, EUR)));
+    when(personService.personNameForAccount(maxLeafId)).thenReturn(Optional.of("Max"));
+
+    DockEditModel model = service().load(TXN_ID);
+
+    assertThat(model.categoryId()).isEqualTo(maxLeafId);
+    assertThat(model.categoryName()).isEqualTo("for Max");
+    assertThat(model.accountEntryText()).isEqualTo("Cash (EUR)");
+  }
+
+  @Test
   void loadsCrossCurrencyTransferSingleLine() {
     // Cross-currency transfer: €100 from Cash (EUR) to Visa (CHF) at a rate.
     long visaChf = 12L;
