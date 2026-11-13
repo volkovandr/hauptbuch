@@ -1174,6 +1174,21 @@ class RegisterEntryScreenIntegrationTest {
   }
 
   @Test
+  void editShowsTheForSigilWhenThePersonIsTheCounterpart() throws Exception {
+    // Issue transaction-register-ui/30: `for Max` books Cash −20, Max +20; re-opening it must put
+    // `for Max` back in the Category field, not the leaf's cosmetic `personal.EUR` name.
+    long cash = openAccount("Cash", "500");
+    commitPersonSpend(cash, "Max", "FOR", "2026-02-01", "20");
+    long txnId = latestTransactionId();
+
+    mockMvc
+        .perform(get("/register/edit/" + txnId).param("viewAccountId", String.valueOf(cash)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("value=\"for Max\"")))
+        .andExpect(content().string(not(containsString("personal.EUR"))));
+  }
+
+  @Test
   void savingAnEditReThreadsTheBalanceInPlace() throws Exception {
     long cash = openAccount("Cash", "500");
     long food = insertCategory("Food");
