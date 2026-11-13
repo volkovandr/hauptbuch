@@ -1,6 +1,8 @@
 package volkovandr.hauptbuch.statements;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.time.LocalDate;
+import java.util.Optional;
 import java.util.function.Function;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import volkovandr.hauptbuch.operations.GhostSuggestion;
 
 /**
  * The saves of the dock on the statement page (statements.md §6.4, plan slices d1–d2): create a
@@ -60,6 +63,24 @@ class StatementDockController {
             .forTarget(id, lineId, categoryId, transferDirection, date)
             .orElse(null));
     return "fragments/statement-dock :: crossFieldsFor(cross=${cross})";
+  }
+
+  /**
+   * The category to fill in once the operator corrects the dock's payee (issue statements/28): the
+   * payee's last category as out-of-band fills, or an empty response that leaves the Category as it
+   * is.
+   */
+  @GetMapping(BASE_PATH + "/dock/category-for-payee")
+  String categoryForPayee(
+      @RequestParam(required = false) String payeeText, Model model, HttpServletResponse response) {
+    Optional<GhostSuggestion> suggestion = dockService.suggestCategoryFor(payeeText);
+    if (suggestion.isPresent()) {
+      response.setHeader("HX-Trigger-After-Swap", "dock-category-filled");
+    }
+    model.addAttribute("categoryId", suggestion.map(GhostSuggestion::categoryId).orElse(null));
+    model.addAttribute("categoryName", suggestion.map(GhostSuggestion::categoryName).orElse(null));
+    return "fragments/statement-dock :: suggestedCategory(categoryId=${categoryId},"
+        + " categoryName=${categoryName})";
   }
 
   /** Book a missing line through the dock and match it. */

@@ -55,7 +55,7 @@
               id="dock-cross"
               class="entry-dock__cross"
               th:attr="hx-get=${dock.suggestsCrossCurrency()} ? @{/statements/{id}/lines/{line}/cross-currency(id=${statementId},line=${dock.lineId()})}"
-              hx-trigger="htmx:afterSwap from:#entry-category-resolved"
+              hx-trigger="htmx:afterSwap from:#entry-category-resolved, dock-category-filled from:body"
               hx-include="#dock-date, #entry-category-resolved"
               hx-target="this"
               hx-select="unset"
@@ -76,6 +76,9 @@
                 list="dock-payee-options"
                 autocomplete="off"
                 th:value="${dock.input().payeeText()}"
+                hx-get="/statements/dock/category-for-payee"
+                hx-trigger="change"
+                hx-swap="none"
               />
               <datalist id="dock-payee-options">
                 <option th:each="p : ${lists.payees()}" th:value="${p.entryValue()}"></option>
@@ -201,6 +204,32 @@
         <th:block
           th:replace="~{:: crossFields(${cross.currencyCode()}, ${cross.counterpartAmount()}, ${cross.showBase()}, ${cross.baseAmount()})}"
         ></th:block>
+      </th:block>
+    </th:block>
+
+    <!-- GET /statements/dock/category-for-payee: the corrected payee's last category, as out-of-band
+         fills only (the Payee input swaps nothing itself). htmx fires no swap event on an OOB
+         target, so the response also sends `dock-category-filled` (HX-Trigger-After-Swap), which
+         makes the cross-currency block above ask for the counterpart amounts again. -->
+    <th:block th:fragment="suggestedCategory(categoryId, categoryName)">
+      <th:block th:if="${categoryName}">
+        <input
+          id="dock-category"
+          data-select-on-focus
+          name="categoryText"
+          class="input"
+          list="dock-category-options"
+          autocomplete="off"
+          th:value="${categoryName}"
+          hx-swap-oob="true"
+          hx-post="/categories/resolve"
+          hx-trigger="change"
+          hx-target="#entry-category-resolved"
+          hx-swap="innerHTML"
+        />
+        <span hx-swap-oob="innerHTML:#entry-category-resolved">
+          <input type="hidden" name="categoryId" th:value="${categoryId}" />
+        </span>
       </th:block>
     </th:block>
   </body>

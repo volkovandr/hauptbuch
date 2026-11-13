@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -113,11 +114,12 @@ class StatementDockIntegrationTest {
         .andExpect(content().string(containsString("hx-get=\"/statements/" + statementId + "\"")));
   }
 
-  @Test
-  void payeeInTheBankTextAndItsLastCategoryArePrefilled() throws Exception {
+  /** A payee whose one confirmed transaction, on the statement's account, was in this category. */
+  private void payeeWithHistory(String name, long categoryId) {
     long payeeId =
         jdbcClient
-            .sql("insert into payee (name) values ('ShopAaa') returning payee_id")
+            .sql("insert into payee (name) values (:n) returning payee_id")
+            .param("n", name)
             .query(Long.class)
             .single();
     long earlier =
@@ -134,8 +136,13 @@ class StatementDockIntegrationTest {
                 + " :c, 5)")
         .param("t", earlier)
         .param("a", accountId)
-        .param("c", foodId)
+        .param("c", categoryId)
         .update();
+  }
+
+  @Test
+  void payeeInTheBankTextAndItsLastCategoryArePrefilled() throws Exception {
+    payeeWithHistory("ShopAaa", foodId);
 
     mockMvc
         .perform(get("/statements/" + statementId).param("dock", String.valueOf(shopLine)))
@@ -143,6 +150,51 @@ class StatementDockIntegrationTest {
         .andExpect(content().string(containsString("name=\"payeeText\"")))
         .andExpect(content().string(containsString("value=\"ShopAaa\"")))
         .andExpect(content().string(containsString("name=\"categoryId\" value=\"" + foodId)));
+  }
+
+  @Test
+  void payeeFieldAsksForTheCategoryOfWhateverPayeeIsTypedInstead() throws Exception {
+    mockMvc
+        .perform(get("/statements/" + statementId).param("dock", String.valueOf(shopLine)))
+        .andExpect(status().isOk())
+        .andExpect(
+            content().string(containsString("hx-get=\"/statements/dock/category-for-payee\"")));
+  }
+
+  @Test
+  void correctedPayeeFillsTheCategoryTextAndTheResolvedIdOutOfBand() throws Exception {
+    long fuelId = accountService.insertLeaf("Fuel", "expense", null, "EUR").accountId();
+    payeeWithHistory("ShopBbb", fuelId);
+
+    mockMvc
+        .perform(get("/statements/dock/category-for-payee").param("payeeText", "ShopBbb"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("id=\"dock-category\"")))
+        .andExpect(content().string(containsString("value=\"Fuel\"")))
+        .andExpect(header().string("HX-Trigger-After-Swap", "dock-category-filled"))
+        .andExpect(content().string(containsString("hx-swap-oob=\"true\"")))
+        .andExpect(
+            content().string(containsString("hx-swap-oob=\"innerHTML:#entry-category-resolved\"")))
+        .andExpect(content().string(containsString("name=\"categoryId\" value=\"" + fuelId)));
+  }
+
+  @Test
+  void correctedPayeeWithoutHistoryLeavesTheCategoryAlone() throws Exception {
+    long payeeWithoutHistory =
+        jdbcClient
+            .sql("insert into payee (name) values ('ShopCcc') returning payee_id")
+            .query(Long.class)
+            .single();
+    assertThat(payeeWithoutHistory).isPositive();
+
+    for (String typed : new String[] {"ShopCcc", "Brand New Payee", ""}) {
+      mockMvc
+          .perform(get("/statements/dock/category-for-payee").param("payeeText", typed))
+          .andExpect(status().isOk())
+          .andExpect(header().doesNotExist("HX-Trigger-After-Swap"))
+          .andExpect(content().string(not(containsString("dock-category"))))
+          .andExpect(content().string(not(containsString("categoryId"))));
+    }
   }
 
   @Test

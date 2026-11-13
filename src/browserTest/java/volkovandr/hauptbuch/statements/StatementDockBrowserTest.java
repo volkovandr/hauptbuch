@@ -11,7 +11,9 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -194,6 +196,46 @@ class StatementDockBrowserTest extends BrowserTest {
         .containsText("Transaction created and matched.");
     org.assertj.core.api.Assertions.assertThat(postingsOn("BrowEnterBbb")).isEqualTo(1L);
     org.assertj.core.api.Assertions.assertThat(postingsOn("BrowEnterAaa")).isZero();
+  }
+
+  @Test
+  void correctingThePayeeRefillsTheCategoryAndAsksForTheCounterpartAmountsAgain() {
+    long fuel = accountService.insertLeaf("BrowFuelBbb", "expense", null, "EUR").accountId();
+    long payee =
+        jdbcClient
+            .sql("insert into payee (name) values ('BrowShopBbb') returning payee_id")
+            .query(Long.class)
+            .single();
+    long earlier =
+        jdbcClient
+            .sql(
+                "insert into transaction (date, payee_id, lifecycle) values ('2026-04-01', :p,"
+                    + " 'confirmed') returning transaction_id")
+            .param("p", payee)
+            .query(Long.class)
+            .single();
+    jdbcClient
+        .sql(
+            "insert into posting (transaction_id, account_id, amount) values (:t, :a, -5), (:t,"
+                + " :c, 5)")
+        .param("t", earlier)
+        .param("a", accountId)
+        .param("c", fuel)
+        .update();
+    openDock("-21,50");
+    List<String> requested = new ArrayList<>();
+    page.onRequest(request -> requested.add(request.url()));
+
+    Locator payeeField = page.locator("#dock-payee");
+    payeeField.fill("BrowShopBbb");
+    payeeField.dispatchEvent("change");
+    settled();
+
+    assertThat(page.locator("#dock-category")).hasValue("BrowFuelBbb");
+    assertThat(page.locator("#statement-dock input[name=categoryId]"))
+        .hasValue(String.valueOf(fuel));
+    // The fill must trigger the dock's cross-currency refresh like a picked category does.
+    page.waitForCondition(() -> requested.stream().anyMatch(u -> u.contains("/cross-currency")));
   }
 
   private long postingsOn(String accountName) {
