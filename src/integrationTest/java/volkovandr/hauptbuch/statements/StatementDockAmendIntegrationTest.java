@@ -235,6 +235,61 @@ class StatementDockAmendIntegrationTest {
   }
 
   @Test
+  void amendDockEndpointReturnsOnlyTheAmendDockRow() throws Exception {
+    long leg = legOf(booked(accountId, "2026-05-02", "ShopAaa", "12.00"), accountId);
+
+    mockMvc
+        .perform(
+            get("/statements/" + statementId + "/lines/" + shopLine + "/dock")
+                .param("posting", String.valueOf(leg)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Amend transaction")))
+        .andExpect(content().string(containsString(lineUrl("amend/" + leg))))
+        .andExpect(content().string(org.hamcrest.Matchers.not(containsString("<table"))));
+  }
+
+  @Test
+  void refusedAmendDockEndpointReturnsTheRefusalRowInsteadOfTheDock() throws Exception {
+    long transaction = booked(accountId, "2026-05-02", "ShopAaa", "12.00");
+    long leg = legOf(transaction, accountId);
+    long drinksId = accountService.insertLeaf("Drinks", "expense", null, "EUR").accountId();
+    jdbcClient
+        .sql("update posting set amount = 8.00 where transaction_id = :t and account_id = :f")
+        .param("t", transaction)
+        .param("f", foodId)
+        .update();
+    jdbcClient
+        .sql("insert into posting (transaction_id, account_id, amount) values (:t, :d, 4.00)")
+        .param("t", transaction)
+        .param("d", drinksId)
+        .update();
+
+    mockMvc
+        .perform(
+            get("/statements/" + statementId + "/lines/" + shopLine + "/dock")
+                .param("posting", String.valueOf(leg)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("role=\"alert\"")))
+        .andExpect(
+            content().string(containsString("href=\"/register?selected=" + transaction + "\"")))
+        .andExpect(
+            content().string(org.hamcrest.Matchers.not(containsString("Amend transaction"))));
+  }
+
+  @Test
+  void extraDockEndpointReturnsOnlyTheEditDockRow() throws Exception {
+    long leg = legOf(booked(accountId, "2026-05-03", "ShopZzz", "4.00"), accountId);
+
+    mockMvc
+        .perform(get("/statements/" + statementId + "/extras/" + leg + "/dock"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Edit transaction")))
+        .andExpect(content().string(containsString("name=\"amount\"")))
+        .andExpect(content().string(containsString("value=\"ShopZzz\"")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(containsString("<table"))));
+  }
+
+  @Test
   void amendSetsTheLegToTheBanksAmountAndMatchesItReconciled() throws Exception {
     long transaction = booked(accountId, "2026-05-02", "ShopAaa", "12.00");
     long leg = legOf(transaction, accountId);

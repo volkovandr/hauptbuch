@@ -110,8 +110,54 @@ class StatementDockIntegrationTest {
         .andExpect(content().string(containsString("hx-post=\"/categories/resolve\"")))
         .andExpect(content().string(containsString("hx-select=\"unset\"")))
         .andExpect(content().string(containsString("name=\"tagText\"")))
-        // Cancel swaps <main> like Create does, so the page keeps its scroll position.
-        .andExpect(content().string(containsString("hx-get=\"/statements/" + statementId + "\"")));
+        // Cancel deletes the dock row on the spot; it does not re-fetch the page.
+        .andExpect(
+            content()
+                .string(containsString("hx-get=\"/statements/" + statementId + "/dock/close\"")));
+  }
+
+  @Test
+  void dockEndpointReturnsOnlyTheDockRowAndClosesAnyOpenDock() throws Exception {
+    mockMvc
+        .perform(get("/statements/" + statementId + "/lines/" + shopLine + "/dock"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Save and match")))
+        .andExpect(content().string(containsString("value=\"2026-05-02\"")))
+        .andExpect(content().string(containsString("value=\"12,50\"")))
+        .andExpect(content().string(containsString("class=\"statement-dock-row\"")))
+        .andExpect(content().string(containsString("hx-swap-oob=\"delete:.statement-dock-row\"")))
+        .andExpect(content().string(not(containsString("<table"))))
+        .andExpect(content().string(not(containsString("<html"))));
+  }
+
+  @Test
+  void createLinkFetchesTheDockEndpointButKeepsTheFullPageUrlForRefresh() throws Exception {
+    mockMvc
+        .perform(get("/statements/" + statementId))
+        .andExpect(
+            content()
+                .string(
+                    containsString(
+                        "hx-get=\"/statements/" + statementId + "/lines/" + shopLine + "/dock\"")))
+        .andExpect(
+            content()
+                .string(
+                    containsString(
+                        "hx-push-url=\"/statements/" + statementId + "?dock=" + shopLine + "\"")));
+  }
+
+  @Test
+  void cancelRemovesTheDockRowWithoutRebuildingThePage() throws Exception {
+    mockMvc
+        .perform(get("/statements/" + statementId).param("dock", String.valueOf(shopLine)))
+        .andExpect(
+            content()
+                .string(containsString("hx-get=\"/statements/" + statementId + "/dock/close\"")))
+        .andExpect(content().string(containsString("hx-swap=\"delete\"")));
+    mockMvc
+        .perform(get("/statements/" + statementId + "/dock/close"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(""));
   }
 
   /** A payee whose one confirmed transaction, on the statement's account, was in this category. */
