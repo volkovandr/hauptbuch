@@ -46,6 +46,15 @@
           >2026-05.csv</a
         >
       </p>
+      <p class="muted">
+        <a
+          th:href="@{/register(accountId=${statement.accountId()})}
+            + ${statement.periodStart() != null ? '&fromDate=' + statement.periodStart().toString() : ''}
+            + ${statement.periodEnd() != null ? '&toDate=' + statement.periodEnd().toString() : ''}"
+          title="The register for this account, over the statement's period"
+          >Open in register</a
+        >
+      </p>
       <p class="statements__notice" th:if="${notice}" th:text="${notice}">Header saved.</p>
       <p class="statements__error" th:if="${error}" th:text="${error}">Not a date.</p>
       <p class="statement-counts">

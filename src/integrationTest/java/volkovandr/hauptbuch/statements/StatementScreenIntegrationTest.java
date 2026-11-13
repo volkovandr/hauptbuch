@@ -133,6 +133,47 @@ class StatementScreenIntegrationTest {
   }
 
   @Test
+  void theStatementPageLinksToTheRegisterForItsAccountAndPeriod() throws Exception {
+    long statementId = uploadAndCreate(saveProfile());
+    jdbcClient
+        .sql(
+            "update statement set period_start = '2026-05-01', period_end = '2026-05-31'"
+                + " where statement_id = :id")
+        .param("id", statementId)
+        .update();
+
+    mockMvc
+        .perform(get("/statements/" + statementId))
+        .andExpect(
+            content()
+                .string(
+                    containsString(
+                        "/register?accountId="
+                            + accountId
+                            + "&amp;fromDate=2026-05-01&amp;toDate=2026-05-31")))
+        .andExpect(content().string(containsString("Open in register")));
+  }
+
+  @Test
+  void theRegisterLinkLeavesOutPeriodBoundsTheStatementDoesNotHave() throws Exception {
+    long statementId = uploadAndCreate(saveProfile());
+    jdbcClient
+        .sql(
+            "update statement set period_start = '2026-05-01', period_end = null"
+                + " where statement_id = :id")
+        .param("id", statementId)
+        .update();
+
+    mockMvc
+        .perform(get("/statements/" + statementId))
+        .andExpect(
+            content()
+                .string(
+                    containsString(
+                        "/register?accountId=" + accountId + "&amp;fromDate=2026-05-01\"")));
+  }
+
+  @Test
   void theStatementPageShowsLiveProposalsMissingLinesAndExtras() throws Exception {
     long statementId = uploadAndCreate(saveProfile());
     long shop = insertId("insert into payee (name) values ('ShopAaa') returning payee_id");
