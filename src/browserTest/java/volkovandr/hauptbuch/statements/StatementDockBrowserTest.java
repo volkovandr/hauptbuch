@@ -322,6 +322,43 @@ class StatementDockBrowserTest extends BrowserTest {
   }
 
   @Test
+  void openingSecondDockClosesTheFirst() {
+    page.navigate(
+        createStatementFromRows(
+            "02.05.2026;;-31,11;EUR;BrowShopAaa;Card;Groceries;\n"
+                + "03.05.2026;;-32,22;EUR;BrowShopBbb;Card;Groceries;\n"));
+    Locator create =
+        page.getByText(
+            "Create", new com.microsoft.playwright.Page.GetByTextOptions().setExact(true));
+    create.nth(0).click();
+    assertThat(page.locator(".statement-dock-row")).hasCount(1);
+    settled();
+    create.nth(1).click();
+    settled();
+
+    assertThat(page.locator(".statement-dock-row")).hasCount(1);
+    assertThat(page.locator("#statement-dock")).containsText("Create transaction");
+    assertThat(page.locator("#dock-date")).hasValue("2026-05-03");
+  }
+
+  @Test
+  void cancelRemovesTheDockAndRestoresThePlainStatementUrl() {
+    String statementUrl = createStatement("-33,33");
+    page.navigate(statementUrl);
+    page.getByText("Create", new com.microsoft.playwright.Page.GetByTextOptions().setExact(true))
+        .click();
+    assertThat(page.locator("table.statements #statement-dock")).isVisible();
+    settled();
+    org.assertj.core.api.Assertions.assertThat(page.url()).contains("?dock=");
+
+    page.getByText("Cancel", new com.microsoft.playwright.Page.GetByTextOptions().setExact(true))
+        .click();
+
+    assertThat(page.locator(".statement-dock-row")).hasCount(0);
+    org.assertj.core.api.Assertions.assertThat(page.url()).isEqualTo(statementUrl);
+  }
+
+  @Test
   void dockOpensWithTheDateFocused() {
     openDock("-15,50");
 

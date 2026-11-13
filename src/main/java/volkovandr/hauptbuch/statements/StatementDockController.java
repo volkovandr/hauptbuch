@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import volkovandr.hauptbuch.operations.GhostSuggestion;
 
@@ -28,6 +29,11 @@ class StatementDockController {
   private static final String NOTICE = "notice";
   private static final String ERROR = "error";
 
+  /** The columns of the lines table and of the extras table: what a full-width row spans. */
+  private static final int LINE_COLUMNS = 7;
+
+  private static final int EXTRA_COLUMNS = 6;
+
   private final StatementDockService dockService;
   private final StatementExtraDockService extraDockService;
   private final StatementPageAssembler pageAssembler;
@@ -42,6 +48,42 @@ class StatementDockController {
     this.dockService = dockService;
     this.extraDockService = extraDockService;
     this.pageAssembler = pageAssembler;
+  }
+
+  /**
+   * Just the dock row for a line (Create, or Amend with a {@code posting}): the page itself is not
+   * rebuilt, since opening the dock changes nothing else on it. A line matched meanwhile, or a
+   * transaction the dock cannot edit, comes back as the error row the full page would show.
+   */
+  @GetMapping(BASE_PATH + "/{id}/lines/{lineId}/dock")
+  String openLineDock(
+      @PathVariable long id,
+      @PathVariable long lineId,
+      @RequestParam(required = false) Long posting,
+      Model model) {
+    pageAssembler.addDock(id, lineId, posting, null, model);
+    return openedDock(id, LINE_COLUMNS, model);
+  }
+
+  /** Just the dock row for an extra (Edit); see {@link #openLineDock}. */
+  @GetMapping(BASE_PATH + "/{id}/extras/{posting}/dock")
+  String openExtraDock(@PathVariable long id, @PathVariable long posting, Model model) {
+    pageAssembler.addDock(id, null, null, posting, model);
+    return openedDock(id, EXTRA_COLUMNS, model);
+  }
+
+  /** Cancel: the htmx caller deletes the dock row itself, so there is nothing to send. */
+  @GetMapping(BASE_PATH + "/{id}/dock/close")
+  @ResponseBody
+  String closeDock() {
+    return "";
+  }
+
+  private static String openedDock(long id, int columns, Model model) {
+    model.addAttribute("statementId", id);
+    model.addAttribute("columns", columns);
+    return "fragments/statement-dock :: openedDock(statementId=${statementId},"
+        + " columns=${columns})";
   }
 
   /**

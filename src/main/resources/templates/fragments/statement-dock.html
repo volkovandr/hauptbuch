@@ -13,6 +13,44 @@
 -->
 <html xmlns:th="http://www.thymeleaf.org">
   <body>
+    <!--
+      The dock as a full-width table row, and the row that says why it cannot open. Both are used by
+      the full page and by the dock-only endpoints. `.statement-dock-row` is what Cancel deletes and
+      what opening another dock replaces.
+    -->
+    <th:block th:fragment="dockRow(statementId, dock, lists, columns)">
+      <tr class="statement-dock-row">
+        <td th:colspan="${columns}">
+          <th:block th:replace="~{:: dock(${statementId}, ${dock}, ${lists})}"></th:block>
+        </td>
+      </tr>
+    </th:block>
+
+    <th:block th:fragment="refusalRow(columns, refusal, transactionId)">
+      <tr>
+        <td th:colspan="${columns}" class="statements__error" role="alert">
+          <span th:text="${refusal}">Only a simple two-leg transaction can be edited here.</span>
+          <a th:if="${transactionId != null}" th:href="@{/register(selected=${transactionId})}"
+            >Change it in the register</a
+          >
+        </td>
+      </tr>
+    </th:block>
+
+    <!--
+      What the dock-only endpoints return: the dock (or the refusal) for the clicked row, and an
+      out-of-band delete of any dock already open, so there is only ever one.
+    -->
+    <th:block th:fragment="openedDock(statementId, columns)">
+      <tr hidden hx-swap-oob="delete:.statement-dock-row"></tr>
+      <th:block th:if="${dock != null}">
+        <th:block th:replace="~{:: dockRow(${statementId}, ${dock}, ${lists}, ${columns})}"></th:block>
+      </th:block>
+      <th:block th:if="${refusal != null}">
+        <th:block th:replace="~{:: refusalRow(${columns}, ${refusal}, ${refusalTransactionId})}"></th:block>
+      </th:block>
+    </th:block>
+
     <th:block th:fragment="dock(statementId, dock, lists)">
       <div id="statement-dock" class="statement-dock">
         <p class="eyebrow" th:text="${dock.title()}">Create transaction</p>
@@ -164,11 +202,10 @@
             <a
               class="btn btn--ghost"
               th:href="@{/statements/{id}(id=${statementId})}"
-              th:attr="hx-get=@{/statements/{id}(id=${statementId})}"
-              hx-target="main"
-              hx-select="main"
-              hx-swap="outerHTML"
-              hx-push-url="true"
+              th:attr="hx-get=@{/statements/{id}/dock/close(id=${statementId})},hx-push-url=@{/statements/{id}(id=${statementId})}"
+              hx-target="closest .statement-dock-row"
+              hx-select="unset"
+              hx-swap="delete"
               >Cancel</a
             >
             <span class="statements__error" role="alert" th:if="${dock.error() != null}" th:text="${dock.error()}">

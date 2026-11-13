@@ -881,12 +881,15 @@
     updateSplitReadout();
   });
 
-  // The statement page's dock (statements.md §6.4) opens by swapping the whole <main>, which
-  // leaves nothing focused; put the cursor on its Date so Tab walks the fields and Enter saves. A
-  // small swap inside the dock (category or tag resolve) leaves focus on the field being typed in,
-  // so it never steals focus.
-  function focusStatementDock() {
-    if (document.activeElement && document.activeElement !== document.body) return;
+  // The statement page's dock (statements.md §6.4) opens from a dock-only response (".../dock")
+  // inserted under the clicked row, or with the whole <main> swapped; put the cursor on its Date so
+  // Tab walks the fields and Enter saves. A dock-only open leaves the clicked link focused, so it
+  // takes focus regardless; any other swap (a whole-page one leaves nothing focused) only when
+  // nothing is. A small swap inside the dock (category or tag resolve) leaves focus on the field
+  // being typed in, so it never steals focus.
+  function focusStatementDock(path) {
+    const opened = typeof path === "string" && /\/dock(\?|$)/.test(path);
+    if (!opened && document.activeElement && document.activeElement !== document.body) return;
     const date = document.querySelector("#statement-dock #dock-date");
     if (date) date.focus();
   }
@@ -908,6 +911,6 @@
       const path = config ? config.path : null;
       focusAfterSplitSwap(path);
       clearTagInputAfterSwap(event, path);
-      focusStatementDock();
+      focusStatementDock(path);
     });
 })();

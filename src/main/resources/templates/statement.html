@@ -384,11 +384,10 @@
                   th:each="f : ${r.fixes()}"
                   class="btn"
                   th:href="@{/statements/{id}(id=${statement.statementId()},dock=${r.lineId()},posting=${f.postingId()})}"
-                  th:attr="hx-get=@{/statements/{id}(id=${statement.statementId()},dock=${r.lineId()},posting=${f.postingId()})}"
-                  hx-target="main"
-                  hx-select="main"
-                  hx-swap="outerHTML"
-                  hx-push-url="true"
+                  th:attr="hx-get=@{/statements/{id}/lines/{line}/dock(id=${statement.statementId()},line=${r.lineId()},posting=${f.postingId()})},hx-push-url=@{/statements/{id}(id=${statement.statementId()},dock=${r.lineId()},posting=${f.postingId()})}"
+                  hx-target="closest tr"
+                  hx-select="unset"
+                  hx-swap="afterend"
                   th:text="${f.label()}"
                   >Amend</a
                 >
@@ -396,11 +395,10 @@
                   th:if="${r.canCreate()}"
                   class="btn"
                   th:href="@{/statements/{id}(id=${statement.statementId()},dock=${r.lineId()})}"
-                  th:attr="hx-get=@{/statements/{id}(id=${statement.statementId()},dock=${r.lineId()})}"
-                  hx-target="main"
-                  hx-select="main"
-                  hx-swap="outerHTML"
-                  hx-push-url="true"
+                  th:attr="hx-get=@{/statements/{id}/lines/{line}/dock(id=${statement.statementId()},line=${r.lineId()})},hx-push-url=@{/statements/{id}(id=${statement.statementId()},dock=${r.lineId()})}"
+                  hx-target="closest tr"
+                  hx-select="unset"
+                  hx-swap="afterend"
                   >Create</a
                 >
               </td>
@@ -413,21 +411,12 @@
                 >
               </td>
             </tr>
-            <tr th:if="${refusal != null and refusedExtra == null and refusedLine == r.lineId()}">
-              <td colspan="7" class="statements__error" role="alert">
-                <span th:text="${refusal}">Only a simple two-leg transaction can be edited here.</span>
-                <a
-                  th:if="${refusalTransactionId != null}"
-                  th:href="@{/register(selected=${refusalTransactionId})}"
-                  >Change it in the register</a
-                >
-                </td>
-            </tr>
-            <tr th:if="${dock != null and dock.lineId() == r.lineId()}">
-              <td colspan="7">
-                <th:block th:replace="~{fragments/statement-dock :: dock(${statement.statementId()}, ${dock}, ${lists})}"></th:block>
-              </td>
-            </tr>
+            <th:block th:if="${refusal != null and refusedExtra == null and refusedLine == r.lineId()}">
+              <th:block th:replace="~{fragments/statement-dock :: refusalRow(7, ${refusal}, ${refusalTransactionId})}"></th:block>
+            </th:block>
+            <th:block th:if="${dock != null and dock.lineId() == r.lineId()}">
+              <th:block th:replace="~{fragments/statement-dock :: dockRow(${statement.statementId()}, ${dock}, ${lists}, 7)}"></th:block>
+            </th:block>
             </th:block>
           </tbody>
         </table>
@@ -469,11 +458,10 @@
                   <a
                     class="btn"
                     th:href="@{/statements/{id}(id=${statement.statementId()},extra=${e.postingId()})}"
-                    th:attr="hx-get=@{/statements/{id}(id=${statement.statementId()},extra=${e.postingId()})}"
-                    hx-target="main"
-                    hx-select="main"
-                    hx-swap="outerHTML"
-                    hx-push-url="true"
+                    th:attr="hx-get=@{/statements/{id}/extras/{posting}/dock(id=${statement.statementId()},posting=${e.postingId()})},hx-push-url=@{/statements/{id}(id=${statement.statementId()},extra=${e.postingId()})}"
+                    hx-target="closest tr"
+                    hx-select="unset"
+                    hx-swap="afterend"
                     >Edit</a
                   >
                   <form
@@ -504,21 +492,12 @@
                   </div>
                 </td>
               </tr>
-              <tr th:if="${refusal != null and refusedExtra == e.postingId()}">
-                <td colspan="6" class="statements__error" role="alert">
-                  <span th:text="${refusal}">Only a simple two-leg transaction can be edited here.</span>
-                  <a
-                    th:if="${refusalTransactionId != null}"
-                    th:href="@{/register(selected=${refusalTransactionId})}"
-                    >Change it in the register</a
-                  >
-                  </td>
-              </tr>
-              <tr th:if="${dock != null and dock.amountEditable() and dock.postingId() == e.postingId()}">
-                <td colspan="6">
-                  <th:block th:replace="~{fragments/statement-dock :: dock(${statement.statementId()}, ${dock}, ${lists})}"></th:block>
-                </td>
-              </tr>
+              <th:block th:if="${refusal != null and refusedExtra == e.postingId()}">
+                <th:block th:replace="~{fragments/statement-dock :: refusalRow(6, ${refusal}, ${refusalTransactionId})}"></th:block>
+              </th:block>
+              <th:block th:if="${dock != null and dock.amountEditable() and dock.postingId() == e.postingId()}">
+                <th:block th:replace="~{fragments/statement-dock :: dockRow(${statement.statementId()}, ${dock}, ${lists}, 6)}"></th:block>
+              </th:block>
             </th:block>
           </tbody>
         </table>
