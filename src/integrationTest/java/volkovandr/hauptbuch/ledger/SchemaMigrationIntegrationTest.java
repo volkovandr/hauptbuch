@@ -188,6 +188,20 @@ class SchemaMigrationIntegrationTest {
         .contains("deleted_at IS NULL");
   }
 
+  @Test
+  void statementMatchIsIndexedByPosting() {
+    // V42: matched_elsewhere and the neighbour-match join look matches up by posting alone; the
+    // other indexes lead with the line or the statement (.scratch/statements/issues/32).
+    assertThat(
+            jdbcClient
+                .sql(
+                    "select indexdef from pg_indexes where tablename = 'statement_match'"
+                        + " and indexname = 'statement_match_posting_id_idx'")
+                .query(String.class)
+                .single())
+        .contains("(posting_id)");
+  }
+
   private String aliasResolvesTo(String alias) {
     return jdbcClient
         .sql("select country_code from country_alias where alias = :alias")
