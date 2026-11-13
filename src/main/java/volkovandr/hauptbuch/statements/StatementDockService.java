@@ -2,6 +2,7 @@ package volkovandr.hauptbuch.statements;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import volkovandr.hauptbuch.ledger.LedgerService;
@@ -67,6 +68,18 @@ public class StatementDockService {
     this.dockEditService = dockEditService;
     this.ledgerService = ledgerService;
     this.crossCurrencyService = crossCurrencyService;
+  }
+
+  /**
+   * The category to suggest once the operator has corrected the dock's payee: the typed payee's
+   * <em>last</em> category — the same rule as {@link #prefill}, so the first guess and a re-pick
+   * agree. Empty for a payee that does not exist yet or has no history, in which case the dock
+   * leaves the Category as it is.
+   */
+  public Optional<GhostSuggestion> suggestCategoryFor(String payeeText) {
+    return payeeService
+        .findExisting(payeeText)
+        .flatMap(payee -> dockPrefillService.lastCategoryOf(payee.payeeId()));
   }
 
   /**

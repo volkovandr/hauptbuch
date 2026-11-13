@@ -148,6 +148,34 @@ class StatementDockServiceTest {
   }
 
   @Test
+  void correctedPayeeSuggestsItsLastCategory() {
+    when(payeeService.findExisting("ShopBbb - Berlin"))
+        .thenReturn(Optional.of(new Payee(6L, "ShopBbb", "Berlin", null, null)));
+    when(dockPrefillService.lastCategoryOf(6L))
+        .thenReturn(Optional.of(new GhostSuggestion(9L, "Fuel")));
+
+    assertThat(service.suggestCategoryFor("ShopBbb - Berlin"))
+        .contains(new GhostSuggestion(9L, "Fuel"));
+  }
+
+  @Test
+  void correctedPayeeWithNoHistorySuggestsNothing() {
+    when(payeeService.findExisting("ShopBbb"))
+        .thenReturn(Optional.of(new Payee(6L, "ShopBbb", null, null, null)));
+    when(dockPrefillService.lastCategoryOf(6L)).thenReturn(Optional.empty());
+
+    assertThat(service.suggestCategoryFor("ShopBbb")).isEmpty();
+  }
+
+  @Test
+  void correctedPayeeThatDoesNotExistYetSuggestsNothing() {
+    when(payeeService.findExisting("Brand New")).thenReturn(Optional.empty());
+
+    assertThat(service.suggestCategoryFor("Brand New")).isEmpty();
+    org.mockito.Mockito.verifyNoInteractions(dockPrefillService);
+  }
+
+  @Test
   void prefillOfForeignChargeLineOpensWithTheChargesFieldsBeforeAnyCategoryIsPicked() {
     when(matchService.lineOf(STATEMENT, LINE_ID)).thenReturn(review(LineStatus.MISSING));
     when(payeeService.longestNameIn(any())).thenReturn(Optional.empty());
