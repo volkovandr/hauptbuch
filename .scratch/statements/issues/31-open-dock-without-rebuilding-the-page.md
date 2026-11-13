@@ -1,6 +1,6 @@
 # Statements: opening the dock rebuilds the whole statement page
 
-Status: in progress
+Status: resolved
 Category: performance
 Area: `StatementController.show`, `StatementPageAssembler`, `statement.html`,
 `fragments/statement-dock.html`, `keyboard.js` (`focusStatementDock`)
@@ -40,3 +40,4 @@ A dock-only endpoint that returns just the dock row, appended under the clicked 
 - Timing is not tested; the owner confirms on the Pi.
 
 ## Comments
+- 2026-11-13: owner verified on the Pi.
