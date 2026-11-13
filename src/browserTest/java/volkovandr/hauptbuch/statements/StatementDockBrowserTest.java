@@ -175,6 +175,37 @@ class StatementDockBrowserTest extends BrowserTest {
     org.assertj.core.api.Assertions.assertThat(editTop).isBetween(unmatchTop - 1, unmatchTop + 1);
   }
 
+  @Test
+  void enterRightAfterPickingCategoryBooksThePickedCategoryNotThePreviousPick() {
+    // Issue statements/27: Enter fires the picker's `change` and the implicit submit in one
+    // keystroke, so the form used to post the hidden id of the *previous* pick.
+    accountService.insertLeaf("BrowEnterAaa", "expense", null, "EUR");
+    accountService.insertLeaf("BrowEnterBbb", "expense", null, "EUR");
+    openDock("-19,50");
+
+    Locator category = page.locator("#dock-category");
+    category.fill("BrowEnterAaa");
+    category.dispatchEvent("change");
+    settled();
+    category.fill("BrowEnterBbb");
+    category.press("Enter");
+
+    assertThat(page.locator(".statements__notice"))
+        .containsText("Transaction created and matched.");
+    org.assertj.core.api.Assertions.assertThat(postingsOn("BrowEnterBbb")).isEqualTo(1L);
+    org.assertj.core.api.Assertions.assertThat(postingsOn("BrowEnterAaa")).isZero();
+  }
+
+  private long postingsOn(String accountName) {
+    return jdbcClient
+        .sql(
+            "select count(*) from posting p join account a on a.account_id = p.account_id"
+                + " where a.name = :n")
+        .param("n", accountName)
+        .query(Long.class)
+        .single();
+  }
+
   private double top(String selector) {
     return edge(selector, "top");
   }
