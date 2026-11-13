@@ -166,4 +166,38 @@ class StatementLedgerBalanceSqlLogicTest {
     assertThat(seenFromJune.get(0).periodEnd()).isEqualTo(LocalDate.of(2026, 5, 31));
     assertThat(matches.findNeighbourMatches(may)).isEmpty();
   }
+
+  @Test
+  void neighbourMatchesOnTheSameSideOfBothBoundariesAreLeftOut() {
+    long may = statement(own, "2026-05-01", "2026-05-31", false);
+    match(may, LocalDate.of(2026, 4, 30), "100.00");
+    match(may, LocalDate.of(2026, 5, 10), "-20.00");
+    long june = statement(own, "2026-06-01", "2026-06-30", false);
+
+    assertThat(matches.findNeighbourMatches(june)).isEmpty();
+  }
+
+  @Test
+  void openingBoundaryKeepsMatchesTheBankBooksBeforeAndTheLedgerDatesAfter() {
+    long may = statement(own, "2026-05-01", "2026-05-31", false);
+    match(may, LocalDate.of(2026, 6, 1), "-7.00");
+    match(may, LocalDate.of(2026, 5, 10), "-20.00");
+    long june = statement(own, "2026-06-01", "2026-06-30", false);
+
+    assertThat(matches.findNeighbourMatches(june))
+        .extracting(NeighbourMatch::transactionDate)
+        .containsExactly(LocalDate.of(2026, 6, 1));
+  }
+
+  @Test
+  void closingBoundaryKeepsMatchesTheBankBooksAfterAndTheLedgerDatesInside() {
+    long may = statement(own, "2026-05-01", "2026-05-31", false);
+    long june = statement(own, "2026-06-01", "2026-06-30", false);
+    match(june, LocalDate.of(2026, 5, 31), "-5.50");
+    match(june, LocalDate.of(2026, 6, 1), "-7.00");
+
+    assertThat(matches.findNeighbourMatches(may))
+        .extracting(NeighbourMatch::transactionDate)
+        .containsExactly(LocalDate.of(2026, 5, 31));
+  }
 }

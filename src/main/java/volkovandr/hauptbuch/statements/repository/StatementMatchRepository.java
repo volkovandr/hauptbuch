@@ -223,7 +223,11 @@ public class StatementMatchRepository {
 
   /**
    * The matches of the statement's account on its other live statements that have a period, with
-   * the matched leg's date and amount (statements.md §6.2).
+   * the matched leg's date and amount (statements.md §6.2) — only those that explain a balance
+   * difference: the ledger date and the other statement's period end fall on opposite sides of this
+   * statement's start (opening) or end (closing). Every other match contributes zero to {@code
+   * StatementBalances}, and an account has thousands of them, so they are left out here. The two
+   * predicates mirror the {@code bankHas} / {@code ledgerHas} pairs in {@code StatementBalances}.
    */
   public List<NeighbourMatch> findNeighbourMatches(long statementId) {
     return jdbcClient
@@ -240,6 +244,8 @@ public class StatementMatchRepository {
               and other.deleted_at is null
               and other.period_end is not null
               and t.deleted_at is null
+              and ((other.period_end < s.period_start) <> (t.date < s.period_start)
+                   or (other.period_end <= s.period_end) <> (t.date <= s.period_end))
             """)
         .param(STATEMENT_ID, statementId)
         .query(NeighbourMatch.class)
