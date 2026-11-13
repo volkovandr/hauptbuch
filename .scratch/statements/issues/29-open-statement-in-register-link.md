@@ -1,6 +1,6 @@
 # Statements: an "Open in register" link on the statement page
 
-Status: in progress
+Status: resolved
 Category: enhancement
 Area: statement page (`statement.html`)
 Design: `docs/statements.md`; the register's `accountId` / `fromDate` / `toDate` query parameters
