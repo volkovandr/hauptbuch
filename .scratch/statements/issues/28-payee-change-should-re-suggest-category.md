@@ -1,6 +1,6 @@
 # Statements: changing the payee in the Create dock should refresh the suggested category
 
-Status: ready-for-agent
+Status: resolved
 Category: enhancement
 Area: statement dock (`fragments/statement-dock.html`), the dock's payee/category suggestion
 Design: `docs/statements.md`; `docs/ui-transaction-register.md` (payee → category suggestion)
