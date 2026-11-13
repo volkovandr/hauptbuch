@@ -1,6 +1,6 @@
 # Statements: the statement page is slow — neighbour matches fetch every match on the account
 
-Status: in progress
+Status: resolved
 Category: performance
 Area: `StatementMatchRepository.findNeighbourMatches`, `StatementReviewService.balances`
 Design: `docs/statements.md` §6.2 (the balance checks); no domain rule changes
@@ -42,3 +42,4 @@ coupling.
   returned, for the opening side and the closing side; matches on the same side are not.
 
 ## Comments
+- 2026-11-13: owner verified on the Pi: noticeably faster. The remaining slowness (render, per-click full-page rebuild, dock open) is tracked separately.
