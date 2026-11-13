@@ -140,6 +140,21 @@
       return;
     }
 
+    // Enter in a picker inside a form submits only after the picker's resolve has landed.
+    if (
+      event.key === "Enter" &&
+      !event.repeat &&
+      !hasModifier(event) &&
+      !event.shiftKey &&
+      event.target.matches &&
+      event.target.matches("input[data-select-on-focus]") &&
+      event.target.form &&
+      !(receiptProcess() && receiptEditActive())
+    ) {
+      submitPickerAfterResolve(event);
+      return;
+    }
+
     // Editor (receipt doc §6.1): Enter saves, wherever focus is (the operator has just been working
     // the crop frame or a slider, so the Save button is not focused). A textarea keeps Enter for its
     // newline; a focused button/link keeps it for its own activation (Tab → Cancel → Enter cancels).
@@ -720,8 +735,27 @@
   function confirmReceipt() {
     if (confirming) return;
     confirming = true;
+    blurActiveField();
+    whenHtmxIdle(() => {
+      // One Confirm in flight at a time: a second Ctrl+Enter before the response must not book twice.
+      const release = () => (confirming = false);
+      document.addEventListener("htmx:afterRequest", release, { once: true });
+      setTimeout(release, 3000); // a click that sent nothing (a declined prompt) must not wedge it
+      clickIfPresent("[data-receipt-confirm]");
+    });
+  }
+
+  /** Leave the focused field, which fires its `change` (pickers resolve their text on it). */
+  function blurActiveField() {
     const active = document.activeElement;
     if (active && active !== document.body && active.blur) active.blur();
+  }
+
+  /**
+   * Run `action` once no htmx request, swap or settle is in progress (two quiet checks 50ms apart;
+   * gives up waiting after about two seconds and runs anyway).
+   */
+  function whenHtmxIdle(action) {
     let quietChecks = 0;
     let waited = 0;
     (function whenSettled() {
@@ -732,12 +766,29 @@
         setTimeout(whenSettled, 50);
         return;
       }
-      // One Confirm in flight at a time: a second Ctrl+Enter before the response must not book twice.
-      const release = () => (confirming = false);
-      document.addEventListener("htmx:afterRequest", release, { once: true });
-      setTimeout(release, 3000); // a click that sent nothing (a declined prompt) must not wedge it
-      clickIfPresent("[data-receipt-confirm]");
+      action();
     })();
+  }
+
+  /**
+   * Enter in a category / account picker (statements issue 27). The picker's text only reaches the
+   * server through the hidden id its `change` resolves asynchronously, yet Enter fires `change` and
+   * the form's implicit submit in the same keystroke — so the form would post the previous pick.
+   * Hold the submit back until the resolve has landed.
+   */
+  let submittingPicker = false;
+  function submitPickerAfterResolve(event) {
+    const input = event.target;
+    const form = input.form;
+    event.preventDefault();
+    if (submittingPicker || !form) return;
+    submittingPicker = true;
+    blurActiveField();
+    whenHtmxIdle(() => {
+      submittingPicker = false;
+      if (form.requestSubmit) form.requestSubmit();
+      else form.submit();
+    });
   }
 
   // Dismiss overlays on a click that is neither inside the menu/dialog nor a fresh right-click.

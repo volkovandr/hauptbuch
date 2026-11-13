@@ -33,6 +33,7 @@ class RegisterKeyboardBrowserTest extends BrowserTest {
   @Autowired AccountService accountService;
   @Autowired LedgerService ledgerService;
   @Autowired SettingsService settingsService;
+  @Autowired org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
 
   @BeforeAll
   void seedRegister() {
@@ -83,6 +84,39 @@ class RegisterKeyboardBrowserTest extends BrowserTest {
     page.locator("#entry-category").fill(CATEGORY);
     page.locator("#entry-category").dispatchEvent("change");
     amountField().fill(amount);
+  }
+
+  @Test
+  void enterRightAfterPickingCategoryBooksThePickedCategoryNotThePreviousPick() {
+    // Issue statements/27: Enter fires the picker's `change` and the form's submit in one
+    // keystroke, so the dock used to post the hidden id of the previous pick.
+    accountService.insertLeaf("KbdEnterAaa", "expense", null, "EUR");
+    accountService.insertLeaf("KbdEnterBbb", "expense", null, "EUR");
+    openRegister();
+    page.locator("#entry-account").fill(ACCOUNT + " (EUR)");
+    page.locator("#entry-account").dispatchEvent("change");
+    amountField().fill("7,77");
+    page.locator("#entry-category").fill("KbdEnterAaa");
+    page.locator("#entry-category").dispatchEvent("change");
+    page.waitForFunction(
+        "() => !document.querySelector('.htmx-request, .htmx-swapping, .htmx-settling')");
+
+    page.locator("#entry-category").fill("KbdEnterBbb");
+    page.locator("#entry-category").press("Enter");
+
+    assertThat(page.locator("#register-rows").getByText("7,77").first()).isVisible();
+    assertThat(postingsOn("KbdEnterBbb")).isEqualTo(1L);
+    assertThat(postingsOn("KbdEnterAaa")).isZero();
+  }
+
+  private long postingsOn(String accountName) {
+    return jdbcClient
+        .sql(
+            "select count(*) from posting p join account a on a.account_id = p.account_id"
+                + " where a.name = :n")
+        .param("n", accountName)
+        .query(Long.class)
+        .single();
   }
 
   /** Move focus out of every field, so single-key shortcuts apply. */
