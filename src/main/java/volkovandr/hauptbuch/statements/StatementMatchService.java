@@ -148,6 +148,18 @@ public class StatementMatchService {
   }
 
   /**
+   * Remove one line (statements issue 33). A matched line is unmatched first, like {@link
+   * #unmatch}: its posting becomes {@code unreconciled} unless another statement still matches it.
+   *
+   * @throws StatementFormatException when the line is not on the statement
+   */
+  @Transactional
+  public void removeLine(long statementId, long statementLineId) {
+    removeMatches(statementId, List.of(statementLineId));
+    statementService.removeLine(statementId, statementLineId);
+  }
+
+  /**
    * Delete a statement: its matches go, its postings stay {@code reconciled} or — when {@code
    * resetReconciliation} — go back to {@code unreconciled}, except a posting another statement
    * still matches (statements.md §5). The file stays on the Pi.

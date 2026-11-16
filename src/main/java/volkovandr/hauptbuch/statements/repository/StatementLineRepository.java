@@ -174,4 +174,47 @@ public class StatementLineRepository {
         .param("problem", line.problem())
         .update();
   }
+
+  /** The position after the statement's last line, for a line the operator adds by hand. */
+  public int nextSortOrder(long statementId) {
+    return jdbcClient
+        .sql(
+            """
+            select coalesce(max(sort_order) + 1, 0)
+            from statement_line
+            where statement_id = :statementId
+            """)
+        .param(STATEMENT_ID, statementId)
+        .query(Integer.class)
+        .single();
+  }
+
+  /**
+   * Delete one line with the "different transaction" decisions made on it. The caller removes its
+   * match first.
+   *
+   * @return the number of lines deleted (0 when the id is unknown or not on the statement)
+   */
+  public int delete(long statementId, long statementLineId) {
+    jdbcClient
+        .sql(
+            """
+            delete from statement_line_exclusion
+            where statement_line_id in (
+              select statement_line_id from statement_line
+              where statement_line_id = :lineId and statement_id = :statementId)
+            """)
+        .param(STATEMENT_ID, statementId)
+        .param("lineId", statementLineId)
+        .update();
+    return jdbcClient
+        .sql(
+            """
+            delete from statement_line
+            where statement_line_id = :lineId and statement_id = :statementId
+            """)
+        .param(STATEMENT_ID, statementId)
+        .param("lineId", statementLineId)
+        .update();
+  }
 }

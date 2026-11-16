@@ -282,6 +282,9 @@ There is no snapshot to go stale and no stored "done" state.
   right line at once — unless another statement still matches it, in which case it stays `reconciled`.
 - **Editing a matched line's booking date or amount** (the line grid) unmatches it the same way when
   saved; the page says so beside Save. Text fields never affect a match.
+- **Add / remove a line** (the line grid, one action each, independent of Save): a line the parse
+  missed is added unmatched at the end; removing a line unmatches it first, like *Unmatch*, then
+  deletes it for good. Neither needs the other lines unmatched.
 - **Deleting a statement** removes its matches and **asks** whether its postings stay `reconciled` or
   go back to `unreconciled`. The rows are soft-deleted; the file stays on the Pi unless the operator
   chooses to remove it.

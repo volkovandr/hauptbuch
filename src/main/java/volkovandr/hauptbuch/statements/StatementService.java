@@ -208,6 +208,51 @@ public class StatementService {
   }
 
   /**
+   * Append a line the parse missed, found by the operator in the original file. It is an ordinary
+   * unmatched line (statements issue 33).
+   *
+   * @throws StatementFormatException when an entry cannot be read or the date or amount is missing
+   */
+  @Transactional
+  public void addLine(long statementId, LineEdit edit) {
+    get(statementId);
+    StatementLine blank =
+        new StatementLine(
+            null,
+            lineRepository.nextSortOrder(statementId),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+    StatementLine line = edit.applyTo(blank);
+    if (line.bookingDate() == null || line.amount() == null) {
+      throw new StatementFormatException("A new line needs a booking date and an amount.");
+    }
+    lineRepository.insert(statementId, line);
+    LOG.debug("Added a line to statement {}", statementId);
+  }
+
+  /**
+   * Delete one line; callers remove its match first ({@link StatementMatchService#removeLine}
+   * does).
+   *
+   * @throws StatementFormatException when the line is not on the statement
+   */
+  @Transactional
+  public void removeLine(long statementId, long statementLineId) {
+    get(statementId);
+    if (lineRepository.delete(statementId, statementLineId) == 0) {
+      throw new StatementFormatException(
+          "That line is no longer on the statement. The page was reloaded.");
+    }
+    LOG.debug("Removed line {} of statement {}", statementLineId, statementId);
+  }
+
+  /**
    * Flip the sign of every line; callers check that none is matched ({@link
    * StatementMatchService}).
    */
