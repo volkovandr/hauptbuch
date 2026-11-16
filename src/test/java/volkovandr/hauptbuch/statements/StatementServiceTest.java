@@ -248,6 +248,55 @@ class StatementServiceTest {
   }
 
   @Test
+  void addLineAppendsAnOrdinaryUnmatchedLine() {
+    stubLive(1L);
+    when(lineRepository.nextSortOrder(1L)).thenReturn(7);
+
+    service.addLine(1L, new LineEdit(0L, "2026-05-04", "", "-8,10", "ShopAaa", "Card", ""));
+
+    ArgumentCaptor<StatementLine> saved = ArgumentCaptor.forClass(StatementLine.class);
+    verify(lineRepository).insert(eq(1L), saved.capture());
+    StatementLine added = saved.getValue();
+    assertThat(added.sortOrder()).isEqualTo(7);
+    assertThat(added.bookingDate()).isEqualTo(LocalDate.of(2026, 5, 4));
+    assertThat(added.amount()).isEqualByComparingTo("-8.10");
+    assertThat(added.counterparty()).isEqualTo("ShopAaa");
+    assertThat(added.problem()).isNull();
+  }
+
+  @Test
+  void addLineWithoutDateOrAmountIsRefusedAndSavesNothing() {
+    stubLive(1L);
+    when(lineRepository.nextSortOrder(1L)).thenReturn(7);
+
+    assertThatThrownBy(
+            () -> service.addLine(1L, new LineEdit(0L, "", "", "-8,10", "ShopAaa", "", "")))
+        .isInstanceOf(StatementFormatException.class)
+        .hasMessage("A new line needs a booking date and an amount.");
+    verify(lineRepository, never()).insert(any(Long.class), any());
+  }
+
+  @Test
+  void removeLineDeletesTheLineOfThisStatement() {
+    stubLive(1L);
+    when(lineRepository.delete(1L, 10L)).thenReturn(1);
+
+    service.removeLine(1L, 10L);
+
+    verify(lineRepository).delete(1L, 10L);
+  }
+
+  @Test
+  void removeLineOfAnotherStatementIsRefused() {
+    stubLive(1L);
+    when(lineRepository.delete(1L, 99L)).thenReturn(0);
+
+    assertThatThrownBy(() -> service.removeLine(1L, 99L))
+        .isInstanceOf(StatementFormatException.class)
+        .hasMessage("That line is no longer on the statement. The page was reloaded.");
+  }
+
+  @Test
   void oneUnreadableRowSavesNothing() {
     stubLive(1L);
     when(lineRepository.findByStatement(1L))

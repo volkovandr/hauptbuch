@@ -300,6 +300,32 @@ class StatementController {
         id, () -> matchService.saveLines(id, edits(params)), "Lines saved.", redirectAttributes);
   }
 
+  /** Add a line the parse missed (statements issue 33); other lines keep their matches. */
+  @PostMapping(BASE_PATH + "/{id}/lines/add")
+  String addLine(
+      @PathVariable long id,
+      @RequestParam MultiValueMap<String, String> params,
+      RedirectAttributes redirectAttributes) {
+    LineEdit edit =
+        new LineEdit(
+            0L,
+            params.getFirst("bookingDate"),
+            params.getFirst("valueDate"),
+            params.getFirst("amount"),
+            params.getFirst("counterparty"),
+            params.getFirst("description"),
+            params.getFirst("bankCategory"));
+    return saved(id, () -> statementService.addLine(id, edit), "Line added.", redirectAttributes);
+  }
+
+  /** Remove one line, unmatching it first (statements issue 33). */
+  @PostMapping(BASE_PATH + "/{id}/lines/{lineId}/remove")
+  String removeLine(
+      @PathVariable long id, @PathVariable long lineId, RedirectAttributes redirectAttributes) {
+    return saved(
+        id, () -> matchService.removeLine(id, lineId), "Line removed.", redirectAttributes);
+  }
+
   /** Confirm one candidate for a line (Accept, a pick, or "the same bank movement"). */
   @PostMapping(BASE_PATH + "/{id}/lines/{lineId}/accept")
   String accept(

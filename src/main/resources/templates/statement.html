@@ -527,6 +527,7 @@
                 <th>Counterparty</th>
                 <th>Description</th>
                 <th>Bank category</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -553,6 +554,9 @@
                 <td>
                   <input class="input" th:name="'bankCategory_' + ${l.id()}" th:value="${l.bankCategory()}" />
                 </td>
+                <td>
+                  <button type="submit" class="btn" th:attr="form='remove-' + ${l.id()}">Remove</button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -560,10 +564,60 @@
         <p class="actions">
           <button type="submit" class="btn">Save lines</button>
           <span class="muted" th:if="${review.matched() > 0}">
-            Saving a changed date or amount on a matched line removes its match and makes its posting
-            unreconciled.
+            Saving a changed date or amount on a matched line, or removing a matched line, removes its
+            match and makes its posting unreconciled.
           </span>
         </p>
+      </form>
+      <!-- Remove forms sit outside the grid form, so Enter in a grid field saves rather than removes. -->
+      <th:block th:unless="${#lists.isEmpty(lines)}">
+        <form
+          th:each="l : ${lines}"
+          th:id="'remove-' + ${l.id()}"
+          method="post"
+          th:action="@{/statements/{id}/lines/{line}/remove(id=${statement.statementId()},line=${l.id()})}"
+          th:attr="hx-post=@{/statements/{id}/lines/{line}/remove(id=${statement.statementId()},line=${l.id()})}"
+          hx-target="main"
+          hx-select="main"
+          hx-swap="outerHTML"
+        ></form>
+      </th:block>
+      <h3>Add a line</h3>
+      <p class="muted">For a booking the file has but the parse missed.</p>
+      <form
+        method="post"
+        th:action="@{/statements/{id}/lines/add(id=${statement.statementId()})}"
+        th:attr="hx-post=@{/statements/{id}/lines/add(id=${statement.statementId()})}"
+        hx-target="main"
+        hx-select="main"
+        hx-swap="outerHTML"
+      >
+        <div class="statement-lines">
+          <table class="statements">
+            <thead>
+              <tr>
+                <th>Booking</th>
+                <th>Value</th>
+                <th class="num">Amount</th>
+                <th>Counterparty</th>
+                <th>Description</th>
+                <th>Bank category</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input class="input" type="date" name="bookingDate" required /></td>
+                <td><input class="input" type="date" name="valueDate" /></td>
+                <td><input class="input input--amount" name="amount" required /></td>
+                <td><input class="input" name="counterparty" /></td>
+                <td><input class="input" name="description" /></td>
+                <td><input class="input" name="bankCategory" /></td>
+                <td><button type="submit" class="btn">Add line</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </form>
       </details>
     </section>

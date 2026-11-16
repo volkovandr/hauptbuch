@@ -358,6 +358,97 @@ class StatementMatchActionsIntegrationTest {
   }
 
   @Test
+  void addingLineWhileOthersAreMatchedKeepsTheMatchesAndLeavesTheNewLineUnmatched()
+      throws Exception {
+    acceptAll(2);
+
+    mockMvc
+        .perform(
+            post("/statements/" + statementId + "/lines/add")
+                .param("bookingDate", "2026-05-09")
+                .param("valueDate", "")
+                .param("amount", "-7,25")
+                .param("counterparty", "ShopBbb")
+                .param("description", "")
+                .param("bankCategory", ""))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(flash().attribute("notice", "Line added."));
+
+    assertThat(matchCount()).isEqualTo(2);
+    long added = lineWithAmount("-7.25");
+    assertThat(
+            jdbcClient
+                .sql("select count(*) from statement_match where statement_line_id = :l")
+                .param("l", added)
+                .query(Long.class)
+                .single())
+        .isZero();
+  }
+
+  @Test
+  void addingLineWithoutAmountIsRefusedWithTheReason() throws Exception {
+    mockMvc
+        .perform(
+            post("/statements/" + statementId + "/lines/add")
+                .param("bookingDate", "2026-05-09")
+                .param("amount", ""))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(flash().attribute("error", "A new line needs a booking date and an amount."));
+  }
+
+  @Test
+  void removingMatchedLineUnmatchesItAndDeletesIt() throws Exception {
+    acceptAll(2);
+    long shopLine = lineWithAmount("-12.50");
+
+    mockMvc
+        .perform(post("/statements/" + statementId + "/lines/" + shopLine + "/remove"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(flash().attribute("notice", "Line removed."));
+
+    assertThat(matchCount()).isEqualTo(1);
+    assertThat(reconciliationOf(shopLeg)).isEqualTo("unreconciled");
+    assertThat(reconciliationOf(salaryLeg)).isEqualTo("reconciled");
+    assertThat(
+            jdbcClient
+                .sql("select count(*) from statement_line where statement_line_id = :l")
+                .param("l", shopLine)
+                .query(Long.class)
+                .single())
+        .isZero();
+  }
+
+  @Test
+  void removingLineMarkedDifferentTransactionStillDeletesIt() throws Exception {
+    long shopLine = lineWithAmount("-12.50");
+    jdbcClient
+        .sql("insert into statement_line_exclusion (statement_line_id, posting_id) values (:l, :p)")
+        .param("l", shopLine)
+        .param("p", shopLeg)
+        .update();
+
+    mockMvc
+        .perform(post("/statements/" + statementId + "/lines/" + shopLine + "/remove"))
+        .andExpect(flash().attribute("notice", "Line removed."));
+
+    assertThat(
+            jdbcClient
+                .sql("select count(*) from statement_line where statement_line_id = :l")
+                .param("l", shopLine)
+                .query(Long.class)
+                .single())
+        .isZero();
+  }
+
+  @Test
+  void pageOffersAddLineAndRemovePerRow() throws Exception {
+    assertThat(statementPage())
+        .contains("/statements/" + statementId + "/lines/add")
+        .contains("/statements/" + statementId + "/lines/" + lineWithAmount("-12.50") + "/remove")
+        .contains("form=\"remove-" + lineWithAmount("-12.50") + "\"");
+  }
+
+  @Test
   void pageWarnsBesideSaveLinesOnlyWhenLineIsMatched() throws Exception {
     assertThat(statementPage()).doesNotContain("makes its posting");
 

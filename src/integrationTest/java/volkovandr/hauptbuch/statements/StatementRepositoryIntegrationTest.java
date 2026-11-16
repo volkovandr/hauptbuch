@@ -236,6 +236,70 @@ class StatementRepositoryIntegrationTest {
   }
 
   @Test
+  void nextSortOrderFollowsTheLastLineAndStartsAtZero() {
+    long statementId = statements.insert(profileId, accountId, "a.csv", "p", null, null);
+    assertThat(lines.nextSortOrder(statementId)).isZero();
+
+    lines.insert(
+        statementId, new StatementLine(null, 4, null, null, null, null, null, null, "r", null));
+
+    assertThat(lines.nextSortOrder(statementId)).isEqualTo(5);
+  }
+
+  @Test
+  void lineDeleteRemovesTheLineAndItsExclusionsOnlyWithinItsStatement() {
+    long statementId = statements.insert(profileId, accountId, "a.csv", "p", null, null);
+    long otherId = statements.insert(profileId, accountId, "b.csv", "p", null, null);
+    long lineId =
+        lines.insert(
+            statementId, new StatementLine(null, 0, null, null, null, null, null, null, "r", null));
+    long postingId = anyPosting();
+    jdbcClient
+        .sql("insert into statement_line_exclusion (statement_line_id, posting_id) values (:l, :p)")
+        .param("l", lineId)
+        .param("p", postingId)
+        .update();
+
+    assertThat(lines.delete(otherId, lineId)).isZero();
+    assertThat(lines.findByStatement(statementId)).hasSize(1);
+
+    assertThat(lines.delete(statementId, lineId)).isEqualTo(1);
+    assertThat(lines.findByStatement(statementId)).isEmpty();
+    assertThat(
+            jdbcClient
+                .sql("select count(*) from statement_line_exclusion where statement_line_id = :l")
+                .param("l", lineId)
+                .query(Long.class)
+                .single())
+        .isZero();
+  }
+
+  private long anyPosting() {
+    long other =
+        jdbcClient
+            .sql(
+                "insert into account (name, type, currency_code) values ('Food', 'expense',"
+                    + " 'EUR') returning account_id")
+            .query(Long.class)
+            .single();
+    long txn =
+        jdbcClient
+            .sql(
+                "insert into transaction (date, lifecycle) values (date '2026-05-01',"
+                    + " 'confirmed') returning transaction_id")
+            .query(Long.class)
+            .single();
+    return jdbcClient
+        .sql(
+            "insert into posting (transaction_id, account_id, amount) values (:t, :a, 1)"
+                + " returning posting_id")
+        .param("t", txn)
+        .param("a", other)
+        .query(Long.class)
+        .single();
+  }
+
+  @Test
   void lineUpdateChangesTheEditableFieldsOnlyWithinItsStatement() {
     long statementId = statements.insert(profileId, accountId, "a.csv", "p", null, null);
     long otherId = statements.insert(profileId, accountId, "b.csv", "p", null, null);

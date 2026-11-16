@@ -284,6 +284,31 @@ class StatementMatchServiceTest {
   }
 
   @Test
+  void removingMatchedLineUnmatchesItBeforeDeletingIt() {
+    when(matchRepository.deleteMatchesOfLines(STATEMENT, List.of(LINE_ID)))
+        .thenReturn(List.of(POSTING));
+    when(matchRepository.postingsWithoutMatch(List.of(POSTING))).thenReturn(List.of(POSTING));
+
+    service.removeLine(STATEMENT, LINE_ID);
+
+    InOrder order = inOrder(matchRepository, ledgerService, statementService);
+    order.verify(matchRepository).deleteMatchesOfLines(STATEMENT, List.of(LINE_ID));
+    order.verify(ledgerService).markUnreconciled(List.of(POSTING));
+    order.verify(statementService).removeLine(STATEMENT, LINE_ID);
+  }
+
+  @Test
+  void removingUnmatchedLineJustDeletesIt() {
+    when(matchRepository.deleteMatchesOfLines(STATEMENT, List.of(LINE_ID))).thenReturn(List.of());
+    when(matchRepository.postingsWithoutMatch(List.of())).thenReturn(List.of());
+
+    service.removeLine(STATEMENT, LINE_ID);
+
+    verify(ledgerService).markUnreconciled(List.of());
+    verify(statementService).removeLine(STATEMENT, LINE_ID);
+  }
+
+  @Test
   void savingLinesUnmatchesTheLinesWhoseDateOrAmountChanged() {
     List<LineEdit> edits = List.of(new LineEdit(LINE_ID, "2026-05-21", "", "-3,50", "", "", ""));
     when(statementService.updateLines(STATEMENT, edits)).thenReturn(List.of(line(LINE_ID)));
