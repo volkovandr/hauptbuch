@@ -1,6 +1,6 @@
 # Statements: add and remove statement lines without unmatching the whole statement
 
-Status: open
+Status: resolved
 Category: improvement
 Area: statement page line grid (`StatementController` / `StatementService.updateLines`), `statement_line`
 Design: `docs/statements.md` §3.2 (Re-seed, line grid), §3.2a (Parse), matches and `reconciled` (unmatch rules)
@@ -57,3 +57,4 @@ recompute from the lines as they already do; no stored total changes.
   has matched lines.
 
 ## Comments
+- 2026-11-16: owner verified in the running app.
